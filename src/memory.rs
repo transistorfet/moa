@@ -75,7 +75,7 @@ impl AddressSpace {
                 return Ok(&self.segments[i]);
             }
         }
-        return Err(Error::new("No segment found"));
+        return Err(Error::new(&format!("No segment found at {:08x}", addr)));
     }
 
     pub fn get_segment_mut(&mut self, addr: Address) -> Result<&mut Segment, Error> {
@@ -84,7 +84,7 @@ impl AddressSpace {
                 return Ok(&mut self.segments[i]);
             }
         }
-        return Err(Error::new("No segment found"));
+        return Err(Error::new(&format!("No segment found at {:08x}", addr)));
     }
 
 
