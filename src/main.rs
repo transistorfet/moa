@@ -3,23 +3,25 @@
 mod error;
 mod memory;
 mod cpus;
+mod devices;
 
-use crate::memory::{AddressSpace, Segment};
+use crate::memory::{AddressSpace, MemoryBlock};
 use crate::cpus::m68k::MC68010;
+use crate::devices::mc68681::MC68681;
 
 fn main() {
     let mut space = AddressSpace::new();
-    let monitor = Segment::load(0x00000000, "monitor.bin").unwrap();
+    let monitor = MemoryBlock::load("monitor.bin").unwrap();
     for byte in monitor.contents.iter() {
         print!("{:02x} ", byte);
     }
-    space.insert(monitor);
+    space.insert(0x00000000, Box::new(monitor));
 
-    let ram = Segment::new(0x00100000, vec![0; 0x00100000]);
-    space.insert(ram);
+    let ram = MemoryBlock::new(vec![0; 0x00100000]);
+    space.insert(0x00100000, Box::new(ram));
 
-    let serial = Segment::new(0x00700000, vec![0; 0x30]);
-    space.insert(serial);
+    let serial = MC68681::new();
+    space.insert(0x00700000, Box::new(serial));
 
     let mut cpu = MC68010::new();
     while cpu.is_running() {

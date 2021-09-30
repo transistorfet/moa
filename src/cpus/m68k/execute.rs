@@ -135,6 +135,11 @@ impl MC68010 {
             ).collect();
         debug!("{:#010x}: {}\n\t{:?}\n", current_ins_addr, ins_data?, ins);
 
+        // Single Step
+        self.dump_state();
+        let mut buffer = String::new();
+        std::io::stdin().read_line(&mut buffer).unwrap();
+
         match ins {
             Instruction::ADD(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
