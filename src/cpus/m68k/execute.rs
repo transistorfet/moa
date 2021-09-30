@@ -32,6 +32,8 @@ pub struct MC68010 {
 
     pub current_instruction_addr: u32,
     pub current_instruction: Instruction,
+    pub breakpoint: u32,
+    pub use_debugger: bool,
 }
 
 const FLAGS_ON_RESET: u16 = 0x2700;
@@ -62,6 +64,8 @@ impl MC68010 {
 
             current_instruction_addr: 0,
             current_instruction: Instruction::NOP,
+            breakpoint: 0,
+            use_debugger: false,
         }
     }
 
@@ -78,6 +82,8 @@ impl MC68010 {
 
         self.current_instruction_addr = 0;
         self.current_instruction = Instruction::NOP;
+        self.breakpoint = 0;
+        self.use_debugger = false;
     }
 
     pub fn is_running(&self) -> bool {
@@ -92,6 +98,10 @@ impl MC68010 {
         self.state = State::Running;
 
         Ok(())
+    }
+
+    pub fn set_breakpoint(&mut self, addr: Address) {
+        self.breakpoint = addr as u32;
     }
 
     pub fn step(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
@@ -146,19 +156,23 @@ impl MC68010 {
         self.current_instruction_addr = self.pc;
         self.current_instruction = self.decode_one(space)?;
 
-/*
-        // Print instruction bytes for debugging
-        let ins_data: Result<String, Error> =
-            (0..((self.pc - current_ins_addr) / 2)).map(|offset|
-                Ok(format!("{:04x} ", space.read_beu16((current_ins_addr + (offset * 2)) as Address)?))
-            ).collect();
-        debug!("{:#010x}: {}\n\t{:?}\n", current_ins_addr, ins_data?, ins);
+        if self.breakpoint == self.current_instruction_addr {
+            self.use_debugger = true;
+        }
 
-        // Single Step
-        self.dump_state();
-        let mut buffer = String::new();
-        std::io::stdin().read_line(&mut buffer).unwrap();
-*/
+        if self.use_debugger {
+            // Print instruction bytes for debugging
+            let ins_data: Result<String, Error> =
+                (0..((self.pc - self.current_instruction_addr) / 2)).map(|offset|
+                    Ok(format!("{:04x} ", space.read_beu16((self.current_instruction_addr + (offset * 2)) as Address)?))
+                ).collect();
+            debug!("{:#010x}: {}\n\t{:?}\n", self.current_instruction_addr, ins_data?, self.current_instruction);
+
+            // Single Step
+            self.dump_state(space);
+            let mut buffer = String::new();
+            std::io::stdin().read_line(&mut buffer).unwrap();
+        }
         Ok(())
     }
 
@@ -236,8 +250,10 @@ impl MC68010 {
             //},
             //Instruction::EXG(Target, Target) => {
             //},
-            //Instruction::EXT(u8, Size) => {
-            //},
+            Instruction::EXT(reg, size) => {
+                let data: u8 = self.d_reg[reg as usize] as u8;
+                self.d_reg[reg as usize] = sign_extend_byte(data, size);
+            },
             //Instruction::ILLEGAL => {
             //},
             Instruction::JMP(target) => {
@@ -266,8 +282,10 @@ impl MC68010 {
             Instruction::MOVEtoSR(target) => {
                 self.sr = self.get_target_value(space, target, Size::Word)? as u16;
             },
-            //Instruction::MOVEtoCCR(Target) => {
-            //},
+            Instruction::MOVEtoCCR(target) => {
+                let value = self.get_target_value(space, target, Size::Word)? as u16;
+                self.sr = (self.sr & 0xFF00) | (value & 0x00FF);
+            },
             Instruction::MOVEC(target, control_reg, dir) => {
                 match dir {
                     Direction::FromTarget => {
@@ -286,7 +304,7 @@ impl MC68010 {
             //},
             Instruction::MOVEM(target, size, dir, mask) => {
                 // TODO moving words requires a sign extension to 32 bits
-                if size != Size::Long { panic!("Unsupported size in MOVEM instruction"); }
+                if size != Size::Long { return Err(Error::new("Unsupported size in MOVEM instruction")); }
 
                 if dir == Direction::ToTarget {
                     let mut mask = mask;
@@ -321,7 +339,7 @@ impl MC68010 {
                 }
             },
             Instruction::MOVEQ(data, reg) => {
-                let value = ((data as i8) as i32) as u32;
+                let value = sign_extend_byte(data, Size::Long);
                 self.d_reg[reg as usize] = value;
             },
             //Instruction::MUL(Target, Target, Size, Sign) => {
@@ -558,7 +576,7 @@ impl MC68010 {
         if carry {
             flags |= FLAGS_CARRY | FLAGS_OVERFLOW;
         }
-        self.sr |= (self.sr & 0xFFF0) | flags;
+        self.sr = (self.sr & 0xFFF0) | flags;
     }
 
     fn set_logic_flags(&mut self, value: u32, size: Size) {
@@ -635,6 +653,14 @@ fn set_address_sized(space: &mut AddressSpace, addr: Address, value: u32, size: 
     }
 }
 
+fn sign_extend_byte(value: u8, size: Size) -> u32 {
+    let value = (value as i8);
+    match size {
+        Size::Byte => (value as u8) as u32,
+        Size::Word => ((value as i16) as u16) as u32,
+        Size::Long => (value as i32) as u32,
+    }
+}
 
 /*
 impl Processor for MC68010 {

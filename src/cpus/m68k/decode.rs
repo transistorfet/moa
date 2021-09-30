@@ -285,13 +285,7 @@ impl MC68010 {
                     let src = self.decode_lower_effective_address(space, ins, None)?;
                     let dest = get_high_reg(ins);
                     Ok(Instruction::LEA(src, dest))
-                } else if (ins & 0b101110000000) == 0b100010000000 {
-                    let target = self.decode_lower_effective_address(space, ins, None)?;
-                    let data = self.read_instruction_word(space)?;
-                    let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
-                    let dir = if (ins & 0x0200) == 0 { Direction::ToTarget } else { Direction::FromTarget };
-                    Ok(Instruction::MOVEM(target, size, dir, data))
-                } else if (ins & 0b100000000000) == 0 {
+                } else if (ins & 0b100000000000) == 0b000000000000 {
                     let target = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
                     match (ins & 0x0700) >> 8 {
                         0b000 => {
@@ -320,22 +314,22 @@ impl MC68010 {
                         },
                         _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
                     }
-                } else if (ins & 0b111100000000) == 0b101000000000 {
-                    let target = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
-                    match get_size(ins) {
-                        Some(size) => Ok(Instruction::TST(target, size)),
-                        None => Ok(Instruction::TAS(target)),
+                } else if (ins & 0b101110000000) == 0b100010000000 {
+                    let mode = get_low_mode(ins);
+                    let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
+
+                    if mode == 0b000 {
+                        Ok(Instruction::EXT(get_low_reg(ins), size))
+                    } else {
+                        let target = self.decode_lower_effective_address(space, ins, None)?;
+                        let data = self.read_instruction_word(space)?;
+                        let dir = if (ins & 0x0200) == 0 { Direction::ToTarget } else { Direction::FromTarget };
+                        Ok(Instruction::MOVEM(target, size, dir, data))
                     }
                 } else if (ins & 0b111100000000) == 0b100000000000 {
                     let subselect = (ins & 0x01C0) >> 6;
                     let mode = get_low_mode(ins);
                     match (subselect, mode) {
-                        (0b010, 0b000) => {
-                            Ok(Instruction::EXT(get_low_reg(ins), Size::Word))
-                        },
-                        (0b011, 0b000) => {
-                            Ok(Instruction::EXT(get_low_reg(ins), Size::Long))
-                        },
                         (0b000, _) => {
                             let target = self.decode_lower_effective_address(space, ins, Some(Size::Byte))?;
                             Ok(Instruction::NBCD(target))
@@ -348,6 +342,12 @@ impl MC68010 {
                             Ok(Instruction::PEA(target))
                         },
                         _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                    }
+                } else if (ins & 0b111100000000) == 0b101000000000 {
+                    let target = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
+                    match get_size(ins) {
+                        Some(size) => Ok(Instruction::TST(target, size)),
+                        None => Ok(Instruction::TAS(target)),
                     }
                 } else if (ins & 0b111110000000) == 0b111010000000 {
                     let target = self.decode_lower_effective_address(space, ins, None)?;
