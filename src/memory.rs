@@ -39,9 +39,10 @@ impl Addressable for Segment {
         self.contents[(addr - self.base) as usize .. ].iter()
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) {
+    fn write(&mut self, mut addr: Address, data: &[u8]) {
         for byte in data {
             self.contents[(addr - self.base) as usize] = *byte;
+            addr += 1;
         }
     }
 }
@@ -75,7 +76,7 @@ impl AddressSpace {
                 return Ok(&self.segments[i]);
             }
         }
-        return Err(Error::new(&format!("No segment found at {:08x}", addr)));
+        return Err(Error::new(&format!("No segment found at {:#08x}", addr)));
     }
 
     pub fn get_segment_mut(&mut self, addr: Address) -> Result<&mut Segment, Error> {
@@ -84,9 +85,14 @@ impl AddressSpace {
                 return Ok(&mut self.segments[i]);
             }
         }
-        return Err(Error::new(&format!("No segment found at {:08x}", addr)));
+        return Err(Error::new(&format!("No segment found at {:#08x}", addr)));
     }
 
+
+    pub fn read(&self, addr: Address) -> Result<Iter<u8>, Error> {
+        let seg = self.get_segment(addr)?;
+        Ok(seg.contents[(addr - seg.base) as usize .. ].iter())
+    }
 
     pub fn read_u8(&self, addr: Address) -> Result<u8, Error> {
         let seg = self.get_segment(addr)?;

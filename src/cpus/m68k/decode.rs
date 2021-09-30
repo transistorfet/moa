@@ -61,7 +61,7 @@ pub enum Condition {
     LessThanOrEqual,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Target {
     Immediate(u32),
     DirectDReg(u8),
@@ -180,14 +180,14 @@ const OPCG_RESERVED2: u8 = 0xF;
 impl MC68010 {
     fn read_instruction_word(&mut self, space: &mut AddressSpace) -> Result<u16, Error> {
         let word = space.read_beu16(self.pc as Address)?;
-        println!("{:08x} {:04x?}", self.pc, word);
+        //debug!("{:#010x} {:#06x?}", self.pc, word);
         self.pc += 2;
         Ok(word)
     }
 
     fn read_instruction_long(&mut self, space: &mut AddressSpace) -> Result<u32, Error> {
         let word = space.read_beu32(self.pc as Address)?;
-        println!("{:08x} {:08x?}", self.pc, word);
+        //debug!("{:#010x} {:#010x}", self.pc, word);
         self.pc += 4;
         Ok(word)
     }
@@ -419,7 +419,7 @@ impl MC68010 {
                 }
             },
             OPCG_BRANCH => {
-                let mut disp = ins & 0xFF;
+                let mut disp = ((ins & 0xFF) as i8) as u16;
                 if disp == 0 {
                     disp = self.read_instruction_word(space)?;
                 }

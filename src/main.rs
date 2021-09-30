@@ -18,9 +18,18 @@ fn main() {
     let ram = Segment::new(0x00100000, vec![0; 0x00100000]);
     space.insert(ram);
 
+    let serial = Segment::new(0x00700000, vec![0; 0x30]);
+    space.insert(serial);
+
     let mut cpu = MC68010::new();
     while cpu.is_running() {
-        cpu.step(&mut space).unwrap();
+        match cpu.step(&mut space) {
+            Ok(()) => { },
+            Err(err) => {
+                cpu.dump_state();
+                panic!("{:?}", err);
+            },
+        }
     }
 }
 
