@@ -2,10 +2,10 @@
 #[macro_use]
 mod error;
 mod memory;
-mod m68k;
+mod cpus;
 
 use crate::memory::{AddressSpace, Segment};
-use crate::m68k::MC68010;
+use crate::cpus::m68k::MC68010;
 
 fn main() {
     let mut space = AddressSpace::new();
@@ -15,6 +15,8 @@ fn main() {
     }
     space.insert(monitor);
 
+    let ram = Segment::new(0x00100000, vec![0; 0x00100000]);
+    space.insert(ram);
 
     let mut cpu = MC68010::new();
     while cpu.is_running() {

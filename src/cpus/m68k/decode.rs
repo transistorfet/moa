@@ -2,72 +2,47 @@
 use crate::error::Error;
 use crate::memory::{Address, AddressSpace};
 
-pub trait Processor {
-    fn reset();
-    fn step();
-}
-
-
+use super::execute::MC68010;
+use super::execute::ERR_ILLEGAL_INSTRUCTION;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum State {
-    Init,
-    Running,
-    Halted,
-}
-
-pub struct MC68010 {
-    pub state: State,
-
-    pub pc: u32,
-    pub msp: u32,
-    pub usp: u32,
-    pub flags: u16,
-    pub d_reg: [u32; 8],
-    pub a_reg: [u32; 8],
-
-    pub vbr: u32,
-}
-
-const FLAGS_ON_RESET: u16 = 0x2700;
-
-const FLAGS_SUPERVISOR: u16 = 0x2000;
-
-const ERR_BUS_ERROR: u32 = 2;
-const ERR_ADDRESS_ERROR: u32 = 3;
-const ERR_ILLEGAL_INSTRUCTION: u32 = 4;
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum Sign {
+pub enum Sign {
     Signed,
     Unsigned,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum Direction {
+pub enum Direction {
     FromTarget,
     ToTarget,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum ShiftDirection {
+pub enum ShiftDirection {
     Right,
     Left,
 }
+
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum ControlRegister {
+pub enum RegisterType {
+    Data,
+    Address,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ControlRegister {
     VBR,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum Size {
+pub enum Size {
     Byte,
     Word,
     Long,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum Condition {
+pub enum Condition {
     True,
     False,
     High,
@@ -87,22 +62,22 @@ enum Condition {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum Target {
+pub enum Target {
     Immediate(u32),
     DirectDReg(u8),
     DirectAReg(u8),
     IndirectAReg(u8),
     IndirectARegInc(u8),
     IndirectARegDec(u8),
-    IndirectARegOffset(u8, u16),
-    IndirectARegXRegOffset(u8, Box<Target>, u16, Size),
+    IndirectARegOffset(u8, i32),
+    IndirectARegXRegOffset(u8, RegisterType, u8, i32, Size),
     IndirectMemory(u32),
-    IndirectPCOffset(u16),
-    IndirectPCXRegOffset(Box<Target>, u16, Size),
+    IndirectPCOffset(i32),
+    IndirectPCXRegOffset(RegisterType, u8, i32, Size),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum Instruction {
+pub enum Instruction {
     //ABCD
     ADD(Target, Target, Size),
     AND(Target, Target, Size),
@@ -110,9 +85,9 @@ enum Instruction {
     ANDtoSR(u16),
     ASd(Target, Target, Size, ShiftDirection),
 
-    Bcc(Condition, u16),
-    BRA(u16),
-    BSR(u16),
+    Bcc(Condition, i16),
+    BRA(i16),
+    BSR(i16),
     BTST(Target, Target, Size),
     BCHG(Target, Target, Size),
     BCLR(Target, Target, Size),
@@ -203,57 +178,6 @@ const OPCG_RESERVED2: u8 = 0xF;
 
 
 impl MC68010 {
-    pub fn new() -> MC68010 {
-        MC68010 {
-            state: State::Init,
-            pc: 0,
-            msp: 0,
-            usp: 0,
-            flags: FLAGS_ON_RESET,
-            d_reg: [0; 8],
-            a_reg: [0; 8],
-            vbr: 0,
-        }
-    }
-
-    pub fn reset(&mut self) {
-        self.state = State::Init;
-        self.pc = 0;
-        self.msp = 0;
-        self.usp = 0;
-        self.flags = FLAGS_ON_RESET;
-        self.d_reg = [0; 8];
-        self.a_reg = [0; 8];
-        self.vbr = 0;
-    }
-
-    pub fn is_running(&self) -> bool {
-        self.state != State::Halted
-    }
-
-
-    pub fn init(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
-        println!("Initializing CPU");
-
-        self.msp = space.read_beu32(0)?;
-        self.pc = space.read_beu32(4)?;
-        self.state = State::Running;
-
-        Ok(())
-    }
-
-    pub fn step(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
-        match self.state {
-            State::Init => self.init(space),
-            State::Halted => Err(Error::new("CPU halted")),
-            State::Running => self.execute_one(space),
-        }
-    }
-
-    fn is_supervisor(&self) -> bool {
-        self.flags & FLAGS_SUPERVISOR != 0
-    }
-
     fn read_instruction_word(&mut self, space: &mut AddressSpace) -> Result<u16, Error> {
         let word = space.read_beu16(self.pc as Address)?;
         println!("{:08x} {:04x?}", self.pc, word);
@@ -268,39 +192,7 @@ impl MC68010 {
         Ok(word)
     }
 
-    fn push_long(&mut self, space: &mut AddressSpace, value: u32) -> Result<(), Error> {
-        let reg = if self.is_supervisor() { &mut self.msp } else { &mut self.usp };
-        *reg -= 4;
-        space.write_beu32(*reg as Address, value)
-    }
-
-    fn execute_one(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
-        let addr = self.pc;
-        let ins = self.decode_one(space)?;
-
-        println!("{:08x}: {:?}", addr, ins);
-        match ins {
-            /*
-            Instruction::JSR(target) => {
-                self.push_long(space, self.pc)?;
-                self.pc = self.get_target_value(space, target)?;
-            },
-            */
-            _ => { /* panic!(""); */ },
-        }
-
-        Ok(())
-    }
-
-    fn get_target_value(&mut self, space: &mut AddressSpace, target: Target) -> Result<u32, Error> {
-        match target {
-            Target::Immediate(value) => Ok(value),
-            Target::DirectDReg(reg) => Ok(self.d_reg[reg as usize]),
-            _ => Err(Error::new(&format!("Unimplemented addressing target: {:?}", target))),
-        }
-    }
-
-    fn decode_one(&mut self, space: &mut AddressSpace) -> Result<Instruction, Error> {
+    pub fn decode_one(&mut self, space: &mut AddressSpace) -> Result<Instruction, Error> {
         let ins = self.read_instruction_word(space)?;
 
         match ((ins & 0xF000) >> 12) as u8 {
@@ -355,7 +247,7 @@ impl MC68010 {
                     let target = self.decode_lower_effective_address(space, ins, size)?;
                     let data = match size {
                         Some(Size::Long) => self.read_instruction_long(space)?,
-                        Some(size) => self.read_instruction_word(space)? as u32,
+                        Some(_) => self.read_instruction_word(space)? as u32,
                         None => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
                     };
 
@@ -444,14 +336,14 @@ impl MC68010 {
                         (0b011, 0b000) => {
                             Ok(Instruction::EXT(get_low_reg(ins), Size::Long))
                         },
-                        (0b000, mode) => {
+                        (0b000, _) => {
                             let target = self.decode_lower_effective_address(space, ins, Some(Size::Byte))?;
                             Ok(Instruction::NBCD(target))
                         },
                         (0b001, 0b000) => {
                             Ok(Instruction::SWAP(get_low_reg(ins)))
                         },
-                        (0b001, mode) => {
+                        (0b001, _) => {
                             let target = self.decode_lower_effective_address(space, ins, None)?;
                             Ok(Instruction::PEA(target))
                         },
@@ -464,6 +356,8 @@ impl MC68010 {
                     } else {
                         Ok(Instruction::JMP(target))
                     }
+                } else if (ins & 0b111111110000) == 0b111001000000 {
+                    Ok(Instruction::TRAP((ins & 0x000F) as u8))
                 } else if (ins & 0b111111110000) == 0b111001010000 {
                     let reg = get_low_reg(ins);
                     if (ins & 0b1000) == 0 {
@@ -525,15 +419,15 @@ impl MC68010 {
                 }
             },
             OPCG_BRANCH => {
-                let mut disp = (ins & 0xFF);
+                let mut disp = ins & 0xFF;
                 if disp == 0 {
                     disp = self.read_instruction_word(space)?;
                 }
                 let condition = get_condition(ins);
                 match condition {
-                    Condition::True => Ok(Instruction::BRA(disp)),
-                    Condition::False => Ok(Instruction::BSR(disp)),
-                    _ => Ok(Instruction::Bcc(condition, disp)),
+                    Condition::True => Ok(Instruction::BRA(disp as i16)),
+                    Condition::False => Ok(Instruction::BSR(disp as i16)),
+                    _ => Ok(Instruction::Bcc(condition, disp as i16)),
                 }
             },
             OPCG_MOVEQ => {
@@ -595,7 +489,7 @@ impl MC68010 {
                         let target = self.decode_lower_effective_address(space, ins, Some(size))?;
                         Ok(Instruction::CMP(Target::DirectDReg(reg), target, size))
                     },
-                    (size, None) => {
+                    (_, None) => {
                         let size = if optype == 0 { Size::Word } else { Size::Long };
                         let target = self.decode_lower_effective_address(space, ins, Some(size))?;
                         Ok(Instruction::CMP(target, Target::DirectAReg(reg), size))
@@ -692,18 +586,14 @@ impl MC68010 {
         self.get_mode_as_target(space, mode, reg, size)
     }
 
-    fn decode_brief_extension_word(&self, brief_extension: u16) -> (Target, u16, Size) {
+    fn decode_brief_extension_word(&self, brief_extension: u16) -> (RegisterType, u8, u16, Size) {
         let data = brief_extension & 0x00FF;
-        let reg = ((brief_extension & 0x7000) >> 12) as u8;
+        let xreg = ((brief_extension & 0x7000) >> 12) as u8;
         let size = if (brief_extension & 0x0800) == 0 { Size::Word } else { Size::Long };
 
-        let target = if (brief_extension & 0x8000) == 0 {
-            Target::DirectDReg(reg)
-        } else {
-            Target::DirectAReg(reg)
-        };
+        let rtype = if (brief_extension & 0x8000) == 0 { RegisterType::Data } else { RegisterType::Address };
 
-        (target, data, size)
+        (rtype, xreg, data, size)
     }
 
     fn get_mode_as_target(&mut self, space: &mut AddressSpace, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
@@ -714,13 +604,13 @@ impl MC68010 {
             0b011 => Target::IndirectARegInc(reg),
             0b100 => Target::IndirectARegDec(reg),
             0b101 => {
-                let d16 = self.read_instruction_word(space)?;
-                Target::IndirectARegOffset(reg, d16)
+                let data = self.read_instruction_word(space)?;
+                Target::IndirectARegOffset(reg, (data as i16) as i32)
             },
             0b110 => {
                 let brief_extension = self.read_instruction_word(space)?;
-                let (target, data, size) = self.decode_brief_extension_word(brief_extension);
-                Target::IndirectARegXRegOffset(reg, Box::new(target), data, size)
+                let (rtype, xreg, data, size) = self.decode_brief_extension_word(brief_extension);
+                Target::IndirectARegXRegOffset(reg, rtype, xreg, (data as i16) as i32, size)
             },
             0b111 => {
                 match reg {
@@ -733,13 +623,13 @@ impl MC68010 {
                         Target::IndirectMemory(value)
                     },
                     0b010 => {
-                        let d16 = self.read_instruction_word(space)?;
-                        Target::IndirectPCOffset(d16)
+                        let data = self.read_instruction_word(space)?;
+                        Target::IndirectPCOffset((data as i16) as i32)
                     },
                     0b011 => {
                         let brief_extension = self.read_instruction_word(space)?;
-                        let (target, data, size) = self.decode_brief_extension_word(brief_extension);
-                        Target::IndirectPCXRegOffset(Box::new(target), data, size)
+                        let (rtype, xreg, data, size) = self.decode_brief_extension_word(brief_extension);
+                        Target::IndirectPCXRegOffset(rtype, xreg, (data as i16) as i32, size)
                     },
                     0b100 => {
                         let data = match size {
@@ -813,8 +703,14 @@ fn get_condition(ins: u16) -> Condition {
     }
 }
 
-/*
-impl Processor for MC68010 {
 
+impl Size {
+    pub fn in_bytes(&self) -> u32 {
+        match self {
+            Size::Byte => 1,
+            Size::Word => 2,
+            Size::Long => 4,
+        }
+    }
 }
-*/
+

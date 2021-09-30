@@ -88,6 +88,11 @@ impl AddressSpace {
     }
 
 
+    pub fn read_u8(&self, addr: Address) -> Result<u8, Error> {
+        let seg = self.get_segment(addr)?;
+        Ok(*seg.read(addr).next().unwrap())
+    }
+
     pub fn read_beu16(&self, addr: Address) -> Result<u16, Error> {
         let seg = self.get_segment(addr)?;
         Ok(read_beu16(seg.read(addr)))
@@ -96,6 +101,12 @@ impl AddressSpace {
     pub fn read_beu32(&self, addr: Address) -> Result<u32, Error> {
         let seg = self.get_segment(addr)?;
         Ok(read_beu32(seg.read(addr)))
+    }
+
+    pub fn write_u8(&mut self, addr: Address, value: u8) -> Result<(), Error> {
+        let seg = self.get_segment_mut(addr)?;
+        let data = [value];
+        Ok(seg.write(addr, &data))
     }
 
     pub fn write_beu16(&mut self, addr: Address, value: u16) -> Result<(), Error> {
