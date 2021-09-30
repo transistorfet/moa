@@ -29,6 +29,9 @@ pub struct MC68010 {
     pub usp: u32,
 
     pub vbr: u32,
+
+    pub current_instruction_addr: u32,
+    pub current_instruction: Instruction,
 }
 
 const FLAGS_ON_RESET: u16 = 0x2700;
@@ -56,6 +59,9 @@ impl MC68010 {
             usp: 0,
 
             vbr: 0,
+
+            current_instruction_addr: 0,
+            current_instruction: Instruction::NOP,
         }
     }
 
@@ -69,6 +75,9 @@ impl MC68010 {
         self.usp = 0;
 
         self.vbr = 0;
+
+        self.current_instruction_addr = 0;
+        self.current_instruction = Instruction::NOP;
     }
 
     pub fn is_running(&self) -> bool {
@@ -89,11 +98,15 @@ impl MC68010 {
         match self.state {
             State::Init => self.init(space),
             State::Halted => Err(Error::new("CPU halted")),
-            State::Running => self.execute_one(space),
+            State::Running => {
+                self.decode_next(space)?;
+                self.execute_current(space)?;
+                Ok(())
+            },
         }
     }
 
-    pub fn dump_state(&self) {
+    pub fn dump_state(&self, space: &AddressSpace) {
         println!("State: {:?}", self.state);
         println!("PC: {:#010x}", self.pc);
         println!("SR: {:#06x}", self.sr);
@@ -103,6 +116,11 @@ impl MC68010 {
         println!("D7: {:#010x}", self.d_reg[7]);
         println!("MSP: {:#010x}", self.msp);
         println!("USP: {:#010x}", self.usp);
+
+        println!("Current Instruction: {:#010x} {:?}", self.current_instruction_addr, self.current_instruction);
+        println!("");
+        space.dump_memory(self.msp as Address, 0x40);
+        println!("");
     }
 
     fn is_supervisor(&self) -> bool {
@@ -124,10 +142,11 @@ impl MC68010 {
         Ok(value)
     }
 
-    fn execute_one(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
-        let current_ins_addr = self.pc;
-        let ins = self.decode_one(space)?;
+    fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+        self.current_instruction_addr = self.pc;
+        self.current_instruction = self.decode_one(space)?;
 
+/*
         // Print instruction bytes for debugging
         let ins_data: Result<String, Error> =
             (0..((self.pc - current_ins_addr) / 2)).map(|offset|
@@ -139,8 +158,12 @@ impl MC68010 {
         self.dump_state();
         let mut buffer = String::new();
         std::io::stdin().read_line(&mut buffer).unwrap();
+*/
+        Ok(())
+    }
 
-        match ins {
+    fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+        match self.current_instruction {
             Instruction::ADD(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
@@ -175,15 +198,15 @@ impl MC68010 {
             Instruction::Bcc(cond, offset) => {
                 let should_branch = self.get_current_condition(cond);
                 if should_branch {
-                    self.pc = current_ins_addr.wrapping_add(offset as u32) + 2;
+                    self.pc = self.current_instruction_addr.wrapping_add(offset as u32) + 2;
                 }
             },
             Instruction::BRA(offset) => {
-                self.pc = current_ins_addr.wrapping_add(offset as u32) + 2;
+                self.pc = self.current_instruction_addr.wrapping_add(offset as u32) + 2;
             },
             Instruction::BSR(offset) => {
                 self.push_long(space, self.pc)?;
-                self.pc = current_ins_addr.wrapping_add(offset as u32) + 2;
+                self.pc = self.current_instruction_addr.wrapping_add(offset as u32) + 2;
             },
             //Instruction::BTST(Target, Target, Size) => {
             //},
@@ -196,8 +219,11 @@ impl MC68010 {
             Instruction::CLR(target, size) => {
                 self.set_target_value(space, target, 0, size)?;
             },
-            //Instruction::CMP(Target, Target, Size) => {
-            //},
+            Instruction::CMP(src, dest, size) => {
+                let value = self.get_target_value(space, src, size)?;
+                let existing = self.get_target_value(space, dest, size)?;
+                let result = self.subtract_sized_with_flags(existing, value, size);
+            },
             //Instruction::DBcc(Condition, u16) => {
             //},
             //Instruction::DIV(Target, Target, Size, Sign) => {
@@ -258,10 +284,46 @@ impl MC68010 {
             },
             //Instruction::MOVEUSP(Target, Direction) => {
             //},
-            //Instruction::MOVEM(Target, Size, Direction, u16) => {
-            //},
-            //Instruction::MOVEQ(u8, u8) => {
-            //},
+            Instruction::MOVEM(target, size, dir, mask) => {
+                // TODO moving words requires a sign extension to 32 bits
+                if size != Size::Long { panic!("Unsupported size in MOVEM instruction"); }
+
+                if dir == Direction::ToTarget {
+                    let mut mask = mask;
+                    for i in 0..8 {
+                        if (mask & 0x01) != 0 {
+                            self.set_target_value(space, target, self.d_reg[i], size)?;
+                        }
+                        mask >>= 1;
+                    }
+                    for i in 0..8 {
+                        if (mask & 0x01) != 0 {
+                            let value = *self.get_a_reg_mut(i);
+                            self.set_target_value(space, target, value, size)?;
+                        }
+                        mask >>= 1;
+                    }
+                } else {
+                    let mut mask = mask;
+                    for i in (0..8).rev() {
+                        if (mask & 0x01) != 0 {
+                            let value = *self.get_a_reg_mut(i);
+                            self.set_target_value(space, target, value, size)?;
+                        }
+                        mask >>= 1;
+                    }
+                    for i in (0..8).rev() {
+                        if (mask & 0x01) != 0 {
+                            self.set_target_value(space, target, self.d_reg[i], size)?;
+                        }
+                        mask >>= 1;
+                    }
+                }
+            },
+            Instruction::MOVEQ(data, reg) => {
+                let value = ((data as i8) as i32) as u32;
+                self.d_reg[reg as usize] = value;
+            },
             //Instruction::MUL(Target, Target, Size, Sign) => {
             //},
             //Instruction::NBCD(Target) => {
@@ -307,18 +369,7 @@ impl MC68010 {
             Instruction::SUB(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
-                let (result, overflow) = match size {
-                    Size::Byte => {
-                        let (result, overflow) = (existing as u8).overflowing_sub(value as u8);
-                        (result as u32, overflow)
-                    },
-                    Size::Word => {
-                        let (result, overflow) = (existing as u16).overflowing_sub(value as u16);
-                        (result as u32, overflow)
-                    },
-                    Size::Long => existing.overflowing_sub(value),
-                };
-                self.set_compare_flags(result as i32, overflow);
+                let result = self.subtract_sized_with_flags(existing, value, size);
                 self.set_target_value(space, dest, result, size)?;
             },
             //Instruction::SWAP(u8) => {
@@ -445,6 +496,22 @@ impl MC68010 {
         Ok(addr)
     }
 
+    fn subtract_sized_with_flags(&mut self, existing: u32, diff: u32, size: Size) -> u32 {
+        let (result, overflow) = match size {
+            Size::Byte => {
+                let (result, overflow) = (existing as u8).overflowing_sub(diff as u8);
+                (result as u32, overflow)
+            },
+            Size::Word => {
+                let (result, overflow) = (existing as u16).overflowing_sub(diff as u16);
+                (result as u32, overflow)
+            },
+            Size::Long => existing.overflowing_sub(diff),
+        };
+        self.set_compare_flags(result as i32, overflow);
+        result
+    }
+
     fn get_control_reg_mut(&mut self, control_reg: ControlRegister) -> &mut u32 {
         match control_reg {
             ControlRegister::VBR => &mut self.vbr,
@@ -511,27 +578,27 @@ impl MC68010 {
 
     fn get_current_condition(&self, cond: Condition) -> bool {
         match cond {
-            True => true,
-            False => false,
-            High => !self.get_flag(FLAGS_CARRY) && !self.get_flag(FLAGS_ZERO),
-            LowOrSame => self.get_flag(FLAGS_CARRY) || self.get_flag(FLAGS_ZERO),
-            CarryClear => !self.get_flag(FLAGS_CARRY),
-            CarrySet => self.get_flag(FLAGS_CARRY),
-            NotEqual => !self.get_flag(FLAGS_ZERO),
-            Equal => self.get_flag(FLAGS_ZERO),
-            OverflowClear => !self.get_flag(FLAGS_OVERFLOW),
-            OverflowSet => self.get_flag(FLAGS_OVERFLOW),
-            Plus => !self.get_flag(FLAGS_NEGATIVE),
-            Minus => self.get_flag(FLAGS_NEGATIVE),
-            GreaterThanOrEqual => self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW) || !self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW),
-            LessThan => self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW) || !self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW),
-            GreaterThan =>
-                self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW) && !self.get_flag(FLAGS_ZERO)
-                || !self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW) && !self.get_flag(FLAGS_ZERO),
-            LessThanOrEqual =>
+            Condition::True => true,
+            Condition::False => false,
+            Condition::High => !self.get_flag(FLAGS_CARRY) && !self.get_flag(FLAGS_ZERO),
+            Condition::LowOrSame => self.get_flag(FLAGS_CARRY) || self.get_flag(FLAGS_ZERO),
+            Condition::CarryClear => !self.get_flag(FLAGS_CARRY),
+            Condition::CarrySet => self.get_flag(FLAGS_CARRY),
+            Condition::NotEqual => !self.get_flag(FLAGS_ZERO),
+            Condition::Equal => self.get_flag(FLAGS_ZERO),
+            Condition::OverflowClear => !self.get_flag(FLAGS_OVERFLOW),
+            Condition::OverflowSet => self.get_flag(FLAGS_OVERFLOW),
+            Condition::Plus => !self.get_flag(FLAGS_NEGATIVE),
+            Condition::Minus => self.get_flag(FLAGS_NEGATIVE),
+            Condition::GreaterThanOrEqual => (self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW)) || (!self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW)),
+            Condition::LessThan => (self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW)) || (!self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW)),
+            Condition::GreaterThan =>
+                (self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW) && !self.get_flag(FLAGS_ZERO))
+                || (!self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW) && !self.get_flag(FLAGS_ZERO)),
+            Condition::LessThanOrEqual =>
                 self.get_flag(FLAGS_ZERO)
-                || self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW)
-                || !self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW),
+                || (self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW))
+                || (!self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW)),
         }
     }
 }

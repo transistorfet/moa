@@ -28,7 +28,7 @@ fn main() {
         match cpu.step(&mut space) {
             Ok(()) => { },
             Err(err) => {
-                cpu.dump_state();
+                cpu.dump_state(&space);
                 panic!("{:?}", err);
             },
         }

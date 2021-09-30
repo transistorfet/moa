@@ -107,6 +107,19 @@ impl AddressSpace {
     }
 
 
+    pub fn dump_memory(&self, mut addr: Address, mut count: Address) {
+        while count > 0 {
+            let mut line = format!("{:#010x}: ", addr);
+            for i in 0..8 {
+                line += &format!("{:#06x} ", self.read_beu16(addr).unwrap());
+                addr += 2;
+                count -= 2;
+            }
+            println!("{}", line);
+        }
+    }
+
+
     pub fn read(&self, addr: Address) -> Result<Iter<u8>, Error> {
         let seg = self.get_segment(addr)?;
         Ok(seg.contents.read(addr - seg.base))
@@ -114,17 +127,17 @@ impl AddressSpace {
 
     pub fn read_u8(&self, addr: Address) -> Result<u8, Error> {
         let seg = self.get_segment(addr)?;
-        Ok(*seg.contents.read(addr - seg.base).next().unwrap())
+        Ok(*seg.contents.read(addr - seg.base).next().ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
     pub fn read_beu16(&self, addr: Address) -> Result<u16, Error> {
         let seg = self.get_segment(addr)?;
-        Ok(read_beu16(seg.contents.read(addr - seg.base)))
+        Ok(read_beu16(seg.contents.read(addr - seg.base)).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
     pub fn read_beu32(&self, addr: Address) -> Result<u32, Error> {
         let seg = self.get_segment(addr)?;
-        Ok(read_beu32(seg.contents.read(addr - seg.base)))
+        Ok(read_beu32(seg.contents.read(addr - seg.base)).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
 
@@ -155,15 +168,17 @@ impl AddressSpace {
     }
 }
 
-pub fn read_beu16(mut iter: Iter<u8>) -> u16 {
-    (*iter.next().unwrap() as u16) << 8 |
-    (*iter.next().unwrap() as u16)
+pub fn read_beu16(mut iter: Iter<u8>) -> Option<u16> {
+    Some(
+    (*iter.next()? as u16) << 8 |
+    (*iter.next()? as u16))
 }
 
-pub fn read_beu32(mut iter: Iter<u8>) -> u32 {
-    (*iter.next().unwrap() as u32) << 24 |
-    (*iter.next().unwrap() as u32) << 16 |
-    (*iter.next().unwrap() as u32) << 8 |
-    (*iter.next().unwrap() as u32)
+pub fn read_beu32(mut iter: Iter<u8>) -> Option<u32> {
+    Some(
+    (*iter.next()? as u32) << 24 |
+    (*iter.next()? as u32) << 16 |
+    (*iter.next()? as u32) << 8 |
+    (*iter.next()? as u32))
 }
 
