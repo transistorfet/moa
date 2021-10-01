@@ -1,6 +1,15 @@
 
 use std::slice::Iter;
+use std::process::Command;
+use std::io::{Read, Write};
+use std::os::unix::io::{RawFd, AsRawFd};
 
+use nix::pty::{self, PtyMaster};
+use nix::fcntl::OFlag;
+use nix::unistd::sleep;
+use nix::poll::{poll, PollFd, PollFlags};
+
+use crate::error::Error;
 use crate::memory::{Address, Addressable};
 
 
@@ -27,9 +36,22 @@ const REG_ISR_RD: Address = 0x0B;
 const REG_IMR_WR: Address = 0x0B;
 const REG_IVR_WR: Address = 0x19;
 
+
+// Status Register Bits (SRA/SRB)
+const SR_RECEIVED_BREAK: u8 = 0x80;
+const SR_FRAMING_ERROR: u8 = 0x40;
+const SR_PARITY_ERROR: u8 = 0x20;
+const SR_OVERRUN_ERROR: u8 = 0x10;
+const SR_TX_EMPTY: u8 = 0x08;
+const SR_TX_READY: u8 = 0x04;
+const SR_RX_FULL: u8 = 0x02;
+const SR_RX_READY: u8 = 0x01;
+
+
 const DEV_NAME: &'static str = "mc68681";
 
 pub struct MC68681 {
+    pub tty: Option<PtyMaster>,
     pub status: [u8; 1],
     pub input: [u8; 1],
 }
@@ -37,8 +59,55 @@ pub struct MC68681 {
 impl MC68681 {
     pub fn new() -> Self {
         MC68681 {
+            tty: None,
             status: [0x0C],
             input: [0],
+        }
+    }
+
+    pub fn open(&mut self) -> Result<(), Error> {
+        let result = pty::posix_openpt(OFlag::O_RDWR).and_then(|master| {
+            pty::grantpt(&master).and_then(|_| pty::unlockpt(&master)).and_then(|_| Ok(master))
+        });
+
+        match result {
+            Ok(master) => {
+                let name = unsafe { pty::ptsname(&master).map_err(|_| Error::new("Unable to get pty name"))? };
+                println!("Open {}", name);
+                self.tty = Some(master);
+                Command::new("x-terminal-emulator").arg("-e").arg(&format!("pyserial-miniterm {}", name)).spawn().unwrap();
+                sleep(1);
+                Ok(())
+            },
+            Err(_) => Err(Error::new("Error opening new pseudoterminal")),
+        }
+    }
+
+    pub fn step(&mut self) -> Result<(), Error> {
+        if !self.rx_ready() && self.tty.is_some() {
+            self.poll_one_byte().map(|byte| {
+                self.input[0] = byte;
+                self.status[0] |= SR_RX_READY;
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn rx_ready(&self) -> bool {
+        (self.status[0] & SR_RX_READY) != 0
+    }
+
+    fn poll_one_byte(&mut self) -> Option<u8> {
+        if self.tty.is_none() {
+            return None;
+        }
+
+        let tty = self.tty.as_mut().unwrap();
+        let mut fds = [PollFd::new(tty.as_raw_fd(), PollFlags::POLLIN); 1];
+        match poll(&mut fds, 0) {
+            Ok(byte) => Some(byte as u8),
+            Err(_) => None,
         }
     }
 }
@@ -48,19 +117,68 @@ impl Addressable for MC68681 {
         0x30
     }
 
-    fn read(&self, addr: Address) -> &[u8] {
+    fn read(&mut self, addr: Address, count: usize) -> Vec<u8> {
+        let mut data = vec![0; count];
+
+        // TODO this is temporary
+        self.step();
+
         match addr {
-            REG_SRA_RD => &self.status,
-            REG_TBA_RD => &self.input,
-            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); &self.input },
+            REG_SRA_RD => data[0] = self.status[0],
+            REG_TBA_RD => {
+                data[0] = self.input[0];
+            },
+            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); data[0] = self.input[0]; },
         }
+
+        data
     }
 
     fn write(&mut self, mut addr: Address, data: &[u8]) {
         match addr {
-            REG_TBA_WR => { println!(">>> {}", data[0] as char); },
+            REG_TBA_WR => {
+                println!("{}: {}", DEV_NAME, data[0] as char);
+                self.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
+            },
             _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
     }
 }
 
+
+/*
+impl Addressable for MC68681 {
+    fn len(&self) -> usize {
+        0x30
+    }
+
+    fn read(&mut self, addr: Address, count: usize) -> Vec<u8> {
+        let mut data = vec![0; count];
+
+        // TODO this is temporary
+        self.step();
+
+        match addr {
+            REG_SRA_RD => { data[0] = self.status },
+            REG_RBA_RD => {
+                if self.rx_ready() {
+                    data[0] = self.input;
+                    self.status = self.status & !SR_RX_READY;
+                }
+            },
+            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); },
+        }
+        data
+    }
+
+    fn write(&mut self, mut addr: Address, data: &[u8]) {
+        match addr {
+            REG_TBA_WR => {
+                println!("{}: {}", DEV_NAME, data[0] as char);
+                self.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
+            },
+            _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+        }
+    }
+}
+*/

@@ -21,19 +21,22 @@ fn main() {
     space.insert(0x00100000, Box::new(ram));
 
     let mut serial = MC68681::new();
+    serial.open().unwrap();
     space.insert(0x00700000, Box::new(serial));
 
     let mut cpu = MC68010::new();
-    //cpu.set_breakpoint(0x0838);
-    //cpu.use_tracing = true;
+    //cpu.set_breakpoint(0x0224);
+    cpu.use_tracing = true;
     while cpu.is_running() {
         match cpu.step(&mut space) {
             Ok(()) => { },
             Err(err) => {
-                cpu.dump_state(&space);
+                cpu.dump_state(&mut space);
                 panic!("{:?}", err);
             },
         }
+
+        //serial.step();
     }
 }
 

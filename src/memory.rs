@@ -9,7 +9,7 @@ pub type Address = u64;
 
 pub trait Addressable {
     fn len(&self) -> usize;
-    fn read(&self, addr: Address) -> &[u8];
+    fn read(&mut self, addr: Address, count: usize) -> Vec<u8>;
     fn write(&mut self, addr: Address, data: &[u8]);
 }
 
@@ -38,8 +38,8 @@ impl Addressable for MemoryBlock {
         self.contents.len()
     }
 
-    fn read(&self, addr: Address) -> &[u8] {
-        &self.contents[(addr) as usize .. ]
+    fn read(&mut self, addr: Address, count: usize) -> Vec<u8> {
+        self.contents[(addr as usize) .. (addr as usize + count)].to_vec()
     }
 
     fn write(&mut self, mut addr: Address, data: &[u8]) {
@@ -107,7 +107,7 @@ impl AddressSpace {
     }
 
 
-    pub fn dump_memory(&self, mut addr: Address, mut count: Address) {
+    pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
         while count > 0 {
             let mut line = format!("{:#010x}: ", addr);
             for i in 0..8 {
@@ -120,24 +120,24 @@ impl AddressSpace {
     }
 
 
-    pub fn read(&self, addr: Address) -> Result<&[u8], Error> {
-        let seg = self.get_segment(addr)?;
-        Ok(seg.contents.read(addr - seg.base))
+    pub fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
+        let mut seg = self.get_segment_mut(addr)?;
+        Ok(seg.contents.read(addr - seg.base, count))
     }
 
-    pub fn read_u8(&self, addr: Address) -> Result<u8, Error> {
-        let seg = self.get_segment(addr)?;
-        Ok(*seg.contents.read(addr - seg.base).iter().next().ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
+    pub fn read_u8(&mut self, addr: Address) -> Result<u8, Error> {
+        let mut seg = self.get_segment_mut(addr)?;
+        Ok(*seg.contents.read(addr - seg.base, 1).iter().next().ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
-    pub fn read_beu16(&self, addr: Address) -> Result<u16, Error> {
-        let seg = self.get_segment(addr)?;
-        Ok(read_beu16(seg.contents.read(addr - seg.base).iter()).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
+    pub fn read_beu16(&mut self, addr: Address) -> Result<u16, Error> {
+        let mut seg = self.get_segment_mut(addr)?;
+        Ok(read_beu16(seg.contents.read(addr - seg.base, 2).iter()).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
-    pub fn read_beu32(&self, addr: Address) -> Result<u32, Error> {
-        let seg = self.get_segment(addr)?;
-        Ok(read_beu32(seg.contents.read(addr - seg.base).iter()).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
+    pub fn read_beu32(&mut self, addr: Address) -> Result<u32, Error> {
+        let mut seg = self.get_segment_mut(addr)?;
+        Ok(read_beu32(seg.contents.read(addr - seg.base, 4).iter()).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
 

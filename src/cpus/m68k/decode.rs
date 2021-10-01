@@ -115,6 +115,7 @@ pub enum Instruction {
     LSd(Target, Target, Size, ShiftDirection),
 
     MOVE(Target, Target, Size),
+    MOVEA(Target, u8, Size),
     MOVEfromSR(Target),
     MOVEtoSR(Target),
     MOVEtoCCR(Target),
@@ -270,12 +271,20 @@ impl MC68010 {
             OPCG_MOVE_LONG => {
                 let src = self.decode_lower_effective_address(space, ins, Some(Size::Long))?;
                 let dest = self.decode_upper_effective_address(space, ins, Some(Size::Long))?;
-                Ok(Instruction::MOVE(src, dest, Size::Long))
+                if let Target::DirectAReg(reg) = dest {
+                    Ok(Instruction::MOVEA(src, reg, Size::Long))
+                } else {
+                    Ok(Instruction::MOVE(src, dest, Size::Long))
+                }
             },
             OPCG_MOVE_WORD => {
                 let src = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
                 let dest = self.decode_upper_effective_address(space, ins, Some(Size::Word))?;
-                Ok(Instruction::MOVE(src, dest, Size::Word))
+                if let Target::DirectAReg(reg) = dest {
+                    Ok(Instruction::MOVEA(src, reg, Size::Word))
+                } else {
+                    Ok(Instruction::MOVE(src, dest, Size::Word))
+                }
             },
             OPCG_MISC => {
                 if (ins & 0b000101000000) == 0b000100000000 {

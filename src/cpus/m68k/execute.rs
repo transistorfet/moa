@@ -121,7 +121,7 @@ impl MC68010 {
         }
     }
 
-    pub fn dump_state(&self, space: &AddressSpace) {
+    pub fn dump_state(&self, space: &mut AddressSpace) {
         println!("State: {:?}", self.state);
         println!("PC: {:#010x}", self.pc);
         println!("SR: {:#06x}", self.sr);
@@ -285,8 +285,13 @@ impl MC68010 {
             //Instruction::EXG(Target, Target) => {
             //},
             Instruction::EXT(reg, size) => {
-                let data: u8 = self.d_reg[reg as usize] as u8;
-                self.d_reg[reg as usize] = sign_extend_byte(data, size);
+                let byte = (self.d_reg[reg as usize] as u8) as i8;
+                let result = match size {
+                    Size::Byte => (byte as u8) as u32,
+                    Size::Word => ((byte as i16) as u16) as u32,
+                    Size::Long => (byte as i32) as u32,
+                };
+                self.d_reg[reg as usize] = result;
             },
             //Instruction::ILLEGAL => {
             //},
@@ -310,6 +315,11 @@ impl MC68010 {
                 let value = self.get_target_value(space, src, size)?;
                 self.set_compare_flags(value, false, size);
                 self.set_target_value(space, dest, value, size)?;
+            },
+            Instruction::MOVEA(src, reg, size) => {
+                let value = self.get_target_value(space, src, size)?;
+                let addr = self.get_a_reg_mut(reg);
+                *addr = sign_extend_to_long(value, size) as u32;
             },
             Instruction::MOVEfromSR(target) => {
                 self.set_target_value(space, target, self.sr as u32, Size::Word)?;
@@ -374,7 +384,7 @@ impl MC68010 {
                 }
             },
             Instruction::MOVEQ(data, reg) => {
-                let value = sign_extend_byte(data, Size::Long);
+                let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
                 self.d_reg[reg as usize] = value;
                 self.set_compare_flags(value, false, Size::Long);
             },
@@ -604,11 +614,7 @@ impl MC68010 {
     }
 
     fn set_compare_flags(&mut self, value: u32, carry: bool, size: Size) {
-        let value = match size {
-            Size::Byte => ((value as u8) as i8) as i32,
-            Size::Word => ((value as u16) as i16) as i32,
-            Size::Long => value as i32,
-        };
+        let value = sign_extend_to_long(value, size);
 
         let mut flags = 0x0000;
         if value < 0 {
@@ -704,12 +710,11 @@ fn set_address_sized(space: &mut AddressSpace, addr: Address, value: u32, size: 
     }
 }
 
-fn sign_extend_byte(value: u8, size: Size) -> u32 {
-    let value = value as i8;
-    match size {
-        Size::Byte => (value as u8) as u32,
-        Size::Word => ((value as i16) as u16) as u32,
-        Size::Long => (value as i32) as u32,
+fn sign_extend_to_long(value: u32, from: Size) -> i32 {
+    match from {
+        Size::Byte => ((value as u8) as i8) as i32,
+        Size::Word => ((value as u16) as i16) as i32,
+        Size::Long => value as i32,
     }
 }
 
