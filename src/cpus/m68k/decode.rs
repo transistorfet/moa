@@ -712,5 +712,13 @@ impl Size {
             Size::Long => 4,
         }
     }
+
+    pub fn in_bits(&self) -> u32 {
+        match self {
+            Size::Byte => 8,
+            Size::Word => 16,
+            Size::Long => 32,
+        }
+    }
 }
 

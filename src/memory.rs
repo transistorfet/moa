@@ -9,7 +9,7 @@ pub type Address = u64;
 
 pub trait Addressable {
     fn len(&self) -> usize;
-    fn read(&self, addr: Address) -> Iter<u8>;
+    fn read(&self, addr: Address) -> &[u8];
     fn write(&mut self, addr: Address, data: &[u8]);
 }
 
@@ -38,8 +38,8 @@ impl Addressable for MemoryBlock {
         self.contents.len()
     }
 
-    fn read(&self, addr: Address) -> Iter<u8> {
-        self.contents[(addr) as usize .. ].iter()
+    fn read(&self, addr: Address) -> &[u8] {
+        &self.contents[(addr) as usize .. ]
     }
 
     fn write(&mut self, mut addr: Address, data: &[u8]) {
@@ -120,24 +120,24 @@ impl AddressSpace {
     }
 
 
-    pub fn read(&self, addr: Address) -> Result<Iter<u8>, Error> {
+    pub fn read(&self, addr: Address) -> Result<&[u8], Error> {
         let seg = self.get_segment(addr)?;
         Ok(seg.contents.read(addr - seg.base))
     }
 
     pub fn read_u8(&self, addr: Address) -> Result<u8, Error> {
         let seg = self.get_segment(addr)?;
-        Ok(*seg.contents.read(addr - seg.base).next().ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
+        Ok(*seg.contents.read(addr - seg.base).iter().next().ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
     pub fn read_beu16(&self, addr: Address) -> Result<u16, Error> {
         let seg = self.get_segment(addr)?;
-        Ok(read_beu16(seg.contents.read(addr - seg.base)).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
+        Ok(read_beu16(seg.contents.read(addr - seg.base).iter()).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
     pub fn read_beu32(&self, addr: Address) -> Result<u32, Error> {
         let seg = self.get_segment(addr)?;
-        Ok(read_beu32(seg.contents.read(addr - seg.base)).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
+        Ok(read_beu32(seg.contents.read(addr - seg.base).iter()).ok_or_else(|| Error::new(&format!("Error reading address {:#010x}", addr)))?)
     }
 
 

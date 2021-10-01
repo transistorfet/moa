@@ -20,11 +20,12 @@ fn main() {
     let ram = MemoryBlock::new(vec![0; 0x00100000]);
     space.insert(0x00100000, Box::new(ram));
 
-    let serial = MC68681::new();
+    let mut serial = MC68681::new();
     space.insert(0x00700000, Box::new(serial));
 
     let mut cpu = MC68010::new();
-    cpu.set_breakpoint(0x0838);
+    //cpu.set_breakpoint(0x0838);
+    //cpu.use_tracing = true;
     while cpu.is_running() {
         match cpu.step(&mut space) {
             Ok(()) => { },

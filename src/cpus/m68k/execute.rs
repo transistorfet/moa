@@ -4,11 +4,25 @@ use crate::memory::{Address, AddressSpace};
 
 use super::decode::{Instruction, Target, Size, Direction, Condition, ControlRegister, RegisterType};
 
+/*
 pub trait Processor {
     fn reset();
     fn step();
 }
+*/
 
+
+const FLAGS_ON_RESET: u16 = 0x2700;
+
+pub const FLAGS_CARRY: u16 = 0x0001;
+pub const FLAGS_OVERFLOW: u16 = 0x0002;
+pub const FLAGS_ZERO: u16 = 0x0004;
+pub const FLAGS_NEGATIVE: u16 = 0x0008;
+pub const FLAGS_SUPERVISOR: u16 = 0x2000;
+
+pub const ERR_BUS_ERROR: u32 = 2;
+pub const ERR_ADDRESS_ERROR: u32 = 3;
+pub const ERR_ILLEGAL_INSTRUCTION: u32 = 4;
 
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -33,20 +47,9 @@ pub struct MC68010 {
     pub current_instruction_addr: u32,
     pub current_instruction: Instruction,
     pub breakpoint: u32,
+    pub use_tracing: bool,
     pub use_debugger: bool,
 }
-
-const FLAGS_ON_RESET: u16 = 0x2700;
-
-pub const FLAGS_CARRY: u16 = 0x0001;
-pub const FLAGS_OVERFLOW: u16 = 0x0002;
-pub const FLAGS_ZERO: u16 = 0x0004;
-pub const FLAGS_NEGATIVE: u16 = 0x0008;
-pub const FLAGS_SUPERVISOR: u16 = 0x2000;
-
-pub const ERR_BUS_ERROR: u32 = 2;
-pub const ERR_ADDRESS_ERROR: u32 = 3;
-pub const ERR_ILLEGAL_INSTRUCTION: u32 = 4;
 
 impl MC68010 {
     pub fn new() -> MC68010 {
@@ -65,6 +68,7 @@ impl MC68010 {
             current_instruction_addr: 0,
             current_instruction: Instruction::NOP,
             breakpoint: 0,
+            use_tracing: false,
             use_debugger: false,
         }
     }
@@ -83,6 +87,7 @@ impl MC68010 {
         self.current_instruction_addr = 0;
         self.current_instruction = Instruction::NOP;
         self.breakpoint = 0;
+        self.use_tracing = false;
         self.use_debugger = false;
     }
 
@@ -157,17 +162,20 @@ impl MC68010 {
         self.current_instruction = self.decode_one(space)?;
 
         if self.breakpoint == self.current_instruction_addr {
+            self.use_tracing = true;
             self.use_debugger = true;
         }
 
-        if self.use_debugger {
+        if self.use_tracing {
             // Print instruction bytes for debugging
             let ins_data: Result<String, Error> =
                 (0..((self.pc - self.current_instruction_addr) / 2)).map(|offset|
                     Ok(format!("{:04x} ", space.read_beu16((self.current_instruction_addr + (offset * 2)) as Address)?))
                 ).collect();
             debug!("{:#010x}: {}\n\t{:?}\n", self.current_instruction_addr, ins_data?, self.current_instruction);
+        }
 
+        if self.use_debugger {
             // Single Step
             self.dump_state(space);
             let mut buffer = String::new();
@@ -192,7 +200,7 @@ impl MC68010 {
                     },
                     Size::Long => existing.overflowing_add(value),
                 };
-                self.set_compare_flags(result as i32, overflow);
+                self.set_compare_flags(result, overflow, size);
                 self.set_target_value(space, dest, result, size)?;
             },
             Instruction::AND(src, dest, size) => {
@@ -222,16 +230,36 @@ impl MC68010 {
                 self.push_long(space, self.pc)?;
                 self.pc = self.current_instruction_addr.wrapping_add(offset as u32) + 2;
             },
-            //Instruction::BTST(Target, Target, Size) => {
-            //},
-            //Instruction::BCHG(Target, Target, Size) => {
-            //},
-            //Instruction::BCLR(Target, Target, Size) => {
-            //},
-            //Instruction::BSET(Target, Target, Size) => {
-            //},
+            Instruction::BTST(bitnum, target, size) => {
+                let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
+                let value = self.get_target_value(space, target, size)?;
+                self.set_bit_test_flags(value, bitnum, size);
+            },
+            Instruction::BCHG(bitnum, target, size) => {
+                let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
+                let mut value = self.get_target_value(space, target, size)?;
+                let mask = self.set_bit_test_flags(value, bitnum, size);
+                value = (value & !mask) | (!(value & mask) & mask);
+                self.set_target_value(space, target, value, size)?;
+            },
+            Instruction::BCLR(bitnum, target, size) => {
+                let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
+                let mut value = self.get_target_value(space, target, size)?;
+                let mask = self.set_bit_test_flags(value, bitnum, size);
+                value = value & !mask;
+                self.set_target_value(space, target, value, size)?;
+            },
+            Instruction::BSET(bitnum, target, size) => {
+                let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
+                let mut value = self.get_target_value(space, target, size)?;
+                let mask = self.set_bit_test_flags(value, bitnum, size);
+                value = value | mask;
+                self.set_target_value(space, target, value, size)?;
+            },
             Instruction::CLR(target, size) => {
                 self.set_target_value(space, target, 0, size)?;
+                // Clear flags except Zero flag
+                self.sr = (self.sr & 0xFFF0) | 0x0004;
             },
             Instruction::CMP(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
@@ -242,12 +270,18 @@ impl MC68010 {
             //},
             //Instruction::DIV(Target, Target, Size, Sign) => {
             //},
-            //Instruction::EOR(Target, Target, Size) => {
-            //},
-            //Instruction::EORtoCCR(u8) => {
-            //},
-            //Instruction::EORtoSR(u16) => {
-            //},
+            Instruction::EOR(src, dest, size) => {
+                let value = self.get_target_value(space, src, size)?;
+                let existing = self.get_target_value(space, dest, size)?;
+                self.set_target_value(space, dest, existing ^ value, size)?;
+                self.set_logic_flags(value, size);
+            },
+            Instruction::EORtoCCR(value) => {
+                self.sr = self.sr ^ value as u16;
+            },
+            Instruction::EORtoSR(value) => {
+                self.sr = self.sr ^ value;
+            },
             //Instruction::EXG(Target, Target) => {
             //},
             Instruction::EXT(reg, size) => {
@@ -274,6 +308,7 @@ impl MC68010 {
             //},
             Instruction::MOVE(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
+                self.set_compare_flags(value, false, size);
                 self.set_target_value(space, dest, value, size)?;
             },
             Instruction::MOVEfromSR(target) => {
@@ -341,6 +376,7 @@ impl MC68010 {
             Instruction::MOVEQ(data, reg) => {
                 let value = sign_extend_byte(data, Size::Long);
                 self.d_reg[reg as usize] = value;
+                self.set_compare_flags(value, false, Size::Long);
             },
             //Instruction::MUL(Target, Target, Size, Sign) => {
             //},
@@ -390,13 +426,15 @@ impl MC68010 {
                 let result = self.subtract_sized_with_flags(existing, value, size);
                 self.set_target_value(space, dest, result, size)?;
             },
-            //Instruction::SWAP(u8) => {
-            //},
+            Instruction::SWAP(reg) => {
+                let value = self.d_reg[reg as usize];
+                self.d_reg[reg as usize] = ((value & 0x0000FFFF) << 16) | ((value & 0xFFFF0000) >> 16);
+            },
             //Instruction::TAS(Target) => {
             //},
             Instruction::TST(target, size) => {
                 let value = self.get_target_value(space, target, size)?;
-                self.set_compare_flags(value as i32, false);
+                self.set_compare_flags(value, false, size);
             },
             //Instruction::TRAP(u8) => {
             //},
@@ -526,7 +564,7 @@ impl MC68010 {
             },
             Size::Long => existing.overflowing_sub(diff),
         };
-        self.set_compare_flags(result as i32, overflow);
+        self.set_compare_flags(result, overflow, size);
         result
     }
 
@@ -565,7 +603,13 @@ impl MC68010 {
         }
     }
 
-    fn set_compare_flags(&mut self, value: i32, carry: bool) {
+    fn set_compare_flags(&mut self, value: u32, carry: bool, size: Size) {
+        let value = match size {
+            Size::Byte => ((value as u8) as i8) as i32,
+            Size::Word => ((value as u16) as i16) as i32,
+            Size::Long => value as i32,
+        };
+
         let mut flags = 0x0000;
         if value < 0 {
             flags |= FLAGS_NEGATIVE
@@ -591,6 +635,13 @@ impl MC68010 {
             flags |= FLAGS_ZERO
         }
         self.sr |= (self.sr & 0xFFF0) | flags;
+    }
+
+    fn set_bit_test_flags(&mut self, value: u32, bitnum: u32, size: Size) -> u32 {
+        let mask = 0x1 << (bitnum % size.in_bits());
+        let zeroflag = if (value & mask) == 0 { FLAGS_ZERO } else { 0 };
+        self.sr = (self.sr & !FLAGS_ZERO) | zeroflag;
+        mask
     }
 
 
@@ -654,7 +705,7 @@ fn set_address_sized(space: &mut AddressSpace, addr: Address, value: u32, size: 
 }
 
 fn sign_extend_byte(value: u8, size: Size) -> u32 {
-    let value = (value as i8);
+    let value = value as i8;
     match size {
         Size::Byte => (value as u8) as u32,
         Size::Word => ((value as i16) as u16) as u32,

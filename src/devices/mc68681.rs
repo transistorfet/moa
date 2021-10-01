@@ -30,12 +30,14 @@ const REG_IVR_WR: Address = 0x19;
 const DEV_NAME: &'static str = "mc68681";
 
 pub struct MC68681 {
+    pub status: [u8; 1],
     pub input: [u8; 1],
 }
 
 impl MC68681 {
     pub fn new() -> Self {
         MC68681 {
+            status: [0x0C],
             input: [0],
         }
     }
@@ -46,16 +48,17 @@ impl Addressable for MC68681 {
         0x30
     }
 
-    fn read(&self, addr: Address) -> Iter<u8> {
+    fn read(&self, addr: Address) -> &[u8] {
         match addr {
-            REG_TBA_WR => self.input.iter(),
-            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); self.input.iter() },
+            REG_SRA_RD => &self.status,
+            REG_TBA_RD => &self.input,
+            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); &self.input },
         }
     }
 
     fn write(&mut self, mut addr: Address, data: &[u8]) {
         match addr {
-            REG_TBA_WR => { println!(">>> {}", data[0]); },
+            REG_TBA_WR => { println!(">>> {}", data[0] as char); },
             _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
     }
