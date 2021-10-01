@@ -552,7 +552,7 @@ impl MC68010 {
                         let reg = get_low_reg(ins);
                         let rotation = get_high_reg(ins);
                         let count = if (ins & 0x0020) == 0 {
-                            Target::Immediate(rotation as u32)
+                            Target::Immediate(if rotation != 0 { rotation as u32 } else { 8 })
                         } else {
                             Target::DirectDReg(rotation)
                         };
@@ -595,8 +595,8 @@ impl MC68010 {
         self.get_mode_as_target(space, mode, reg, size)
     }
 
-    fn decode_brief_extension_word(&self, brief_extension: u16) -> (RegisterType, u8, u16, Size) {
-        let data = brief_extension & 0x00FF;
+    fn decode_brief_extension_word(&self, brief_extension: u16) -> (RegisterType, u8, i32, Size) {
+        let data = sign_extend_to_long((brief_extension & 0x00FF) as u32, Size::Byte);
         let xreg = ((brief_extension & 0x7000) >> 12) as u8;
         let size = if (brief_extension & 0x0800) == 0 { Size::Word } else { Size::Long };
 
@@ -613,13 +613,13 @@ impl MC68010 {
             0b011 => Target::IndirectARegInc(reg),
             0b100 => Target::IndirectARegDec(reg),
             0b101 => {
-                let data = self.read_instruction_word(space)?;
-                Target::IndirectARegOffset(reg, (data as i16) as i32)
+                let data = sign_extend_to_long(self.read_instruction_word(space)? as u32, Size::Word);
+                Target::IndirectARegOffset(reg, data)
             },
             0b110 => {
                 let brief_extension = self.read_instruction_word(space)?;
                 let (rtype, xreg, data, size) = self.decode_brief_extension_word(brief_extension);
-                Target::IndirectARegXRegOffset(reg, rtype, xreg, (data as i16) as i32, size)
+                Target::IndirectARegXRegOffset(reg, rtype, xreg, data, size)
             },
             0b111 => {
                 match reg {
@@ -632,13 +632,13 @@ impl MC68010 {
                         Target::IndirectMemory(value)
                     },
                     0b010 => {
-                        let data = self.read_instruction_word(space)?;
-                        Target::IndirectPCOffset((data as i16) as i32)
+                        let data = sign_extend_to_long(self.read_instruction_word(space)? as u32, Size::Word);
+                        Target::IndirectPCOffset(data)
                     },
                     0b011 => {
                         let brief_extension = self.read_instruction_word(space)?;
                         let (rtype, xreg, data, size) = self.decode_brief_extension_word(brief_extension);
-                        Target::IndirectPCXRegOffset(rtype, xreg, (data as i16) as i32, size)
+                        Target::IndirectPCXRegOffset(rtype, xreg, data, size)
                     },
                     0b100 => {
                         let data = match size {
@@ -728,6 +728,14 @@ impl Size {
             Size::Word => 16,
             Size::Long => 32,
         }
+    }
+}
+
+pub fn sign_extend_to_long(value: u32, from: Size) -> i32 {
+    match from {
+        Size::Byte => ((value as u8) as i8) as i32,
+        Size::Word => ((value as u16) as i16) as i32,
+        Size::Long => value as i32,
     }
 }
 

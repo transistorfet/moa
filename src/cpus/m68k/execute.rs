@@ -2,7 +2,7 @@
 use crate::error::Error;
 use crate::memory::{Address, AddressSpace};
 
-use super::decode::{Instruction, Target, Size, Direction, Condition, ControlRegister, RegisterType};
+use super::decode::{Instruction, Target, Size, Direction, Condition, ShiftDirection, ControlRegister, RegisterType, sign_extend_to_long};
 
 /*
 pub trait Processor {
@@ -18,6 +18,7 @@ pub const FLAGS_CARRY: u16 = 0x0001;
 pub const FLAGS_OVERFLOW: u16 = 0x0002;
 pub const FLAGS_ZERO: u16 = 0x0004;
 pub const FLAGS_NEGATIVE: u16 = 0x0008;
+pub const FLAGS_EXTEND: u16 = 0x0010;
 pub const FLAGS_SUPERVISOR: u16 = 0x2000;
 
 pub const ERR_BUS_ERROR: u32 = 2;
@@ -200,7 +201,7 @@ impl MC68010 {
                     },
                     Size::Long => existing.overflowing_add(value),
                 };
-                self.set_compare_flags(result, overflow, size);
+                self.set_compare_flags(result, size, overflow);
                 self.set_target_value(space, dest, result, size)?;
             },
             Instruction::AND(src, dest, size) => {
@@ -309,11 +310,21 @@ impl MC68010 {
             },
             //Instruction::LINK(u8, u16) => {
             //},
-            //Instruction::LSd(Target, Target, Size, ShiftDirection) => {
-            //},
+            Instruction::LSd(count, target, size, shift_dir) => {
+                let count = self.get_target_value(space, count, size)? % 64;
+                let mut pair = (self.get_target_value(space, target, size)?, false);
+                for _ in 0..count {
+                    pair = shift_operation(pair.0, size, shift_dir, false);
+                }
+                self.set_compare_flags(pair.0, size, false);
+                if pair.1 {
+                    self.sr |= FLAGS_EXTEND | FLAGS_CARRY;
+                }
+                self.set_target_value(space, target, pair.0, size)?;
+            },
             Instruction::MOVE(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
-                self.set_compare_flags(value, false, size);
+                self.set_compare_flags(value, size, false);
                 self.set_target_value(space, dest, value, size)?;
             },
             Instruction::MOVEA(src, reg, size) => {
@@ -386,7 +397,7 @@ impl MC68010 {
             Instruction::MOVEQ(data, reg) => {
                 let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
                 self.d_reg[reg as usize] = value;
-                self.set_compare_flags(value, false, Size::Long);
+                self.set_compare_flags(value, Size::Long, false);
             },
             //Instruction::MUL(Target, Target, Size, Sign) => {
             //},
@@ -444,7 +455,7 @@ impl MC68010 {
             //},
             Instruction::TST(target, size) => {
                 let value = self.get_target_value(space, target, size)?;
-                self.set_compare_flags(value, false, size);
+                self.set_compare_flags(value, size, false);
             },
             //Instruction::TRAP(u8) => {
             //},
@@ -480,9 +491,9 @@ impl MC68010 {
                 get_address_sized(space, (*addr).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, target_size) => {
-                let reg_offset = get_value_sized(self.get_x_reg_value(rtype, xreg), target_size);
+                let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
                 let addr = self.get_a_reg_mut(reg);
-                get_address_sized(space, (*addr).wrapping_add(reg_offset).wrapping_add(offset as u32) as Address, size)
+                get_address_sized(space, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectMemory(addr) => {
                 get_address_sized(space, addr as Address, size)
@@ -491,8 +502,8 @@ impl MC68010 {
                 get_address_sized(space, self.pc.wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectPCXRegOffset(rtype, xreg, offset, target_size) => {
-                let reg_offset = get_value_sized(self.get_x_reg_value(rtype, xreg), target_size);
-                get_address_sized(space, self.pc.wrapping_add(reg_offset).wrapping_add(offset as u32) as Address, size)
+                let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
+                get_address_sized(space, self.pc.wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
             },
         }
     }
@@ -523,9 +534,9 @@ impl MC68010 {
                 set_address_sized(space, (*addr).wrapping_add(offset as u32) as Address, value, size)?;
             },
             Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, target_size) => {
-                let reg_offset = get_value_sized(self.get_x_reg_value(rtype, xreg), target_size);
+                let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
                 let addr = self.get_a_reg_mut(reg);
-                set_address_sized(space, (*addr).wrapping_add(reg_offset).wrapping_add(offset as u32) as Address, value, size)?;
+                set_address_sized(space, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, value, size)?;
             },
             Target::IndirectMemory(addr) => {
                 set_address_sized(space, addr as Address, value, size)?;
@@ -543,9 +554,9 @@ impl MC68010 {
                 (*addr).wrapping_add(offset as u32)
             },
             Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, target_size) => {
-                let reg_offset = get_value_sized(self.get_x_reg_value(rtype, xreg), target_size);
+                let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
                 let addr = self.get_a_reg_mut(reg);
-                (*addr).wrapping_add(reg_offset).wrapping_add(offset as u32)
+                (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32)
             },
             Target::IndirectMemory(addr) => {
                 addr
@@ -554,8 +565,8 @@ impl MC68010 {
                 self.pc.wrapping_add(offset as u32)
             },
             Target::IndirectPCXRegOffset(rtype, xreg, offset, target_size) => {
-                let reg_offset = get_value_sized(self.get_x_reg_value(rtype, xreg), target_size);
-                self.pc.wrapping_add(reg_offset).wrapping_add(offset as u32)
+                let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
+                self.pc.wrapping_add(reg_offset as u32).wrapping_add(offset as u32)
             },
             _ => return Err(Error::new(&format!("Invalid addressing target: {:?}", target))),
         };
@@ -574,7 +585,7 @@ impl MC68010 {
             },
             Size::Long => existing.overflowing_sub(diff),
         };
-        self.set_compare_flags(result, overflow, size);
+        self.set_compare_flags(result, size, overflow);
         result
     }
 
@@ -613,7 +624,7 @@ impl MC68010 {
         }
     }
 
-    fn set_compare_flags(&mut self, value: u32, carry: bool, size: Size) {
+    fn set_compare_flags(&mut self, value: u32, size: Size, carry: bool) {
         let value = sign_extend_to_long(value, size);
 
         let mut flags = 0x0000;
@@ -631,11 +642,8 @@ impl MC68010 {
 
     fn set_logic_flags(&mut self, value: u32, size: Size) {
         let mut flags = 0x0000;
-        match size {
-            Size::Byte if value & 0x80 != 0 => flags |= FLAGS_NEGATIVE,
-            Size::Word if value & 0x8000 != 0 => flags |= FLAGS_NEGATIVE,
-            Size::Long if value & 0x80000000 != 0 => flags |= FLAGS_NEGATIVE,
-            _ => { },
+        if get_msb(value, size) {
+            flags |= FLAGS_NEGATIVE;
         }
         if value == 0 {
             flags |= FLAGS_ZERO
@@ -710,16 +718,35 @@ fn set_address_sized(space: &mut AddressSpace, addr: Address, value: u32, size: 
     }
 }
 
-fn sign_extend_to_long(value: u32, from: Size) -> i32 {
-    match from {
-        Size::Byte => ((value as u8) as i8) as i32,
-        Size::Word => ((value as u16) as i16) as i32,
-        Size::Long => value as i32,
+fn shift_operation(value: u32, size: Size, dir: ShiftDirection, arithmetic: bool) -> (u32, bool) {
+    match dir {
+        ShiftDirection::Left => {
+            match size {
+                Size::Byte => (((value as u8) << 1) as u32, get_msb(value, size)),
+                Size::Word => (((value as u16) << 1) as u32, get_msb(value, size)),
+                Size::Long => ((value << 1) as u32, get_msb(value, size)),
+            }
+        },
+        ShiftDirection::Right => {
+            let mask = if arithmetic { get_msb_mask(value, size) } else { 0 };
+            ((value >> 1) | mask, (value & 0x1) != 0)
+        },
     }
 }
 
-/*
-impl Processor for MC68010 {
-
+fn get_msb(value: u32, size: Size) -> bool {
+    match size {
+        Size::Byte => (value & 0x00000080) != 0,
+        Size::Word => (value & 0x00008000) != 0,
+        Size::Long => (value & 0x80000000) != 0,
+    }
 }
-*/
+
+fn get_msb_mask(value: u32, size: Size) -> u32 {
+    match size {
+        Size::Byte => value & 0x00000080,
+        Size::Word => value & 0x00008000,
+        Size::Long => value & 0x80000000,
+    }
+}
+
