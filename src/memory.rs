@@ -39,7 +39,8 @@ impl Addressable for MemoryBlock {
     }
 
     fn read(&mut self, addr: Address, count: usize) -> Vec<u8> {
-        self.contents[(addr as usize) .. (addr as usize + count)].to_vec()
+        let size = if addr as usize + count < self.contents.len() { addr as usize + count } else { self.contents.len() };
+        self.contents[(addr as usize) .. size].to_vec()
     }
 
     fn write(&mut self, mut addr: Address, data: &[u8]) {
@@ -112,7 +113,12 @@ impl AddressSpace {
             let mut line = format!("{:#010x}: ", addr);
             let to = if count < 16 { count / 2 } else { 8 };
             for i in 0..to {
-                line += &format!("{:#06x} ", self.read_beu16(addr).unwrap());
+                let word = self.read_beu16(addr);
+                if word.is_err() {
+                    println!("{}", line);
+                    return;
+                }
+                line += &format!("{:#06x} ", word.unwrap());
                 addr += 2;
                 count -= 2;
             }

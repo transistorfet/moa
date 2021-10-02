@@ -25,7 +25,10 @@ fn main() {
     space.insert(0x00700000, Box::new(serial));
 
     let mut cpu = MC68010::new();
-    cpu.set_breakpoint(0x0ea0);
+    //cpu.add_breakpoint(0x07f8);
+    //cpu.add_breakpoint(0x0836);
+    //cpu.add_breakpoint(0x0838);
+
     cpu.use_tracing = true;
     while cpu.is_running() {
         match cpu.step(&mut space) {
@@ -38,5 +41,13 @@ fn main() {
 
         //serial.step();
     }
+
+    // TODO I need to add a way to decode and dump the assembly for a section of code, in debugger
+    /*
+    cpu.pc = 0x07f8;
+    while cpu.is_running() {
+        cpu.decode_next(&mut space).unwrap();
+    }
+    */
 }
 

@@ -47,7 +47,7 @@ pub struct MC68010 {
 
     pub current_instruction_addr: u32,
     pub current_instruction: Instruction,
-    pub breakpoint: u32,
+    pub breakpoints: Vec<u32>,
     pub use_tracing: bool,
     pub use_debugger: bool,
 }
@@ -68,7 +68,7 @@ impl MC68010 {
 
             current_instruction_addr: 0,
             current_instruction: Instruction::NOP,
-            breakpoint: 0,
+            breakpoints: vec![],
             use_tracing: false,
             use_debugger: false,
         }
@@ -87,7 +87,7 @@ impl MC68010 {
 
         self.current_instruction_addr = 0;
         self.current_instruction = Instruction::NOP;
-        self.breakpoint = 0;
+        self.breakpoints = vec![];
         self.use_tracing = false;
         self.use_debugger = false;
     }
@@ -106,8 +106,8 @@ impl MC68010 {
         Ok(())
     }
 
-    pub fn set_breakpoint(&mut self, addr: Address) {
-        self.breakpoint = addr as u32;
+    pub fn add_breakpoint(&mut self, addr: Address) {
+        self.breakpoints.push(addr as u32);
     }
 
     pub fn step(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
@@ -162,9 +162,12 @@ impl MC68010 {
         self.current_instruction_addr = self.pc;
         self.current_instruction = self.decode_one(space)?;
 
-        if self.breakpoint == self.current_instruction_addr {
-            self.use_tracing = true;
-            self.use_debugger = true;
+        for breakpoint in &self.breakpoints {
+            if *breakpoint == self.current_instruction_addr {
+                self.use_tracing = true;
+                self.use_debugger = true;
+                break;
+            }
         }
 
         if self.use_tracing {
@@ -190,6 +193,10 @@ impl MC68010 {
             std::io::stdin().read_line(&mut buffer).unwrap();
             match buffer.as_ref() {
                 "dump\n" => space.dump_memory(self.msp as Address, (0x200000 - self.msp) as Address),
+                "continue\n" => {
+                    self.use_debugger = false;
+                    return;
+                },
                 _ => { return; },
             }
         }
@@ -276,6 +283,11 @@ impl MC68010 {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
                 let result = self.subtract_sized_with_flags(existing, value, size);
+            },
+            Instruction::CMPA(src, reg, size) => {
+                let value = self.get_target_value(space, src, size)?;
+                let existing = sign_extend_to_long(*self.get_a_reg_mut(reg), size) as u32;
+                let result = self.subtract_sized_with_flags(existing, value, Size::Long);
             },
             //Instruction::DBcc(Condition, u16) => {
             //},
@@ -374,31 +386,32 @@ impl MC68010 {
 
                 if dir == Direction::ToTarget {
                     let mut mask = mask;
-                    for i in 0..8 {
-                        if (mask & 0x01) != 0 {
-                            self.set_target_value(space, target, self.d_reg[i], size)?;
-                        }
-                        mask >>= 1;
-                    }
-                    for i in 0..8 {
+                    for i in (0..8).rev() {
                         if (mask & 0x01) != 0 {
                             let value = *self.get_a_reg_mut(i);
                             self.set_target_value(space, target, value, size)?;
+                        }
+                        mask >>= 1;
+                    }
+                    for i in (0..8).rev() {
+                        if (mask & 0x01) != 0 {
+                            self.set_target_value(space, target, self.d_reg[i], size)?;
                         }
                         mask >>= 1;
                     }
                 } else {
                     let mut mask = mask;
-                    for i in (0..8).rev() {
+                    for i in 0..8 {
                         if (mask & 0x01) != 0 {
-                            let value = *self.get_a_reg_mut(i);
-                            self.set_target_value(space, target, value, size)?;
+                            self.d_reg[i] = self.get_target_value(space, target, size)?;
                         }
                         mask >>= 1;
                     }
-                    for i in (0..8).rev() {
+                    for i in 0..8 {
                         if (mask & 0x01) != 0 {
-                            self.set_target_value(space, target, self.d_reg[i], size)?;
+                            let value = self.get_target_value(space, target, size)?;
+                            let addr = self.get_a_reg_mut(i);
+                            *addr = value;
                         }
                         mask >>= 1;
                     }

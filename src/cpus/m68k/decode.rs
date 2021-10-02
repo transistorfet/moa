@@ -5,6 +5,24 @@ use crate::memory::{Address, AddressSpace};
 use super::execute::MC68010;
 use super::execute::ERR_ILLEGAL_INSTRUCTION;
 
+const OPCG_BIT_OPS: u8 = 0x0;
+const OPCG_MOVE_BYTE: u8 = 0x1;
+const OPCG_MOVE_LONG: u8 = 0x2;
+const OPCG_MOVE_WORD: u8 = 0x3;
+const OPCG_MISC: u8 = 0x04;
+const OPCG_ADDQ_SUBQ: u8 = 0x5;
+const OPCG_BRANCH: u8 = 0x6;
+const OPCG_MOVEQ: u8 = 0x7;
+const OPCG_DIV_OR: u8 = 0x8;
+const OPCG_SUB: u8 = 0x9;
+const OPCG_RESERVED1: u8 = 0xA;
+const OPCG_CMP_EOR: u8 = 0xB;
+const OPCG_MUL_AND: u8 = 0xC;
+const OPCG_ADD: u8 = 0xD;
+const OPCG_SHIFT: u8 = 0xE;
+const OPCG_RESERVED2: u8 = 0xF;
+
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Sign {
     Signed,
@@ -95,6 +113,7 @@ pub enum Instruction {
 
     CLR(Target, Size),
     CMP(Target, Target, Size),
+    CMPA(Target, u8, Size),
 
     DBcc(Condition, u16),
     DIV(Target, Target, Size, Sign),
@@ -158,24 +177,6 @@ pub enum Instruction {
 
     UNLK(u8),
 }
-
-
-const OPCG_BIT_OPS: u8 = 0x0;
-const OPCG_MOVE_BYTE: u8 = 0x1;
-const OPCG_MOVE_LONG: u8 = 0x2;
-const OPCG_MOVE_WORD: u8 = 0x3;
-const OPCG_MISC: u8 = 0x04;
-const OPCG_ADDQ_SUBQ: u8 = 0x5;
-const OPCG_BRANCH: u8 = 0x6;
-const OPCG_MOVEQ: u8 = 0x7;
-const OPCG_DIV_OR: u8 = 0x8;
-const OPCG_SUB: u8 = 0x9;
-const OPCG_RESERVED1: u8 = 0xA;
-const OPCG_CMP_EOR: u8 = 0xB;
-const OPCG_MUL_AND: u8 = 0xC;
-const OPCG_ADD: u8 = 0xD;
-const OPCG_SHIFT: u8 = 0xE;
-const OPCG_RESERVED2: u8 = 0xF;
 
 
 impl MC68010 {
@@ -332,7 +333,7 @@ impl MC68010 {
                     } else {
                         let target = self.decode_lower_effective_address(space, ins, None)?;
                         let data = self.read_instruction_word(space)?;
-                        let dir = if (ins & 0x0200) == 0 { Direction::ToTarget } else { Direction::FromTarget };
+                        let dir = if (ins & 0x0400) == 0 { Direction::ToTarget } else { Direction::FromTarget };
                         Ok(Instruction::MOVEM(target, size, dir, data))
                     }
                 } else if (ins & 0b111100000000) == 0b100000000000 {
@@ -496,12 +497,12 @@ impl MC68010 {
                     },
                     (0b0, Some(size)) => {
                         let target = self.decode_lower_effective_address(space, ins, Some(size))?;
-                        Ok(Instruction::CMP(Target::DirectDReg(reg), target, size))
+                        Ok(Instruction::CMP(target, Target::DirectDReg(reg), size))
                     },
                     (_, None) => {
                         let size = if optype == 0 { Size::Word } else { Size::Long };
                         let target = self.decode_lower_effective_address(space, ins, Some(size))?;
-                        Ok(Instruction::CMP(target, Target::DirectAReg(reg), size))
+                        Ok(Instruction::CMPA(target, reg, size))
                     },
                     _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
                 }
@@ -624,7 +625,7 @@ impl MC68010 {
             0b111 => {
                 match reg {
                     0b000 => {
-                        let value = self.read_instruction_word(space)? as u32;
+                        let value = sign_extend_to_long(self.read_instruction_word(space)? as u32, Size::Word) as u32;
                         Target::IndirectMemory(value)
                     },
                     0b001 => {
