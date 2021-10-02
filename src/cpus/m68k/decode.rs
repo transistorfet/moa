@@ -2,8 +2,8 @@
 use crate::error::Error;
 use crate::memory::{Address, AddressSpace};
 
-use super::execute::MC68010;
 use super::execute::ERR_ILLEGAL_INSTRUCTION;
+
 
 const OPCG_BIT_OPS: u8 = 0x0;
 const OPCG_MOVE_BYTE: u8 = 0x1;
@@ -179,19 +179,25 @@ pub enum Instruction {
 }
 
 
-impl MC68010 {
-    fn read_instruction_word(&mut self, space: &mut AddressSpace) -> Result<u16, Error> {
-        let word = space.read_beu16(self.pc as Address)?;
-        //debug!("{:#010x} {:#06x?}", self.pc, word);
-        self.pc += 2;
-        Ok(word)
+pub struct M68kDecoder {
+    pub start: u32,
+    pub end: u32,
+    pub instruction: Instruction,
+}
+
+impl M68kDecoder {
+    pub fn new(start: u32) -> M68kDecoder {
+        M68kDecoder {
+            start: start,
+            end: start,
+            instruction: Instruction::NOP,
+        }
     }
 
-    fn read_instruction_long(&mut self, space: &mut AddressSpace) -> Result<u32, Error> {
-        let word = space.read_beu32(self.pc as Address)?;
-        //debug!("{:#010x} {:#010x}", self.pc, word);
-        self.pc += 4;
-        Ok(word)
+    pub fn decode_at(space: &mut AddressSpace, start: u32) -> Result<M68kDecoder, Error> {
+        let mut decoder = M68kDecoder::new(start);
+        decoder.instruction = decoder.decode_one(space)?;
+        Ok(decoder)
     }
 
     pub fn decode_one(&mut self, space: &mut AddressSpace) -> Result<Instruction, Error> {
@@ -582,6 +588,20 @@ impl MC68010 {
             },
             _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
         }
+    }
+
+    fn read_instruction_word(&mut self, space: &mut AddressSpace) -> Result<u16, Error> {
+        let word = space.read_beu16(self.end as Address)?;
+        //debug!("{:#010x} {:#06x?}", self.end, word);
+        self.end += 2;
+        Ok(word)
+    }
+
+    fn read_instruction_long(&mut self, space: &mut AddressSpace) -> Result<u32, Error> {
+        let word = space.read_beu32(self.end as Address)?;
+        //debug!("{:#010x} {:#010x}", self.end, word);
+        self.end += 4;
+        Ok(word)
     }
 
     fn decode_lower_effective_address(&mut self, space: &mut AddressSpace, ins: u16, size: Option<Size>) -> Result<Target, Error> {

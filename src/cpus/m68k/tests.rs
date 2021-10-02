@@ -19,9 +19,9 @@ fn init_test() -> (MC68010, AddressSpace) {
 
     let mut cpu = MC68010::new();
     cpu.step(&mut space).unwrap();
-    assert_eq!(cpu.pc, INIT_ADDR as u32);
-    assert_eq!(cpu.msp, INIT_STACK as u32);
-    assert_eq!(cpu.current_instruction, Instruction::NOP);
+    assert_eq!(cpu.state.pc, INIT_ADDR as u32);
+    assert_eq!(cpu.state.msp, INIT_STACK as u32);
+    assert_eq!(cpu.decoder.instruction, Instruction::NOP);
     (cpu, space)
 }
 
@@ -36,7 +36,7 @@ mod tests {
 
         space.write_beu16(INIT_ADDR, 0x4e71).unwrap();
         cpu.decode_next(&mut space).unwrap();
-        assert_eq!(cpu.current_instruction, Instruction::NOP);
+        assert_eq!(cpu.decoder.instruction, Instruction::NOP);
         cpu.execute_current(&mut space).unwrap();
         // TODO you need a way to easily check the entire state (you maybe need to make a special struct for the state)
     }
@@ -49,9 +49,9 @@ mod tests {
         space.write_beu16(INIT_ADDR,     0x0008).unwrap();
         space.write_beu16(INIT_ADDR + 2, 0x00FF).unwrap();
         cpu.decode_next(&mut space).unwrap();
-        assert_eq!(cpu.current_instruction, Instruction::OR(Target::Immediate(0xFF), Target::DirectAReg(0), Size::Byte));
+        assert_eq!(cpu.decoder.instruction, Instruction::OR(Target::Immediate(0xFF), Target::DirectAReg(0), Size::Byte));
         cpu.execute_current(&mut space).unwrap();
-        assert_eq!(cpu.a_reg[0], 0x000000FF);
+        assert_eq!(cpu.state.a_reg[0], 0x000000FF);
     }
 }
 

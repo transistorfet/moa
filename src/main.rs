@@ -28,6 +28,7 @@ fn main() {
     //cpu.add_breakpoint(0x07f8);
     //cpu.add_breakpoint(0x0836);
     //cpu.add_breakpoint(0x0838);
+    //cpu.add_breakpoint(0x0ea0);
 
     cpu.use_tracing = true;
     while cpu.is_running() {
@@ -44,7 +45,7 @@ fn main() {
 
     // TODO I need to add a way to decode and dump the assembly for a section of code, in debugger
     /*
-    cpu.pc = 0x07f8;
+    cpu.state.pc = 0x07f8;
     while cpu.is_running() {
         cpu.decode_next(&mut space).unwrap();
     }
