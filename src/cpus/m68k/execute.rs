@@ -197,15 +197,15 @@ impl MC68010 {
             Instruction::Bcc(cond, offset) => {
                 let should_branch = self.get_current_condition(cond);
                 if should_branch {
-                    self.state.pc = self.decoder.start.wrapping_add(offset as u32) + 2;
+                    self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
                 }
             },
             Instruction::BRA(offset) => {
-                self.state.pc = self.decoder.start.wrapping_add(offset as u32) + 2;
+                self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
             },
             Instruction::BSR(offset) => {
                 self.push_long(space, self.state.pc)?;
-                self.state.pc = self.decoder.start.wrapping_add(offset as u32) + 2;
+                self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
             },
             Instruction::BTST(bitnum, target, size) => {
                 let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
@@ -278,11 +278,11 @@ impl MC68010 {
             //Instruction::ILLEGAL => {
             //},
             Instruction::JMP(target) => {
-                self.state.pc = self.get_target_address(target)? - 2;
+                self.state.pc = self.get_target_address(target)?;
             },
             Instruction::JSR(target) => {
                 self.push_long(space, self.state.pc)?;
-                self.state.pc = self.get_target_address(target)? - 2;
+                self.state.pc = self.get_target_address(target)?;
             },
             Instruction::LEA(target, reg) => {
                 let value = self.get_target_address(target)?;
@@ -496,11 +496,11 @@ impl MC68010 {
                 get_address_sized(space, addr as Address, size)
             },
             Target::IndirectPCOffset(offset) => {
-                get_address_sized(space, self.state.pc.wrapping_add(offset as u32) as Address, size)
+                get_address_sized(space, (self.decoder.start + 2).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectPCXRegOffset(rtype, xreg, offset, target_size) => {
                 let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
-                get_address_sized(space, self.state.pc.wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
+                get_address_sized(space, (self.decoder.start + 2).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
             },
         }
     }
@@ -559,11 +559,11 @@ impl MC68010 {
                 addr
             },
             Target::IndirectPCOffset(offset) => {
-                self.state.pc.wrapping_add(offset as u32)
+                (self.decoder.start + 2).wrapping_add(offset as u32)
             },
             Target::IndirectPCXRegOffset(rtype, xreg, offset, target_size) => {
                 let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
-                self.state.pc.wrapping_add(reg_offset as u32).wrapping_add(offset as u32)
+                (self.decoder.start + 2).wrapping_add(reg_offset as u32).wrapping_add(offset as u32)
             },
             _ => return Err(Error::new(&format!("Invalid addressing target: {:?}", target))),
         };
