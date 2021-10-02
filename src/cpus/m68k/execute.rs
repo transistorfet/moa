@@ -177,12 +177,22 @@ impl MC68010 {
         }
 
         if self.use_debugger {
-            // Single Step
-            self.dump_state(space);
-            let mut buffer = String::new();
-            std::io::stdin().read_line(&mut buffer).unwrap();
+            self.run_debugger(space);
         }
         Ok(())
+    }
+
+    fn run_debugger(&mut self, space: &mut AddressSpace) {
+        self.dump_state(space);
+        let mut buffer = String::new();
+
+        loop {
+            std::io::stdin().read_line(&mut buffer).unwrap();
+            match buffer.as_ref() {
+                "dump\n" => space.dump_memory(self.msp as Address, (0x200000 - self.msp) as Address),
+                _ => { return; },
+            }
+        }
     }
 
     fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {

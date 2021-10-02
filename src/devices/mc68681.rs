@@ -8,6 +8,7 @@ use nix::pty::{self, PtyMaster};
 use nix::fcntl::OFlag;
 use nix::unistd::sleep;
 use nix::poll::{poll, PollFd, PollFlags};
+use nix::fcntl::{fcntl, FcntlArg};
 
 use crate::error::Error;
 use crate::memory::{Address, Addressable};
@@ -52,16 +53,16 @@ const DEV_NAME: &'static str = "mc68681";
 
 pub struct MC68681 {
     pub tty: Option<PtyMaster>,
-    pub status: [u8; 1],
-    pub input: [u8; 1],
+    pub status: u8,
+    pub input: u8,
 }
 
 impl MC68681 {
     pub fn new() -> Self {
         MC68681 {
             tty: None,
-            status: [0x0C],
-            input: [0],
+            status: 0x0C,
+            input: 0,
         }
     }
 
@@ -74,7 +75,9 @@ impl MC68681 {
             Ok(master) => {
                 let name = unsafe { pty::ptsname(&master).map_err(|_| Error::new("Unable to get pty name"))? };
                 println!("Open {}", name);
+                fcntl(master.as_raw_fd(), FcntlArg::F_SETFL(OFlag::O_NONBLOCK)).unwrap();
                 self.tty = Some(master);
+
                 Command::new("x-terminal-emulator").arg("-e").arg(&format!("pyserial-miniterm {}", name)).spawn().unwrap();
                 sleep(1);
                 Ok(())
@@ -85,30 +88,26 @@ impl MC68681 {
 
     pub fn step(&mut self) -> Result<(), Error> {
         if !self.rx_ready() && self.tty.is_some() {
-            self.poll_one_byte().map(|byte| {
-                self.input[0] = byte;
-                self.status[0] |= SR_RX_READY;
-            });
+            let mut buf = [0; 1];
+            let tty = self.tty.as_mut().unwrap();
+            match tty.read(&mut buf) {
+                Ok(count) => {
+                    println!("READ {:?}", count);
+                    self.input = buf[0];
+                    self.status |= SR_RX_READY;
+                },
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => { },
+                Err(err) => {
+                    println!("ERROR: {:?}", err);
+                }
+            }
         }
 
         Ok(())
     }
 
     pub fn rx_ready(&self) -> bool {
-        (self.status[0] & SR_RX_READY) != 0
-    }
-
-    fn poll_one_byte(&mut self) -> Option<u8> {
-        if self.tty.is_none() {
-            return None;
-        }
-
-        let tty = self.tty.as_mut().unwrap();
-        let mut fds = [PollFd::new(tty.as_raw_fd(), PollFlags::POLLIN); 1];
-        match poll(&mut fds, 0) {
-            Ok(byte) => Some(byte as u8),
-            Err(_) => None,
-        }
+        (self.status & SR_RX_READY) != 0
     }
 }
 
@@ -124,50 +123,16 @@ impl Addressable for MC68681 {
         self.step();
 
         match addr {
-            REG_SRA_RD => data[0] = self.status[0],
-            REG_TBA_RD => {
-                data[0] = self.input[0];
+            REG_SRA_RD => {
+                data[0] = self.status
             },
-            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); data[0] = self.input[0]; },
-        }
-
-        data
-    }
-
-    fn write(&mut self, mut addr: Address, data: &[u8]) {
-        match addr {
-            REG_TBA_WR => {
-                println!("{}: {}", DEV_NAME, data[0] as char);
-                self.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
-            },
-            _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
-        }
-    }
-}
-
-
-/*
-impl Addressable for MC68681 {
-    fn len(&self) -> usize {
-        0x30
-    }
-
-    fn read(&mut self, addr: Address, count: usize) -> Vec<u8> {
-        let mut data = vec![0; count];
-
-        // TODO this is temporary
-        self.step();
-
-        match addr {
-            REG_SRA_RD => { data[0] = self.status },
             REG_RBA_RD => {
-                if self.rx_ready() {
-                    data[0] = self.input;
-                    self.status = self.status & !SR_RX_READY;
-                }
+                data[0] = self.input;
+                self.status &= !SR_RX_READY;
             },
-            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); },
+            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); data[0] = self.input; },
         }
+
         data
     }
 
@@ -181,4 +146,4 @@ impl Addressable for MC68681 {
         }
     }
 }
-*/
+
