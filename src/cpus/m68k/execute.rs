@@ -158,7 +158,7 @@ impl MC68010 {
         Ok(value)
     }
 
-    fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+    pub(crate) fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
         self.current_instruction_addr = self.pc;
         self.current_instruction = self.decode_one(space)?;
 
@@ -195,7 +195,7 @@ impl MC68010 {
         }
     }
 
-    fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+    pub(crate) fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
         match self.current_instruction {
             Instruction::ADD(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;

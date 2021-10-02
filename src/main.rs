@@ -25,7 +25,7 @@ fn main() {
     space.insert(0x00700000, Box::new(serial));
 
     let mut cpu = MC68010::new();
-    //cpu.set_breakpoint(0x0224);
+    cpu.set_breakpoint(0x0ea0);
     cpu.use_tracing = true;
     while cpu.is_running() {
         match cpu.step(&mut space) {
