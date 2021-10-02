@@ -53,5 +53,47 @@ mod tests {
         cpu.execute_current(&mut space).unwrap();
         assert_eq!(cpu.state.a_reg[0], 0x000000FF);
     }
+
+    #[test]
+    fn instruction_cmpi_equal() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR,     0x7020).unwrap();
+        space.write_beu16(INIT_ADDR + 2, 0x0C00).unwrap();
+        space.write_beu16(INIT_ADDR + 4, 0x0020).unwrap();
+        cpu.step(&mut space).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::CMP(Target::Immediate(0x20), Target::DirectDReg(0), Size::Byte));
+        cpu.execute_current(&mut space).unwrap();
+        assert_eq!(cpu.state.sr & 0x0F, 0x04);
+    }
+
+    #[test]
+    fn instruction_cmpi_greater() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR,     0x7020).unwrap();
+        space.write_beu16(INIT_ADDR + 2, 0x0C00).unwrap();
+        space.write_beu16(INIT_ADDR + 4, 0x0030).unwrap();
+        cpu.step(&mut space).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::CMP(Target::Immediate(0x30), Target::DirectDReg(0), Size::Byte));
+        cpu.execute_current(&mut space).unwrap();
+        assert_eq!(cpu.state.sr & 0x0F, 0x00B);
+    }
+
+    #[test]
+    fn instruction_cmpi_less() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR,     0x7020).unwrap();
+        space.write_beu16(INIT_ADDR + 2, 0x0C00).unwrap();
+        space.write_beu16(INIT_ADDR + 4, 0x0010).unwrap();
+        cpu.step(&mut space).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::CMP(Target::Immediate(0x10), Target::DirectDReg(0), Size::Byte));
+        cpu.execute_current(&mut space).unwrap();
+        assert_eq!(cpu.state.sr & 0x0F, 0x00);
+    }
 }
 

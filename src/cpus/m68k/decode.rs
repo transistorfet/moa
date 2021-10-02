@@ -115,7 +115,7 @@ pub enum Instruction {
     CMP(Target, Target, Size),
     CMPA(Target, u8, Size),
 
-    DBcc(Condition, u16),
+    DBcc(Condition, i16),
     DIV(Target, Target, Size, Sign),
 
     EOR(Target, Target, Size),
@@ -130,7 +130,7 @@ pub enum Instruction {
     JSR(Target),
 
     LEA(Target, u8),
-    LINK(u8, u16),
+    LINK(u8, i16),
     LSd(Target, Target, Size, ShiftDirection),
 
     MOVE(Target, Target, Size),
@@ -378,7 +378,7 @@ impl M68kDecoder {
                     let reg = get_low_reg(ins);
                     if (ins & 0b1000) == 0 {
                         let data = self.read_instruction_word(space)?;
-                        Ok(Instruction::LINK(reg, data))
+                        Ok(Instruction::LINK(reg, data as i16))
                     } else {
                         Ok(Instruction::UNLK(reg))
                     }
@@ -435,15 +435,15 @@ impl M68kDecoder {
                 }
             },
             OPCG_BRANCH => {
-                let mut disp = ((ins & 0xFF) as i8) as u16;
+                let mut disp = ((ins & 0xFF) as i8) as i16;
                 if disp == 0 {
-                    disp = self.read_instruction_word(space)?;
+                    disp = self.read_instruction_word(space)? as i16;
                 }
                 let condition = get_condition(ins);
                 match condition {
-                    Condition::True => Ok(Instruction::BRA(disp as i16)),
-                    Condition::False => Ok(Instruction::BSR(disp as i16)),
-                    _ => Ok(Instruction::Bcc(condition, disp as i16)),
+                    Condition::True => Ok(Instruction::BRA(disp)),
+                    Condition::False => Ok(Instruction::BSR(disp)),
+                    _ => Ok(Instruction::Bcc(condition, disp)),
                 }
             },
             OPCG_MOVEQ => {

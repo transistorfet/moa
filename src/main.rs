@@ -30,6 +30,7 @@ fn main() {
     //cpu.add_breakpoint(0x0838);
     //cpu.add_breakpoint(0x0ea0);
 
+    cpu.add_breakpoint(0x0034);
     cpu.enable_tracing();
     while cpu.is_running() {
         match cpu.step(&mut space) {

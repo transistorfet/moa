@@ -141,15 +141,14 @@ impl MC68010 {
     }
 
     pub(crate) fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
-        self.decoder = M68kDecoder::decode_at(space, self.state.pc)?;
-        self.state.pc = self.decoder.end;
-
         self.check_breakpoints();
+
+        self.decoder = M68kDecoder::decode_at(space, self.state.pc)?;
 
         if self.debugger.use_tracing {
             // Print instruction bytes for debugging
             let ins_data: Result<String, Error> =
-                (0..((self.state.pc - self.decoder.start) / 2)).map(|offset|
+                (0..((self.decoder.end - self.decoder.start) / 2)).map(|offset|
                     Ok(format!("{:04x} ", space.read_beu16((self.decoder.start + (offset * 2)) as Address)?))
                 ).collect();
             debug!("{:#010x}: {}\n\t{:?}\n", self.decoder.start, ins_data?, self.decoder.instruction);
@@ -158,6 +157,8 @@ impl MC68010 {
         if self.debugger.use_debugger {
             self.run_debugger(space);
         }
+
+        self.state.pc = self.decoder.end;
         Ok(())
     }
 
@@ -192,8 +193,22 @@ impl MC68010 {
             Instruction::ANDtoSR(value) => {
                 self.state.sr = self.state.sr | value;
             },
-            //Instruction::ASd(Target, Target, Size, ShiftDirection) => {
-            //},
+            Instruction::ASd(count, target, size, shift_dir) => {
+                let count = self.get_target_value(space, count, size)? % 64;
+                let mut pair = (self.get_target_value(space, target, size)?, false);
+                let original = pair.0;
+                for _ in 0..count {
+                    pair = shift_operation(pair.0, size, shift_dir, true);
+                }
+                self.set_compare_flags(pair.0, size, false);
+                if pair.1 {
+                    self.state.sr |= FLAGS_EXTEND | FLAGS_CARRY;
+                }
+                if get_msb(pair.0, size) != get_msb(original, size) {
+                    self.state.sr |= FLAGS_OVERFLOW;
+                }
+                self.set_target_value(space, target, pair.0, size)?;
+            },
             Instruction::Bcc(cond, offset) => {
                 let should_branch = self.get_current_condition(cond);
                 if should_branch {
@@ -236,7 +251,7 @@ impl MC68010 {
             Instruction::CLR(target, size) => {
                 self.set_target_value(space, target, 0, size)?;
                 // Clear flags except Zero flag
-                self.state.sr = (self.state.sr & 0xFFF0) | 0x0004;
+                self.state.sr = (self.state.sr & 0xFFF0) | FLAGS_ZERO;
             },
             Instruction::CMP(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
@@ -289,8 +304,14 @@ impl MC68010 {
                 let addr = self.get_a_reg_mut(reg);
                 *addr = value;
             },
-            //Instruction::LINK(u8, u16) => {
-            //},
+            Instruction::LINK(reg, offset) => {
+                let value = *self.get_a_reg_mut(reg);
+                self.push_long(space, value)?;
+                let sp = *self.get_stack_pointer_mut();
+                let addr = self.get_a_reg_mut(reg);
+                *addr = sp;
+                *self.get_stack_pointer_mut() = sp + (offset as i32) as u32;
+            },
             Instruction::LSd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(space, count, size)? % 64;
                 let mut pair = (self.get_target_value(space, target, size)?, false);
@@ -337,8 +358,12 @@ impl MC68010 {
                     },
                 }
             },
-            //Instruction::MOVEUSP(Target, Direction) => {
-            //},
+            Instruction::MOVEUSP(target, dir) => {
+                match dir {
+                    Direction::ToTarget => self.set_target_value(space, target, self.state.usp, Size::Long)?,
+                    Direction::FromTarget => { self.state.usp = self.get_target_value(space, target, Size::Long)?; },
+                }
+            },
             Instruction::MOVEM(target, size, dir, mask) => {
                 // TODO moving words requires a sign extension to 32 bits
                 if size != Size::Long { return Err(Error::new("Unsupported size in MOVEM instruction")); }
@@ -390,8 +415,12 @@ impl MC68010 {
             //Instruction::NEGX(Target, Size) => {
             //},
             Instruction::NOP => { },
-            //Instruction::NOT(target, size) => {
-            //},
+            Instruction::NOT(target, size) => {
+                let mut value = self.get_target_value(space, target, size)?;
+                value = get_value_sized(!value, size);
+                self.set_target_value(space, target, value, size)?;
+                self.set_logic_flags(value, size);
+            },
             Instruction::OR(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
@@ -443,8 +472,13 @@ impl MC68010 {
             //},
             //Instruction::TRAPV => {
             //},
-            //Instruction::UNLK(u8) => {
-            //},
+            Instruction::UNLK(reg) => {
+                let value = *self.get_a_reg_mut(reg);
+                *self.get_stack_pointer_mut() = value;
+                let new_value = self.pop_long(space)?;
+                let addr = self.get_a_reg_mut(reg);
+                *addr = new_value;
+            },
             _ => { panic!(""); },
         }
 
@@ -490,7 +524,9 @@ impl MC68010 {
             Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, target_size) => {
                 let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
                 let addr = self.get_a_reg_mut(reg);
-                get_address_sized(space, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
+                let result = get_address_sized(space, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size);
+println!(">>> {:x} has {:x}", (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32), result.as_ref().unwrap());
+                result
             },
             Target::IndirectMemory(addr) => {
                 get_address_sized(space, addr as Address, size)
