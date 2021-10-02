@@ -2,6 +2,7 @@
 use crate::error::Error;
 use crate::memory::{Address, AddressSpace};
 
+use super::debugger::M68kDebugger;
 use super::decode::{
     M68kDecoder,
     Instruction,
@@ -14,6 +15,7 @@ use super::decode::{
     RegisterType,
     sign_extend_to_long
 };
+
 
 /*
 pub trait Processor {
@@ -76,35 +78,23 @@ impl MC68010State {
 
 pub struct MC68010 {
     pub state: MC68010State,
-
     pub decoder: M68kDecoder,
-
-    pub breakpoints: Vec<u32>,
-    pub use_tracing: bool,
-    pub use_debugger: bool,
+    pub debugger: M68kDebugger,
 }
 
 impl MC68010 {
     pub fn new() -> MC68010 {
         MC68010 {
             state: MC68010State::new(),
-
             decoder: M68kDecoder::new(0),
-
-            breakpoints: vec![],
-            use_tracing: false,
-            use_debugger: false,
+            debugger: M68kDebugger::new(),
         }
     }
 
     pub fn reset(&mut self) {
         self.state = MC68010State::new();
-
         self.decoder = M68kDecoder::new(0);
-
-        self.breakpoints = vec![];
-        self.use_tracing = false;
-        self.use_debugger = false;
+        self.debugger = M68kDebugger::new();
     }
 
     pub fn is_running(&self) -> bool {
@@ -138,10 +128,6 @@ impl MC68010 {
         println!("");
     }
 
-    pub fn add_breakpoint(&mut self, addr: Address) {
-        self.breakpoints.push(addr as u32);
-    }
-
     pub fn step(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
         match self.state.status {
             Status::Init => self.init(space),
@@ -158,15 +144,9 @@ impl MC68010 {
         self.decoder = M68kDecoder::decode_at(space, self.state.pc)?;
         self.state.pc = self.decoder.end;
 
-        for breakpoint in &self.breakpoints {
-            if *breakpoint == self.decoder.start {
-                self.use_tracing = true;
-                self.use_debugger = true;
-                break;
-            }
-        }
+        self.check_breakpoints();
 
-        if self.use_tracing {
+        if self.debugger.use_tracing {
             // Print instruction bytes for debugging
             let ins_data: Result<String, Error> =
                 (0..((self.state.pc - self.decoder.start) / 2)).map(|offset|
@@ -175,27 +155,10 @@ impl MC68010 {
             debug!("{:#010x}: {}\n\t{:?}\n", self.decoder.start, ins_data?, self.decoder.instruction);
         }
 
-        if self.use_debugger {
+        if self.debugger.use_debugger {
             self.run_debugger(space);
         }
         Ok(())
-    }
-
-    fn run_debugger(&mut self, space: &mut AddressSpace) {
-        self.dump_state(space);
-        let mut buffer = String::new();
-
-        loop {
-            std::io::stdin().read_line(&mut buffer).unwrap();
-            match buffer.as_ref() {
-                "dump\n" => space.dump_memory(self.state.msp as Address, (0x200000 - self.state.msp) as Address),
-                "continue\n" => {
-                    self.use_debugger = false;
-                    return;
-                },
-                _ => { return; },
-            }
-        }
     }
 
     pub(crate) fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
