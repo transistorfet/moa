@@ -222,7 +222,7 @@ impl M68kDecoder {
                             let data = self.read_instruction_word(space)?;
                             match optype {
                                 0b0000 => Ok(Instruction::ORtoSR(data)),
-                                0b0001 => Ok(Instruction::ANDtoSR(data)),
+                                0b0010 => Ok(Instruction::ANDtoSR(data)),
                                 0b1010 => Ok(Instruction::EORtoSR(data)),
                                 _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
                             }
@@ -532,7 +532,7 @@ impl M68kDecoder {
                 if size.is_none() {
                     let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
-                    let effective_addr = self.decode_lower_effective_address(space, ins, size)?;
+                    let effective_addr = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
                     Ok(Instruction::MUL(effective_addr, data_reg, Size::Word, sign))
                 } else if (ins & 0b000111110000) == 0b000100000000 {
                     // TODO ABCD or EXG

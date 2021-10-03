@@ -2,7 +2,7 @@
 use crate::memory::{Address, AddressSpace, MemoryBlock};
 
 use super::execute::MC68010;
-use super::decode::{Instruction, Target, Size};
+use super::decode::{Instruction, Target, Size, Sign};
 
 const INIT_STACK: Address = 0x00002000;
 const INIT_ADDR: Address = 0x00000010;
@@ -28,7 +28,7 @@ fn init_test() -> (MC68010, AddressSpace) {
 #[cfg(test)]
 mod tests {
     use super::{init_test, INIT_ADDR};
-    use super::{Instruction, Target, Size};
+    use super::{Instruction, Target, Size, Sign};
 
     #[test]
     fn instruction_nop() {
@@ -97,13 +97,25 @@ mod tests {
     }
 
     #[test]
-    fn instruction_movel() {
+    fn instruction_andi_sr() {
         let (mut cpu, mut space) = init_test();
 
-        space.write_beu16(INIT_ADDR,     0x2F49).unwrap();
-        space.write_beu16(INIT_ADDR + 2, 0x0034).unwrap();
+        space.write_beu16(INIT_ADDR,     0x027C).unwrap();
+        space.write_beu16(INIT_ADDR + 2, 0xF8FF).unwrap();
         cpu.decode_next(&mut space).unwrap();
-        assert_eq!(cpu.decoder.instruction, Instruction::MOVE(Target::DirectAReg(0x01), Target::IndirectARegOffset(7, 52), Size::Long));
+        assert_eq!(cpu.decoder.instruction, Instruction::ANDtoSR(0xF8FF));
+        //cpu.execute_current(&mut space).unwrap();
+        //assert_eq!(cpu.state.sr & 0x0F, 0x00);
+    }
+
+    #[test]
+    fn instruction_muls() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR,     0xC1FC).unwrap();
+        space.write_beu16(INIT_ADDR + 2, 0x0276).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::MUL(Target::Immediate(0x276), Target::DirectDReg(0), Size::Word, Sign::Signed));
         //cpu.execute_current(&mut space).unwrap();
         //assert_eq!(cpu.state.sr & 0x0F, 0x00);
     }

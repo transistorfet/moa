@@ -1,0 +1,9 @@
+
+* there's probably a problem with the shift operations flags, they look more complex than what's being done atm
+
+
+* check all instructions in the docs
+
+* make tests for each instruction
+
+ 

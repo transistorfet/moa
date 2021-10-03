@@ -31,6 +31,19 @@ impl MemoryBlock {
             Err(_) => Err(Error::new(&format!("Error reading contents of {}", filename))),
         }
     }
+
+    pub fn load_at(&mut self, mut addr: Address, filename: &str) -> Result<(), Error> {
+        match fs::read(filename) {
+            Ok(contents) => {
+                for byte in contents {
+                    self.contents[addr as usize] = byte;
+                    addr += 1;
+                }
+                Ok(())
+            },
+            Err(_) => Err(Error::new(&format!("Error reading contents of {}", filename))),
+        }
+    }
 }
 
 impl Addressable for MemoryBlock {

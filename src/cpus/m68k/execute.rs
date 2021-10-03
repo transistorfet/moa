@@ -523,7 +523,7 @@ impl MC68010 {
                 let addr = self.get_a_reg_mut(reg);
                 *addr = new_value;
             },
-            _ => { panic!("Unsupported instruction"); },
+            _ => { return Err(Error::new("Unsupported instruction")); },
         }
 
         Ok(())
