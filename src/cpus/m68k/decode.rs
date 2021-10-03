@@ -115,7 +115,7 @@ pub enum Instruction {
     CMP(Target, Target, Size),
     CMPA(Target, u8, Size),
 
-    DBcc(Condition, i16),
+    DBcc(Condition, u8, i16),
     DIV(Target, Target, Size, Sign),
 
     EOR(Target, Target, Size),
@@ -165,7 +165,7 @@ pub enum Instruction {
     RTS,
 
     //SBCD
-    //Scc
+    Scc(Condition, Target),
     STOP(u16),
     SUB(Target, Target, Size),
     SWAP(u8),
@@ -252,12 +252,13 @@ impl M68kDecoder {
 
                 } else {
                     let size = get_size(ins);
-                    let target = self.decode_lower_effective_address(space, ins, size)?;
                     let data = match size {
+                        Some(Size::Byte) => (self.read_instruction_word(space)? as u32 & 0xFF),
+                        Some(Size::Word) => self.read_instruction_word(space)? as u32,
                         Some(Size::Long) => self.read_instruction_long(space)?,
-                        Some(_) => self.read_instruction_word(space)? as u32,
                         None => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
                     };
+                    let target = self.decode_lower_effective_address(space, ins, size)?;
 
                     match optype {
                         0b0000 => Ok(Instruction::OR(Target::Immediate(data), target, size.unwrap())),
@@ -337,8 +338,8 @@ impl M68kDecoder {
                     if mode == 0b000 {
                         Ok(Instruction::EXT(get_low_reg(ins), size))
                     } else {
-                        let target = self.decode_lower_effective_address(space, ins, None)?;
                         let data = self.read_instruction_word(space)?;
+                        let target = self.decode_lower_effective_address(space, ins, None)?;
                         let dir = if (ins & 0x0400) == 0 { Direction::ToTarget } else { Direction::FromTarget };
                         Ok(Instruction::MOVEM(target, size, dir, data))
                     }
@@ -417,21 +418,33 @@ impl M68kDecoder {
                 }
             },
             OPCG_ADDQ_SUBQ => {
-                let size = match get_size(ins) {
-                    Some(size) => size,
-                    None => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
-                };
+                match get_size(ins) {
+                    Some(size) => {
+                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let mut data = ((ins & 0x0E00) >> 9) as u32;
+                        if data == 0 {
+                            data = 8;
+                        }
 
-                let target = self.decode_lower_effective_address(space, ins, Some(size))?;
-                let mut data = ((ins & 0x0E00) >> 9) as u32;
-                if data == 0 {
-                    data = 8;
-                }
+                        if (ins & 0x0100) == 0 {
+                            Ok(Instruction::ADD(Target::Immediate(data), target, size))
+                        } else {
+                            Ok(Instruction::SUB(Target::Immediate(data), target, size))
+                        }
+                    },
+                    None => {
+                        let mode = get_low_mode(ins);
+                        let condition = get_condition(ins);
 
-                if (ins & 0x0100) == 0 {
-                    Ok(Instruction::ADD(Target::Immediate(data), target, size))
-                } else {
-                    Ok(Instruction::SUB(Target::Immediate(data), target, size))
+                        if mode == 0b001 {
+                            let reg = get_low_reg(ins);
+                            let disp = self.read_instruction_word(space)? as i16;
+                            Ok(Instruction::DBcc(condition, reg, disp))
+                        } else {
+                            let target = self.decode_lower_effective_address(space, ins, Some(Size::Byte))?;
+                            Ok(Instruction::Scc(condition, target))
+                        }
+                    },
                 }
             },
             OPCG_BRANCH => {

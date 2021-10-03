@@ -111,6 +111,7 @@ impl AddressSpace {
     pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
         while count > 0 {
             let mut line = format!("{:#010x}: ", addr);
+
             let to = if count < 16 { count / 2 } else { 8 };
             for i in 0..to {
                 let word = self.read_beu16(addr);

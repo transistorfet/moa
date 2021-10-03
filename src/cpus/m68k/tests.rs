@@ -95,5 +95,17 @@ mod tests {
         cpu.execute_current(&mut space).unwrap();
         assert_eq!(cpu.state.sr & 0x0F, 0x00);
     }
+
+    #[test]
+    fn instruction_movel() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR,     0x2F49).unwrap();
+        space.write_beu16(INIT_ADDR + 2, 0x0034).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::MOVE(Target::DirectAReg(0x01), Target::IndirectARegOffset(7, 52), Size::Long));
+        //cpu.execute_current(&mut space).unwrap();
+        //assert_eq!(cpu.state.sr & 0x0F, 0x00);
+    }
 }
 

@@ -8,6 +8,7 @@ use super::decode::{
     Instruction,
     Target,
     Size,
+    Sign,
     Direction,
     Condition,
     ShiftDirection,
@@ -140,7 +141,7 @@ impl MC68010 {
         }
     }
 
-    pub(crate) fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+    pub fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
         self.check_breakpoints();
 
         self.decoder = M68kDecoder::decode_at(space, self.state.pc)?;
@@ -162,23 +163,16 @@ impl MC68010 {
         Ok(())
     }
 
-    pub(crate) fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+    pub fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
         match self.decoder.instruction {
             Instruction::ADD(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
-                let (result, overflow) = match size {
-                    Size::Byte => {
-                        let (result, overflow) = (existing as u8).overflowing_add(value as u8);
-                        (result as u32, overflow)
-                    },
-                    Size::Word => {
-                        let (result, overflow) = (existing as u16).overflowing_add(value as u16);
-                        (result as u32, overflow)
-                    },
-                    Size::Long => existing.overflowing_add(value),
-                };
-                self.set_compare_flags(result, size, overflow);
+                let (result, carry) = overflowing_add_sized(existing, value, size);
+                match dest {
+                    Target::DirectAReg(_) => { },
+                    _ => self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size)),
+                }
                 self.set_target_value(space, dest, result, size)?;
             },
             Instruction::AND(src, dest, size) => {
@@ -200,7 +194,7 @@ impl MC68010 {
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, true);
                 }
-                self.set_compare_flags(pair.0, size, false);
+                self.set_logic_flags(pair.0, size);
                 if pair.1 {
                     self.state.sr |= FLAGS_EXTEND | FLAGS_CARRY;
                 }
@@ -256,17 +250,38 @@ impl MC68010 {
             Instruction::CMP(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
-                let result = self.subtract_sized_with_flags(existing, value, size);
+                let (result, carry) = overflowing_sub_sized(existing, value, size);
+                self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size));
             },
             Instruction::CMPA(src, reg, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = sign_extend_to_long(*self.get_a_reg_mut(reg), size) as u32;
-                let result = self.subtract_sized_with_flags(existing, value, Size::Long);
+                let (result, carry) = overflowing_sub_sized(existing, value, Size::Long);
+                self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, Size::Long));
             },
-            //Instruction::DBcc(Condition, u16) => {
-            //},
-            //Instruction::DIV(Target, Target, Size, Sign) => {
-            //},
+            Instruction::DBcc(cond, reg, offset) => {
+                let condition_true = self.get_current_condition(cond);
+                if !condition_true {
+                    let next = (get_value_sized(self.state.d_reg[reg as usize], Size::Word) as u16) as i16 - 1;
+                    set_value_sized(&mut self.state.d_reg[reg as usize], next as u32, Size::Word);
+                    if next != -1 {
+                        self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
+                    }
+                }
+            },
+            Instruction::DIV(src, dest, size, sign) => {
+                if size == Size::Long {
+                    return Err(Error::new("Unsupported multiplication size"));
+                }
+
+                let value = self.get_target_value(space, src, size)?;
+                let existing = self.get_target_value(space, dest, Size::Long)?;
+                let result = match sign {
+                    Sign::Signed => ((existing as i16 % value as i16) as u32) << 16 | (0xFFFF & (existing as i16 / value as i16) as u32),
+                    Sign::Unsigned => ((existing as u16 % value as u16) as u32) << 16 | (0xFFFF & (existing as u16 / value as u16) as u32),
+                };
+                self.set_target_value(space, dest, result, Size::Long)?;
+            },
             Instruction::EOR(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
@@ -288,7 +303,8 @@ impl MC68010 {
                     Size::Word => ((byte as i16) as u16) as u32,
                     Size::Long => (byte as i32) as u32,
                 };
-                self.state.d_reg[reg as usize] = result;
+                set_value_sized(&mut self.state.d_reg[reg as usize], result, size);
+                self.set_logic_flags(result, size);
             },
             //Instruction::ILLEGAL => {
             //},
@@ -318,7 +334,7 @@ impl MC68010 {
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, false);
                 }
-                self.set_compare_flags(pair.0, size, false);
+                self.set_logic_flags(pair.0, size);
                 if pair.1 {
                     self.state.sr |= FLAGS_EXTEND | FLAGS_CARRY;
                 }
@@ -326,13 +342,14 @@ impl MC68010 {
             },
             Instruction::MOVE(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
-                self.set_compare_flags(value, size, false);
+                self.set_logic_flags(value, size);
                 self.set_target_value(space, dest, value, size)?;
             },
             Instruction::MOVEA(src, reg, size) => {
                 let value = self.get_target_value(space, src, size)?;
+                let value = sign_extend_to_long(value, size) as u32;
                 let addr = self.get_a_reg_mut(reg);
-                *addr = sign_extend_to_long(value, size) as u32;
+                *addr = value;
             },
             Instruction::MOVEfromSR(target) => {
                 self.set_target_value(space, target, self.state.sr as u32, Size::Word)?;
@@ -404,14 +421,29 @@ impl MC68010 {
             Instruction::MOVEQ(data, reg) => {
                 let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
                 self.state.d_reg[reg as usize] = value;
-                self.set_compare_flags(value, Size::Long, false);
+                self.set_logic_flags(value, Size::Long);
             },
-            //Instruction::MUL(Target, Target, Size, Sign) => {
-            //},
+            Instruction::MUL(src, dest, size, sign) => {
+                if size == Size::Long {
+                    return Err(Error::new("Unsupported multiplication size"));
+                }
+
+                let value = self.get_target_value(space, src, size)?;
+                let existing = self.get_target_value(space, dest, size)?;
+                let result = match sign {
+                    Sign::Signed => (sign_extend_to_long(existing, Size::Word) * sign_extend_to_long(value, Size::Word)) as u32,
+                    Sign::Unsigned => existing as u32 * value as u32,
+                };
+                self.set_target_value(space, dest, result, Size::Long)?;
+            },
             //Instruction::NBCD(Target) => {
             //},
-            //Instruction::NEG(Target, Size) => {
-            //},
+            Instruction::NEG(target, size) => {
+                let original = self.get_target_value(space, target, size)?;
+                let (value, _) = (0 as u32).overflowing_sub(original);
+                self.set_target_value(space, target, value, size);
+                self.set_compare_flags(value, size, value != 0, get_overflow(0, original, value, size));
+            },
             //Instruction::NEGX(Target, Size) => {
             //},
             Instruction::NOP => { },
@@ -450,12 +482,24 @@ impl MC68010 {
             Instruction::RTS => {
                 self.state.pc = self.pop_long(space)?;
             },
+            Instruction::Scc(cond, target) => {
+                let condition_true = self.get_current_condition(cond);
+                if condition_true {
+                    self.set_target_value(space, target, 0xFF, Size::Byte);
+                } else {
+                    self.set_target_value(space, target, 0x00, Size::Byte);
+                }
+            },
             //Instruction::STOP(u16) => {
             //},
             Instruction::SUB(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
-                let result = self.subtract_sized_with_flags(existing, value, size);
+                let (result, carry) = overflowing_sub_sized(existing, value, size);
+                match dest {
+                    Target::DirectAReg(_) => { },
+                    _ => self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size)),
+                }
                 self.set_target_value(space, dest, result, size)?;
             },
             Instruction::SWAP(reg) => {
@@ -466,7 +510,7 @@ impl MC68010 {
             //},
             Instruction::TST(target, size) => {
                 let value = self.get_target_value(space, target, size)?;
-                self.set_compare_flags(value, size, false);
+                self.set_logic_flags(value, size);
             },
             //Instruction::TRAP(u8) => {
             //},
@@ -479,7 +523,7 @@ impl MC68010 {
                 let addr = self.get_a_reg_mut(reg);
                 *addr = new_value;
             },
-            _ => { panic!(""); },
+            _ => { panic!("Unsupported instruction"); },
         }
 
         Ok(())
@@ -524,9 +568,7 @@ impl MC68010 {
             Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, target_size) => {
                 let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
                 let addr = self.get_a_reg_mut(reg);
-                let result = get_address_sized(space, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size);
-println!(">>> {:x} has {:x}", (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32), result.as_ref().unwrap());
-                result
+                get_address_sized(space, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectMemory(addr) => {
                 get_address_sized(space, addr as Address, size)
@@ -606,22 +648,6 @@ println!(">>> {:x} has {:x}", (*addr).wrapping_add(reg_offset as u32).wrapping_a
         Ok(addr)
     }
 
-    fn subtract_sized_with_flags(&mut self, existing: u32, diff: u32, size: Size) -> u32 {
-        let (result, overflow) = match size {
-            Size::Byte => {
-                let (result, overflow) = (existing as u8).overflowing_sub(diff as u8);
-                (result as u32, overflow)
-            },
-            Size::Word => {
-                let (result, overflow) = (existing as u16).overflowing_sub(diff as u16);
-                (result as u32, overflow)
-            },
-            Size::Long => existing.overflowing_sub(diff),
-        };
-        self.set_compare_flags(result, size, overflow);
-        result
-    }
-
     fn get_control_reg_mut(&mut self, control_reg: ControlRegister) -> &mut u32 {
         match control_reg {
             ControlRegister::VBR => &mut self.state.vbr,
@@ -645,7 +671,7 @@ println!(">>> {:x} has {:x}", (*addr).wrapping_add(reg_offset as u32).wrapping_a
     fn get_x_reg_value(&self, rtype: RegisterType, reg: u8) -> u32 {
         match rtype {
             RegisterType::Data => self.state.d_reg[reg as usize],
-            RegisterType::Address => self.state.d_reg[reg as usize],
+            RegisterType::Address => self.state.a_reg[reg as usize],
         }
     }
 
@@ -661,7 +687,7 @@ println!(">>> {:x} has {:x}", (*addr).wrapping_add(reg_offset as u32).wrapping_a
         }
     }
 
-    fn set_compare_flags(&mut self, value: u32, size: Size, carry: bool) {
+    fn set_compare_flags(&mut self, value: u32, size: Size, carry: bool, overflow: bool) {
         let value = sign_extend_to_long(value, size);
 
         let mut flags = 0x0000;
@@ -672,7 +698,10 @@ println!(">>> {:x} has {:x}", (*addr).wrapping_add(reg_offset as u32).wrapping_a
             flags |= FLAGS_ZERO
         }
         if carry {
-            flags |= FLAGS_CARRY | FLAGS_OVERFLOW;
+            flags |= FLAGS_CARRY;
+        }
+        if overflow {
+            flags |= FLAGS_OVERFLOW;
         }
         self.state.sr = (self.state.sr & 0xFFF0) | flags;
     }
@@ -685,7 +714,7 @@ println!(">>> {:x} has {:x}", (*addr).wrapping_add(reg_offset as u32).wrapping_a
         if value == 0 {
             flags |= FLAGS_ZERO
         }
-        self.state.sr |= (self.state.sr & 0xFFF0) | flags;
+        self.state.sr = (self.state.sr & 0xFFF0) | flags;
     }
 
     fn set_bit_test_flags(&mut self, value: u32, bitnum: u32, size: Size) -> u32 {
@@ -723,6 +752,52 @@ println!(">>> {:x} has {:x}", (*addr).wrapping_add(reg_offset as u32).wrapping_a
     }
 }
 
+
+fn overflowing_add_sized(operand1: u32, operand2: u32, size: Size) -> (u32, bool) {
+    match size {
+        Size::Byte => {
+            let (result, carry) = (operand1 as u8).overflowing_add(operand2 as u8);
+            (result as u32, carry)
+        },
+        Size::Word => {
+            let (result, carry) = (operand1 as u16).overflowing_add(operand2 as u16);
+            (result as u32, carry)
+        },
+        Size::Long => operand1.overflowing_add(operand2),
+    }
+}
+
+fn overflowing_sub_sized(operand1: u32, operand2: u32, size: Size) -> (u32, bool) {
+    match size {
+        Size::Byte => {
+            let (result, carry) = (operand1 as u8).overflowing_sub(operand2 as u8);
+            (result as u32, carry)
+        },
+        Size::Word => {
+            let (result, carry) = (operand1 as u16).overflowing_sub(operand2 as u16);
+            (result as u32, carry)
+        },
+        Size::Long => operand1.overflowing_sub(operand2),
+    }
+}
+
+fn shift_operation(value: u32, size: Size, dir: ShiftDirection, arithmetic: bool) -> (u32, bool) {
+    match dir {
+        ShiftDirection::Left => {
+            match size {
+                Size::Byte => (((value as u8) << 1) as u32, get_msb(value, size)),
+                Size::Word => (((value as u16) << 1) as u32, get_msb(value, size)),
+                Size::Long => ((value << 1) as u32, get_msb(value, size)),
+            }
+        },
+        ShiftDirection::Right => {
+            let mask = if arithmetic { get_msb_mask(value, size) } else { 0 };
+            ((value >> 1) | mask, (value & 0x1) != 0)
+        },
+    }
+}
+
+
 fn get_value_sized(value: u32, size: Size) -> u32 {
     match size {
         Size::Byte => { 0x000000FF & value },
@@ -755,20 +830,12 @@ fn set_address_sized(space: &mut AddressSpace, addr: Address, value: u32, size: 
     }
 }
 
-fn shift_operation(value: u32, size: Size, dir: ShiftDirection, arithmetic: bool) -> (u32, bool) {
-    match dir {
-        ShiftDirection::Left => {
-            match size {
-                Size::Byte => (((value as u8) << 1) as u32, get_msb(value, size)),
-                Size::Word => (((value as u16) << 1) as u32, get_msb(value, size)),
-                Size::Long => ((value << 1) as u32, get_msb(value, size)),
-            }
-        },
-        ShiftDirection::Right => {
-            let mask = if arithmetic { get_msb_mask(value, size) } else { 0 };
-            ((value >> 1) | mask, (value & 0x1) != 0)
-        },
-    }
+fn get_overflow(operand1: u32, operand2: u32, result: u32, size: Size) -> bool {
+    let msb1 = get_msb(operand1, size);
+    let msb2 = get_msb(operand2, size);
+    let msb_res = get_msb(result, size);
+
+    msb1 && msb2 && !msb_res
 }
 
 fn get_msb(value: u32, size: Size) -> bool {
