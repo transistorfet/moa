@@ -2,6 +2,7 @@
 #[macro_use]
 mod error;
 mod memory;
+mod timers;
 mod cpus;
 mod devices;
 
@@ -26,10 +27,10 @@ fn main() {
     space.insert(0x00700000, Box::new(serial));
 
     let mut cpu = MC68010::new();
-    cpu.enable_tracing();
+    //cpu.enable_tracing();
 
     //cpu.add_breakpoint(0x0c94);
-    //cpu.add_breakpoint(0x0cf2);
+    cpu.add_breakpoint(0x103220);
 
     while cpu.is_running() {
         match cpu.step(&mut space) {

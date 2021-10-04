@@ -1,5 +1,6 @@
 
 use crate::error::Error;
+use crate::timers::CpuTimer;
 use crate::memory::{Address, AddressSpace};
 
 use super::debugger::M68kDebugger;
@@ -81,6 +82,7 @@ pub struct MC68010 {
     pub state: MC68010State,
     pub decoder: M68kDecoder,
     pub debugger: M68kDebugger,
+    pub timer: CpuTimer,
 }
 
 impl MC68010 {
@@ -89,6 +91,7 @@ impl MC68010 {
             state: MC68010State::new(),
             decoder: M68kDecoder::new(0),
             debugger: M68kDebugger::new(),
+            timer: CpuTimer::new(),
         }
     }
 
@@ -134,8 +137,15 @@ impl MC68010 {
             Status::Init => self.init(space),
             Status::Stopped => Err(Error::new("CPU stopped")),
             Status::Running => {
+                let timer = self.timer.cycle.start();
                 self.decode_next(space)?;
                 self.execute_current(space)?;
+                self.timer.cycle.end(timer);
+
+                if (self.timer.cycle.events % 500) == 0 {
+                    println!("{}", self.timer);
+                }
+
                 Ok(())
             },
         }
@@ -144,7 +154,9 @@ impl MC68010 {
     pub fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
         self.check_breakpoints();
 
+        let timer = self.timer.decode.start();
         self.decoder = M68kDecoder::decode_at(space, self.state.pc)?;
+        self.timer.decode.end(timer);
 
         if self.debugger.use_tracing {
             // Print instruction bytes for debugging
@@ -164,6 +176,7 @@ impl MC68010 {
     }
 
     pub fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+        let timer = self.timer.decode.start();
         match self.decoder.instruction {
             Instruction::ADD(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
@@ -526,6 +539,7 @@ impl MC68010 {
             _ => { return Err(Error::new("Unsupported instruction")); },
         }
 
+        self.timer.execute.end(timer);
         Ok(())
     }
 
