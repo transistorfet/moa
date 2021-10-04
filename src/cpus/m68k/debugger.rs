@@ -5,12 +5,34 @@ use crate::memory::{Address, AddressSpace};
 use super::execute::{MC68010};
 use super::decode::{Instruction, Target, Size, Direction, Condition, ControlRegister, RegisterType};
 
+pub struct StackTracer {
+    pub calls: Vec<u32>,
+}
+
+impl StackTracer {
+    pub fn new() -> StackTracer {
+        StackTracer {
+            calls: vec![],
+        }
+    }
+
+    pub fn push_return(&mut self, addr: u32) {
+        self.calls.push(addr);
+    }
+
+    pub fn pop_return(&mut self) {
+        self.calls.pop();
+    }
+}
+
+
 pub struct M68kDebugger {
     pub breakpoints: Vec<u32>,
     pub use_tracing: bool,
     pub use_debugger: bool,
+    pub step_until_return: bool,
+    pub stack_tracer: StackTracer,
 }
-
 
 impl M68kDebugger {
     pub fn new() -> M68kDebugger {
@@ -18,6 +40,8 @@ impl M68kDebugger {
             breakpoints: vec!(),
             use_tracing: false,
             use_debugger: false,
+            step_until_return: false,
+            stack_tracer: StackTracer::new(),
         }
     }
 }
@@ -44,6 +68,17 @@ impl MC68010 {
 
     pub fn run_debugger(&mut self, space: &mut AddressSpace) {
         self.dump_state(space);
+
+        if self.debugger.step_until_return {
+            match self.decoder.instruction {
+                Instruction::RTS | Instruction::RTE | Instruction::RTR => {
+                    self.debugger.step_until_return = false;
+                }
+                _ => {
+                    return;
+                },
+            }
+        }
 
         loop {
             let mut buffer = String::new();
@@ -82,6 +117,16 @@ impl MC68010 {
                 } else {
                     space.dump_memory(self.state.msp as Address, 0x40 as Address);
                 }
+            },
+            "ds" | "stack" | "dumpstack" => {
+                println!("Stack:");
+                for addr in &self.debugger.stack_tracer.calls {
+                    println!("  {:08x}", space.read_beu32(*addr as Address)?);
+                }
+            },
+            "so" | "stepout" => {
+                self.debugger.step_until_return = true;
+                return Ok(true);
             },
             "c" | "continue" => {
                 self.debugger.use_debugger = false;

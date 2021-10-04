@@ -227,6 +227,8 @@ impl MC68010 {
             },
             Instruction::BSR(offset) => {
                 self.push_long(space, self.state.pc)?;
+                let sp = *self.get_stack_pointer_mut();
+                self.debugger.stack_tracer.push_return(sp);
                 self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
             },
             Instruction::BTST(bitnum, target, size) => {
@@ -267,10 +269,10 @@ impl MC68010 {
                 self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size));
             },
             Instruction::CMPA(src, reg, size) => {
-                let value = self.get_target_value(space, src, size)?;
-                let existing = sign_extend_to_long(*self.get_a_reg_mut(reg), size) as u32;
+                let value = sign_extend_to_long(self.get_target_value(space, src, size)?, size) as u32;
+                let existing = *self.get_a_reg_mut(reg);
                 let (result, carry) = overflowing_sub_sized(existing, value, Size::Long);
-                self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, Size::Long));
+                self.set_compare_flags(result, Size::Long, carry, get_overflow(existing, value, result, Size::Long));
             },
             Instruction::DBcc(cond, reg, offset) => {
                 let condition_true = self.get_current_condition(cond);
@@ -326,6 +328,8 @@ impl MC68010 {
             },
             Instruction::JSR(target) => {
                 self.push_long(space, self.state.pc)?;
+                let sp = *self.get_stack_pointer_mut();
+                self.debugger.stack_tracer.push_return(sp);
                 self.state.pc = self.get_target_address(target)?;
             },
             Instruction::LEA(target, reg) => {
@@ -493,6 +497,7 @@ impl MC68010 {
             //Instruction::RTR => {
             //},
             Instruction::RTS => {
+                self.debugger.stack_tracer.pop_return();
                 self.state.pc = self.pop_long(space)?;
             },
             Instruction::Scc(cond, target) => {

@@ -143,7 +143,7 @@ impl AddressSpace {
     pub fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
         let mut seg = self.get_segment_mut(addr)?;
         let relative_addr = addr - seg.base;
-        if relative_addr as usize + count >= seg.contents.len() {
+        if relative_addr as usize + count > seg.contents.len() {
             Err(Error::new(&format!("Error reading address {:#010x}", addr)))
         } else {
             Ok(seg.contents.read(relative_addr, count))
