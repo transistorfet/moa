@@ -9,6 +9,7 @@ mod devices;
 use crate::memory::{AddressSpace, MemoryBlock};
 use crate::cpus::m68k::MC68010;
 use crate::devices::mc68681::MC68681;
+use crate::devices::ata::AtaDevice;
 
 fn main() {
     let mut space = AddressSpace::new();
@@ -21,6 +22,10 @@ fn main() {
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
     ram.load_at(0, "binaries/kernel.bin").unwrap();
     space.insert(0x00100000, Box::new(ram));
+
+    let mut ata = AtaDevice::new();
+    ata.load("binaries/compactflash.img").unwrap();
+    space.insert(0x00600000, Box::new(ata));
 
     let mut serial = MC68681::new();
     serial.open().unwrap();

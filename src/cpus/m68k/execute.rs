@@ -343,7 +343,7 @@ impl MC68010 {
                 let sp = *self.get_stack_pointer_mut();
                 let addr = self.get_a_reg_mut(reg);
                 *addr = sp;
-                *self.get_stack_pointer_mut() = sp + (offset as i32) as u32;
+                *self.get_stack_pointer_mut() = sp.wrapping_add((offset as i32) as u32);
             },
             Instruction::LSd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(space, count, size)? % 64;
