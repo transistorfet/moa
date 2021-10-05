@@ -30,7 +30,7 @@ pub struct M68kDebugger {
     pub breakpoints: Vec<u32>,
     pub use_tracing: bool,
     pub use_debugger: bool,
-    pub step_until_return: bool,
+    pub step_until_return: Option<usize>,
     pub stack_tracer: StackTracer,
 }
 
@@ -40,7 +40,7 @@ impl M68kDebugger {
             breakpoints: vec!(),
             use_tracing: false,
             use_debugger: false,
-            step_until_return: false,
+            step_until_return: None,
             stack_tracer: StackTracer::new(),
         }
     }
@@ -69,15 +69,10 @@ impl MC68010 {
     pub fn run_debugger(&mut self, space: &mut AddressSpace) {
         self.dump_state(space);
 
-        if self.debugger.step_until_return {
-            match self.decoder.instruction {
-                Instruction::RTS | Instruction::RTE | Instruction::RTR => {
-                    self.debugger.step_until_return = false;
-                }
-                _ => {
-                    return;
-                },
-            }
+        match self.debugger.step_until_return {
+            Some(level) if level == self.debugger.stack_tracer.calls.len() => { self.debugger.step_until_return = None; },
+            Some(_) => { return; },
+            None => { },
         }
 
         loop {
@@ -125,7 +120,7 @@ impl MC68010 {
                 }
             },
             "so" | "stepout" => {
-                self.debugger.step_until_return = true;
+                self.debugger.step_until_return = Some(self.debugger.stack_tracer.calls.len() - 1);
                 return Ok(true);
             },
             "c" | "continue" => {

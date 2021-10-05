@@ -1,4 +1,6 @@
 
+use std::fmt;
+
 use crate::error::Error;
 use crate::memory::{Address, AddressSpace};
 
@@ -639,7 +641,7 @@ impl M68kDecoder {
         (rtype, xreg, data, size)
     }
 
-    fn get_mode_as_target(&mut self, space: &mut AddressSpace, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
+    pub fn get_mode_as_target(&mut self, space: &mut AddressSpace, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
         let value = match mode {
             0b000 => Target::DirectDReg(reg),
             0b001 => Target::DirectAReg(reg),
@@ -770,6 +772,24 @@ pub fn sign_extend_to_long(value: u32, from: Size) -> i32 {
         Size::Byte => ((value as u8) as i8) as i32,
         Size::Word => ((value as u16) as i16) as i32,
         Size::Long => value as i32,
+    }
+}
+
+impl fmt::Display for Target {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Target::Immediate(value) => write!(f, "#{:08x}", value),
+            Target::DirectDReg(reg) => write!(f, "%d{}", reg),
+            Target::DirectAReg(reg) => write!(f, "%a{}", reg),
+            Target::IndirectAReg(reg) => write!(f, "(%a{})", reg),
+            Target::IndirectARegInc(reg) => write!(f, "(%a{})+", reg),
+            Target::IndirectARegDec(reg) => write!(f, "-(%a{})", reg),
+            Target::IndirectARegOffset(reg, offset) => write!(f, "(%a{} + #{})", reg, offset),
+            Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, _) => write!(f, "(%a{} + %{}{} + #{})", reg, if *rtype == RegisterType::Data { 'd' } else { 'a' }, xreg, offset),
+            Target::IndirectMemory(value) => write!(f, "(#{:08x})", value),
+            Target::IndirectPCOffset(offset) => write!(f, "(%pc + #{})", offset),
+            Target::IndirectPCXRegOffset(rtype, xreg, offset, _) => write!(f, "(%pc + %{}{} + #{})", if *rtype == RegisterType::Data { 'd' } else { 'a' }, xreg, offset),
+        }
     }
 }
 

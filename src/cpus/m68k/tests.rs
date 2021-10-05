@@ -2,7 +2,7 @@
 use crate::memory::{Address, AddressSpace, MemoryBlock};
 
 use super::execute::MC68010;
-use super::decode::{Instruction, Target, Size, Sign};
+use super::decode::{Instruction, Target, Size, Sign, ShiftDirection};
 
 const INIT_STACK: Address = 0x00002000;
 const INIT_ADDR: Address = 0x00000010;
@@ -27,8 +27,9 @@ fn init_test() -> (MC68010, AddressSpace) {
 
 #[cfg(test)]
 mod tests {
+    use crate::memory::Address;
     use super::{init_test, INIT_ADDR};
-    use super::{Instruction, Target, Size, Sign};
+    use super::{Instruction, Target, Size, Sign, ShiftDirection};
 
     #[test]
     fn instruction_nop() {
@@ -79,7 +80,7 @@ mod tests {
         cpu.decode_next(&mut space).unwrap();
         assert_eq!(cpu.decoder.instruction, Instruction::CMP(Target::Immediate(0x30), Target::DirectDReg(0), Size::Byte));
         cpu.execute_current(&mut space).unwrap();
-        assert_eq!(cpu.state.sr & 0x0F, 0x00B);
+        assert_eq!(cpu.state.sr & 0x0F, 0x009);
     }
 
     #[test]
@@ -118,6 +119,165 @@ mod tests {
         assert_eq!(cpu.decoder.instruction, Instruction::MUL(Target::Immediate(0x276), Target::DirectDReg(0), Size::Word, Sign::Signed));
         //cpu.execute_current(&mut space).unwrap();
         //assert_eq!(cpu.state.sr & 0x0F, 0x00);
+    }
+
+    #[test]
+    fn instruction_asli() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR, 0xE300).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left));
+
+        cpu.state.d_reg[0] = 0x01;
+        cpu.execute_current(&mut space).unwrap();
+        assert_eq!(cpu.state.d_reg[0], 0x00000002);
+        assert_eq!(cpu.state.sr & 0x1F, 0x00);
+    }
+
+    #[test]
+    fn instruction_asri() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR, 0xE200).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right));
+
+        cpu.state.d_reg[0] = 0x81;
+        cpu.execute_current(&mut space).unwrap();
+        assert_eq!(cpu.state.d_reg[0], 0x000000C0);
+        assert_eq!(cpu.state.sr & 0x1F, 0x19);
+    }
+
+    #[test]
+    fn instruction_roli() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR, 0xE318).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left));
+
+        cpu.state.d_reg[0] = 0x80;
+        cpu.execute_current(&mut space).unwrap();
+        assert_eq!(cpu.state.d_reg[0], 0x00000001);
+        assert_eq!(cpu.state.sr & 0x1F, 0x01);
+    }
+
+    #[test]
+    fn instruction_rori() {
+        let (mut cpu, mut space) = init_test();
+
+        space.write_beu16(INIT_ADDR, 0xE218).unwrap();
+        cpu.decode_next(&mut space).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right));
+
+        cpu.state.d_reg[0] = 0x01;
+        cpu.execute_current(&mut space).unwrap();
+        assert_eq!(cpu.state.d_reg[0], 0x00000080);
+        assert_eq!(cpu.state.sr & 0x1F, 0x09);
+    }
+
+
+
+
+
+    #[test]
+    fn target_value_direct_d() {
+        let (mut cpu, mut space) = init_test();
+
+        let size = Size::Word;
+        let expected = 0x1234;
+
+        let target = cpu.decoder.get_mode_as_target(&mut space, 0b000, 0b001, Some(size)).unwrap();
+        assert_eq!(target, Target::DirectDReg(1));
+
+        cpu.state.d_reg[1] = expected;
+        let result = cpu.get_target_value(&mut space, target, size).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn target_value_direct_a() {
+        let (mut cpu, mut space) = init_test();
+
+        let size = Size::Word;
+        let expected = 0x1234;
+
+        let target = cpu.decoder.get_mode_as_target(&mut space, 0b001, 0b010, Some(size)).unwrap();
+        assert_eq!(target, Target::DirectAReg(2));
+
+        cpu.state.a_reg[2] = expected;
+        let result = cpu.get_target_value(&mut space, target, size).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn target_value_indirect_a() {
+        let (mut cpu, mut space) = init_test();
+
+        let size = Size::Long;
+        let expected_addr = INIT_ADDR;
+        let expected = 0x12345678;
+
+        space.write_beu32(INIT_ADDR, expected).unwrap();
+        let target = cpu.decoder.get_mode_as_target(&mut space, 0b010, 0b010, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectAReg(2));
+
+        cpu.state.a_reg[2] = INIT_ADDR as u32;
+        let result = cpu.get_target_value(&mut space, target, size).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn target_value_indirect_a_inc() {
+        let (mut cpu, mut space) = init_test();
+
+        let size = Size::Long;
+        let expected_addr = INIT_ADDR;
+        let expected = 0x12345678;
+
+        space.write_beu32(INIT_ADDR, expected).unwrap();
+        let target = cpu.decoder.get_mode_as_target(&mut space, 0b011, 0b010, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectARegInc(2));
+
+        cpu.state.a_reg[2] = INIT_ADDR as u32;
+        let result = cpu.get_target_value(&mut space, target, size).unwrap();
+        assert_eq!(result, expected);
+        assert_eq!(cpu.state.a_reg[2], (INIT_ADDR as u32) + 4);
+    }
+
+    #[test]
+    fn target_value_indirect_a_dec() {
+        let (mut cpu, mut space) = init_test();
+
+        let size = Size::Long;
+        let expected_addr = INIT_ADDR + 4;
+        let expected = 0x12345678;
+
+        space.write_beu32(INIT_ADDR, expected).unwrap();
+        let target = cpu.decoder.get_mode_as_target(&mut space, 0b100, 0b010, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectARegDec(2));
+
+        cpu.state.a_reg[2] = (INIT_ADDR as u32) + 4;
+        let result = cpu.get_target_value(&mut space, target, size).unwrap();
+        assert_eq!(result, expected);
+        assert_eq!(cpu.state.a_reg[2], INIT_ADDR as u32);
+    }
+
+
+    #[test]
+    fn target_value_immediate() {
+        let (mut cpu, mut space) = init_test();
+
+        let size = Size::Word;
+        let expected = 0x1234;
+
+        space.write_beu16(cpu.decoder.end as Address, expected as u16).unwrap();
+        let target = cpu.decoder.get_mode_as_target(&mut space, 0b111, 0b100, Some(size)).unwrap();
+        assert_eq!(target, Target::Immediate(expected));
+
+        let result = cpu.get_target_value(&mut space, target, size).unwrap();
+        assert_eq!(result, expected);
     }
 }
 

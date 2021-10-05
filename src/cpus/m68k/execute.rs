@@ -142,9 +142,9 @@ impl MC68010 {
                 self.execute_current(space)?;
                 self.timer.cycle.end(timer);
 
-                if (self.timer.cycle.events % 500) == 0 {
-                    println!("{}", self.timer);
-                }
+                //if (self.timer.cycle.events % 500) == 0 {
+                //    println!("{}", self.timer);
+                //}
 
                 Ok(())
             },
@@ -191,8 +191,9 @@ impl MC68010 {
             Instruction::AND(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
-                self.set_target_value(space, dest, existing & value, size)?;
-                self.set_logic_flags(value, size);
+                let result = get_value_sized(existing & value, size);
+                self.set_target_value(space, dest, result, size)?;
+                self.set_logic_flags(result, size);
             },
             Instruction::ANDtoCCR(value) => {
                 self.state.sr = self.state.sr | value as u16;
@@ -300,8 +301,9 @@ impl MC68010 {
             Instruction::EOR(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
-                self.set_target_value(space, dest, existing ^ value, size)?;
-                self.set_logic_flags(value, size);
+                let result = get_value_sized(existing ^ value, size);
+                self.set_target_value(space, dest, result, size)?;
+                self.set_logic_flags(result, size);
             },
             Instruction::EORtoCCR(value) => {
                 self.state.sr = self.state.sr ^ value as u16;
@@ -402,18 +404,21 @@ impl MC68010 {
                 // TODO moving words requires a sign extension to 32 bits
                 if size != Size::Long { return Err(Error::new("Unsupported size in MOVEM instruction")); }
 
+                let mut addr = self.get_target_address(target)?;
                 if dir == Direction::ToTarget {
                     let mut mask = mask;
                     for i in (0..8).rev() {
                         if (mask & 0x01) != 0 {
                             let value = *self.get_a_reg_mut(i);
-                            self.set_target_value(space, target, value, size)?;
+                            addr -= size.in_bytes();
+                            set_address_sized(space, addr as Address, value, size);
                         }
                         mask >>= 1;
                     }
                     for i in (0..8).rev() {
                         if (mask & 0x01) != 0 {
-                            self.set_target_value(space, target, self.state.d_reg[i], size)?;
+                            addr -= size.in_bytes();
+                            set_address_sized(space, addr as Address, self.state.d_reg[i], size);
                         }
                         mask >>= 1;
                     }
@@ -421,18 +426,27 @@ impl MC68010 {
                     let mut mask = mask;
                     for i in 0..8 {
                         if (mask & 0x01) != 0 {
-                            self.state.d_reg[i] = self.get_target_value(space, target, size)?;
+                            self.state.d_reg[i] = get_address_sized(space, addr as Address, size)?;
+                            addr += size.in_bytes();
                         }
                         mask >>= 1;
                     }
                     for i in 0..8 {
                         if (mask & 0x01) != 0 {
-                            let value = self.get_target_value(space, target, size)?;
-                            let addr = self.get_a_reg_mut(i);
-                            *addr = value;
+                            *self.get_a_reg_mut(i) = get_address_sized(space, addr as Address, size)?;
+                            addr += size.in_bytes();
                         }
                         mask >>= 1;
                     }
+                }
+
+                // If it was Post-Inc/Pre-Dec target, then update the value
+                match target {
+                    Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
+                        let a_reg_mut = self.get_a_reg_mut(reg);
+                        *a_reg_mut = addr;
+                    }
+                    _ => { },
                 }
             },
             Instruction::MOVEQ(data, reg) => {
@@ -473,8 +487,9 @@ impl MC68010 {
             Instruction::OR(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
-                self.set_target_value(space, dest, existing | value, size)?;
-                self.set_logic_flags(value, size);
+                let result = get_value_sized(existing | value, size);
+                self.set_target_value(space, dest, result, size)?;
+                self.set_logic_flags(result, size);
             },
             Instruction::ORtoCCR(value) => {
                 self.state.sr = self.state.sr | value as u16;
@@ -488,8 +503,18 @@ impl MC68010 {
             },
             //Instruction::RESET => {
             //},
-            //Instruction::ROd(Target, Target, Size, ShiftDirection) => {
-            //},
+            Instruction::ROd(count, target, size, shift_dir) => {
+                let count = self.get_target_value(space, count, size)? % 64;
+                let mut pair = (self.get_target_value(space, target, size)?, false);
+                for _ in 0..count {
+                    pair = rotate_operation(pair.0, size, shift_dir);
+                }
+                self.set_logic_flags(pair.0, size);
+                if pair.1 {
+                    self.state.sr |= FLAGS_CARRY;
+                }
+                self.set_target_value(space, target, pair.0, size)?;
+            },
             //Instruction::ROXd(Target, Target, Size, ShiftDirection) => {
             //},
             //Instruction::RTE => {
@@ -563,7 +588,7 @@ impl MC68010 {
         Ok(value)
     }
 
-    fn get_target_value(&mut self, space: &mut AddressSpace, target: Target, size: Size) -> Result<u32, Error> {
+    pub fn get_target_value(&mut self, space: &mut AddressSpace, target: Target, size: Size) -> Result<u32, Error> {
         match target {
             Target::Immediate(value) => Ok(value),
             Target::DirectDReg(reg) => Ok(get_value_sized(self.state.d_reg[reg as usize], size)),
@@ -602,7 +627,7 @@ impl MC68010 {
         }
     }
 
-    fn set_target_value(&mut self, space: &mut AddressSpace, target: Target, value: u32, size: Size) -> Result<(), Error> {
+    pub fn set_target_value(&mut self, space: &mut AddressSpace, target: Target, value: u32, size: Size) -> Result<(), Error> {
         match target {
             Target::DirectDReg(reg) => {
                 set_value_sized(&mut self.state.d_reg[reg as usize], value, size);
@@ -640,9 +665,9 @@ impl MC68010 {
         Ok(())
     }
 
-    fn get_target_address(&mut self, target: Target) -> Result<u32, Error> {
+    pub fn get_target_address(&mut self, target: Target) -> Result<u32, Error> {
         let addr = match target {
-            Target::IndirectAReg(reg) => *self.get_a_reg_mut(reg),
+            Target::IndirectAReg(reg) | Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => *self.get_a_reg_mut(reg),
             Target::IndirectARegOffset(reg, offset) => {
                 let addr = self.get_a_reg_mut(reg);
                 (*addr).wrapping_add(offset as u32)
@@ -704,6 +729,10 @@ impl MC68010 {
         } else {
             true
         }
+    }
+
+    fn set_flag(&mut self, flag: u16, value: bool) {
+        self.state.sr = (self.state.sr & !flag) | (if value { flag } else { 0 });
     }
 
     fn set_compare_flags(&mut self, value: u32, size: Size, carry: bool, overflow: bool) {
@@ -803,15 +832,35 @@ fn overflowing_sub_sized(operand1: u32, operand2: u32, size: Size) -> (u32, bool
 fn shift_operation(value: u32, size: Size, dir: ShiftDirection, arithmetic: bool) -> (u32, bool) {
     match dir {
         ShiftDirection::Left => {
+            let bit = get_msb(value, size);
             match size {
-                Size::Byte => (((value as u8) << 1) as u32, get_msb(value, size)),
-                Size::Word => (((value as u16) << 1) as u32, get_msb(value, size)),
-                Size::Long => ((value << 1) as u32, get_msb(value, size)),
+                Size::Byte => (((value as u8) << 1) as u32, bit),
+                Size::Word => (((value as u16) << 1) as u32, bit),
+                Size::Long => ((value << 1) as u32, bit),
             }
         },
         ShiftDirection::Right => {
             let mask = if arithmetic { get_msb_mask(value, size) } else { 0 };
             ((value >> 1) | mask, (value & 0x1) != 0)
+        },
+    }
+}
+
+fn rotate_operation(value: u32, size: Size, dir: ShiftDirection) -> (u32, bool) {
+    match dir {
+        ShiftDirection::Left => {
+            let bit = get_msb(value, size);
+            let mask = if bit { 0x01 } else { 0x00 };
+            match size {
+                Size::Byte => (mask | ((value as u8) << 1) as u32, bit),
+                Size::Word => (mask | ((value as u16) << 1) as u32, bit),
+                Size::Long => (mask | (value << 1) as u32, bit),
+            }
+        },
+        ShiftDirection::Right => {
+            let bit = if (value & 0x01) != 0 { true } else { false };
+            let mask = if bit { get_msb_mask(0xffffffff, size) } else { 0x0 };
+            ((value >> 1) | mask, bit)
         },
     }
 }
