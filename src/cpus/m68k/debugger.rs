@@ -1,9 +1,9 @@
 
 use crate::error::Error;
-use crate::memory::{Address, Addressable, AddressSpace};
+use crate::system::System;
+use crate::memory::Address;
 
 use super::execute::{MC68010};
-use super::decode::{Instruction, Target, Size, Direction, Condition, ControlRegister, RegisterType};
 
 pub struct StackTracer {
     pub calls: Vec<u32>,
@@ -66,8 +66,8 @@ impl MC68010 {
         }
     }
 
-    pub fn run_debugger(&mut self, space: &mut AddressSpace) {
-        self.dump_state(space);
+    pub fn run_debugger(&mut self, system: &System) {
+        self.dump_state(system);
 
         match self.debugger.step_until_return {
             Some(level) if level == self.debugger.stack_tracer.calls.len() => { self.debugger.step_until_return = None; },
@@ -79,7 +79,7 @@ impl MC68010 {
             let mut buffer = String::new();
             std::io::stdin().read_line(&mut buffer).unwrap();
             let args: Vec<&str> = buffer.split_whitespace().collect();
-            match self.run_debugger_command(space, args) {
+            match self.run_debugger_command(system, args) {
                 Ok(true) => return,
                 Ok(false) => { },
                 Err(err) => {
@@ -89,7 +89,7 @@ impl MC68010 {
         }
     }
 
-    pub fn run_debugger_command(&mut self, space: &mut AddressSpace, args: Vec<&str>) -> Result<bool, Error> {
+    pub fn run_debugger_command(&mut self, system: &System, args: Vec<&str>) -> Result<bool, Error> {
         if args.len() <= 0 {
             return Ok(true);
         }
@@ -108,15 +108,15 @@ impl MC68010 {
                 if args.len() > 1 {
                     let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?;
                     let len = if args.len() > 2 { u32::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse length"))? } else { 0x20 };
-                    space.dump_memory(addr as Address, len as Address);
+                    system.dump_memory(addr as Address, len as Address);
                 } else {
-                    space.dump_memory(self.state.msp as Address, 0x40 as Address);
+                    system.dump_memory(self.state.msp as Address, 0x40 as Address);
                 }
             },
             "ds" | "stack" | "dumpstack" => {
                 println!("Stack:");
                 for addr in &self.debugger.stack_tracer.calls {
-                    println!("  {:08x}", space.read_beu32(*addr as Address)?);
+                    println!("  {:08x}", system.read_beu32(*addr as Address)?);
                 }
             },
             "so" | "stepout" => {

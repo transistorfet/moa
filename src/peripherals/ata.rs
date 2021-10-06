@@ -3,6 +3,7 @@ use std::fs;
 
 use crate::error::Error;
 use crate::memory::{Address, Addressable};
+use crate::system::{Clock, Device, System};
 
 
 const ATA_REG_DEV_CONTROL: Address      = 0x1D;
@@ -90,7 +91,7 @@ println!(">> {:x}", data[0]);
         Ok(data)
     }
 
-    fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         println!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             ATA_REG_DRIVE_HEAD => { self.selected_sector |= ((data[0] & 0x1F) as u32) << 24; },
@@ -110,12 +111,18 @@ println!(">> {:x}", data[0]);
             ATA_REG_FEATURE => {
                 // TODO implement features
             },
-            ATA_REG_DATA => {
+            ATA_REG_DATA_BYTE => {
                 // TODO implement writing
             },
             _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
         Ok(())
+    }
+}
+
+impl Device for AtaDevice {
+    fn step(&mut self, _system: &System) -> Result<Clock, Error> {
+        Ok(1)
     }
 }
 

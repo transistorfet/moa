@@ -1,7 +1,8 @@
 
 use crate::error::Error;
 use crate::timers::CpuTimer;
-use crate::memory::{Address, Addressable, AddressSpace};
+use crate::memory::Address;
+use crate::system::System;
 
 use super::debugger::M68kDebugger;
 use super::decode::{
@@ -17,14 +18,6 @@ use super::decode::{
     RegisterType,
     sign_extend_to_long
 };
-
-
-/*
-pub trait Processor {
-    fn reset();
-    fn step();
-}
-*/
 
 
 const FLAGS_ON_RESET: u16 = 0x2700;
@@ -91,13 +84,13 @@ impl MC68010 {
     pub fn new() -> MC68010 {
         MC68010 {
             state: MC68010State::new(),
-            decoder: M68kDecoder::new(0),
+            decoder: M68kDecoder::new(0, 0),
             debugger: M68kDebugger::new(),
             timer: CpuTimer::new(),
         }
     }
 
-    pub fn dump_state(&self, space: &mut AddressSpace) {
+    pub fn dump_state(&self, system: &System) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#010x}", self.state.pc);
         println!("SR: {:#06x}", self.state.sr);
@@ -110,13 +103,13 @@ impl MC68010 {
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
         println!("");
-        space.dump_memory(self.state.msp as Address, 0x40);
+        system.dump_memory(self.state.msp as Address, 0x40);
         println!("");
     }
 
     pub fn reset(&mut self) {
         self.state = MC68010State::new();
-        self.decoder = M68kDecoder::new(0);
+        self.decoder = M68kDecoder::new(0, 0);
         self.debugger = M68kDebugger::new();
     }
 
@@ -124,88 +117,88 @@ impl MC68010 {
         self.state.status != Status::Stopped
     }
 
-    pub fn init(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+    pub fn init(&mut self, system: &System) -> Result<(), Error> {
         println!("Initializing CPU");
 
-        self.state.msp = space.read_beu32(0)?;
-        self.state.pc = space.read_beu32(4)?;
+        self.state.msp = system.read_beu32(0)?;
+        self.state.pc = system.read_beu32(4)?;
         self.state.status = Status::Running;
 
         Ok(())
     }
 
-    pub fn step(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+    pub fn step(&mut self, system: &System) -> Result<(), Error> {
         match self.state.status {
-            Status::Init => self.init(space),
+            Status::Init => self.init(system),
             Status::Stopped | Status::Halted => Err(Error::new("CPU stopped")),
             Status::Running => {
                 let timer = self.timer.cycle.start();
-                self.decode_next(space)?;
-                self.execute_current(space)?;
+                self.decode_next(system)?;
+                self.execute_current(system)?;
                 self.timer.cycle.end(timer);
 
-                //if (self.timer.cycle.events % 500) == 0 {
-                //    println!("{}", self.timer);
-                //}
+                if (self.timer.cycle.events % 500) == 0 {
+                    println!("{}", self.timer);
+                }
 
                 Ok(())
             },
         }
     }
 
-    pub fn exception(&mut self, space: &mut AddressSpace, number: u8) -> Result<(), Error> {
+    pub fn exception(&mut self, system: &System, number: u8) -> Result<(), Error> {
         let offset = (number as u16) << 2;
-        self.push_word(space, offset)?;
-        self.push_long(space, self.state.pc)?;
-        self.push_word(space, self.state.sr)?;
+        self.push_word(system, offset)?;
+        self.push_long(system, self.state.pc)?;
+        self.push_word(system, self.state.sr)?;
         self.state.sr |= FLAGS_SUPERVISOR;
         self.state.sr &= !FLAGS_TRACING;
-        self.state.pc = space.read_beu32((self.state.vbr + offset as u32) as Address)?;
+        self.state.pc = system.read_beu32((self.state.vbr + offset as u32) as Address)?;
         Ok(())
     }
 
-    pub fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+    pub fn decode_next(&mut self, system: &System) -> Result<(), Error> {
         self.check_breakpoints();
 
         let timer = self.timer.decode.start();
-        self.decoder = M68kDecoder::decode_at(space, self.state.pc)?;
+        self.decoder = M68kDecoder::decode_at(system, self.state.pc)?;
         self.timer.decode.end(timer);
 
         if self.debugger.use_tracing {
             // Print instruction bytes for debugging
             let ins_data: Result<String, Error> =
                 (0..((self.decoder.end - self.decoder.start) / 2)).map(|offset|
-                    Ok(format!("{:04x} ", space.read_beu16((self.decoder.start + (offset * 2)) as Address)?))
+                    Ok(format!("{:04x} ", system.read_beu16((self.decoder.start + (offset * 2)) as Address)?))
                 ).collect();
             debug!("{:#010x}: {}\n\t{:?}\n", self.decoder.start, ins_data?, self.decoder.instruction);
         }
 
         if self.debugger.use_debugger {
-            self.run_debugger(space);
+            self.run_debugger(system);
         }
 
         self.state.pc = self.decoder.end;
         Ok(())
     }
 
-    pub fn execute_current(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
+    pub fn execute_current(&mut self, system: &System) -> Result<(), Error> {
         let timer = self.timer.decode.start();
         match self.decoder.instruction {
             Instruction::ADD(src, dest, size) => {
-                let value = self.get_target_value(space, src, size)?;
-                let existing = self.get_target_value(space, dest, size)?;
+                let value = self.get_target_value(system, src, size)?;
+                let existing = self.get_target_value(system, dest, size)?;
                 let (result, carry) = overflowing_add_sized(existing, value, size);
                 match dest {
                     Target::DirectAReg(_) => { },
                     _ => self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size)),
                 }
-                self.set_target_value(space, dest, result, size)?;
+                self.set_target_value(system, dest, result, size)?;
             },
             Instruction::AND(src, dest, size) => {
-                let value = self.get_target_value(space, src, size)?;
-                let existing = self.get_target_value(space, dest, size)?;
+                let value = self.get_target_value(system, src, size)?;
+                let existing = self.get_target_value(system, dest, size)?;
                 let result = get_value_sized(existing & value, size);
-                self.set_target_value(space, dest, result, size)?;
+                self.set_target_value(system, dest, result, size)?;
                 self.set_logic_flags(result, size);
             },
             Instruction::ANDtoCCR(value) => {
@@ -215,8 +208,8 @@ impl MC68010 {
                 self.state.sr = self.state.sr | value;
             },
             Instruction::ASd(count, target, size, shift_dir) => {
-                let count = self.get_target_value(space, count, size)? % 64;
-                let mut pair = (self.get_target_value(space, target, size)?, false);
+                let count = self.get_target_value(system, count, size)? % 64;
+                let mut pair = (self.get_target_value(system, target, size)?, false);
                 let original = pair.0;
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, true);
@@ -228,7 +221,7 @@ impl MC68010 {
                 if get_msb(pair.0, size) != get_msb(original, size) {
                     self.state.sr |= FLAGS_OVERFLOW;
                 }
-                self.set_target_value(space, target, pair.0, size)?;
+                self.set_target_value(system, target, pair.0, size)?;
             },
             Instruction::Bcc(cond, offset) => {
                 let should_branch = self.get_current_condition(cond);
@@ -240,50 +233,50 @@ impl MC68010 {
                 self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
             },
             Instruction::BSR(offset) => {
-                self.push_long(space, self.state.pc)?;
+                self.push_long(system, self.state.pc)?;
                 let sp = *self.get_stack_pointer_mut();
                 self.debugger.stack_tracer.push_return(sp);
                 self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
             },
             Instruction::BTST(bitnum, target, size) => {
-                let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
-                let value = self.get_target_value(space, target, size)?;
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
+                let value = self.get_target_value(system, target, size)?;
                 self.set_bit_test_flags(value, bitnum, size);
             },
             Instruction::BCHG(bitnum, target, size) => {
-                let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
-                let mut value = self.get_target_value(space, target, size)?;
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
+                let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = (value & !mask) | (!(value & mask) & mask);
-                self.set_target_value(space, target, value, size)?;
+                self.set_target_value(system, target, value, size)?;
             },
             Instruction::BCLR(bitnum, target, size) => {
-                let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
-                let mut value = self.get_target_value(space, target, size)?;
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
+                let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = value & !mask;
-                self.set_target_value(space, target, value, size)?;
+                self.set_target_value(system, target, value, size)?;
             },
             Instruction::BSET(bitnum, target, size) => {
-                let bitnum = self.get_target_value(space, bitnum, Size::Byte)?;
-                let mut value = self.get_target_value(space, target, size)?;
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
+                let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = value | mask;
-                self.set_target_value(space, target, value, size)?;
+                self.set_target_value(system, target, value, size)?;
             },
             Instruction::CLR(target, size) => {
-                self.set_target_value(space, target, 0, size)?;
+                self.set_target_value(system, target, 0, size)?;
                 // Clear flags except Zero flag
                 self.state.sr = (self.state.sr & 0xFFF0) | FLAGS_ZERO;
             },
             Instruction::CMP(src, dest, size) => {
-                let value = self.get_target_value(space, src, size)?;
-                let existing = self.get_target_value(space, dest, size)?;
+                let value = self.get_target_value(system, src, size)?;
+                let existing = self.get_target_value(system, dest, size)?;
                 let (result, carry) = overflowing_sub_sized(existing, value, size);
                 self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size));
             },
             Instruction::CMPA(src, reg, size) => {
-                let value = sign_extend_to_long(self.get_target_value(space, src, size)?, size) as u32;
+                let value = sign_extend_to_long(self.get_target_value(system, src, size)?, size) as u32;
                 let existing = *self.get_a_reg_mut(reg);
                 let (result, carry) = overflowing_sub_sized(existing, value, Size::Long);
                 self.set_compare_flags(result, Size::Long, carry, get_overflow(existing, value, result, Size::Long));
@@ -303,19 +296,19 @@ impl MC68010 {
                     return Err(Error::new("Unsupported multiplication size"));
                 }
 
-                let value = self.get_target_value(space, src, size)?;
-                let existing = self.get_target_value(space, dest, Size::Long)?;
+                let value = self.get_target_value(system, src, size)?;
+                let existing = self.get_target_value(system, dest, Size::Long)?;
                 let result = match sign {
                     Sign::Signed => ((existing as i16 % value as i16) as u32) << 16 | (0xFFFF & (existing as i16 / value as i16) as u32),
                     Sign::Unsigned => ((existing as u16 % value as u16) as u32) << 16 | (0xFFFF & (existing as u16 / value as u16) as u32),
                 };
-                self.set_target_value(space, dest, result, Size::Long)?;
+                self.set_target_value(system, dest, result, Size::Long)?;
             },
             Instruction::EOR(src, dest, size) => {
-                let value = self.get_target_value(space, src, size)?;
-                let existing = self.get_target_value(space, dest, size)?;
+                let value = self.get_target_value(system, src, size)?;
+                let existing = self.get_target_value(system, dest, size)?;
                 let result = get_value_sized(existing ^ value, size);
-                self.set_target_value(space, dest, result, size)?;
+                self.set_target_value(system, dest, result, size)?;
                 self.set_logic_flags(result, size);
             },
             Instruction::EORtoCCR(value) => {
@@ -342,7 +335,7 @@ impl MC68010 {
                 self.state.pc = self.get_target_address(target)?;
             },
             Instruction::JSR(target) => {
-                self.push_long(space, self.state.pc)?;
+                self.push_long(system, self.state.pc)?;
                 let sp = *self.get_stack_pointer_mut();
                 self.debugger.stack_tracer.push_return(sp);
                 self.state.pc = self.get_target_address(target)?;
@@ -354,15 +347,15 @@ impl MC68010 {
             },
             Instruction::LINK(reg, offset) => {
                 let value = *self.get_a_reg_mut(reg);
-                self.push_long(space, value)?;
+                self.push_long(system, value)?;
                 let sp = *self.get_stack_pointer_mut();
                 let addr = self.get_a_reg_mut(reg);
                 *addr = sp;
                 *self.get_stack_pointer_mut() = sp.wrapping_add((offset as i32) as u32);
             },
             Instruction::LSd(count, target, size, shift_dir) => {
-                let count = self.get_target_value(space, count, size)? % 64;
-                let mut pair = (self.get_target_value(space, target, size)?, false);
+                let count = self.get_target_value(system, count, size)? % 64;
+                let mut pair = (self.get_target_value(system, target, size)?, false);
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, false);
                 }
@@ -370,47 +363,47 @@ impl MC68010 {
                 if pair.1 {
                     self.state.sr |= FLAGS_EXTEND | FLAGS_CARRY;
                 }
-                self.set_target_value(space, target, pair.0, size)?;
+                self.set_target_value(system, target, pair.0, size)?;
             },
             Instruction::MOVE(src, dest, size) => {
-                let value = self.get_target_value(space, src, size)?;
+                let value = self.get_target_value(system, src, size)?;
                 self.set_logic_flags(value, size);
-                self.set_target_value(space, dest, value, size)?;
+                self.set_target_value(system, dest, value, size)?;
             },
             Instruction::MOVEA(src, reg, size) => {
-                let value = self.get_target_value(space, src, size)?;
+                let value = self.get_target_value(system, src, size)?;
                 let value = sign_extend_to_long(value, size) as u32;
                 let addr = self.get_a_reg_mut(reg);
                 *addr = value;
             },
             Instruction::MOVEfromSR(target) => {
-                self.set_target_value(space, target, self.state.sr as u32, Size::Word)?;
+                self.set_target_value(system, target, self.state.sr as u32, Size::Word)?;
             },
             Instruction::MOVEtoSR(target) => {
-                self.state.sr = self.get_target_value(space, target, Size::Word)? as u16;
+                self.state.sr = self.get_target_value(system, target, Size::Word)? as u16;
             },
             Instruction::MOVEtoCCR(target) => {
-                let value = self.get_target_value(space, target, Size::Word)? as u16;
+                let value = self.get_target_value(system, target, Size::Word)? as u16;
                 self.state.sr = (self.state.sr & 0xFF00) | (value & 0x00FF);
             },
             Instruction::MOVEC(target, control_reg, dir) => {
                 match dir {
                     Direction::FromTarget => {
-                        let value = self.get_target_value(space, target, Size::Long)?;
+                        let value = self.get_target_value(system, target, Size::Long)?;
                         let addr = self.get_control_reg_mut(control_reg);
                         *addr = value;
                     },
                     Direction::ToTarget => {
                         let addr = self.get_control_reg_mut(control_reg);
                         let value = *addr;
-                        self.set_target_value(space, target, value, Size::Long)?;
+                        self.set_target_value(system, target, value, Size::Long)?;
                     },
                 }
             },
             Instruction::MOVEUSP(target, dir) => {
                 match dir {
-                    Direction::ToTarget => self.set_target_value(space, target, self.state.usp, Size::Long)?,
-                    Direction::FromTarget => { self.state.usp = self.get_target_value(space, target, Size::Long)?; },
+                    Direction::ToTarget => self.set_target_value(system, target, self.state.usp, Size::Long)?,
+                    Direction::FromTarget => { self.state.usp = self.get_target_value(system, target, Size::Long)?; },
                 }
             },
             Instruction::MOVEM(target, size, dir, mask) => {
@@ -424,14 +417,14 @@ impl MC68010 {
                         if (mask & 0x01) != 0 {
                             let value = *self.get_a_reg_mut(i);
                             addr -= size.in_bytes();
-                            set_address_sized(space, addr as Address, value, size);
+                            set_address_sized(system, addr as Address, value, size)?;
                         }
                         mask >>= 1;
                     }
                     for i in (0..8).rev() {
                         if (mask & 0x01) != 0 {
                             addr -= size.in_bytes();
-                            set_address_sized(space, addr as Address, self.state.d_reg[i], size);
+                            set_address_sized(system, addr as Address, self.state.d_reg[i], size)?;
                         }
                         mask >>= 1;
                     }
@@ -439,14 +432,14 @@ impl MC68010 {
                     let mut mask = mask;
                     for i in 0..8 {
                         if (mask & 0x01) != 0 {
-                            self.state.d_reg[i] = get_address_sized(space, addr as Address, size)?;
+                            self.state.d_reg[i] = get_address_sized(system, addr as Address, size)?;
                             addr += size.in_bytes();
                         }
                         mask >>= 1;
                     }
                     for i in 0..8 {
                         if (mask & 0x01) != 0 {
-                            *self.get_a_reg_mut(i) = get_address_sized(space, addr as Address, size)?;
+                            *self.get_a_reg_mut(i) = get_address_sized(system, addr as Address, size)?;
                             addr += size.in_bytes();
                         }
                         mask >>= 1;
@@ -472,36 +465,36 @@ impl MC68010 {
                     return Err(Error::new("Unsupported multiplication size"));
                 }
 
-                let value = self.get_target_value(space, src, size)?;
-                let existing = self.get_target_value(space, dest, size)?;
+                let value = self.get_target_value(system, src, size)?;
+                let existing = self.get_target_value(system, dest, size)?;
                 let result = match sign {
                     Sign::Signed => (sign_extend_to_long(existing, Size::Word) * sign_extend_to_long(value, Size::Word)) as u32,
                     Sign::Unsigned => existing as u32 * value as u32,
                 };
-                self.set_target_value(space, dest, result, Size::Long)?;
+                self.set_target_value(system, dest, result, Size::Long)?;
             },
             //Instruction::NBCD(Target) => {
             //},
             Instruction::NEG(target, size) => {
-                let original = self.get_target_value(space, target, size)?;
+                let original = self.get_target_value(system, target, size)?;
                 let (value, _) = (0 as u32).overflowing_sub(original);
-                self.set_target_value(space, target, value, size);
+                self.set_target_value(system, target, value, size)?;
                 self.set_compare_flags(value, size, value != 0, get_overflow(0, original, value, size));
             },
             //Instruction::NEGX(Target, Size) => {
             //},
             Instruction::NOP => { },
             Instruction::NOT(target, size) => {
-                let mut value = self.get_target_value(space, target, size)?;
+                let mut value = self.get_target_value(system, target, size)?;
                 value = get_value_sized(!value, size);
-                self.set_target_value(space, target, value, size)?;
+                self.set_target_value(system, target, value, size)?;
                 self.set_logic_flags(value, size);
             },
             Instruction::OR(src, dest, size) => {
-                let value = self.get_target_value(space, src, size)?;
-                let existing = self.get_target_value(space, dest, size)?;
+                let value = self.get_target_value(system, src, size)?;
+                let existing = self.get_target_value(system, dest, size)?;
                 let result = get_value_sized(existing | value, size);
-                self.set_target_value(space, dest, result, size)?;
+                self.set_target_value(system, dest, result, size)?;
                 self.set_logic_flags(result, size);
             },
             Instruction::ORtoCCR(value) => {
@@ -512,13 +505,13 @@ impl MC68010 {
             },
             Instruction::PEA(target) => {
                 let value = self.get_target_address(target)?;
-                self.push_long(space, value)?;
+                self.push_long(system, value)?;
             },
             //Instruction::RESET => {
             //},
             Instruction::ROd(count, target, size, shift_dir) => {
-                let count = self.get_target_value(space, count, size)? % 64;
-                let mut pair = (self.get_target_value(space, target, size)?, false);
+                let count = self.get_target_value(system, count, size)? % 64;
+                let mut pair = (self.get_target_value(system, target, size)?, false);
                 for _ in 0..count {
                     pair = rotate_operation(pair.0, size, shift_dir);
                 }
@@ -526,27 +519,27 @@ impl MC68010 {
                 if pair.1 {
                     self.state.sr |= FLAGS_CARRY;
                 }
-                self.set_target_value(space, target, pair.0, size)?;
+                self.set_target_value(system, target, pair.0, size)?;
             },
             //Instruction::ROXd(Target, Target, Size, ShiftDirection) => {
             //},
             Instruction::RTE => {
-                self.state.sr = self.pop_word(space)?;
-                self.state.pc = self.pop_long(space)?;
-                let _ = self.pop_word(space)?;
+                self.state.sr = self.pop_word(system)?;
+                self.state.pc = self.pop_long(system)?;
+                let _ = self.pop_word(system)?;
             },
             //Instruction::RTR => {
             //},
             Instruction::RTS => {
                 self.debugger.stack_tracer.pop_return();
-                self.state.pc = self.pop_long(space)?;
+                self.state.pc = self.pop_long(system)?;
             },
             Instruction::Scc(cond, target) => {
                 let condition_true = self.get_current_condition(cond);
                 if condition_true {
-                    self.set_target_value(space, target, 0xFF, Size::Byte);
+                    self.set_target_value(system, target, 0xFF, Size::Byte)?;
                 } else {
-                    self.set_target_value(space, target, 0x00, Size::Byte);
+                    self.set_target_value(system, target, 0x00, Size::Byte)?;
                 }
             },
             Instruction::STOP(flags) => {
@@ -554,14 +547,14 @@ impl MC68010 {
                 self.state.status = Status::Stopped;
             },
             Instruction::SUB(src, dest, size) => {
-                let value = self.get_target_value(space, src, size)?;
-                let existing = self.get_target_value(space, dest, size)?;
+                let value = self.get_target_value(system, src, size)?;
+                let existing = self.get_target_value(system, dest, size)?;
                 let (result, carry) = overflowing_sub_sized(existing, value, size);
                 match dest {
                     Target::DirectAReg(_) => { },
                     _ => self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size)),
                 }
-                self.set_target_value(space, dest, result, size)?;
+                self.set_target_value(system, dest, result, size)?;
             },
             Instruction::SWAP(reg) => {
                 let value = self.state.d_reg[reg as usize];
@@ -570,21 +563,21 @@ impl MC68010 {
             //Instruction::TAS(Target) => {
             //},
             Instruction::TST(target, size) => {
-                let value = self.get_target_value(space, target, size)?;
+                let value = self.get_target_value(system, target, size)?;
                 self.set_logic_flags(value, size);
             },
             Instruction::TRAP(number) => {
-                self.exception(space, 32 + number)?;
+                self.exception(system, 32 + number)?;
             },
             Instruction::TRAPV => {
                 if self.get_flag(FLAGS_OVERFLOW) {
-                    self.exception(space, 7)?;
+                    self.exception(system, 7)?;
                 }
             },
             Instruction::UNLK(reg) => {
                 let value = *self.get_a_reg_mut(reg);
                 *self.get_stack_pointer_mut() = value;
-                let new_value = self.pop_long(space)?;
+                let new_value = self.pop_long(system)?;
                 let addr = self.get_a_reg_mut(reg);
                 *addr = new_value;
             },
@@ -595,72 +588,72 @@ impl MC68010 {
         Ok(())
     }
 
-    fn push_word(&mut self, space: &mut AddressSpace, value: u16) -> Result<(), Error> {
+    fn push_word(&mut self, system: &System, value: u16) -> Result<(), Error> {
         let reg = self.get_stack_pointer_mut();
         *reg -= 2;
-        space.write_beu16(*reg as Address, value)
+        system.write_beu16(*reg as Address, value)
     }
 
-    fn pop_word(&mut self, space: &mut AddressSpace) -> Result<u16, Error> {
+    fn pop_word(&mut self, system: &System) -> Result<u16, Error> {
         let reg = self.get_stack_pointer_mut();
-        let value = space.read_beu16(*reg as Address)?;
+        let value = system.read_beu16(*reg as Address)?;
         *reg += 2;
         Ok(value)
     }
 
-    fn push_long(&mut self, space: &mut AddressSpace, value: u32) -> Result<(), Error> {
+    fn push_long(&mut self, system: &System, value: u32) -> Result<(), Error> {
         let reg = self.get_stack_pointer_mut();
         *reg -= 4;
-        space.write_beu32(*reg as Address, value)
+        system.write_beu32(*reg as Address, value)
     }
 
-    fn pop_long(&mut self, space: &mut AddressSpace) -> Result<u32, Error> {
+    fn pop_long(&mut self, system: &System) -> Result<u32, Error> {
         let reg = self.get_stack_pointer_mut();
-        let value = space.read_beu32(*reg as Address)?;
+        let value = system.read_beu32(*reg as Address)?;
         *reg += 4;
         Ok(value)
     }
 
-    pub fn get_target_value(&mut self, space: &mut AddressSpace, target: Target, size: Size) -> Result<u32, Error> {
+    pub fn get_target_value(&mut self, system: &System, target: Target, size: Size) -> Result<u32, Error> {
         match target {
             Target::Immediate(value) => Ok(value),
             Target::DirectDReg(reg) => Ok(get_value_sized(self.state.d_reg[reg as usize], size)),
             Target::DirectAReg(reg) => Ok(get_value_sized(*self.get_a_reg_mut(reg), size)),
-            Target::IndirectAReg(reg) => get_address_sized(space, *self.get_a_reg_mut(reg) as Address, size),
+            Target::IndirectAReg(reg) => get_address_sized(system, *self.get_a_reg_mut(reg) as Address, size),
             Target::IndirectARegInc(reg) => {
                 let addr = self.get_a_reg_mut(reg);
-                let result = get_address_sized(space, *addr as Address, size);
+                let result = get_address_sized(system, *addr as Address, size);
                 *addr += size.in_bytes();
                 result
             },
             Target::IndirectARegDec(reg) => {
                 let addr = self.get_a_reg_mut(reg);
                 *addr -= size.in_bytes();
-                get_address_sized(space, *addr as Address, size)
+                get_address_sized(system, *addr as Address, size)
             },
             Target::IndirectARegOffset(reg, offset) => {
                 let addr = self.get_a_reg_mut(reg);
-                get_address_sized(space, (*addr).wrapping_add(offset as u32) as Address, size)
+                get_address_sized(system, (*addr).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, target_size) => {
                 let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
                 let addr = self.get_a_reg_mut(reg);
-                get_address_sized(space, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
+                get_address_sized(system, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectMemory(addr) => {
-                get_address_sized(space, addr as Address, size)
+                get_address_sized(system, addr as Address, size)
             },
             Target::IndirectPCOffset(offset) => {
-                get_address_sized(space, (self.decoder.start + 2).wrapping_add(offset as u32) as Address, size)
+                get_address_sized(system, (self.decoder.start + 2).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectPCXRegOffset(rtype, xreg, offset, target_size) => {
                 let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
-                get_address_sized(space, (self.decoder.start + 2).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
+                get_address_sized(system, (self.decoder.start + 2).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, size)
             },
         }
     }
 
-    pub fn set_target_value(&mut self, space: &mut AddressSpace, target: Target, value: u32, size: Size) -> Result<(), Error> {
+    pub fn set_target_value(&mut self, system: &System, target: Target, value: u32, size: Size) -> Result<(), Error> {
         match target {
             Target::DirectDReg(reg) => {
                 set_value_sized(&mut self.state.d_reg[reg as usize], value, size);
@@ -669,29 +662,29 @@ impl MC68010 {
                 set_value_sized(self.get_a_reg_mut(reg), value, size);
             },
             Target::IndirectAReg(reg) => {
-                set_address_sized(space, *self.get_a_reg_mut(reg) as Address, value, size)?;
+                set_address_sized(system, *self.get_a_reg_mut(reg) as Address, value, size)?;
             },
             Target::IndirectARegInc(reg) => {
                 let addr = self.get_a_reg_mut(reg);
-                set_address_sized(space, *addr as Address, value, size)?;
+                set_address_sized(system, *addr as Address, value, size)?;
                 *addr += size.in_bytes();
             },
             Target::IndirectARegDec(reg) => {
                 let addr = self.get_a_reg_mut(reg);
                 *addr -= size.in_bytes();
-                set_address_sized(space, *addr as Address, value, size)?;
+                set_address_sized(system, *addr as Address, value, size)?;
             },
             Target::IndirectARegOffset(reg, offset) => {
                 let addr = self.get_a_reg_mut(reg);
-                set_address_sized(space, (*addr).wrapping_add(offset as u32) as Address, value, size)?;
+                set_address_sized(system, (*addr).wrapping_add(offset as u32) as Address, value, size)?;
             },
             Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, target_size) => {
                 let reg_offset = sign_extend_to_long(self.get_x_reg_value(rtype, xreg), target_size);
                 let addr = self.get_a_reg_mut(reg);
-                set_address_sized(space, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, value, size)?;
+                set_address_sized(system, (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) as Address, value, size)?;
             },
             Target::IndirectMemory(addr) => {
-                set_address_sized(space, addr as Address, value, size)?;
+                set_address_sized(system, addr as Address, value, size)?;
             },
             _ => return Err(Error::new(&format!("Unimplemented addressing target: {:?}", target))),
         }
@@ -907,11 +900,11 @@ fn get_value_sized(value: u32, size: Size) -> u32 {
     }
 }
 
-fn get_address_sized(space: &mut AddressSpace, addr: Address, size: Size) -> Result<u32, Error> {
+fn get_address_sized(system: &System, addr: Address, size: Size) -> Result<u32, Error> {
     match size {
-        Size::Byte => space.read_u8(addr).map(|value| value as u32),
-        Size::Word => space.read_beu16(addr).map(|value| value as u32),
-        Size::Long => space.read_beu32(addr),
+        Size::Byte => system.read_u8(addr).map(|value| value as u32),
+        Size::Word => system.read_beu16(addr).map(|value| value as u32),
+        Size::Long => system.read_beu32(addr),
     }
 }
 
@@ -923,11 +916,11 @@ fn set_value_sized(addr: &mut u32, value: u32, size: Size) {
     }
 }
 
-fn set_address_sized(space: &mut AddressSpace, addr: Address, value: u32, size: Size) -> Result<(), Error> {
+fn set_address_sized(system: &System, addr: Address, value: u32, size: Size) -> Result<(), Error> {
     match size {
-        Size::Byte => space.write_u8(addr, value as u8),
-        Size::Word => space.write_beu16(addr, value as u16),
-        Size::Long => space.write_beu32(addr, value),
+        Size::Byte => system.write_u8(addr, value as u8),
+        Size::Word => system.write_beu16(addr, value as u16),
+        Size::Long => system.write_beu32(addr, value),
     }
 }
 

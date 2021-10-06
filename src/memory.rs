@@ -1,8 +1,8 @@
 
 use std::fs;
-use std::slice::Iter;
 
 use crate::error::Error;
+use crate::system::{Clock, DeviceNumber, Device, System};
 
 
 pub type Address = u64;
@@ -91,104 +91,61 @@ impl Addressable for MemoryBlock {
     }
 }
 
+impl Device for MemoryBlock {
+    fn step(&mut self, _system: &System) -> Result<Clock, Error> {
+        Ok(1)
+    }
+}
 
 
-pub struct Segment {
+pub struct Block {
     pub base: Address,
-    pub contents: Box<dyn Addressable>,
+    pub length: usize,
+    pub dev: DeviceNumber,
 }
 
-impl Segment {
-    pub fn new(base: Address, contents: Box<dyn Addressable>) -> Segment {
-        Segment {
-            base,
-            contents,
-        }
-    }
+pub struct Bus {
+    pub blocks: Vec<Block>,
 }
 
-pub struct AddressSpace {
-    pub segments: Vec<Segment>,
-}
-
-impl AddressSpace {
-    pub fn new() -> AddressSpace {
-        AddressSpace {
-            segments: vec!(),
+impl Bus {
+    pub fn new() -> Bus {
+        Bus {
+            blocks: vec!(),
         }
     }
 
-    pub fn insert(&mut self, base: Address, contents: Box<dyn Addressable>) {
-        let seg = Segment::new(base, contents);
-        for i in 0..self.segments.len() {
-            if self.segments[i].base > seg.base {
-                self.segments.insert(i, seg);
+    pub fn insert(&mut self, base: Address, length: usize, dev: DeviceNumber) {
+        let block = Block { base, length, dev };
+        for i in 0..self.blocks.len() {
+            if self.blocks[i].base > block.base {
+                self.blocks.insert(i, block);
                 return;
             }
         }
-        self.segments.insert(0, seg);
+        self.blocks.insert(0, block);
     }
 
-    pub fn get_segment(&self, addr: Address) -> Result<&Segment, Error> {
-        for i in 0..self.segments.len() {
-            if addr >= self.segments[i].base && addr <= (self.segments[i].base + self.segments[i].contents.len() as Address) {
-                return Ok(&self.segments[i]);
-            }
-        }
-        return Err(Error::new(&format!("No segment found at {:#08x}", addr)));
-    }
-
-    pub fn get_segment_mut(&mut self, addr: Address) -> Result<&mut Segment, Error> {
-        for i in 0..self.segments.len() {
-            if addr >= self.segments[i].base && addr <= (self.segments[i].base + self.segments[i].contents.len() as Address) {
-                return Ok(&mut self.segments[i]);
-            }
-        }
-        return Err(Error::new(&format!("No segment found at {:#08x}", addr)));
-    }
-
-
-    pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
-        while count > 0 {
-            let mut line = format!("{:#010x}: ", addr);
-
-            let to = if count < 16 { count / 2 } else { 8 };
-            for i in 0..to {
-                let word = self.read_beu16(addr);
-                if word.is_err() {
-                    println!("{}", line);
-                    return;
+    pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(DeviceNumber, Address), Error> {
+        for block in &self.blocks {
+            if addr >= block.base && addr <= (block.base + block.length as Address) {
+                let relative_addr = addr - block.base;
+                if relative_addr as usize + count <= block.length {
+                    return Ok((block.dev, relative_addr));
+                } else {
+                    return Err(Error::new(&format!("Error reading address {:#010x}", addr)));
                 }
-                line += &format!("{:#06x} ", word.unwrap());
-                addr += 2;
-                count -= 2;
             }
-            println!("{}", line);
         }
+        return Err(Error::new(&format!("No segment found at {:#08x}", addr)));
+    }
+
+    pub fn max_address(&self) -> Address {
+        let block = &self.blocks[self.blocks.len() - 1];
+        block.base + block.length as Address
     }
 }
 
-impl Addressable for AddressSpace {
-    fn len(&self) -> usize {
-        let seg = &self.segments[self.segments.len() - 1];
-        (seg.base as usize) + seg.contents.len()
-    }
-
-    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
-        let mut seg = self.get_segment_mut(addr)?;
-        let relative_addr = addr - seg.base;
-        if relative_addr as usize + count > seg.contents.len() {
-            Err(Error::new(&format!("Error reading address {:#010x}", addr)))
-        } else {
-            seg.contents.read(relative_addr, count)
-        }
-    }
-
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        let seg = self.get_segment_mut(addr)?;
-        seg.contents.write(addr - seg.base, data)
-    }
-}
 
 #[inline(always)]
 pub fn read_beu16(data: &[u8]) -> u16 {
@@ -221,3 +178,4 @@ pub fn write_beu32(value: u32) -> [u8; 4] {
         value as u8,
     ]
 }
+

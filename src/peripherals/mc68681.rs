@@ -1,16 +1,15 @@
 
-use std::slice::Iter;
 use std::process::Command;
 use std::io::{Read, Write};
-use std::os::unix::io::{RawFd, AsRawFd};
+use std::os::unix::io::AsRawFd;
 
 use nix::pty::{self, PtyMaster};
 use nix::fcntl::OFlag;
 use nix::unistd::sleep;
-use nix::poll::{poll, PollFd, PollFlags};
 use nix::fcntl::{fcntl, FcntlArg};
 
 use crate::error::Error;
+use crate::system::{Clock, Device, System};
 use crate::memory::{Address, Addressable};
 
 
@@ -86,7 +85,7 @@ impl MC68681 {
         }
     }
 
-    pub fn step(&mut self) -> Result<(), Error> {
+    pub fn step_internal(&mut self, _system: &System) -> Result<(), Error> {
         if !self.rx_ready() && self.tty.is_some() {
             let mut buf = [0; 1];
             let tty = self.tty.as_mut().unwrap();
@@ -120,7 +119,7 @@ impl Addressable for MC68681 {
         let mut data = vec![0; count];
 
         // TODO this is temporary
-        self.step();
+        //self.step();
 
         match addr {
             REG_SRA_RD => {
@@ -136,7 +135,7 @@ impl Addressable for MC68681 {
         Ok(data)
     }
 
-    fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         match addr {
             REG_TBA_WR => {
                 println!("{}: {}", DEV_NAME, data[0] as char);
@@ -145,6 +144,13 @@ impl Addressable for MC68681 {
             _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
         Ok(())
+    }
+}
+
+impl Device for MC68681 {
+    fn step(&mut self, system: &System) -> Result<Clock, Error> {
+        self.step_internal(system)?;
+        Ok(1)
     }
 }
 

@@ -2,7 +2,8 @@
 use std::fmt;
 
 use crate::error::Error;
-use crate::memory::{Address, Addressable, AddressSpace};
+use crate::memory::Address;
+use crate::system::{System, DeviceRefMut};
 
 use super::execute::ERR_ILLEGAL_INSTRUCTION;
 
@@ -182,28 +183,31 @@ pub enum Instruction {
 
 
 pub struct M68kDecoder {
+    pub base: u32,
     pub start: u32,
     pub end: u32,
     pub instruction: Instruction,
 }
 
 impl M68kDecoder {
-    pub fn new(start: u32) -> M68kDecoder {
+    pub fn new(base: u32, start: u32) -> M68kDecoder {
         M68kDecoder {
+            base: base,
             start: start,
             end: start,
             instruction: Instruction::NOP,
         }
     }
 
-    pub fn decode_at(space: &mut AddressSpace, start: u32) -> Result<M68kDecoder, Error> {
-        let mut decoder = M68kDecoder::new(start);
-        decoder.instruction = decoder.decode_one(space)?;
+    pub fn decode_at(system: &System, start: u32) -> Result<M68kDecoder, Error> {
+        let (mut memory, relative_addr) = system.get_device_in_range(start as Address, 12)?;
+        let mut decoder = M68kDecoder::new(start - relative_addr as u32, start);
+        decoder.instruction = decoder.decode_one(&mut memory)?;
         Ok(decoder)
     }
 
-    pub fn decode_one(&mut self, space: &mut AddressSpace) -> Result<Instruction, Error> {
-        let ins = self.read_instruction_word(space)?;
+    pub fn decode_one(&mut self, system: &mut DeviceRefMut<'_>) -> Result<Instruction, Error> {
+        let ins = self.read_instruction_word(system)?;
 
         match ((ins & 0xF000) >> 12) as u8 {
             OPCG_BIT_OPS => {
@@ -212,7 +216,7 @@ impl M68kDecoder {
                 if (ins & 0x3F) == 0b111100 {
                     match (ins & 0x00C0) >> 6 {
                         0b00 => {
-                            let data = self.read_instruction_word(space)?;
+                            let data = self.read_instruction_word(system)?;
                             match optype {
                                 0b0000 => Ok(Instruction::ORtoCCR(data as u8)),
                                 0b0001 => Ok(Instruction::ANDtoCCR(data as u8)),
@@ -221,7 +225,7 @@ impl M68kDecoder {
                             }
                         },
                         0b01 => {
-                            let data = self.read_instruction_word(space)?;
+                            let data = self.read_instruction_word(system)?;
                             match optype {
                                 0b0000 => Ok(Instruction::ORtoSR(data)),
                                 0b0010 => Ok(Instruction::ANDtoSR(data)),
@@ -235,10 +239,10 @@ impl M68kDecoder {
                     let bitnum = if (ins & 0x0100) == 0x0100 {
                         Target::DirectDReg(get_high_reg(ins))
                     } else {
-                        Target::Immediate(self.read_instruction_word(space)? as u32)
+                        Target::Immediate(self.read_instruction_word(system)? as u32)
                     };
 
-                    let target = self.decode_lower_effective_address(space, ins, Some(Size::Byte))?;
+                    let target = self.decode_lower_effective_address(system, ins, Some(Size::Byte))?;
                     let size = match target {
                         Target::DirectAReg(_) | Target::DirectDReg(_) => Size::Long,
                         _ => Size::Byte,
@@ -255,12 +259,12 @@ impl M68kDecoder {
                 } else {
                     let size = get_size(ins);
                     let data = match size {
-                        Some(Size::Byte) => (self.read_instruction_word(space)? as u32 & 0xFF),
-                        Some(Size::Word) => self.read_instruction_word(space)? as u32,
-                        Some(Size::Long) => self.read_instruction_long(space)?,
+                        Some(Size::Byte) => (self.read_instruction_word(system)? as u32 & 0xFF),
+                        Some(Size::Word) => self.read_instruction_word(system)? as u32,
+                        Some(Size::Long) => self.read_instruction_long(system)?,
                         None => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
                     };
-                    let target = self.decode_lower_effective_address(space, ins, size)?;
+                    let target = self.decode_lower_effective_address(system, ins, size)?;
 
                     match optype {
                         0b0000 => Ok(Instruction::OR(Target::Immediate(data), target, size.unwrap())),
@@ -274,13 +278,13 @@ impl M68kDecoder {
                 }
             },
             OPCG_MOVE_BYTE => {
-                let src = self.decode_lower_effective_address(space, ins, Some(Size::Byte))?;
-                let dest = self.decode_upper_effective_address(space, ins, Some(Size::Byte))?;
+                let src = self.decode_lower_effective_address(system, ins, Some(Size::Byte))?;
+                let dest = self.decode_upper_effective_address(system, ins, Some(Size::Byte))?;
                 Ok(Instruction::MOVE(src, dest, Size::Byte))
             },
             OPCG_MOVE_LONG => {
-                let src = self.decode_lower_effective_address(space, ins, Some(Size::Long))?;
-                let dest = self.decode_upper_effective_address(space, ins, Some(Size::Long))?;
+                let src = self.decode_lower_effective_address(system, ins, Some(Size::Long))?;
+                let dest = self.decode_upper_effective_address(system, ins, Some(Size::Long))?;
                 if let Target::DirectAReg(reg) = dest {
                     Ok(Instruction::MOVEA(src, reg, Size::Long))
                 } else {
@@ -288,8 +292,8 @@ impl M68kDecoder {
                 }
             },
             OPCG_MOVE_WORD => {
-                let src = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
-                let dest = self.decode_upper_effective_address(space, ins, Some(Size::Word))?;
+                let src = self.decode_lower_effective_address(system, ins, Some(Size::Word))?;
+                let dest = self.decode_upper_effective_address(system, ins, Some(Size::Word))?;
                 if let Target::DirectAReg(reg) = dest {
                     Ok(Instruction::MOVEA(src, reg, Size::Word))
                 } else {
@@ -301,11 +305,11 @@ impl M68kDecoder {
                     // CHK Instruction
                     panic!("Not Implemented");
                 } else if (ins & 0b000111000000) == 0b000111000000 {
-                    let src = self.decode_lower_effective_address(space, ins, None)?;
+                    let src = self.decode_lower_effective_address(system, ins, None)?;
                     let dest = get_high_reg(ins);
                     Ok(Instruction::LEA(src, dest))
                 } else if (ins & 0b100000000000) == 0b000000000000 {
-                    let target = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
+                    let target = self.decode_lower_effective_address(system, ins, Some(Size::Word))?;
                     match (ins & 0x0700) >> 8 {
                         0b000 => {
                             match get_size(ins) {
@@ -340,8 +344,8 @@ impl M68kDecoder {
                     if mode == 0b000 {
                         Ok(Instruction::EXT(get_low_reg(ins), size))
                     } else {
-                        let data = self.read_instruction_word(space)?;
-                        let target = self.decode_lower_effective_address(space, ins, None)?;
+                        let data = self.read_instruction_word(system)?;
+                        let target = self.decode_lower_effective_address(system, ins, None)?;
                         let dir = if (ins & 0x0400) == 0 { Direction::ToTarget } else { Direction::FromTarget };
                         Ok(Instruction::MOVEM(target, size, dir, data))
                     }
@@ -350,26 +354,26 @@ impl M68kDecoder {
                     let mode = get_low_mode(ins);
                     match (subselect, mode) {
                         (0b000, _) => {
-                            let target = self.decode_lower_effective_address(space, ins, Some(Size::Byte))?;
+                            let target = self.decode_lower_effective_address(system, ins, Some(Size::Byte))?;
                             Ok(Instruction::NBCD(target))
                         },
                         (0b001, 0b000) => {
                             Ok(Instruction::SWAP(get_low_reg(ins)))
                         },
                         (0b001, _) => {
-                            let target = self.decode_lower_effective_address(space, ins, None)?;
+                            let target = self.decode_lower_effective_address(system, ins, None)?;
                             Ok(Instruction::PEA(target))
                         },
                         _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
                     }
                 } else if (ins & 0b111100000000) == 0b101000000000 {
-                    let target = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
+                    let target = self.decode_lower_effective_address(system, ins, Some(Size::Word))?;
                     match get_size(ins) {
                         Some(size) => Ok(Instruction::TST(target, size)),
                         None => Ok(Instruction::TAS(target)),
                     }
                 } else if (ins & 0b111110000000) == 0b111010000000 {
-                    let target = self.decode_lower_effective_address(space, ins, None)?;
+                    let target = self.decode_lower_effective_address(system, ins, None)?;
                     if (ins & 0b01000000) == 0 {
                         Ok(Instruction::JSR(target))
                     } else {
@@ -380,7 +384,7 @@ impl M68kDecoder {
                 } else if (ins & 0b111111110000) == 0b111001010000 {
                     let reg = get_low_reg(ins);
                     if (ins & 0b1000) == 0 {
-                        let data = self.read_instruction_word(space)?;
+                        let data = self.read_instruction_word(system)?;
                         Ok(Instruction::LINK(reg, data as i16))
                     } else {
                         Ok(Instruction::UNLK(reg))
@@ -395,7 +399,7 @@ impl M68kDecoder {
                         0xE70 => Ok(Instruction::RESET),
                         0xE71 => Ok(Instruction::NOP),
                         0xE72 => {
-                            let data = self.read_instruction_word(space)?;
+                            let data = self.read_instruction_word(system)?;
                             Ok(Instruction::STOP(data))
                         },
                         0xE73 => Ok(Instruction::RTE),
@@ -404,7 +408,7 @@ impl M68kDecoder {
                         0xE77 => Ok(Instruction::RTR),
                         0xE7A | 0xE7B => {
                             let dir = if ins & 0x01 == 0 { Direction::ToTarget } else { Direction::FromTarget };
-                            let ins2 = self.read_instruction_word(space)?;
+                            let ins2 = self.read_instruction_word(system)?;
                             let target = match ins2 & 0x8000 {
                                 0 => Target::DirectDReg(((ins2 & 0x7000) >> 12) as u8),
                                 _ => Target::DirectAReg(((ins2 & 0x7000) >> 12) as u8),
@@ -422,7 +426,7 @@ impl M68kDecoder {
             OPCG_ADDQ_SUBQ => {
                 match get_size(ins) {
                     Some(size) => {
-                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         let mut data = ((ins & 0x0E00) >> 9) as u32;
                         if data == 0 {
                             data = 8;
@@ -440,10 +444,10 @@ impl M68kDecoder {
 
                         if mode == 0b001 {
                             let reg = get_low_reg(ins);
-                            let disp = self.read_instruction_word(space)? as i16;
+                            let disp = self.read_instruction_word(system)? as i16;
                             Ok(Instruction::DBcc(condition, reg, disp))
                         } else {
-                            let target = self.decode_lower_effective_address(space, ins, Some(Size::Byte))?;
+                            let target = self.decode_lower_effective_address(system, ins, Some(Size::Byte))?;
                             Ok(Instruction::Scc(condition, target))
                         }
                     },
@@ -452,7 +456,7 @@ impl M68kDecoder {
             OPCG_BRANCH => {
                 let mut disp = ((ins & 0xFF) as i8) as i16;
                 if disp == 0 {
-                    disp = self.read_instruction_word(space)? as i16;
+                    disp = self.read_instruction_word(system)? as i16;
                 }
                 let condition = get_condition(ins);
                 match condition {
@@ -473,14 +477,14 @@ impl M68kDecoder {
                 if size.is_none() {
                     let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
-                    let effective_addr = self.decode_lower_effective_address(space, ins, size)?;
+                    let effective_addr = self.decode_lower_effective_address(system, ins, size)?;
                     Ok(Instruction::DIV(effective_addr, data_reg, Size::Word, sign))
                 } else if (ins & 0b000111110000) == 0b000100000000 {
                     // TODO SBCD
                     panic!("Not Implemented");
                 } else {
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
-                    let effective_addr = self.decode_lower_effective_address(space, ins, size)?;
+                    let effective_addr = self.decode_lower_effective_address(system, ins, size)?;
                     let (from, to) = if (ins & 0x0100) == 0 { (effective_addr, data_reg) } else { (data_reg, effective_addr) };
                     Ok(Instruction::OR(from, to, size.unwrap()))
                 }
@@ -492,7 +496,7 @@ impl M68kDecoder {
                 let size = get_size(ins);
                 match size {
                     Some(size) => {
-                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         if dir == 0 {
                             Ok(Instruction::SUB(target, Target::DirectDReg(reg), size))
                         } else {
@@ -501,7 +505,7 @@ impl M68kDecoder {
                     },
                     None => {
                         let size = if dir == 0 { Size::Word } else { Size::Long };
-                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         Ok(Instruction::SUB(target, Target::DirectAReg(reg), size))
                     },
                 }
@@ -513,16 +517,16 @@ impl M68kDecoder {
                 match (optype, size) {
                     (0b1, Some(size)) => {
                         // TODO need to decode the CMPM instruction (mode == 0b001) (would likely be erroneously decoded atm)
-                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         Ok(Instruction::EOR(Target::DirectDReg(reg), target, size))
                     },
                     (0b0, Some(size)) => {
-                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         Ok(Instruction::CMP(target, Target::DirectDReg(reg), size))
                     },
                     (_, None) => {
                         let size = if optype == 0 { Size::Word } else { Size::Long };
-                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         Ok(Instruction::CMPA(target, reg, size))
                     },
                     _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
@@ -534,14 +538,14 @@ impl M68kDecoder {
                 if size.is_none() {
                     let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
-                    let effective_addr = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
+                    let effective_addr = self.decode_lower_effective_address(system, ins, Some(Size::Word))?;
                     Ok(Instruction::MUL(effective_addr, data_reg, Size::Word, sign))
                 } else if (ins & 0b000111110000) == 0b000100000000 {
                     // TODO ABCD or EXG
                     panic!("Not Implemented");
                 } else {
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
-                    let effective_addr = self.decode_lower_effective_address(space, ins, size)?;
+                    let effective_addr = self.decode_lower_effective_address(system, ins, size)?;
                     let (from, to) = if (ins & 0x0100) == 0 { (effective_addr, data_reg) } else { (data_reg, effective_addr) };
                     Ok(Instruction::AND(from, to, size.unwrap()))
                 }
@@ -553,7 +557,7 @@ impl M68kDecoder {
                 let size = get_size(ins);
                 match size {
                     Some(size) => {
-                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         if dir == 0 {
                             Ok(Instruction::ADD(target, Target::DirectDReg(reg), size))
                         } else {
@@ -562,7 +566,7 @@ impl M68kDecoder {
                     },
                     None => {
                         let size = if dir == 0 { Size::Word } else { Size::Long };
-                        let target = self.decode_lower_effective_address(space, ins, Some(size))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         Ok(Instruction::ADD(target, Target::DirectAReg(reg), size))
                     },
                 }
@@ -588,7 +592,7 @@ impl M68kDecoder {
                         }
                     },
                     None => {
-                        let target = self.decode_lower_effective_address(space, ins, Some(Size::Word))?;
+                        let target = self.decode_lower_effective_address(system, ins, Some(Size::Word))?;
                         let count = Target::Immediate(1);
 
                         match (ins & 0x0600) >> 9 {
@@ -605,30 +609,30 @@ impl M68kDecoder {
         }
     }
 
-    fn read_instruction_word(&mut self, space: &mut AddressSpace) -> Result<u16, Error> {
-        let word = space.read_beu16(self.end as Address)?;
+    fn read_instruction_word(&mut self, system: &mut DeviceRefMut<'_>) -> Result<u16, Error> {
+        let word = system.read_beu16((self.end - self.base) as Address)?;
         //debug!("{:#010x} {:#06x?}", self.end, word);
         self.end += 2;
         Ok(word)
     }
 
-    fn read_instruction_long(&mut self, space: &mut AddressSpace) -> Result<u32, Error> {
-        let word = space.read_beu32(self.end as Address)?;
+    fn read_instruction_long(&mut self, system: &mut DeviceRefMut<'_>) -> Result<u32, Error> {
+        let word = system.read_beu32((self.end - self.base) as Address)?;
         //debug!("{:#010x} {:#010x}", self.end, word);
         self.end += 4;
         Ok(word)
     }
 
-    fn decode_lower_effective_address(&mut self, space: &mut AddressSpace, ins: u16, size: Option<Size>) -> Result<Target, Error> {
+    fn decode_lower_effective_address(&mut self, system: &mut DeviceRefMut<'_>, ins: u16, size: Option<Size>) -> Result<Target, Error> {
         let reg = get_low_reg(ins);
         let mode = get_low_mode(ins);
-        self.get_mode_as_target(space, mode, reg, size)
+        self.get_mode_as_target(system, mode, reg, size)
     }
 
-    fn decode_upper_effective_address(&mut self, space: &mut AddressSpace, ins: u16, size: Option<Size>) -> Result<Target, Error> {
+    fn decode_upper_effective_address(&mut self, system: &mut DeviceRefMut<'_>, ins: u16, size: Option<Size>) -> Result<Target, Error> {
         let reg = get_high_reg(ins);
         let mode = get_high_mode(ins);
-        self.get_mode_as_target(space, mode, reg, size)
+        self.get_mode_as_target(system, mode, reg, size)
     }
 
     fn decode_brief_extension_word(&self, brief_extension: u16) -> (RegisterType, u8, i32, Size) {
@@ -641,7 +645,7 @@ impl M68kDecoder {
         (rtype, xreg, data, size)
     }
 
-    pub fn get_mode_as_target(&mut self, space: &mut AddressSpace, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
+    pub fn get_mode_as_target(&mut self, system: &mut DeviceRefMut<'_>, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
         let value = match mode {
             0b000 => Target::DirectDReg(reg),
             0b001 => Target::DirectAReg(reg),
@@ -649,37 +653,37 @@ impl M68kDecoder {
             0b011 => Target::IndirectARegInc(reg),
             0b100 => Target::IndirectARegDec(reg),
             0b101 => {
-                let data = sign_extend_to_long(self.read_instruction_word(space)? as u32, Size::Word);
+                let data = sign_extend_to_long(self.read_instruction_word(system)? as u32, Size::Word);
                 Target::IndirectARegOffset(reg, data)
             },
             0b110 => {
-                let brief_extension = self.read_instruction_word(space)?;
+                let brief_extension = self.read_instruction_word(system)?;
                 let (rtype, xreg, data, size) = self.decode_brief_extension_word(brief_extension);
                 Target::IndirectARegXRegOffset(reg, rtype, xreg, data, size)
             },
             0b111 => {
                 match reg {
                     0b000 => {
-                        let value = sign_extend_to_long(self.read_instruction_word(space)? as u32, Size::Word) as u32;
+                        let value = sign_extend_to_long(self.read_instruction_word(system)? as u32, Size::Word) as u32;
                         Target::IndirectMemory(value)
                     },
                     0b001 => {
-                        let value = self.read_instruction_long(space)?;
+                        let value = self.read_instruction_long(system)?;
                         Target::IndirectMemory(value)
                     },
                     0b010 => {
-                        let data = sign_extend_to_long(self.read_instruction_word(space)? as u32, Size::Word);
+                        let data = sign_extend_to_long(self.read_instruction_word(system)? as u32, Size::Word);
                         Target::IndirectPCOffset(data)
                     },
                     0b011 => {
-                        let brief_extension = self.read_instruction_word(space)?;
+                        let brief_extension = self.read_instruction_word(system)?;
                         let (rtype, xreg, data, size) = self.decode_brief_extension_word(brief_extension);
                         Target::IndirectPCXRegOffset(rtype, xreg, data, size)
                     },
                     0b100 => {
                         let data = match size {
-                            Some(Size::Byte) | Some(Size::Word) => self.read_instruction_word(space)? as u32,
-                            Some(Size::Long) => self.read_instruction_long(space)?,
+                            Some(Size::Byte) | Some(Size::Word) => self.read_instruction_word(system)? as u32,
+                            Some(Size::Long) => self.read_instruction_long(system)?,
                             None => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
                         };
                         Target::Immediate(data)
