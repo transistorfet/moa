@@ -1,5 +1,7 @@
 
-* there's probably a problem with the shift operations flags, they look more complex than what's being done atm
+* how do you pass in a mutable system to a mutable device?  At the very least, I need the AddressSpace, but that needs access to the devices/memory segments.
+  I could make System contain refcells for submutability
+
 
 
 * check all instructions in the docs

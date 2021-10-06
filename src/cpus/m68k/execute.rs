@@ -35,6 +35,7 @@ pub const FLAGS_ZERO: u16 = 0x0004;
 pub const FLAGS_NEGATIVE: u16 = 0x0008;
 pub const FLAGS_EXTEND: u16 = 0x0010;
 pub const FLAGS_SUPERVISOR: u16 = 0x2000;
+pub const FLAGS_TRACING: u16 = 0x8000;
 
 pub const ERR_BUS_ERROR: u32 = 2;
 pub const ERR_ADDRESS_ERROR: u32 = 3;
@@ -46,6 +47,7 @@ pub enum Status {
     Init,
     Running,
     Stopped,
+    Halted,
 }
 
 pub struct MC68010State {
@@ -95,6 +97,23 @@ impl MC68010 {
         }
     }
 
+    pub fn dump_state(&self, space: &mut AddressSpace) {
+        println!("Status: {:?}", self.state.status);
+        println!("PC: {:#010x}", self.state.pc);
+        println!("SR: {:#06x}", self.state.sr);
+        for i in 0..7 {
+            println!("D{}: {:#010x}        A{}:  {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
+        }
+        println!("D7: {:#010x}", self.state.d_reg[7]);
+        println!("MSP: {:#010x}", self.state.msp);
+        println!("USP: {:#010x}", self.state.usp);
+
+        println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
+        println!("");
+        space.dump_memory(self.state.msp as Address, 0x40);
+        println!("");
+    }
+
     pub fn reset(&mut self) {
         self.state = MC68010State::new();
         self.decoder = M68kDecoder::new(0);
@@ -115,40 +134,34 @@ impl MC68010 {
         Ok(())
     }
 
-    pub fn dump_state(&self, space: &mut AddressSpace) {
-        println!("Status: {:?}", self.state.status);
-        println!("PC: {:#010x}", self.state.pc);
-        println!("SR: {:#06x}", self.state.sr);
-        for i in 0..7 {
-            println!("D{}: {:#010x}        A{}:  {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
-        }
-        println!("D7: {:#010x}", self.state.d_reg[7]);
-        println!("MSP: {:#010x}", self.state.msp);
-        println!("USP: {:#010x}", self.state.usp);
-
-        println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
-        println!("");
-        space.dump_memory(self.state.msp as Address, 0x40);
-        println!("");
-    }
-
     pub fn step(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
         match self.state.status {
             Status::Init => self.init(space),
-            Status::Stopped => Err(Error::new("CPU stopped")),
+            Status::Stopped | Status::Halted => Err(Error::new("CPU stopped")),
             Status::Running => {
                 let timer = self.timer.cycle.start();
                 self.decode_next(space)?;
                 self.execute_current(space)?;
                 self.timer.cycle.end(timer);
 
-                if (self.timer.cycle.events % 500) == 0 {
-                    println!("{}", self.timer);
-                }
+                //if (self.timer.cycle.events % 500) == 0 {
+                //    println!("{}", self.timer);
+                //}
 
                 Ok(())
             },
         }
+    }
+
+    pub fn exception(&mut self, space: &mut AddressSpace, number: u8) -> Result<(), Error> {
+        let offset = (number as u16) << 2;
+        self.push_word(space, offset)?;
+        self.push_long(space, self.state.pc)?;
+        self.push_word(space, self.state.sr)?;
+        self.state.sr |= FLAGS_SUPERVISOR;
+        self.state.sr &= !FLAGS_TRACING;
+        self.state.pc = space.read_beu32((self.state.vbr + offset as u32) as Address)?;
+        Ok(())
     }
 
     pub fn decode_next(&mut self, space: &mut AddressSpace) -> Result<(), Error> {
@@ -517,8 +530,11 @@ impl MC68010 {
             },
             //Instruction::ROXd(Target, Target, Size, ShiftDirection) => {
             //},
-            //Instruction::RTE => {
-            //},
+            Instruction::RTE => {
+                self.state.sr = self.pop_word(space)?;
+                self.state.pc = self.pop_long(space)?;
+                let _ = self.pop_word(space)?;
+            },
             //Instruction::RTR => {
             //},
             Instruction::RTS => {
@@ -533,8 +549,10 @@ impl MC68010 {
                     self.set_target_value(space, target, 0x00, Size::Byte);
                 }
             },
-            //Instruction::STOP(u16) => {
-            //},
+            Instruction::STOP(flags) => {
+                self.state.sr = flags;
+                self.state.status = Status::Stopped;
+            },
             Instruction::SUB(src, dest, size) => {
                 let value = self.get_target_value(space, src, size)?;
                 let existing = self.get_target_value(space, dest, size)?;
@@ -555,10 +573,14 @@ impl MC68010 {
                 let value = self.get_target_value(space, target, size)?;
                 self.set_logic_flags(value, size);
             },
-            //Instruction::TRAP(u8) => {
-            //},
-            //Instruction::TRAPV => {
-            //},
+            Instruction::TRAP(number) => {
+                self.exception(space, 32 + number)?;
+            },
+            Instruction::TRAPV => {
+                if self.get_flag(FLAGS_OVERFLOW) {
+                    self.exception(space, 7)?;
+                }
+            },
             Instruction::UNLK(reg) => {
                 let value = *self.get_a_reg_mut(reg);
                 *self.get_stack_pointer_mut() = value;
@@ -573,17 +595,28 @@ impl MC68010 {
         Ok(())
     }
 
+    fn push_word(&mut self, space: &mut AddressSpace, value: u16) -> Result<(), Error> {
+        let reg = self.get_stack_pointer_mut();
+        *reg -= 2;
+        space.write_beu16(*reg as Address, value)
+    }
+
+    fn pop_word(&mut self, space: &mut AddressSpace) -> Result<u16, Error> {
+        let reg = self.get_stack_pointer_mut();
+        let value = space.read_beu16(*reg as Address)?;
+        *reg += 2;
+        Ok(value)
+    }
+
     fn push_long(&mut self, space: &mut AddressSpace, value: u32) -> Result<(), Error> {
         let reg = self.get_stack_pointer_mut();
         *reg -= 4;
-        //println!("PUSHING {:08x} at {:08x}", value, *reg);
         space.write_beu32(*reg as Address, value)
     }
 
     fn pop_long(&mut self, space: &mut AddressSpace) -> Result<u32, Error> {
         let reg = self.get_stack_pointer_mut();
         let value = space.read_beu32(*reg as Address)?;
-        //println!("POPPING {:08x} at {:08x}", value, *reg);
         *reg += 4;
         Ok(value)
     }
