@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::timers::CpuTimer;
-use crate::memory::{Address, AddressSpace};
+use crate::memory::{Address, Addressable, AddressSpace};
 
 use super::debugger::M68kDebugger;
 use super::decode::{
@@ -142,9 +142,9 @@ impl MC68010 {
                 self.execute_current(space)?;
                 self.timer.cycle.end(timer);
 
-                //if (self.timer.cycle.events % 500) == 0 {
-                //    println!("{}", self.timer);
-                //}
+                if (self.timer.cycle.events % 500) == 0 {
+                    println!("{}", self.timer);
+                }
 
                 Ok(())
             },

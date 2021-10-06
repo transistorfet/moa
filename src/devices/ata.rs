@@ -64,7 +64,7 @@ impl Addressable for AtaDevice {
         0x30
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Vec<u8> {
+    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
         let mut data = vec![0; count];
 
         match addr {
@@ -87,10 +87,10 @@ println!(">> {:x}", data[0]);
             _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); },
         }
 
-        data
+        Ok(data)
     }
 
-    fn write(&mut self, mut addr: Address, data: &[u8]) {
+    fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
         println!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             ATA_REG_DRIVE_HEAD => { self.selected_sector |= ((data[0] & 0x1F) as u32) << 24; },
@@ -115,6 +115,7 @@ println!(">> {:x}", data[0]);
             },
             _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
+        Ok(())
     }
 }
 

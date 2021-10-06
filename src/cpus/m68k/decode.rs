@@ -2,7 +2,7 @@
 use std::fmt;
 
 use crate::error::Error;
-use crate::memory::{Address, AddressSpace};
+use crate::memory::{Address, Addressable, AddressSpace};
 
 use super::execute::ERR_ILLEGAL_INSTRUCTION;
 

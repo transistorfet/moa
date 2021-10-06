@@ -1,5 +1,5 @@
 
-use crate::memory::{Address, AddressSpace, MemoryBlock};
+use crate::memory::{Address, Addressable, AddressSpace, MemoryBlock};
 
 use super::execute::MC68010;
 use super::decode::{Instruction, Target, Size, Sign, ShiftDirection};
@@ -27,7 +27,7 @@ fn init_test() -> (MC68010, AddressSpace) {
 
 #[cfg(test)]
 mod tests {
-    use crate::memory::Address;
+    use crate::memory::{Address, Addressable};
     use super::{init_test, INIT_ADDR};
     use super::{Instruction, Target, Size, Sign, ShiftDirection};
 

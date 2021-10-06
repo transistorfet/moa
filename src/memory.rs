@@ -9,8 +9,35 @@ pub type Address = u64;
 
 pub trait Addressable {
     fn len(&self) -> usize;
-    fn read(&mut self, addr: Address, count: usize) -> Vec<u8>;
-    fn write(&mut self, addr: Address, data: &[u8]);
+    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error>;
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error>;
+
+    fn read_u8(&mut self, addr: Address) -> Result<u8, Error> {
+        Ok(self.read(addr, 1)?[0])
+    }
+
+    fn read_beu16(&mut self, addr: Address) -> Result<u16, Error> {
+        Ok(read_beu16(&self.read(addr, 2)?))
+    }
+
+    fn read_beu32(&mut self, addr: Address) -> Result<u32, Error> {
+        Ok(read_beu32(&self.read(addr, 4)?))
+    }
+
+    fn write_u8(&mut self, addr: Address, value: u8) -> Result<(), Error> {
+        let data = [value];
+        self.write(addr, &data)
+    }
+
+    fn write_beu16(&mut self, addr: Address, value: u16) -> Result<(), Error> {
+        let data = write_beu16(value);
+        self.write(addr, &data)
+    }
+
+    fn write_beu32(&mut self, addr: Address, value: u32) -> Result<(), Error> {
+        let data = write_beu32(value);
+        self.write(addr, &data)
+    }
 }
 
 
@@ -51,15 +78,16 @@ impl Addressable for MemoryBlock {
         self.contents.len()
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Vec<u8> {
-        self.contents[(addr as usize) .. (addr as usize + count)].to_vec()
+    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
+        Ok(self.contents[(addr as usize) .. (addr as usize + count)].to_vec())
     }
 
-    fn write(&mut self, mut addr: Address, data: &[u8]) {
+    fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
         for byte in data {
             self.contents[addr as usize] = *byte;
             addr += 1;
         }
+        Ok(())
     }
 }
 
@@ -138,71 +166,58 @@ impl AddressSpace {
             println!("{}", line);
         }
     }
+}
 
+impl Addressable for AddressSpace {
+    fn len(&self) -> usize {
+        let seg = &self.segments[self.segments.len() - 1];
+        (seg.base as usize) + seg.contents.len()
+    }
 
-    pub fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
+    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
         let mut seg = self.get_segment_mut(addr)?;
         let relative_addr = addr - seg.base;
         if relative_addr as usize + count > seg.contents.len() {
             Err(Error::new(&format!("Error reading address {:#010x}", addr)))
         } else {
-            Ok(seg.contents.read(relative_addr, count))
+            seg.contents.read(relative_addr, count)
         }
     }
 
-    pub fn read_u8(&mut self, addr: Address) -> Result<u8, Error> {
-        Ok(self.read(addr, 1)?[0])
-    }
-
-    pub fn read_beu16(&mut self, addr: Address) -> Result<u16, Error> {
-        Ok(read_beu16(&self.read(addr, 2)?))
-    }
-
-    pub fn read_beu32(&mut self, addr: Address) -> Result<u32, Error> {
-        Ok(read_beu32(&self.read(addr, 4)?))
-    }
-
-
-    pub fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         let seg = self.get_segment_mut(addr)?;
-        Ok(seg.contents.write(addr - seg.base, data))
-    }
-
-    pub fn write_u8(&mut self, addr: Address, value: u8) -> Result<(), Error> {
-        let data = [value];
-        self.write(addr, &data)
-    }
-
-    pub fn write_beu16(&mut self, addr: Address, value: u16) -> Result<(), Error> {
-        let data = [
-            (value >> 8) as u8,
-            value as u8,
-        ];
-        self.write(addr, &data)
-    }
-
-    pub fn write_beu32(&mut self, addr: Address, value: u32) -> Result<(), Error> {
-        let data = [
-            (value >> 24) as u8,
-            (value >> 16) as u8,
-            (value >> 8) as u8,
-            value as u8,
-        ];
-        self.write(addr, &data)
+        seg.contents.write(addr - seg.base, data)
     }
 }
 
 #[inline(always)]
-pub fn read_beu16(mut data: &[u8]) -> u16 {
+pub fn read_beu16(data: &[u8]) -> u16 {
     (data[0] as u16) << 8 |
     (data[1] as u16)
 }
 
 #[inline(always)]
-pub fn read_beu32(mut data: &[u8]) -> u32 {
+pub fn read_beu32(data: &[u8]) -> u32 {
     (data[0] as u32) << 24 |
     (data[1] as u32) << 16 |
     (data[2] as u32) << 8 |
     (data[3] as u32)
 }
 
+#[inline(always)]
+pub fn write_beu16(value: u16) -> [u8; 2] {
+    [
+        (value >> 8) as u8,
+        value as u8,
+    ]
+}
+
+#[inline(always)]
+pub fn write_beu32(value: u32) -> [u8; 4] {
+    [
+        (value >> 24) as u8,
+        (value >> 16) as u8,
+        (value >> 8) as u8,
+        value as u8,
+    ]
+}

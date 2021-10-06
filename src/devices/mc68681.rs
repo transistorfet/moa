@@ -116,7 +116,7 @@ impl Addressable for MC68681 {
         0x30
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Vec<u8> {
+    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
         let mut data = vec![0; count];
 
         // TODO this is temporary
@@ -133,10 +133,10 @@ impl Addressable for MC68681 {
             _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); data[0] = self.input; },
         }
 
-        data
+        Ok(data)
     }
 
-    fn write(&mut self, mut addr: Address, data: &[u8]) {
+    fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
         match addr {
             REG_TBA_WR => {
                 println!("{}: {}", DEV_NAME, data[0] as char);
@@ -144,6 +144,7 @@ impl Addressable for MC68681 {
             },
             _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
+        Ok(())
     }
 }
 

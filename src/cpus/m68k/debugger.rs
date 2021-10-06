@@ -1,6 +1,6 @@
 
 use crate::error::Error;
-use crate::memory::{Address, AddressSpace};
+use crate::memory::{Address, Addressable, AddressSpace};
 
 use super::execute::{MC68010};
 use super::decode::{Instruction, Target, Size, Direction, Condition, ControlRegister, RegisterType};
