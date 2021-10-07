@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::timers::CpuTimer;
-use crate::memory::Address;
+use crate::memory::{Address, Addressable};
 use crate::system::System;
 
 use super::debugger::M68kDebugger;
@@ -103,7 +103,7 @@ impl MC68010 {
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
         println!("");
-        system.dump_memory(self.state.msp as Address, 0x40);
+        system.get_bus().dump_memory(self.state.msp as Address, 0x40);
         println!("");
     }
 
@@ -120,8 +120,8 @@ impl MC68010 {
     pub fn init(&mut self, system: &System) -> Result<(), Error> {
         println!("Initializing CPU");
 
-        self.state.msp = system.read_beu32(0)?;
-        self.state.pc = system.read_beu32(4)?;
+        self.state.msp = system.get_bus().read_beu32(0)?;
+        self.state.pc = system.get_bus().read_beu32(4)?;
         self.state.status = Status::Running;
 
         Ok(())
@@ -153,7 +153,7 @@ impl MC68010 {
         self.push_word(system, self.state.sr)?;
         self.state.sr |= FLAGS_SUPERVISOR;
         self.state.sr &= !FLAGS_TRACING;
-        self.state.pc = system.read_beu32((self.state.vbr + offset as u32) as Address)?;
+        self.state.pc = system.get_bus().read_beu32((self.state.vbr + offset as u32) as Address)?;
         Ok(())
     }
 
@@ -168,7 +168,7 @@ impl MC68010 {
             // Print instruction bytes for debugging
             let ins_data: Result<String, Error> =
                 (0..((self.decoder.end - self.decoder.start) / 2)).map(|offset|
-                    Ok(format!("{:04x} ", system.read_beu16((self.decoder.start + (offset * 2)) as Address)?))
+                    Ok(format!("{:04x} ", system.get_bus().read_beu16((self.decoder.start + (offset * 2)) as Address)?))
                 ).collect();
             debug!("{:#010x}: {}\n\t{:?}\n", self.decoder.start, ins_data?, self.decoder.instruction);
         }
@@ -591,12 +591,12 @@ impl MC68010 {
     fn push_word(&mut self, system: &System, value: u16) -> Result<(), Error> {
         let reg = self.get_stack_pointer_mut();
         *reg -= 2;
-        system.write_beu16(*reg as Address, value)
+        system.get_bus().write_beu16(*reg as Address, value)
     }
 
     fn pop_word(&mut self, system: &System) -> Result<u16, Error> {
         let reg = self.get_stack_pointer_mut();
-        let value = system.read_beu16(*reg as Address)?;
+        let value = system.get_bus().read_beu16(*reg as Address)?;
         *reg += 2;
         Ok(value)
     }
@@ -604,12 +604,12 @@ impl MC68010 {
     fn push_long(&mut self, system: &System, value: u32) -> Result<(), Error> {
         let reg = self.get_stack_pointer_mut();
         *reg -= 4;
-        system.write_beu32(*reg as Address, value)
+        system.get_bus().write_beu32(*reg as Address, value)
     }
 
     fn pop_long(&mut self, system: &System) -> Result<u32, Error> {
         let reg = self.get_stack_pointer_mut();
-        let value = system.read_beu32(*reg as Address)?;
+        let value = system.get_bus().read_beu32(*reg as Address)?;
         *reg += 4;
         Ok(value)
     }
@@ -902,9 +902,9 @@ fn get_value_sized(value: u32, size: Size) -> u32 {
 
 fn get_address_sized(system: &System, addr: Address, size: Size) -> Result<u32, Error> {
     match size {
-        Size::Byte => system.read_u8(addr).map(|value| value as u32),
-        Size::Word => system.read_beu16(addr).map(|value| value as u32),
-        Size::Long => system.read_beu32(addr),
+        Size::Byte => system.get_bus().read_u8(addr).map(|value| value as u32),
+        Size::Word => system.get_bus().read_beu16(addr).map(|value| value as u32),
+        Size::Long => system.get_bus().read_beu32(addr),
     }
 }
 
@@ -918,9 +918,9 @@ fn set_value_sized(addr: &mut u32, value: u32, size: Size) {
 
 fn set_address_sized(system: &System, addr: Address, value: u32, size: Size) -> Result<(), Error> {
     match size {
-        Size::Byte => system.write_u8(addr, value as u8),
-        Size::Word => system.write_beu16(addr, value as u16),
-        Size::Long => system.write_beu32(addr, value),
+        Size::Byte => system.get_bus().write_u8(addr, value as u8),
+        Size::Word => system.get_bus().write_beu16(addr, value as u16),
+        Size::Long => system.get_bus().write_beu32(addr, value),
     }
 }
 

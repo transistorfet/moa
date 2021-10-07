@@ -2,7 +2,7 @@
 use std::fs;
 
 use crate::error::Error;
-use crate::system::{Clock, DeviceNumber, Device, System};
+use crate::system::{Clock, DeviceNumber, Steppable, AddressableDeviceBox, System};
 
 
 pub type Address = u64;
@@ -91,7 +91,7 @@ impl Addressable for MemoryBlock {
     }
 }
 
-impl Device for MemoryBlock {
+impl Steppable for MemoryBlock {
     fn step(&mut self, _system: &System) -> Result<Clock, Error> {
         Ok(1)
     }
@@ -101,7 +101,7 @@ impl Device for MemoryBlock {
 pub struct Block {
     pub base: Address,
     pub length: usize,
-    pub dev: DeviceNumber,
+    pub dev: AddressableDeviceBox,
 }
 
 pub struct Bus {
@@ -115,7 +115,7 @@ impl Bus {
         }
     }
 
-    pub fn insert(&mut self, base: Address, length: usize, dev: DeviceNumber) {
+    pub fn insert(&mut self, base: Address, length: usize, dev: AddressableDeviceBox) {
         let block = Block { base, length, dev };
         for i in 0..self.blocks.len() {
             if self.blocks[i].base > block.base {
@@ -126,12 +126,12 @@ impl Bus {
         self.blocks.insert(0, block);
     }
 
-    pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(DeviceNumber, Address), Error> {
+    pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(AddressableDeviceBox, Address), Error> {
         for block in &self.blocks {
             if addr >= block.base && addr <= (block.base + block.length as Address) {
                 let relative_addr = addr - block.base;
                 if relative_addr as usize + count <= block.length {
-                    return Ok((block.dev, relative_addr));
+                    return Ok((block.dev.clone(), relative_addr));
                 } else {
                     return Err(Error::new(&format!("Error reading address {:#010x}", addr)));
                 }
@@ -140,9 +140,42 @@ impl Bus {
         return Err(Error::new(&format!("No segment found at {:#08x}", addr)));
     }
 
-    pub fn max_address(&self) -> Address {
+    pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
+        while count > 0 {
+            let mut line = format!("{:#010x}: ", addr);
+
+            let to = if count < 16 { count / 2 } else { 8 };
+            for _ in 0..to {
+                let word = self.read_beu16(addr);
+                if word.is_err() {
+                    println!("{}", line);
+                    return;
+                }
+                line += &format!("{:#06x} ", word.unwrap());
+                addr += 2;
+                count -= 2;
+            }
+            println!("{}", line);
+        }
+    }
+}
+
+impl Addressable for Bus {
+    fn len(&self) -> usize {
         let block = &self.blocks[self.blocks.len() - 1];
-        block.base + block.length as Address
+        (block.base as usize) + block.length
+    }
+
+    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
+        let (dev, relative_addr) = self.get_device_at(addr, count)?;
+        let result = dev.borrow_mut().read(relative_addr, count);
+        result
+    }
+
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+        let (dev, relative_addr) = self.get_device_at(addr, data.len())?;
+        let result = dev.borrow_mut().write(relative_addr, data);
+        result
     }
 }
 

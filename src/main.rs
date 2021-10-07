@@ -11,7 +11,7 @@ use crate::memory::MemoryBlock;
 use crate::cpus::m68k::MC68010;
 use crate::peripherals::ata::AtaDevice;
 use crate::peripherals::mc68681::MC68681;
-use crate::system::{System};
+use crate::system::{System, wrap_addressable};
 
 fn main() {
     let mut system = System::new();
@@ -20,19 +20,19 @@ fn main() {
     for byte in monitor.contents.iter() {
         print!("{:02x} ", byte);
     }
-    system.add_device(0x00000000, Box::new(monitor)).unwrap();
+    system.add_addressable_device(0x00000000, wrap_addressable(monitor)).unwrap();
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
     ram.load_at(0, "binaries/kernel.bin").unwrap();
-    system.add_device(0x00100000, Box::new(ram)).unwrap();
+    system.add_addressable_device(0x00100000, wrap_addressable(ram)).unwrap();
 
     let mut ata = AtaDevice::new();
     ata.load("binaries/disk-with-partition-table.img").unwrap();
-    system.add_device(0x00600000, Box::new(ata)).unwrap();
+    system.add_addressable_device(0x00600000, wrap_addressable(ata)).unwrap();
 
     let mut serial = MC68681::new();
     serial.open().unwrap();
-    system.add_device(0x00700000, Box::new(serial)).unwrap();
+    system.add_addressable_device(0x00700000, wrap_addressable(serial)).unwrap();
 
 
     let mut cpu = MC68010::new();

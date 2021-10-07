@@ -9,7 +9,7 @@ use nix::unistd::sleep;
 use nix::fcntl::{fcntl, FcntlArg};
 
 use crate::error::Error;
-use crate::system::{Clock, Device, System};
+use crate::system::{Clock, Steppable, System};
 use crate::memory::{Address, Addressable};
 
 
@@ -147,7 +147,7 @@ impl Addressable for MC68681 {
     }
 }
 
-impl Device for MC68681 {
+impl Steppable for MC68681 {
     fn step(&mut self, system: &System) -> Result<Clock, Error> {
         self.step_internal(system)?;
         Ok(1)

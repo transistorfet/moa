@@ -3,7 +3,7 @@ use std::fs;
 
 use crate::error::Error;
 use crate::memory::{Address, Addressable};
-use crate::system::{Clock, Device, System};
+use crate::system::{Clock, Steppable, System};
 
 
 const ATA_REG_DEV_CONTROL: Address      = 0x1D;
@@ -120,7 +120,7 @@ println!(">> {:x}", data[0]);
     }
 }
 
-impl Device for AtaDevice {
+impl Steppable for AtaDevice {
     fn step(&mut self, _system: &System) -> Result<Clock, Error> {
         Ok(1)
     }

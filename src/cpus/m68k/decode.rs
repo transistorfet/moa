@@ -2,8 +2,8 @@
 use std::fmt;
 
 use crate::error::Error;
-use crate::memory::Address;
-use crate::system::{System, DeviceRefMut};
+use crate::memory::{Address, Addressable};
+use crate::system::{System, AddressableDeviceRefMut};
 
 use super::execute::ERR_ILLEGAL_INSTRUCTION;
 
@@ -200,13 +200,13 @@ impl M68kDecoder {
     }
 
     pub fn decode_at(system: &System, start: u32) -> Result<M68kDecoder, Error> {
-        let (mut memory, relative_addr) = system.get_device_in_range(start as Address, 12)?;
+        let (mut memory, relative_addr) = system.get_bus().get_device_at(start as Address, 12)?;
         let mut decoder = M68kDecoder::new(start - relative_addr as u32, start);
-        decoder.instruction = decoder.decode_one(&mut memory)?;
+        decoder.instruction = decoder.decode_one(&mut memory.borrow_mut())?;
         Ok(decoder)
     }
 
-    pub fn decode_one(&mut self, system: &mut DeviceRefMut<'_>) -> Result<Instruction, Error> {
+    pub fn decode_one(&mut self, system: &mut AddressableDeviceRefMut<'_>) -> Result<Instruction, Error> {
         let ins = self.read_instruction_word(system)?;
 
         match ((ins & 0xF000) >> 12) as u8 {
@@ -609,27 +609,27 @@ impl M68kDecoder {
         }
     }
 
-    fn read_instruction_word(&mut self, system: &mut DeviceRefMut<'_>) -> Result<u16, Error> {
-        let word = system.read_beu16((self.end - self.base) as Address)?;
+    fn read_instruction_word(&mut self, device: &mut AddressableDeviceRefMut<'_>) -> Result<u16, Error> {
+        let word = device.read_beu16((self.end - self.base) as Address)?;
         //debug!("{:#010x} {:#06x?}", self.end, word);
         self.end += 2;
         Ok(word)
     }
 
-    fn read_instruction_long(&mut self, system: &mut DeviceRefMut<'_>) -> Result<u32, Error> {
-        let word = system.read_beu32((self.end - self.base) as Address)?;
+    fn read_instruction_long(&mut self, device: &mut AddressableDeviceRefMut<'_>) -> Result<u32, Error> {
+        let word = device.read_beu32((self.end - self.base) as Address)?;
         //debug!("{:#010x} {:#010x}", self.end, word);
         self.end += 4;
         Ok(word)
     }
 
-    fn decode_lower_effective_address(&mut self, system: &mut DeviceRefMut<'_>, ins: u16, size: Option<Size>) -> Result<Target, Error> {
+    fn decode_lower_effective_address(&mut self, system: &mut AddressableDeviceRefMut<'_>, ins: u16, size: Option<Size>) -> Result<Target, Error> {
         let reg = get_low_reg(ins);
         let mode = get_low_mode(ins);
         self.get_mode_as_target(system, mode, reg, size)
     }
 
-    fn decode_upper_effective_address(&mut self, system: &mut DeviceRefMut<'_>, ins: u16, size: Option<Size>) -> Result<Target, Error> {
+    fn decode_upper_effective_address(&mut self, system: &mut AddressableDeviceRefMut<'_>, ins: u16, size: Option<Size>) -> Result<Target, Error> {
         let reg = get_high_reg(ins);
         let mode = get_high_mode(ins);
         self.get_mode_as_target(system, mode, reg, size)
@@ -645,7 +645,7 @@ impl M68kDecoder {
         (rtype, xreg, data, size)
     }
 
-    pub fn get_mode_as_target(&mut self, system: &mut DeviceRefMut<'_>, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
+    pub fn get_mode_as_target(&mut self, system: &mut AddressableDeviceRefMut<'_>, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
         let value = match mode {
             0b000 => Target::DirectDReg(reg),
             0b001 => Target::DirectAReg(reg),
