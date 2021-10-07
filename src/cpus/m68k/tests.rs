@@ -1,8 +1,8 @@
 
 use crate::memory::{Address, Addressable, MemoryBlock};
-use crate::system::{System, wrap_addressable};
+use crate::system::{System, Steppable, wrap_addressable};
 
-use super::execute::MC68010;
+use super::state::MC68010;
 use super::decode::Instruction;
 
 const INIT_STACK: Address = 0x00002000;

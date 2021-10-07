@@ -3,7 +3,7 @@ use crate::error::Error;
 use crate::system::System;
 use crate::memory::{Address, Addressable};
 
-use super::execute::{MC68010};
+use super::state::{MC68010};
 
 pub struct StackTracer {
     pub calls: Vec<u32>,

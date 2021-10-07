@@ -11,7 +11,7 @@ use crate::memory::MemoryBlock;
 use crate::cpus::m68k::MC68010;
 use crate::peripherals::ata::AtaDevice;
 use crate::peripherals::mc68681::MC68681;
-use crate::system::{System, wrap_addressable};
+use crate::system::{System, wrap_addressable, wrap_interruptable};
 
 fn main() {
     let mut system = System::new();
@@ -43,17 +43,15 @@ fn main() {
     //cpu.add_breakpoint(0x224);
     //cpu.add_breakpoint(0x100334);
 
-    while cpu.is_running() {
-        system.step().unwrap();
-        match cpu.step(&system) {
+    system.add_interruptable_device(wrap_interruptable(cpu)).unwrap();
+    loop {
+        match system.step() {
             Ok(()) => { },
             Err(err) => {
-                cpu.dump_state(&system);
+                system.exit_error();
                 panic!("{:?}", err);
             },
         }
-
-        //serial.step();
     }
 
     /*

@@ -1,8 +1,9 @@
 
+pub mod state;
 pub mod decode;
 pub mod execute;
 pub mod debugger;
 pub mod tests;
 
-pub use self::execute::MC68010;
+pub use self::state::MC68010;
 

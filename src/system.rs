@@ -3,15 +3,15 @@ use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
 
 use crate::error::Error;
-use crate::memory::{self, Address, Addressable, Bus};
+use crate::memory::{Address, Addressable, Bus};
 
 
 pub type Clock = u64;
-pub type DeviceNumber = u8;
 
 
 pub trait Steppable {
     fn step(&mut self, system: &System) -> Result<Clock, Error>;
+    fn on_error(&mut self, _system: &System) { }
 }
 
 pub trait Interruptable {
@@ -33,10 +33,19 @@ pub fn wrap_addressable<T: AddressableDevice + 'static>(value: T) -> Addressable
     Rc::new(RefCell::new(Box::new(value)))
 }
 
+pub fn wrap_interruptable<T: InterruptableDevice + 'static>(value: T) -> InterruptableDeviceBox {
+    Rc::new(RefCell::new(Box::new(value)))
+}
+
+
+pub enum Device {
+    Addressable(AddressableDeviceBox),
+    Interruptable(InterruptableDeviceBox),
+}
 
 pub struct System {
     pub clock: Clock,
-    pub addressable_devices: Vec<AddressableDeviceBox>,
+    pub devices: Vec<Device>,
     pub bus: RefCell<Bus>,
 }
 
@@ -44,7 +53,7 @@ impl System {
     pub fn new() -> System {
         System {
             clock: 0,
-            addressable_devices: vec![],
+            devices: vec![],
             bus: RefCell::new(Bus::new()),
         }
     }
@@ -56,16 +65,43 @@ impl System {
     pub fn add_addressable_device(&mut self, addr: Address, device: AddressableDeviceBox) -> Result<(), Error> {
         let length = device.borrow().len();
         self.bus.borrow_mut().insert(addr, length, device.clone());
-        self.addressable_devices.push(device);
+        self.devices.push(Device::Addressable(device));
+        Ok(())
+    }
+
+    pub fn add_interruptable_device(&mut self, device: InterruptableDeviceBox) -> Result<(), Error> {
+        //self.bus.borrow_mut().insert(addr, length, device.clone());
+        self.devices.push(Device::Interruptable(device));
         Ok(())
     }
 
     pub fn step(&mut self) -> Result<(), Error> {
         self.clock += 1;
-        for dev in &self.addressable_devices {
-            dev.borrow_mut().step(&self)?;
+        for dev in &self.devices {
+            match dev {
+                Device::Addressable(dev) => dev.borrow_mut().step(&self),
+                Device::Interruptable(dev) => dev.borrow_mut().step(&self),
+            }?;
         }
         Ok(())
     }
+
+    pub fn trigger_interrupt(&self, number: u8) {
+        // TODO how does this find the specific device it's connected to?
+    }
+
+    pub fn exit_error(&mut self) {
+        for dev in &self.devices {
+            match dev {
+                Device::Addressable(dev) => dev.borrow_mut().on_error(&self),
+                Device::Interruptable(dev) => dev.borrow_mut().on_error(&self),
+            }
+        }
+    }
 }
+
+pub struct InterruptController {
+    
+}
+
 

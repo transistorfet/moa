@@ -2,7 +2,7 @@
 use std::fs;
 
 use crate::error::Error;
-use crate::system::{Clock, DeviceNumber, Steppable, AddressableDeviceBox, System};
+use crate::system::{Clock, Steppable, AddressableDeviceBox, System};
 
 
 pub type Address = u64;

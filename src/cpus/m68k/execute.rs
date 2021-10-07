@@ -1,10 +1,8 @@
 
 use crate::error::Error;
-use crate::timers::CpuTimer;
 use crate::memory::{Address, Addressable};
-use crate::system::System;
+use crate::system::{System, Clock, Steppable, Interruptable};
 
-use super::debugger::M68kDebugger;
 use super::decode::{
     M68kDecoder,
     Instruction,
@@ -19,100 +17,26 @@ use super::decode::{
     sign_extend_to_long
 };
 
+use super::state::{MC68010, Status, Flags};
 
-const FLAGS_ON_RESET: u16 = 0x2700;
+impl Steppable for MC68010 {
+    fn step(&mut self, system: &System) -> Result<Clock, Error> {
+        self.step_internal(system)?;
+        Ok(1)
+    }
 
-pub const FLAGS_CARRY: u16 = 0x0001;
-pub const FLAGS_OVERFLOW: u16 = 0x0002;
-pub const FLAGS_ZERO: u16 = 0x0004;
-pub const FLAGS_NEGATIVE: u16 = 0x0008;
-pub const FLAGS_EXTEND: u16 = 0x0010;
-pub const FLAGS_SUPERVISOR: u16 = 0x2000;
-pub const FLAGS_TRACING: u16 = 0x8000;
-
-pub const ERR_BUS_ERROR: u32 = 2;
-pub const ERR_ADDRESS_ERROR: u32 = 3;
-pub const ERR_ILLEGAL_INSTRUCTION: u32 = 4;
-
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Status {
-    Init,
-    Running,
-    Stopped,
-    Halted,
-}
-
-pub struct MC68010State {
-    pub status: Status,
-
-    pub pc: u32,
-    pub sr: u16,
-    pub d_reg: [u32; 8],
-    pub a_reg: [u32; 7],
-    pub msp: u32,
-    pub usp: u32,
-
-    pub vbr: u32,
-}
-
-impl MC68010State {
-    pub fn new() -> MC68010State {
-        MC68010State {
-            status: Status::Init,
-
-            pc: 0,
-            sr: FLAGS_ON_RESET,
-            d_reg: [0; 8],
-            a_reg: [0; 7],
-            msp: 0,
-            usp: 0,
-
-            vbr: 0,
-        }
+    fn on_error(&mut self, system: &System) {
+        self.dump_state(system);
     }
 }
 
-pub struct MC68010 {
-    pub state: MC68010State,
-    pub decoder: M68kDecoder,
-    pub debugger: M68kDebugger,
-    pub timer: CpuTimer,
+impl Interruptable for MC68010 {
+    fn handle_interrupt(&mut self, system: &System, number: u8) -> Result<(), Error> {
+        self.exception(system, number)
+    }
 }
 
 impl MC68010 {
-    pub fn new() -> MC68010 {
-        MC68010 {
-            state: MC68010State::new(),
-            decoder: M68kDecoder::new(0, 0),
-            debugger: M68kDebugger::new(),
-            timer: CpuTimer::new(),
-        }
-    }
-
-    pub fn dump_state(&self, system: &System) {
-        println!("Status: {:?}", self.state.status);
-        println!("PC: {:#010x}", self.state.pc);
-        println!("SR: {:#06x}", self.state.sr);
-        for i in 0..7 {
-            println!("D{}: {:#010x}        A{}:  {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
-        }
-        println!("D7: {:#010x}", self.state.d_reg[7]);
-        println!("MSP: {:#010x}", self.state.msp);
-        println!("USP: {:#010x}", self.state.usp);
-
-        println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
-        println!("");
-        system.get_bus().dump_memory(self.state.msp as Address, 0x40);
-        println!("");
-    }
-
-    pub fn reset(&mut self) {
-        self.state = MC68010State::new();
-        self.decoder = M68kDecoder::new(0, 0);
-        self.debugger = M68kDebugger::new();
-    }
-
     pub fn is_running(&self) -> bool {
         self.state.status != Status::Stopped
     }
@@ -127,7 +51,7 @@ impl MC68010 {
         Ok(())
     }
 
-    pub fn step(&mut self, system: &System) -> Result<(), Error> {
+    pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
         match self.state.status {
             Status::Init => self.init(system),
             Status::Stopped | Status::Halted => Err(Error::new("CPU stopped")),
@@ -151,8 +75,8 @@ impl MC68010 {
         self.push_word(system, offset)?;
         self.push_long(system, self.state.pc)?;
         self.push_word(system, self.state.sr)?;
-        self.state.sr |= FLAGS_SUPERVISOR;
-        self.state.sr &= !FLAGS_TRACING;
+        self.set_flag(Flags::Supervisor, true);
+        self.set_flag(Flags::Tracing, false);
         self.state.pc = system.get_bus().read_beu32((self.state.vbr + offset as u32) as Address)?;
         Ok(())
     }
@@ -216,10 +140,11 @@ impl MC68010 {
                 }
                 self.set_logic_flags(pair.0, size);
                 if pair.1 {
-                    self.state.sr |= FLAGS_EXTEND | FLAGS_CARRY;
+                    self.set_flag(Flags::Carry, true);
+                    self.set_flag(Flags::Extend, true);
                 }
                 if get_msb(pair.0, size) != get_msb(original, size) {
-                    self.state.sr |= FLAGS_OVERFLOW;
+                    self.set_flag(Flags::Overflow, true);
                 }
                 self.set_target_value(system, target, pair.0, size)?;
             },
@@ -267,7 +192,7 @@ impl MC68010 {
             Instruction::CLR(target, size) => {
                 self.set_target_value(system, target, 0, size)?;
                 // Clear flags except Zero flag
-                self.state.sr = (self.state.sr & 0xFFF0) | FLAGS_ZERO;
+                self.state.sr = (self.state.sr & 0xFFF0) | (Flags::Zero as u16);
             },
             Instruction::CMP(src, dest, size) => {
                 let value = self.get_target_value(system, src, size)?;
@@ -361,7 +286,8 @@ impl MC68010 {
                 }
                 self.set_logic_flags(pair.0, size);
                 if pair.1 {
-                    self.state.sr |= FLAGS_EXTEND | FLAGS_CARRY;
+                    self.set_flag(Flags::Carry, true);
+                    self.set_flag(Flags::Extend, true);
                 }
                 self.set_target_value(system, target, pair.0, size)?;
             },
@@ -517,7 +443,7 @@ impl MC68010 {
                 }
                 self.set_logic_flags(pair.0, size);
                 if pair.1 {
-                    self.state.sr |= FLAGS_CARRY;
+                    self.set_flag(Flags::Carry, true);
                 }
                 self.set_target_value(system, target, pair.0, size)?;
             },
@@ -570,7 +496,7 @@ impl MC68010 {
                 self.exception(system, 32 + number)?;
             },
             Instruction::TRAPV => {
-                if self.get_flag(FLAGS_OVERFLOW) {
+                if self.get_flag(Flags::Overflow) {
                     self.exception(system, 7)?;
                 }
             },
@@ -746,19 +672,17 @@ impl MC68010 {
     }
 
     fn is_supervisor(&self) -> bool {
-        self.state.sr & FLAGS_SUPERVISOR != 0
+        self.state.sr & (Flags:: Supervisor as u16) != 0
     }
 
-    fn get_flag(&self, flag: u16) -> bool {
-        if (self.state.sr & flag) == 0 {
-            false
-        } else {
-            true
-        }
+    #[inline(always)]
+    fn get_flag(&self, flag: Flags) -> bool {
+        (self.state.sr & (flag as u16)) != 0
     }
 
-    fn set_flag(&mut self, flag: u16, value: bool) {
-        self.state.sr = (self.state.sr & !flag) | (if value { flag } else { 0 });
+    #[inline(always)]
+    fn set_flag(&mut self, flag: Flags, value: bool) {
+        self.state.sr = (self.state.sr & !(flag as u16)) | (if value { flag as u16 } else { 0 });
     }
 
     fn set_compare_flags(&mut self, value: u32, size: Size, carry: bool, overflow: bool) {
@@ -766,16 +690,16 @@ impl MC68010 {
 
         let mut flags = 0x0000;
         if value < 0 {
-            flags |= FLAGS_NEGATIVE
+            flags |= Flags::Negative as u16;
         }
         if value == 0 {
-            flags |= FLAGS_ZERO
+            flags |= Flags::Zero as u16;
         }
         if carry {
-            flags |= FLAGS_CARRY;
+            flags |= Flags::Carry as u16;
         }
         if overflow {
-            flags |= FLAGS_OVERFLOW;
+            flags |= Flags::Overflow as u16;
         }
         self.state.sr = (self.state.sr & 0xFFF0) | flags;
     }
@@ -783,18 +707,17 @@ impl MC68010 {
     fn set_logic_flags(&mut self, value: u32, size: Size) {
         let mut flags = 0x0000;
         if get_msb(value, size) {
-            flags |= FLAGS_NEGATIVE;
+            flags |= Flags::Negative as u16;
         }
         if value == 0 {
-            flags |= FLAGS_ZERO
+            flags |= Flags::Zero as u16;
         }
         self.state.sr = (self.state.sr & 0xFFF0) | flags;
     }
 
     fn set_bit_test_flags(&mut self, value: u32, bitnum: u32, size: Size) -> u32 {
         let mask = 0x1 << (bitnum % size.in_bits());
-        let zeroflag = if (value & mask) == 0 { FLAGS_ZERO } else { 0 };
-        self.state.sr = (self.state.sr & !FLAGS_ZERO) | zeroflag;
+        self.set_flag(Flags::Zero, (value & mask) == 0);
         mask
     }
 
@@ -803,25 +726,25 @@ impl MC68010 {
         match cond {
             Condition::True => true,
             Condition::False => false,
-            Condition::High => !self.get_flag(FLAGS_CARRY) && !self.get_flag(FLAGS_ZERO),
-            Condition::LowOrSame => self.get_flag(FLAGS_CARRY) || self.get_flag(FLAGS_ZERO),
-            Condition::CarryClear => !self.get_flag(FLAGS_CARRY),
-            Condition::CarrySet => self.get_flag(FLAGS_CARRY),
-            Condition::NotEqual => !self.get_flag(FLAGS_ZERO),
-            Condition::Equal => self.get_flag(FLAGS_ZERO),
-            Condition::OverflowClear => !self.get_flag(FLAGS_OVERFLOW),
-            Condition::OverflowSet => self.get_flag(FLAGS_OVERFLOW),
-            Condition::Plus => !self.get_flag(FLAGS_NEGATIVE),
-            Condition::Minus => self.get_flag(FLAGS_NEGATIVE),
-            Condition::GreaterThanOrEqual => (self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW)) || (!self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW)),
-            Condition::LessThan => (self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW)) || (!self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW)),
+            Condition::High => !self.get_flag(Flags::Carry) && !self.get_flag(Flags::Zero),
+            Condition::LowOrSame => self.get_flag(Flags::Carry) || self.get_flag(Flags::Zero),
+            Condition::CarryClear => !self.get_flag(Flags::Carry),
+            Condition::CarrySet => self.get_flag(Flags::Carry),
+            Condition::NotEqual => !self.get_flag(Flags::Zero),
+            Condition::Equal => self.get_flag(Flags::Zero),
+            Condition::OverflowClear => !self.get_flag(Flags::Overflow),
+            Condition::OverflowSet => self.get_flag(Flags::Overflow),
+            Condition::Plus => !self.get_flag(Flags::Negative),
+            Condition::Minus => self.get_flag(Flags::Negative),
+            Condition::GreaterThanOrEqual => (self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow)) || (!self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow)),
+            Condition::LessThan => (self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow)) || (!self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow)),
             Condition::GreaterThan =>
-                (self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW) && !self.get_flag(FLAGS_ZERO))
-                || (!self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW) && !self.get_flag(FLAGS_ZERO)),
+                (self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow) && !self.get_flag(Flags::Zero))
+                || (!self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow) && !self.get_flag(Flags::Zero)),
             Condition::LessThanOrEqual =>
-                self.get_flag(FLAGS_ZERO)
-                || (self.get_flag(FLAGS_NEGATIVE) && !self.get_flag(FLAGS_OVERFLOW))
-                || (!self.get_flag(FLAGS_NEGATIVE) && self.get_flag(FLAGS_OVERFLOW)),
+                self.get_flag(Flags::Zero)
+                || (self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow))
+                || (!self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow)),
         }
     }
 }

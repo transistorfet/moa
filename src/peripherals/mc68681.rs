@@ -54,6 +54,8 @@ pub struct MC68681 {
     pub tty: Option<PtyMaster>,
     pub status: u8,
     pub input: u8,
+    pub int_vector: u8,
+    pub timer: u16,
 }
 
 impl MC68681 {
@@ -62,6 +64,8 @@ impl MC68681 {
             tty: None,
             status: 0x0C,
             input: 0,
+            int_vector: 0,
+            timer: 0,
         }
     }
 
@@ -137,9 +141,21 @@ impl Addressable for MC68681 {
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         match addr {
+            //REG_MR1A_MR2A | REG_ACR_WR => {
+            //    // TODO config
+            //},
             REG_TBA_WR => {
                 println!("{}: {}", DEV_NAME, data[0] as char);
                 self.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
+            },
+            REG_CTUR_WR => {
+                self.timer = (self.timer & 0x00FF) | ((data[0] as u16) << 8);
+            },
+            REG_CTLR_WR => {
+                self.timer = (self.timer & 0xFF00) | (data[0] as u16);
+            },
+            REG_IVR_WR => {
+                self.int_vector = data[0];
             },
             _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }

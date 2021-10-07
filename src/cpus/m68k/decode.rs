@@ -2,10 +2,10 @@
 use std::fmt;
 
 use crate::error::Error;
-use crate::memory::{Address, Addressable};
+use crate::memory::{Address};
 use crate::system::{System, AddressableDeviceRefMut};
 
-use super::execute::ERR_ILLEGAL_INSTRUCTION;
+use super::state::ERR_ILLEGAL_INSTRUCTION;
 
 
 const OPCG_BIT_OPS: u8 = 0x0;
@@ -200,7 +200,7 @@ impl M68kDecoder {
     }
 
     pub fn decode_at(system: &System, start: u32) -> Result<M68kDecoder, Error> {
-        let (mut memory, relative_addr) = system.get_bus().get_device_at(start as Address, 12)?;
+        let (memory, relative_addr) = system.get_bus().get_device_at(start as Address, 12)?;
         let mut decoder = M68kDecoder::new(start - relative_addr as u32, start);
         decoder.instruction = decoder.decode_one(&mut memory.borrow_mut())?;
         Ok(decoder)
