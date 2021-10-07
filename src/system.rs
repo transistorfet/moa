@@ -86,8 +86,19 @@ impl System {
         Ok(())
     }
 
-    pub fn trigger_interrupt(&self, number: u8) {
+    pub fn trigger_interrupt(&self, number: u8) -> Result<(), Error> {
         // TODO how does this find the specific device it's connected to?
+
+        // TODO for the time being, this will find the first device to handle it or fail
+        for dev in &self.devices {
+            match dev {
+                Device::Interruptable(dev) => {
+                    return dev.borrow_mut().handle_interrupt(&self, number);
+                },
+                _ => { },
+            }
+        }
+        return Err(Error::new(&format!("unhandled interrupt: {:x}", number)));
     }
 
     pub fn exit_error(&mut self) {

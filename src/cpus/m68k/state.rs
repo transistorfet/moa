@@ -29,6 +29,7 @@ pub const ERR_ILLEGAL_INSTRUCTION: u32 = 4;
 pub enum Status {
     Init,
     Running,
+    PendingExecption(u8),
     Stopped,
     Halted,
 }

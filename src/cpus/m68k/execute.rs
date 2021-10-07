@@ -31,8 +31,9 @@ impl Steppable for MC68010 {
 }
 
 impl Interruptable for MC68010 {
-    fn handle_interrupt(&mut self, system: &System, number: u8) -> Result<(), Error> {
-        self.exception(system, number)
+    fn handle_interrupt(&mut self, _system: &System, number: u8) -> Result<(), Error> {
+        self.state.status = Status::PendingExecption(number);
+        Ok(())
     }
 }
 
@@ -67,10 +68,16 @@ impl MC68010 {
 
                 Ok(())
             },
+            Status::PendingExecption(num) => {
+                self.exception(system, num)?;
+                self.state.status = Status::Running;
+                Ok(())
+            }
         }
     }
 
     pub fn exception(&mut self, system: &System, number: u8) -> Result<(), Error> {
+        println!("raising exeception {:x}", number);
         let offset = (number as u16) << 2;
         self.push_word(system, offset)?;
         self.push_long(system, self.state.pc)?;

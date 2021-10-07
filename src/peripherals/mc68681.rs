@@ -48,13 +48,27 @@ const SR_RX_FULL: u8 = 0x02;
 const SR_RX_READY: u8 = 0x01;
 
 
+// Interrupt Status/Mask Bits (ISR/IVR)
+const ISR_INPUT_CHANGE: u8 = 0x80;
+const ISR_CH_B_BREAK_CHANGE: u8 = 0x40;
+const ISR_CH_B_RX_READY_FULL: u8 = 0x20;
+const ISR_CH_B_TX_READY: u8 = 0x10;
+const ISR_TIMER_CHANGE: u8 = 0x08;
+const ISR_CH_A_BREAK_CHANGE: u8 = 0x04;
+const ISR_CH_A_RX_READY_FULL: u8 = 0x02;
+const ISR_CH_A_TX_READY: u8 = 0x01;
+
+
 const DEV_NAME: &'static str = "mc68681";
 
 pub struct MC68681 {
     pub tty: Option<PtyMaster>,
     pub status: u8,
     pub input: u8,
+    pub int_mask: u8,
+    pub int_status: u8,
     pub int_vector: u8,
+    pub int_edge_trigger: u8,
     pub timer: u16,
 }
 
@@ -64,7 +78,10 @@ impl MC68681 {
             tty: None,
             status: 0x0C,
             input: 0,
+            int_mask: 0,
+            int_status: 0,
             int_vector: 0,
+            int_edge_trigger: 0,
             timer: 0,
         }
     }
@@ -89,7 +106,7 @@ impl MC68681 {
         }
     }
 
-    pub fn step_internal(&mut self, _system: &System) -> Result<(), Error> {
+    pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
         if !self.rx_ready() && self.tty.is_some() {
             let mut buf = [0; 1];
             let tty = self.tty.as_mut().unwrap();
@@ -104,6 +121,17 @@ impl MC68681 {
                     println!("ERROR: {:?}", err);
                 }
             }
+        }
+
+        // TODO this is a hack
+        if (system.clock % 10000) == 0 {
+            self.int_status |= ISR_TIMER_CHANGE;
+            self.int_edge_trigger = self.int_status;
+        }
+
+        if (self.int_edge_trigger & self.int_mask) != 0 {
+            system.trigger_interrupt(self.int_vector)?;
+            self.int_edge_trigger = 0;
         }
 
         Ok(())
@@ -133,6 +161,10 @@ impl Addressable for MC68681 {
                 data[0] = self.input;
                 self.status &= !SR_RX_READY;
             },
+            REG_ISR_RD => {
+                data[0] = self.int_status;
+                self.int_status = 0;
+            },
             _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); data[0] = self.input; },
         }
 
@@ -153,6 +185,9 @@ impl Addressable for MC68681 {
             },
             REG_CTLR_WR => {
                 self.timer = (self.timer & 0xFF00) | (data[0] as u16);
+            },
+            REG_IMR_WR => {
+                self.int_mask = data[0];
             },
             REG_IVR_WR => {
                 self.int_vector = data[0];
