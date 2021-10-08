@@ -1,4 +1,9 @@
 
+* add a Signal struct which records its val and prev val, and can be used for state change things like interrupts
+  the int controller coild have multiple for different prioritis, and could maybe be activated by multiple sources
+* the remaining issue with the shell is that putchar_buffered requires the TX interrupt and TX enable/disable commands to work in order to trigger a write
+
+
 * how will you add the cpu, which is not addressable, but is steppable, and also interruptable... what else?
 * should you simulate bus arbitration?
 * if the bus had an Rc<RefCell<Box<dyn AddressableDevice>>>, then it could be like AddressSpace used to be, with it's own Addressable, and then you could

@@ -15,7 +15,7 @@ pub trait Steppable {
 }
 
 pub trait Interruptable {
-    fn handle_interrupt(&mut self, system: &System, number: u8) -> Result<(), Error>;
+    fn interrupt_state_change(&mut self, system: &System, state: bool, priority: u8, number: u8) -> Result<(), Error>;
 }
 
 pub trait AddressableDevice: Addressable + Steppable { }
@@ -86,14 +86,15 @@ impl System {
         Ok(())
     }
 
-    pub fn trigger_interrupt(&self, number: u8) -> Result<(), Error> {
+    pub fn change_interrupt_state(&self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
         // TODO how does this find the specific device it's connected to?
 
         // TODO for the time being, this will find the first device to handle it or fail
+        println!("system: interrupt state changed to {} ({})", state, priority);
         for dev in &self.devices {
             match dev {
                 Device::Interruptable(dev) => {
-                    return dev.borrow_mut().handle_interrupt(&self, number);
+                    return dev.borrow_mut().interrupt_state_change(&self, state, priority, number);
                 },
                 _ => { },
             }
@@ -112,7 +113,7 @@ impl System {
 }
 
 pub struct InterruptController {
-    
+
 }
 
 

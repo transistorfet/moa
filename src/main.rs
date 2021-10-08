@@ -38,10 +38,9 @@ fn main() {
     let mut cpu = MC68010::new();
 
     //cpu.enable_tracing();
-    //cpu.add_breakpoint(0x0c94);
-    //cpu.add_breakpoint(0x103234);
-    //cpu.add_breakpoint(0x224);
-    //cpu.add_breakpoint(0x106ed2);
+    //cpu.add_breakpoint(0x10781a);
+    //cpu.add_breakpoint(0x10bc9c);
+    //cpu.add_breakpoint(0x106a94);
 
     system.add_interruptable_device(wrap_interruptable(cpu)).unwrap();
     loop {
@@ -56,13 +55,13 @@ fn main() {
 
     /*
     // TODO I need to add a way to decode and dump the assembly for a section of code, in debugger
-    cpu.state.pc = 0x00100000;
-    cpu.state.pc = 0x0010c270;
+    cpu.enable_tracing();
+    cpu.state.pc = 0x0010781a;
     while cpu.is_running() {
-        match cpu.decode_next(&mut space) {
+        match cpu.decode_next(&system) {
             Ok(()) => { },
             Err(err) => {
-                cpu.dump_state(&mut space);
+                cpu.dump_state(&system);
                 panic!("{:?}", err);
             },
         }

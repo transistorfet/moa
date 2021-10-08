@@ -74,13 +74,19 @@ impl Addressable for AtaDevice {
                 let offset = ((self.selected_sector * ATA_SECTOR_SIZE) + (ATA_SECTOR_SIZE -1 - self.selected_count)) as usize;
                 data[0] = self.contents[offset];
                 data[1] = self.contents[offset + 1];
-println!(">> {:x}{:x}", data[0], data[1]);
+                if self.selected_count == 0 {
+                    self.selected_sector = 0;
+                    self.selected_count = 0;
+                }
             },
             ATA_REG_DATA_BYTE => {
                 self.selected_count -= 1;
                 let offset = ((self.selected_sector * ATA_SECTOR_SIZE) + (ATA_SECTOR_SIZE - 1 - self.selected_count)) as usize;
                 data[0] = self.contents[offset];
-println!(">> {:x}", data[0]);
+                if self.selected_count == 0 {
+                    self.selected_sector = 0;
+                    self.selected_count = 0;
+                }
             },
             ATA_REG_STATUS => {
                 data[0] = ATA_ST_DATA_READY;

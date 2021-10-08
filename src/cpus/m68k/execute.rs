@@ -17,7 +17,7 @@ use super::decode::{
     sign_extend_to_long
 };
 
-use super::state::{MC68010, Status, Flags};
+use super::state::{MC68010, Status, Flags, InterruptPriority};
 
 impl Steppable for MC68010 {
     fn step(&mut self, system: &System) -> Result<Clock, Error> {
@@ -31,8 +31,19 @@ impl Steppable for MC68010 {
 }
 
 impl Interruptable for MC68010 {
-    fn handle_interrupt(&mut self, _system: &System, number: u8) -> Result<(), Error> {
-        self.state.status = Status::PendingExecption(number);
+    fn interrupt_state_change(&mut self, system: &System, state: bool, priority: u8, number: u8) -> Result<(), Error> {
+        let ipl = if state {
+            InterruptPriority::from_u8(priority)
+        } else {
+            InterruptPriority::NoInterrupt
+        };
+
+        if ipl != self.state.pending_ipl {
+            self.state.pending_ipl = ipl;
+            if ipl != InterruptPriority::NoInterrupt {
+                self.state.ipl_ack_num = number;
+            }
+        }
         Ok(())
     }
 }
@@ -62,22 +73,40 @@ impl MC68010 {
                 self.execute_current(system)?;
                 self.timer.cycle.end(timer);
 
-                if (self.timer.cycle.events % 500) == 0 {
-                    println!("{}", self.timer);
-                }
+                //if (self.timer.cycle.events % 500) == 0 {
+                //    println!("{}", self.timer);
+                //}
+
+                self.check_pending_interrupts(system)?;
 
                 Ok(())
             },
-            Status::PendingExecption(num) => {
-                self.exception(system, num)?;
-                self.state.status = Status::Running;
-                Ok(())
-            }
         }
     }
 
+    pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), Error> {
+        let current_ipl = self.state.current_ipl as u8;
+        let pending_ipl = self.state.pending_ipl as u8;
+
+        if self.state.pending_ipl != InterruptPriority::NoInterrupt {
+            let priority_mask = ((self.state.sr & 0x700) >> 8) as u8;
+
+            if (pending_ipl >= priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
+                self.state.current_ipl = self.state.pending_ipl;
+                self.exception(system, self.state.ipl_ack_num)?;
+                return Ok(());
+            }
+        }
+
+        if pending_ipl < current_ipl {
+            self.state.current_ipl = self.state.pending_ipl;
+        }
+
+        Ok(())
+    }
+
     pub fn exception(&mut self, system: &System, number: u8) -> Result<(), Error> {
-        println!("raising exeception {:x}", number);
+        println!("raising exception {}", number);
         let offset = (number as u16) << 2;
         self.push_word(system, offset)?;
         self.push_long(system, self.state.pc)?;
@@ -133,7 +162,7 @@ impl MC68010 {
                 self.set_logic_flags(result, size);
             },
             Instruction::ANDtoCCR(value) => {
-                self.state.sr = self.state.sr | value as u16;
+                self.state.sr = self.state.sr | (value as u16);
             },
             Instruction::ANDtoSR(value) => {
                 self.state.sr = self.state.sr | value;
@@ -244,7 +273,7 @@ impl MC68010 {
                 self.set_logic_flags(result, size);
             },
             Instruction::EORtoCCR(value) => {
-                self.state.sr = self.state.sr ^ value as u16;
+                self.state.sr = self.state.sr ^ (value as u16);
             },
             Instruction::EORtoSR(value) => {
                 self.state.sr = self.state.sr ^ value;
@@ -431,7 +460,7 @@ impl MC68010 {
                 self.set_logic_flags(result, size);
             },
             Instruction::ORtoCCR(value) => {
-                self.state.sr = self.state.sr | value as u16;
+                self.state.sr = self.state.sr | (value as u16);
             },
             Instruction::ORtoSR(value) => {
                 self.state.sr = self.state.sr | value;

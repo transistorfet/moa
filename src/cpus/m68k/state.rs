@@ -29,13 +29,43 @@ pub const ERR_ILLEGAL_INSTRUCTION: u32 = 4;
 pub enum Status {
     Init,
     Running,
-    PendingExecption(u8),
     Stopped,
     Halted,
 }
 
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum InterruptPriority {
+    NoInterrupt = 0,
+    Level1 = 1,
+    Level2 = 2,
+    Level3 = 3,
+    Level4 = 4,
+    Level5 = 5,
+    Level6 = 6,
+    Level7 = 7,
+}
+
+impl InterruptPriority {
+    pub fn from_u8(priority: u8) -> InterruptPriority {
+        match priority {
+            0 => InterruptPriority::NoInterrupt,
+            1 => InterruptPriority::Level1,
+            2 => InterruptPriority::Level2,
+            3 => InterruptPriority::Level3,
+            4 => InterruptPriority::Level4,
+            5 => InterruptPriority::Level5,
+            6 => InterruptPriority::Level6,
+            _ => InterruptPriority::Level7,
+        }
+    }
+}
+
 pub struct MC68010State {
     pub status: Status,
+    pub current_ipl: InterruptPriority,
+    pub pending_ipl: InterruptPriority,
+    pub ipl_ack_num: u8,
 
     pub pc: u32,
     pub sr: u16,
@@ -51,6 +81,9 @@ impl MC68010State {
     pub fn new() -> MC68010State {
         MC68010State {
             status: Status::Init,
+            current_ipl: InterruptPriority::NoInterrupt,
+            pending_ipl: InterruptPriority::NoInterrupt,
+            ipl_ack_num: 0,
 
             pc: 0,
             sr: FLAGS_ON_RESET,

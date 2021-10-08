@@ -19,6 +19,14 @@ const REG_CSRA_WR: Address = 0x03;
 const REG_CRA_WR: Address = 0x05;
 const REG_TBA_WR: Address = 0x07;
 const REG_RBA_RD: Address = 0x07;
+
+const REG_MR1B_MR2B: Address = 0x700011;
+const REG_SRB_RD: Address = 0x700013;
+const REG_CSRB_WR: Address = 0x700013;
+const REG_CRB_WR: Address = 0x700015;
+const REG_TBB_WR: Address = 0x700017;
+const REG_RBB_RD: Address = 0x700017;
+
 const REG_ACR_WR: Address = 0x09;
 
 const REG_CTUR_WR: Address = 0x0D;
@@ -63,26 +71,47 @@ const DEV_NAME: &'static str = "mc68681";
 
 pub struct MC68681 {
     pub tty: Option<PtyMaster>,
-    pub status: u8,
-    pub input: u8,
+    pub acr: u8,
+    pub status_a: u8,
+    pub input_a: u8,
+    pub tx_a_enabled: bool,
+    pub rx_a_enabled: bool,
+    pub status_b: u8,
+    pub input_b: u8,
+    pub tx_b_enabled: bool,
+    pub rx_b_enabled: bool,
     pub int_mask: u8,
     pub int_status: u8,
     pub int_vector: u8,
-    pub int_edge_trigger: u8,
-    pub timer: u16,
+    pub is_interrupt: bool,
+    pub timer_preload: u16,
+    pub timer_count: u16,
+    pub is_timing: bool,
 }
 
 impl MC68681 {
     pub fn new() -> Self {
         MC68681 {
             tty: None,
-            status: 0x0C,
-            input: 0,
+            acr: 0,
+
+            status_a: 0,
+            input_a: 0,
+            tx_a_enabled: false,
+            rx_a_enabled: false,
+            status_b: 0,
+            input_b: 0,
+            tx_b_enabled: false,
+            rx_b_enabled: false,
+
             int_mask: 0,
             int_status: 0,
             int_vector: 0,
-            int_edge_trigger: 0,
-            timer: 0,
+            is_interrupt: false,
+
+            timer_preload: 0,
+            timer_count: 0,
+            is_timing: true,
         }
     }
 
@@ -107,14 +136,15 @@ impl MC68681 {
     }
 
     pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
-        if !self.rx_ready() && self.tty.is_some() {
+        if self.rx_a_enabled && !self.rx_ready() && self.tty.is_some() {
             let mut buf = [0; 1];
             let tty = self.tty.as_mut().unwrap();
             match tty.read(&mut buf) {
                 Ok(count) => {
                     println!("READ {:?}", count);
-                    self.input = buf[0];
-                    self.status |= SR_RX_READY;
+                    self.input_a = buf[0];
+                    self.status_a |= SR_RX_READY;
+                    self.int_status |= ISR_CH_A_RX_READY_FULL;
                 },
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => { },
                 Err(err) => {
@@ -123,22 +153,39 @@ impl MC68681 {
             }
         }
 
-        // TODO this is a hack
-        if (system.clock % 10000) == 0 {
-            self.int_status |= ISR_TIMER_CHANGE;
-            self.int_edge_trigger = self.int_status;
+        if self.is_timing {
+            self.timer_count = self.timer_count.wrapping_sub(1);
+
+            if self.timer_count == 0 {
+                self.int_status |= ISR_TIMER_CHANGE;
+                if (self.acr & 0x40) == 0 {
+                    self.is_timing = false;
+                } else {
+                    self.timer_count = self.timer_preload;
+                }
+            }
         }
 
-        if (self.int_edge_trigger & self.int_mask) != 0 {
-            system.trigger_interrupt(self.int_vector)?;
-            self.int_edge_trigger = 0;
-        }
+        self.check_interrupt_state(system)?;
 
         Ok(())
     }
 
+    fn check_interrupt_state(&mut self, system: &System) -> Result<(), Error> {
+        if !self.is_interrupt && (self.int_status & self.int_mask) != 0 {
+            self.is_interrupt = true;
+            system.change_interrupt_state(self.is_interrupt, 4, self.int_vector)?;
+        }
+
+        if self.is_interrupt && (self.int_status & self.int_mask) == 0 {
+            self.is_interrupt = false;
+            system.change_interrupt_state(self.is_interrupt, 4, self.int_vector)?;
+        }
+        Ok(())
+    }
+
     pub fn rx_ready(&self) -> bool {
-        (self.status & SR_RX_READY) != 0
+        (self.status_a & SR_RX_READY) != 0
     }
 }
 
@@ -150,41 +197,110 @@ impl Addressable for MC68681 {
     fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
         let mut data = vec![0; count];
 
-        // TODO this is temporary
-        //self.step();
+        if addr != REG_SRA_RD && addr != REG_SRB_RD {
+            println!("{}: reading from {:0x}", DEV_NAME, addr);
+        }
 
         match addr {
             REG_SRA_RD => {
-                data[0] = self.status
+                data[0] = self.status_a
             },
             REG_RBA_RD => {
-                data[0] = self.input;
-                self.status &= !SR_RX_READY;
+                data[0] = self.input_a;
+                self.status_a &= !SR_RX_READY;
+                self.int_status &= !ISR_CH_A_RX_READY_FULL;
+            },
+            REG_SRB_RD => {
+                data[0] = self.status_b
+            },
+            REG_RBB_RD => {
+                data[0] = self.input_b;
+                self.status_b &= !SR_RX_READY;
+                self.int_status &= !ISR_CH_B_RX_READY_FULL;
             },
             REG_ISR_RD => {
                 data[0] = self.int_status;
-                self.int_status = 0;
             },
-            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); data[0] = self.input; },
+            REG_START_RD => {
+                self.timer_count = self.timer_preload;
+                self.is_timing = true;
+            },
+            REG_STOP_RD => {
+                self.int_status &= !ISR_TIMER_CHANGE;
+                if (self.acr & 0x40) == 0 {
+                    // Counter Mode
+                    self.is_timing = false;
+                    self.timer_count = self.timer_preload;
+                } else {
+                    // Timer Mode
+                    // Do nothing except reset the ISR bit
+                }
+            },
+            _ => { },
         }
 
         Ok(data)
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+        println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr);
         match addr {
             //REG_MR1A_MR2A | REG_ACR_WR => {
             //    // TODO config
             //},
+            REG_ACR_WR => {
+                self.acr = data[0];
+            }
             REG_TBA_WR => {
-                println!("{}: {}", DEV_NAME, data[0] as char);
+                println!("{}a: write {}", DEV_NAME, data[0] as char);
                 self.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
             },
+            REG_CRA_WR => {
+                let rx_cmd = (data[0] & 0x03);
+                if rx_cmd == 0b01 {
+                    self.rx_a_enabled = true;
+                } else if rx_cmd == 0b10 {
+                    self.rx_a_enabled = false;
+                }
+
+                let tx_cmd = ((data[0] & 0x0C) >> 2);
+                if tx_cmd == 0b01 {
+                    self.tx_a_enabled = true;
+                    self.status_a |= SR_TX_READY | SR_TX_EMPTY;
+                    self.int_status |= ISR_CH_A_TX_READY;
+                } else if tx_cmd == 0b10 {
+                    self.tx_a_enabled = false;
+                    self.status_a &= !(SR_TX_READY | SR_TX_EMPTY);
+                    self.int_status &= !ISR_CH_A_TX_READY;
+                }
+            },
+            REG_TBB_WR => {
+                println!("{}b: write {:x}", DEV_NAME, data[0]);
+            },
+            REG_CRB_WR => {
+                let rx_cmd = (data[0] & 0x03);
+                if rx_cmd == 0b01 {
+                    self.rx_b_enabled = true;
+                } else if rx_cmd == 0b10 {
+                    self.rx_b_enabled = false;
+                }
+
+                let tx_cmd = ((data[0] & 0x0C) >> 2);
+                if tx_cmd == 0b01 {
+                    self.tx_b_enabled = true;
+                    self.status_b |= SR_TX_READY | SR_TX_EMPTY;
+                    self.int_status |= ISR_CH_B_TX_READY;
+                } else if tx_cmd == 0b10 {
+                    self.tx_b_enabled = false;
+                    self.status_b &= !(SR_TX_READY | SR_TX_EMPTY);
+                    self.int_status &= !ISR_CH_B_TX_READY;
+                }
+            },
             REG_CTUR_WR => {
-                self.timer = (self.timer & 0x00FF) | ((data[0] as u16) << 8);
+                self.timer_preload = (self.timer_preload & 0x00FF) | ((data[0] as u16) << 8);
             },
             REG_CTLR_WR => {
-                self.timer = (self.timer & 0xFF00) | (data[0] as u16);
+                self.timer_preload = (self.timer_preload & 0xFF00) | (data[0] as u16);
             },
             REG_IMR_WR => {
                 self.int_mask = data[0];
@@ -192,7 +308,7 @@ impl Addressable for MC68681 {
             REG_IVR_WR => {
                 self.int_vector = data[0];
             },
-            _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+            _ => { },
         }
         Ok(())
     }

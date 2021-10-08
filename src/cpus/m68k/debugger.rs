@@ -124,6 +124,7 @@ impl MC68010 {
                 return Ok(true);
             },
             "c" | "continue" => {
+                self.debugger.use_tracing = false;
                 self.debugger.use_debugger = false;
                 return Ok(true);
             },
