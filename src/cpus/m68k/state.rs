@@ -1,7 +1,7 @@
 
+use crate::system::System;
+use crate::memory::Address;
 use crate::timers::CpuTimer;
-use crate::memory::{Address};
-use crate::system::{System};
 
 use super::decode::M68kDecoder;
 use super::debugger::M68kDebugger;

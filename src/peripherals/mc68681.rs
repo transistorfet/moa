@@ -3,13 +3,14 @@ use std::process::Command;
 use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
 
-use nix::pty::{self, PtyMaster};
 use nix::fcntl::OFlag;
 use nix::unistd::sleep;
+use nix::pty::{self, PtyMaster};
 use nix::fcntl::{fcntl, FcntlArg};
 
 use crate::error::Error;
-use crate::system::{Clock, Steppable, System};
+use crate::system::System;
+use crate::devices::{Clock, Steppable};
 use crate::memory::{Address, Addressable};
 
 

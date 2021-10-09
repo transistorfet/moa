@@ -2,8 +2,9 @@
 use std::fs;
 
 use crate::error::Error;
+use crate::system::System;
 use crate::memory::{Address, Addressable};
-use crate::system::{Clock, Steppable, System};
+use crate::devices::{Clock, Steppable};
 
 
 const ATA_REG_DEV_CONTROL: Address      = 0x1D;

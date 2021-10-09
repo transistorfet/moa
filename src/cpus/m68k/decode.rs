@@ -2,8 +2,9 @@
 use std::fmt;
 
 use crate::error::Error;
-use crate::memory::{Address};
-use crate::system::{System, AddressableDeviceRefMut};
+use crate::system::System;
+use crate::memory::Address;
+use crate::devices::AddressableDeviceRefMut;
 
 use super::state::ERR_ILLEGAL_INSTRUCTION;
 

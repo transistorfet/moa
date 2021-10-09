@@ -1,6 +1,7 @@
 
+use crate::system::System;
+use crate::devices::{Steppable, wrap_addressable};
 use crate::memory::{Address, Addressable, MemoryBlock};
-use crate::system::{System, Steppable, wrap_addressable};
 
 use super::state::MC68010;
 use super::decode::Instruction;

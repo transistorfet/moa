@@ -3,15 +3,18 @@
 mod error;
 mod memory;
 mod timers;
+mod devices;
+mod interrupts;
 mod cpus;
 mod peripherals;
 mod system;
 
+use crate::system::System;
 use crate::memory::MemoryBlock;
 use crate::cpus::m68k::MC68010;
 use crate::peripherals::ata::AtaDevice;
 use crate::peripherals::mc68681::MC68681;
-use crate::system::{System, wrap_addressable, wrap_interruptable};
+use crate::devices::{wrap_addressable, wrap_interruptable};
 
 fn main() {
     let mut system = System::new();
