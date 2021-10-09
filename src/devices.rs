@@ -16,7 +16,7 @@ pub trait Steppable {
 }
 
 pub trait Interruptable {
-    fn interrupt_state_change(&mut self, system: &System, state: bool, priority: u8, number: u8) -> Result<(), Error>;
+    fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error>;
 }
 
 pub trait AddressableDevice: Addressable + Steppable { }

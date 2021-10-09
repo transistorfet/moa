@@ -1,5 +1,8 @@
 
+use std::iter;
+
 use crate::error::Error;
+use crate::devices::{InterruptableDeviceBox};
 
 
 pub struct Signal {
@@ -15,12 +18,12 @@ impl Signal {
         }
     }
 
-    pub fn check_change<F>(&mut self, f: F) -> Result<(), Error> where F: Fn(bool) -> Result<(), Error> {
+    pub fn has_changed(&mut self) -> Option<bool> {
         if self.current != self.previous {
             self.previous = self.current;
-            f(self.current)
+            Some(self.current)
         } else {
-            Ok(())
+            None
         }
     }
 
@@ -32,7 +35,50 @@ impl Signal {
 
 
 pub struct InterruptController {
-
+    pub target: Option<InterruptableDeviceBox>,
+    pub priority: Vec<Signal>,
 }
 
+impl InterruptController {
+    pub fn new() -> InterruptController {
+        InterruptController {
+            target: None,
+            priority: iter::repeat_with(|| Signal::new()).take(7).collect::<Vec<_>>(), //vec![Signal::new(); 7],
+        }
+    }
+
+    pub fn set_target(&mut self, dev: InterruptableDeviceBox) -> Result<(), Error> {
+        if self.target.is_some() {
+            return Err(Error::new("Interruptable device already set, and interrupt controller only supports one receiver"));
+        }
+
+        self.target = Some(dev);
+        Ok(())
+    }
+
+    pub fn set(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
+        let signal = &mut self.priority[priority as usize];
+        signal.set(state);
+        match signal.has_changed() {
+            Some(value) => self.notify_interrupt_state(value, priority, number)?,
+            None => { },
+        }
+        Ok(())
+    }
+
+    fn notify_interrupt_state(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
+        // TODO how does this find the specific device it's connected to?
+        // TODO for the time being, this will find the first device to handle it or fail
+
+        println!("interrupts: priority {} state changed to {}", priority, state);
+        match &self.target {
+            Some(dev) => {
+                Ok(dev.borrow_mut().interrupt_state_change(state, priority, number)?)
+            },
+            None => {
+                Err(Error::new(&format!("unhandled interrupt: {:x}", number)))
+            },
+        }
+    }
+}
 

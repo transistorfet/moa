@@ -32,7 +32,7 @@ impl Steppable for MC68010 {
 }
 
 impl Interruptable for MC68010 {
-    fn interrupt_state_change(&mut self, system: &System, state: bool, priority: u8, number: u8) -> Result<(), Error> {
+    fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
         let ipl = if state {
             InterruptPriority::from_u8(priority)
         } else {

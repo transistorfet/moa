@@ -136,6 +136,10 @@ impl MC68681 {
         }
     }
 
+    pub fn rx_ready(&self) -> bool {
+        (self.status_a & SR_RX_READY) != 0
+    }
+
     pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
         if self.rx_a_enabled && !self.rx_ready() && self.tty.is_some() {
             let mut buf = [0; 1];
@@ -173,20 +177,7 @@ impl MC68681 {
     }
 
     fn check_interrupt_state(&mut self, system: &System) -> Result<(), Error> {
-        if !self.is_interrupt && (self.int_status & self.int_mask) != 0 {
-            self.is_interrupt = true;
-            system.change_interrupt_state(self.is_interrupt, 4, self.int_vector)?;
-        }
-
-        if self.is_interrupt && (self.int_status & self.int_mask) == 0 {
-            self.is_interrupt = false;
-            system.change_interrupt_state(self.is_interrupt, 4, self.int_vector)?;
-        }
-        Ok(())
-    }
-
-    pub fn rx_ready(&self) -> bool {
-        (self.status_a & SR_RX_READY) != 0
+        system.get_interrupt_controller().set((self.int_status & self.int_mask) != 0, 4, self.int_vector)
     }
 }
 
