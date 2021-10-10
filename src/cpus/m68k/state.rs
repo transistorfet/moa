@@ -6,6 +6,15 @@ use crate::timers::CpuTimer;
 use super::decode::M68kDecoder;
 use super::debugger::M68kDebugger;
 
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum M68kType {
+    MC68000,
+    MC68010,
+    MC68020,
+    MC68030,
+}
+
 const FLAGS_ON_RESET: u16 = 0x2700;
 
 #[repr(u16)]
@@ -16,6 +25,8 @@ pub enum Flags {
     Zero        = 0x0004,
     Negative    = 0x0008,
     Extend      = 0x0010,
+    IntMask     = 0x0700,
+    Interrupt   = 0x1000,
     Supervisor  = 0x2000,
     Tracing     = 0x8000,
 }
@@ -61,7 +72,7 @@ impl InterruptPriority {
     }
 }
 
-pub struct MC68010State {
+pub struct M68kState {
     pub status: Status,
     pub current_ipl: InterruptPriority,
     pub pending_ipl: InterruptPriority,
@@ -77,9 +88,9 @@ pub struct MC68010State {
     pub vbr: u32,
 }
 
-impl MC68010State {
-    pub fn new() -> MC68010State {
-        MC68010State {
+impl M68kState {
+    pub fn new() -> M68kState {
+        M68kState {
             status: Status::Init,
             current_ipl: InterruptPriority::NoInterrupt,
             pending_ipl: InterruptPriority::NoInterrupt,
@@ -97,26 +108,28 @@ impl MC68010State {
     }
 }
 
-pub struct MC68010 {
-    pub state: MC68010State,
+pub struct M68k {
+    pub cputype: M68kType,
+    pub state: M68kState,
     pub decoder: M68kDecoder,
     pub debugger: M68kDebugger,
     pub timer: CpuTimer,
 }
 
-impl MC68010 {
-    pub fn new() -> MC68010 {
-        MC68010 {
-            state: MC68010State::new(),
-            decoder: M68kDecoder::new(0, 0),
+impl M68k {
+    pub fn new(cputype: M68kType) -> M68k {
+        M68k {
+            cputype,
+            state: M68kState::new(),
+            decoder: M68kDecoder::new(cputype, 0, 0),
             debugger: M68kDebugger::new(),
             timer: CpuTimer::new(),
         }
     }
 
     pub fn reset(&mut self) {
-        self.state = MC68010State::new();
-        self.decoder = M68kDecoder::new(0, 0);
+        self.state = M68kState::new();
+        self.decoder = M68kDecoder::new(self.cputype, 0, 0);
         self.debugger = M68kDebugger::new();
     }
 

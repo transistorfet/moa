@@ -18,9 +18,9 @@ use super::decode::{
     sign_extend_to_long
 };
 
-use super::state::{MC68010, Status, Flags, InterruptPriority};
+use super::state::{M68k, Status, Flags, InterruptPriority};
 
-impl Steppable for MC68010 {
+impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<Clock, Error> {
         self.step_internal(system)?;
         Ok(1)
@@ -31,7 +31,7 @@ impl Steppable for MC68010 {
     }
 }
 
-impl Interruptable for MC68010 {
+impl Interruptable for M68k {
     fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
         let ipl = if state {
             InterruptPriority::from_u8(priority)
@@ -49,7 +49,7 @@ impl Interruptable for MC68010 {
     }
 }
 
-impl MC68010 {
+impl M68k {
     pub fn is_running(&self) -> bool {
         self.state.status != Status::Stopped
     }
@@ -74,9 +74,9 @@ impl MC68010 {
                 self.execute_current(system)?;
                 self.timer.cycle.end(timer);
 
-                //if (self.timer.cycle.events % 500) == 0 {
-                //    println!("{}", self.timer);
-                //}
+                if (self.timer.cycle.events % 500) == 0 {
+                    println!("{}", self.timer);
+                }
 
                 self.check_pending_interrupts(system)?;
 
@@ -90,7 +90,7 @@ impl MC68010 {
         let pending_ipl = self.state.pending_ipl as u8;
 
         if self.state.pending_ipl != InterruptPriority::NoInterrupt {
-            let priority_mask = ((self.state.sr & 0x700) >> 8) as u8;
+            let priority_mask = ((self.state.sr & Flags::IntMask as u16) >> 8) as u8;
 
             if (pending_ipl >= priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
                 self.state.current_ipl = self.state.pending_ipl;
@@ -122,7 +122,7 @@ impl MC68010 {
         self.check_breakpoints();
 
         let timer = self.timer.decode.start();
-        self.decoder = M68kDecoder::decode_at(system, self.state.pc)?;
+        self.decoder.decode_at(system, self.state.pc)?;
         self.timer.decode.end(timer);
 
         if self.debugger.use_tracing {

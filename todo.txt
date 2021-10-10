@@ -1,10 +1,22 @@
 
+* make functions to print assembly out	
 * how can you add 68030 support?  Should it be all one module that checks maybe during decode if the instruction is supported?  Should it 'inherit' from the MC68010 object
+* make tests for each instruction
+
+* unimplemented: ADDX, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SUBX
+* undecoded: ADDX, SUBX, ABCD, SBCD
+* modify execution for >=MC68020: DIVSL, DIVUL, EXTB, LINK, MOVEM, MULSL, MULUL, RTM, TRAPcc, UNPK
+* implement the full extension word for MC68020+
+
+* >=MC68020 instructions: BFCHG, BFCLR, BFEXTS, BFEXTU, BFFFO, BFINS, BFSET, BFTST, CALLM, CAS, CAS2, CHK2, CMP2, PACK
+* Coprocessor instructions: cpBcc, cpDBcc, cpGEN, cpScc, cpTRAPcc
+
+
+* should you simulate clock ticks, and only step devices when they next request it
 * how can you have multple CPUs
 * should you simulate bus arbitration?
 
 
 * check all instructions in the docs
-* make tests for each instruction
 
  

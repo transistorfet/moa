@@ -5,5 +5,5 @@ pub mod execute;
 pub mod debugger;
 pub mod tests;
 
-pub use self::state::MC68010;
+pub use self::state::{M68k, M68kType};
 

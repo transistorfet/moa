@@ -3,7 +3,7 @@ use crate::error::Error;
 use crate::system::System;
 use crate::memory::{Address, Addressable};
 
-use super::state::MC68010;
+use super::state::M68k;
 
 pub struct StackTracer {
     pub calls: Vec<u32>,
@@ -46,7 +46,7 @@ impl M68kDebugger {
     }
 }
 
-impl MC68010 {
+impl M68k {
     pub fn enable_tracing(&mut self) {
         self.debugger.use_tracing = true;
     }

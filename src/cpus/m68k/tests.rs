@@ -3,13 +3,13 @@ use crate::system::System;
 use crate::devices::{Steppable, wrap_addressable};
 use crate::memory::{Address, Addressable, MemoryBlock};
 
-use super::state::MC68010;
 use super::decode::Instruction;
+use super::state::{M68k, M68kType};
 
 const INIT_STACK: Address = 0x00002000;
 const INIT_ADDR: Address = 0x00000010;
 
-fn init_test() -> (MC68010, System) {
+fn init_test() -> (M68k, System) {
     let mut system = System::new();
 
     // Insert basic initialization
@@ -19,7 +19,7 @@ fn init_test() -> (MC68010, System) {
     system.get_bus().write_beu32(0, INIT_STACK as u32).unwrap();
     system.get_bus().write_beu32(4, INIT_ADDR as u32).unwrap();
 
-    let mut cpu = MC68010::new();
+    let mut cpu = M68k::new(M68kType::MC68010);
     cpu.step(&system).unwrap();
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.msp, INIT_STACK as u32);
