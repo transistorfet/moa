@@ -53,7 +53,8 @@ fn main() {
             Ok(()) => { },
             Err(err) => {
                 system.exit_error();
-                panic!("{:?}", err);
+                println!("{:?}", err);
+                break;
             },
         }
     }

@@ -1,22 +1,10 @@
 
-* add a Signal struct which records its val and prev val, and can be used for state change things like interrupts
-  the int controller coild have multiple for different prioritis, and could maybe be activated by multiple sources
-* the remaining issue with the shell is that putchar_buffered requires the TX interrupt and TX enable/disable commands to work in order to trigger a write
-
-
-* how will you add the cpu, which is not addressable, but is steppable, and also interruptable... what else?
+* how can you add 68030 support?  Should it be all one module that checks maybe during decode if the instruction is supported?  Should it 'inherit' from the MC68010 object
+* how can you have multple CPUs
 * should you simulate bus arbitration?
-* if the bus had an Rc<RefCell<Box<dyn AddressableDevice>>>, then it could be like AddressSpace used to be, with it's own Addressable, and then you could
-  access one of multiple busses to do an op on it, rather than a single bus per machine
-* can you get rid of the duplicate read/write functions in System?
-
-* how do you pass in a mutable system to a mutable device?  At the very least, I need the AddressSpace, but that needs access to the devices/memory segments.
-  I could make System contain refcells for submutability
-
 
 
 * check all instructions in the docs
-
 * make tests for each instruction
 
  
