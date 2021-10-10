@@ -261,8 +261,11 @@ impl MC68010 {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, Size::Long)?;
                 let result = match sign {
-                    Sign::Signed => ((existing as i16 % value as i16) as u32) << 16 | (0xFFFF & (existing as i16 / value as i16) as u32),
-                    Sign::Unsigned => ((existing as u16 % value as u16) as u32) << 16 | (0xFFFF & (existing as u16 / value as u16) as u32),
+                    Sign::Signed => {
+                        let value = sign_extend_to_long(value, size) as u32;
+                        ((existing % value) << 16) | (0xFFFF & (existing / value))
+                    },
+                    Sign::Unsigned => ((existing % value)  << 16) | (0xFFFF & (existing / value)),
                 };
                 self.set_target_value(system, dest, result, Size::Long)?;
             },

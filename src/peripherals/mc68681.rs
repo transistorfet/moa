@@ -1,10 +1,8 @@
 
-use std::process::Command;
 use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
 
 use nix::fcntl::OFlag;
-use nix::unistd::sleep;
 use nix::pty::{self, PtyMaster};
 use nix::fcntl::{fcntl, FcntlArg};
 
@@ -21,12 +19,12 @@ const REG_CRA_WR: Address = 0x05;
 const REG_TBA_WR: Address = 0x07;
 const REG_RBA_RD: Address = 0x07;
 
-const REG_MR1B_MR2B: Address = 0x700011;
-const REG_SRB_RD: Address = 0x700013;
-const REG_CSRB_WR: Address = 0x700013;
-const REG_CRB_WR: Address = 0x700015;
-const REG_TBB_WR: Address = 0x700017;
-const REG_RBB_RD: Address = 0x700017;
+const REG_MR1B_MR2B: Address = 0x11;
+const REG_SRB_RD: Address = 0x13;
+const REG_CSRB_WR: Address = 0x13;
+const REG_CRB_WR: Address = 0x15;
+const REG_TBB_WR: Address = 0x17;
+const REG_RBB_RD: Address = 0x17;
 
 const REG_ACR_WR: Address = 0x09;
 
@@ -70,21 +68,95 @@ const ISR_CH_A_TX_READY: u8 = 0x01;
 
 const DEV_NAME: &'static str = "mc68681";
 
-pub struct MC68681 {
+pub struct MC68681Port {
     pub tty: Option<PtyMaster>,
+    pub status: u8,
+    pub input: u8,
+    pub tx_enabled: bool,
+    pub rx_enabled: bool,
+}
+
+impl MC68681Port {
+    pub fn new() -> MC68681Port {
+        MC68681Port {
+            tty: None,
+            status: 0,
+            input: 0,
+            tx_enabled: false,
+            rx_enabled: false,
+        }
+    }
+
+    pub fn open(&mut self) -> Result<String, Error> {
+        let master = pty::posix_openpt(OFlag::O_RDWR).and_then(|master| {
+            pty::grantpt(&master)?;
+            pty::unlockpt(&master)?;
+            fcntl(master.as_raw_fd(), FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
+            Ok(master)
+        }).map_err(|_| Error::new("Error opening new pseudoterminal"))?;
+
+        let name = unsafe { pty::ptsname(&master).map_err(|_| Error::new("Unable to get pty name"))? };
+        println!("{}: opening pts {}", DEV_NAME, name);
+        self.tty = Some(master);
+        Ok(name)
+    }
+
+    pub fn rx_ready(&self) -> bool {
+        (self.status & SR_RX_READY) != 0
+    }
+
+    pub fn check_read(&mut self) -> Result<bool, Error> {
+        if self.rx_enabled && !self.rx_ready() && self.tty.is_some() {
+            let mut buf = [0; 1];
+            let tty = self.tty.as_mut().unwrap();
+            match tty.read(&mut buf) {
+                Ok(count) => {
+                    println!("READ {:?}", count);
+                    self.input = buf[0];
+                    self.status |= SR_RX_READY;
+                    return Ok(true);
+                },
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => { },
+                Err(err) => {
+                    println!("ERROR: {:?}", err);
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    pub fn handle_command(&mut self, data: u8) -> Option<bool> {
+        let rx_cmd = data& 0x03;
+        if rx_cmd == 0b01 {
+            self.rx_enabled = true;
+        } else if rx_cmd == 0b10 {
+            self.rx_enabled = false;
+        }
+
+        let tx_cmd = (data & 0x0C) >> 2;
+        if tx_cmd == 0b01 {
+            self.tx_enabled = true;
+            self.status |= SR_TX_READY | SR_TX_EMPTY;
+            return Some(true);
+        } else if tx_cmd == 0b10 {
+            self.tx_enabled = false;
+            self.status &= !(SR_TX_READY | SR_TX_EMPTY);
+            return Some(false);
+        }
+
+        None
+    }
+}
+
+pub struct MC68681 {
     pub acr: u8,
-    pub status_a: u8,
-    pub input_a: u8,
-    pub tx_a_enabled: bool,
-    pub rx_a_enabled: bool,
-    pub status_b: u8,
-    pub input_b: u8,
-    pub tx_b_enabled: bool,
-    pub rx_b_enabled: bool,
+    pub port_a: MC68681Port,
+    pub port_b: MC68681Port,
+
     pub int_mask: u8,
     pub int_status: u8,
     pub int_vector: u8,
-    pub is_interrupt: bool,
+
     pub timer_preload: u16,
     pub timer_count: u16,
     pub is_timing: bool,
@@ -93,22 +165,13 @@ pub struct MC68681 {
 impl MC68681 {
     pub fn new() -> Self {
         MC68681 {
-            tty: None,
             acr: 0,
-
-            status_a: 0,
-            input_a: 0,
-            tx_a_enabled: false,
-            rx_a_enabled: false,
-            status_b: 0,
-            input_b: 0,
-            tx_b_enabled: false,
-            rx_b_enabled: false,
+            port_a: MC68681Port::new(),
+            port_b: MC68681Port::new(),
 
             int_mask: 0,
             int_status: 0,
             int_vector: 0,
-            is_interrupt: false,
 
             timer_preload: 0,
             timer_count: 0,
@@ -116,46 +179,13 @@ impl MC68681 {
         }
     }
 
-    pub fn open(&mut self) -> Result<(), Error> {
-        let result = pty::posix_openpt(OFlag::O_RDWR).and_then(|master| {
-            pty::grantpt(&master).and_then(|_| pty::unlockpt(&master)).and_then(|_| Ok(master))
-        });
-
-        match result {
-            Ok(master) => {
-                let name = unsafe { pty::ptsname(&master).map_err(|_| Error::new("Unable to get pty name"))? };
-                println!("Open {}", name);
-                fcntl(master.as_raw_fd(), FcntlArg::F_SETFL(OFlag::O_NONBLOCK)).unwrap();
-                self.tty = Some(master);
-
-                Command::new("x-terminal-emulator").arg("-e").arg(&format!("pyserial-miniterm {}", name)).spawn().unwrap();
-                sleep(1);
-                Ok(())
-            },
-            Err(_) => Err(Error::new("Error opening new pseudoterminal")),
-        }
-    }
-
-    pub fn rx_ready(&self) -> bool {
-        (self.status_a & SR_RX_READY) != 0
-    }
-
     pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
-        if self.rx_a_enabled && !self.rx_ready() && self.tty.is_some() {
-            let mut buf = [0; 1];
-            let tty = self.tty.as_mut().unwrap();
-            match tty.read(&mut buf) {
-                Ok(count) => {
-                    println!("READ {:?}", count);
-                    self.input_a = buf[0];
-                    self.status_a |= SR_RX_READY;
-                    self.int_status |= ISR_CH_A_RX_READY_FULL;
-                },
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => { },
-                Err(err) => {
-                    println!("ERROR: {:?}", err);
-                }
-            }
+        if self.port_a.check_read()? {
+            self.int_status |= ISR_CH_A_RX_READY_FULL;
+        }
+
+        if self.port_b.check_read()? {
+            self.int_status |= ISR_CH_B_RX_READY_FULL;
         }
 
         if self.is_timing {
@@ -174,6 +204,10 @@ impl MC68681 {
         self.check_interrupt_state(system)?;
 
         Ok(())
+    }
+
+    fn set_interrupt_flag(&mut self, flag: u8, value: bool) {
+        self.int_status = (self.int_status & !flag) | (if value { flag } else { 0 });
     }
 
     fn check_interrupt_state(&mut self, system: &System) -> Result<(), Error> {
@@ -195,19 +229,19 @@ impl Addressable for MC68681 {
 
         match addr {
             REG_SRA_RD => {
-                data[0] = self.status_a
+                data[0] = self.port_a.status
             },
             REG_RBA_RD => {
-                data[0] = self.input_a;
-                self.status_a &= !SR_RX_READY;
+                data[0] = self.port_a.input;
+                self.port_a.status &= !SR_RX_READY;
                 self.int_status &= !ISR_CH_A_RX_READY_FULL;
             },
             REG_SRB_RD => {
-                data[0] = self.status_b
+                data[0] = self.port_b.status
             },
             REG_RBB_RD => {
-                data[0] = self.input_b;
-                self.status_b &= !SR_RX_READY;
+                data[0] = self.port_b.input;
+                self.port_b.status &= !SR_RX_READY;
                 self.int_status &= !ISR_CH_B_RX_READY_FULL;
             },
             REG_ISR_RD => {
@@ -245,47 +279,22 @@ impl Addressable for MC68681 {
             }
             REG_TBA_WR => {
                 println!("{}a: write {}", DEV_NAME, data[0] as char);
-                self.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
+                self.port_a.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
             },
             REG_CRA_WR => {
-                let rx_cmd = (data[0] & 0x03);
-                if rx_cmd == 0b01 {
-                    self.rx_a_enabled = true;
-                } else if rx_cmd == 0b10 {
-                    self.rx_a_enabled = false;
-                }
-
-                let tx_cmd = ((data[0] & 0x0C) >> 2);
-                if tx_cmd == 0b01 {
-                    self.tx_a_enabled = true;
-                    self.status_a |= SR_TX_READY | SR_TX_EMPTY;
-                    self.int_status |= ISR_CH_A_TX_READY;
-                } else if tx_cmd == 0b10 {
-                    self.tx_a_enabled = false;
-                    self.status_a &= !(SR_TX_READY | SR_TX_EMPTY);
-                    self.int_status &= !ISR_CH_A_TX_READY;
+                match self.port_a.handle_command(data[0]) {
+                    Some(value) => self.set_interrupt_flag(ISR_CH_A_TX_READY, value),
+                    None => { },
                 }
             },
             REG_TBB_WR => {
                 println!("{}b: write {:x}", DEV_NAME, data[0]);
+                self.port_b.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
             },
             REG_CRB_WR => {
-                let rx_cmd = (data[0] & 0x03);
-                if rx_cmd == 0b01 {
-                    self.rx_b_enabled = true;
-                } else if rx_cmd == 0b10 {
-                    self.rx_b_enabled = false;
-                }
-
-                let tx_cmd = ((data[0] & 0x0C) >> 2);
-                if tx_cmd == 0b01 {
-                    self.tx_b_enabled = true;
-                    self.status_b |= SR_TX_READY | SR_TX_EMPTY;
-                    self.int_status |= ISR_CH_B_TX_READY;
-                } else if tx_cmd == 0b10 {
-                    self.tx_b_enabled = false;
-                    self.status_b &= !(SR_TX_READY | SR_TX_EMPTY);
-                    self.int_status &= !ISR_CH_B_TX_READY;
+                match self.port_b.handle_command(data[0]) {
+                    Some(value) => self.set_interrupt_flag(ISR_CH_B_TX_READY, value),
+                    None => { },
                 }
             },
             REG_CTUR_WR => {

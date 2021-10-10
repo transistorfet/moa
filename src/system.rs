@@ -1,11 +1,10 @@
 
-use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
 
 use crate::error::Error;
 use crate::interrupts::InterruptController;
-use crate::memory::{Address, Addressable, Bus};
-use crate::devices::{Device, Steppable, AddressableDeviceBox, InterruptableDeviceBox, Clock};
+use crate::memory::{Address, Bus};
+use crate::devices::{Device, AddressableDeviceBox, InterruptableDeviceBox, Clock};
 
 
 pub struct System {
@@ -42,7 +41,7 @@ impl System {
     }
 
     pub fn add_interruptable_device(&mut self, device: InterruptableDeviceBox) -> Result<(), Error> {
-        self.interrupt_controller.borrow_mut().set_target(device.clone());
+        self.interrupt_controller.borrow_mut().set_target(device.clone())?;
         self.devices.push(Device::Interruptable(device));
         Ok(())
     }
