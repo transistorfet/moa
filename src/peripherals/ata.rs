@@ -7,8 +7,6 @@ use crate::memory::{Address, Addressable};
 use crate::devices::{Clock, Steppable};
 
 
-const ATA_REG_DEV_CONTROL: Address      = 0x1D;
-const ATA_REG_DEV_ADDRESS: Address      = 0x1F;
 const ATA_REG_DATA_WORD: Address        = 0x20;
 const ATA_REG_DATA_BYTE: Address        = 0x21;
 const ATA_REG_FEATURE: Address          = 0x23;
@@ -26,8 +24,11 @@ const ATA_CMD_WRITE_SECTORS: u8         = 0x30;
 const ATA_CMD_IDENTIFY: u8              = 0xEC;
 const ATA_CMD_SET_FEATURE: u8           = 0xEF;
 
+#[allow(dead_code)]
 const ATA_ST_BUSY: u8                   = 0x80;
+#[allow(dead_code)]
 const ATA_ST_DATA_READY: u8             = 0x08;
+#[allow(dead_code)]
 const ATA_ST_ERROR: u8                  = 0x01;
 
 const ATA_SECTOR_SIZE: u32              = 512;
@@ -37,6 +38,7 @@ const DEV_NAME: &'static str = "ata";
 pub struct AtaDevice {
     pub selected_sector: u32,
     pub selected_count: u32,
+    pub last_error: u8,
     pub contents: Vec<u8>,
 }
 
@@ -46,6 +48,7 @@ impl AtaDevice {
         AtaDevice {
             selected_sector: 0,
             selected_count: 0,
+            last_error: 0,
             contents: vec![],
         }
     }
@@ -91,6 +94,9 @@ impl Addressable for AtaDevice {
             },
             ATA_REG_STATUS => {
                 data[0] = ATA_ST_DATA_READY;
+            },
+            ATA_REG_ERROR => {
+                data[0] = self.last_error;
             },
             _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); },
         }

@@ -124,7 +124,7 @@ impl M68k {
             },
             "dis" | "disassemble" => {
                 let mut decoder = M68kDecoder::new(self.cputype, 0, 0);
-                decoder.dump_disassembly(system, self.state.pc, 0x1000);
+                //decoder.dump_disassembly(system, self.state.pc, 0x1000);
             },
             "so" | "stepout" => {
                 self.debugger.step_until_return = Some(self.debugger.stack_tracer.calls.len() - 1);

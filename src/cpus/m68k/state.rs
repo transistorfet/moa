@@ -9,9 +9,13 @@ use super::debugger::M68kDebugger;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum M68kType {
+    #[allow(dead_code)]
     MC68000,
+    #[allow(dead_code)]
     MC68010,
+    #[allow(dead_code)]
     MC68020,
+    #[allow(dead_code)]
     MC68030,
 }
 
@@ -31,9 +35,17 @@ pub enum Flags {
     Tracing     = 0x8000,
 }
 
-pub const ERR_BUS_ERROR: u32 = 2;
-pub const ERR_ADDRESS_ERROR: u32 = 3;
-pub const ERR_ILLEGAL_INSTRUCTION: u32 = 4;
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Exceptions {
+    BusError            = 2,
+    AddressError        = 3,
+    IllegalInstruction  = 4,
+    ZeroDivide          = 5,
+    ChkInstruction      = 6,
+    TrapvInstruction    = 7,
+    PrivilegeViolation  = 8,
+}
 
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -41,7 +53,6 @@ pub enum Status {
     Init,
     Running,
     Stopped,
-    Halted,
 }
 
 #[repr(u8)]
@@ -72,6 +83,7 @@ impl InterruptPriority {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct M68kState {
     pub status: Status,
     pub current_ipl: InterruptPriority,
@@ -127,6 +139,7 @@ impl M68k {
         }
     }
 
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.state = M68kState::new();
         self.decoder = M68kDecoder::new(self.cputype, 0, 0);

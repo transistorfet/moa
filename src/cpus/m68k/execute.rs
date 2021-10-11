@@ -5,7 +5,6 @@ use crate::memory::{Address, Addressable};
 use crate::devices::{Clock, Steppable, Interruptable};
 
 use super::decode::{
-    M68kDecoder,
     Instruction,
     Target,
     Size,
@@ -18,7 +17,7 @@ use super::decode::{
     sign_extend_to_long
 };
 
-use super::state::{M68k, Status, Flags, InterruptPriority};
+use super::state::{M68k, Status, Flags, Exceptions, InterruptPriority};
 
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<Clock, Error> {
@@ -50,24 +49,15 @@ impl Interruptable for M68k {
 }
 
 impl M68k {
+    #[allow(dead_code)]
     pub fn is_running(&self) -> bool {
         self.state.status != Status::Stopped
-    }
-
-    pub fn init(&mut self, system: &System) -> Result<(), Error> {
-        println!("Initializing CPU");
-
-        self.state.msp = system.get_bus().read_beu32(0)?;
-        self.state.pc = system.get_bus().read_beu32(4)?;
-        self.state.status = Status::Running;
-
-        Ok(())
     }
 
     pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
         match self.state.status {
             Status::Init => self.init(system),
-            Status::Stopped | Status::Halted => Err(Error::new("CPU stopped")),
+            Status::Stopped => Err(Error::new("CPU stopped")),
             Status::Running => {
                 let timer = self.timer.cycle.start();
                 self.decode_next(system)?;
@@ -83,6 +73,13 @@ impl M68k {
                 Ok(())
             },
         }
+    }
+
+    pub fn init(&mut self, system: &System) -> Result<(), Error> {
+        self.state.msp = system.get_bus().read_beu32(0)?;
+        self.state.pc = system.get_bus().read_beu32(4)?;
+        self.state.status = Status::Running;
+        Ok(())
     }
 
     pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), Error> {
@@ -126,12 +123,7 @@ impl M68k {
         self.timer.decode.end(timer);
 
         if self.debugger.use_tracing {
-            // Print instruction bytes for debugging
-            let ins_data: Result<String, Error> =
-                (0..((self.decoder.end - self.decoder.start) / 2)).map(|offset|
-                    Ok(format!("{:04x} ", system.get_bus().read_beu16((self.decoder.start + (offset * 2)) as Address)?))
-                ).collect();
-            debug!("{:#010x}: {}\n\t{:?}\n", self.decoder.start, ins_data?, self.decoder.instruction);
+            self.decoder.dump_decoded(system);
         }
 
         if self.debugger.use_debugger {
@@ -259,6 +251,11 @@ impl M68k {
                 }
 
                 let value = self.get_target_value(system, src, size)?;
+                if value == 0 {
+                    self.exception(system, Exceptions::ZeroDivide as u8)?;
+                    return Ok(());
+                }
+
                 let existing = self.get_target_value(system, dest, Size::Long)?;
                 let result = match sign {
                     Sign::Signed => {
@@ -537,7 +534,7 @@ impl M68k {
             },
             Instruction::TRAPV => {
                 if self.get_flag(Flags::Overflow) {
-                    self.exception(system, 7)?;
+                    self.exception(system, Exceptions::TrapvInstruction as u8)?;
                 }
             },
             Instruction::UNLK(reg) => {

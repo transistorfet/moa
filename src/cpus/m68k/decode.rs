@@ -3,10 +3,10 @@ use std::fmt;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::memory::Address;
+use crate::memory::{Address, Addressable};
 use crate::devices::AddressableDeviceRefMut;
 
-use super::state::{M68kType, ERR_ILLEGAL_INSTRUCTION};
+use super::state::{M68kType, Exceptions};
 
 
 const OPCG_BIT_OPS: u8 = 0x0;
@@ -19,11 +19,14 @@ const OPCG_BRANCH: u8 = 0x6;
 const OPCG_MOVEQ: u8 = 0x7;
 const OPCG_DIV_OR: u8 = 0x8;
 const OPCG_SUB: u8 = 0x9;
-const OPCG_RESERVED1: u8 = 0xA;
 const OPCG_CMP_EOR: u8 = 0xB;
 const OPCG_MUL_AND: u8 = 0xC;
 const OPCG_ADD: u8 = 0xD;
 const OPCG_SHIFT: u8 = 0xE;
+
+#[allow(dead_code)]
+const OPCG_RESERVED1: u8 = 0xA;
+#[allow(dead_code)]
 const OPCG_RESERVED2: u8 = 0xF;
 
 
@@ -236,7 +239,7 @@ impl M68kDecoder {
                                 0b0000 => Ok(Instruction::ORtoCCR(data as u8)),
                                 0b0001 => Ok(Instruction::ANDtoCCR(data as u8)),
                                 0b1010 => Ok(Instruction::EORtoCCR(data as u8)),
-                                _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                                _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
                         },
                         0b01 => {
@@ -245,10 +248,10 @@ impl M68kDecoder {
                                 0b0000 => Ok(Instruction::ORtoSR(data)),
                                 0b0010 => Ok(Instruction::ANDtoSR(data)),
                                 0b1010 => Ok(Instruction::EORtoSR(data)),
-                                _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                                _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
                         },
-                        _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else if (ins & 0x138) == 0x108 {
                     let dreg = get_high_reg(ins);
@@ -275,7 +278,7 @@ impl M68kDecoder {
                         0b01 => Ok(Instruction::BCHG(bitnum, target, size)),
                         0b10 => Ok(Instruction::BCLR(bitnum, target, size)),
                         0b11 => Ok(Instruction::BSET(bitnum, target, size)),
-                        _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else {
                     let size = get_size(ins);
@@ -283,7 +286,7 @@ impl M68kDecoder {
                         Some(Size::Byte) => (self.read_instruction_word(system)? as u32 & 0xFF),
                         Some(Size::Word) => self.read_instruction_word(system)? as u32,
                         Some(Size::Long) => self.read_instruction_long(system)?,
-                        None => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                        None => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     };
                     let target = self.decode_lower_effective_address(system, ins, size)?;
 
@@ -294,7 +297,7 @@ impl M68kDecoder {
                         0b0110 => Ok(Instruction::ADD(Target::Immediate(data), target, size.unwrap())),
                         0b1010 => Ok(Instruction::EOR(Target::Immediate(data), target, size.unwrap())),
                         0b1100 => Ok(Instruction::CMP(Target::Immediate(data), target, size.unwrap())),
-                        _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 }
             },
@@ -330,7 +333,7 @@ impl M68kDecoder {
                         let size = match get_size(ins) {
                             Some(Size::Word) => Size::Word,
                             Some(Size::Long) if self.cputype >= M68kType::MC68020 => Size::Long,
-                            _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         };
 
                         let reg = get_high_reg(ins);
@@ -362,7 +365,7 @@ impl M68kDecoder {
                             match get_size(ins) {
                                 Some(size) => Ok(Instruction::CLR(target, size)),
                                 None if self.cputype >= M68kType::MC68010 => Ok(Instruction::MOVEfromCCR(target)),
-                                None => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                                None => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
                         },
                         0b100 => {
@@ -377,7 +380,7 @@ impl M68kDecoder {
                                 None => Ok(Instruction::MOVEtoSR(target)),
                             }
                         },
-                        _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else if ins_0f00 == 0x800 {
                     let subselect = (ins & 0x01C0) >> 6;
@@ -402,7 +405,7 @@ impl M68kDecoder {
                             let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
                             Ok(Instruction::EXT(get_low_reg(ins), size))
                         },
-                        _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else if ins_0f00 == 0xA00 {
                     if (ins & 0x0FF) == 0xFC {
@@ -461,15 +464,15 @@ impl M68kDecoder {
                                 };
                                 let creg = match ins2 & 0xFFF {
                                     0x801 => ControlRegister::VBR,
-                                    _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                                    _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                                 };
                                 Ok(Instruction::MOVEC(target, creg, dir))
                             },
-                            _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         }
                     }
                 } else {
-                    return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION));
+                    return Err(Error::processor(Exceptions::IllegalInstruction as u32));
                 }
             },
             OPCG_ADDQ_SUBQ => {
@@ -518,7 +521,7 @@ impl M68kDecoder {
             },
             OPCG_MOVEQ => {
                 if (ins & 0x0100) != 0 {
-                    return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION));
+                    return Err(Error::processor(Exceptions::IllegalInstruction as u32));
                 }
                 let reg = get_high_reg(ins);
                 let data = (ins & 0xFF) as u8;
@@ -596,7 +599,7 @@ impl M68kDecoder {
                         let target = self.decode_lower_effective_address(system, ins, Some(size))?;
                         Ok(Instruction::CMPA(target, reg, size))
                     },
-                    _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                    _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                 }
             },
             OPCG_MUL_AND => {
@@ -617,7 +620,7 @@ impl M68kDecoder {
                         0b01000 => Ok(Instruction::EXG(Target::DirectDReg(regx), Target::DirectDReg(regy))),
                         0b01001 => Ok(Instruction::EXG(Target::DirectAReg(regx), Target::DirectAReg(regy))),
                         0b10001 => Ok(Instruction::EXG(Target::DirectDReg(regx), Target::DirectAReg(regy))),
-                        _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else if size.is_none() {
                     let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
@@ -675,7 +678,7 @@ impl M68kDecoder {
                             0b01 => Ok(Instruction::LSd(count, Target::DirectDReg(reg), size, dir)),
                             0b10 => Ok(Instruction::ROXd(count, Target::DirectDReg(reg), size, dir)),
                             0b11 => Ok(Instruction::ROd(count, Target::DirectDReg(reg), size, dir)),
-                            _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         }
                     },
                     None => {
@@ -687,12 +690,12 @@ impl M68kDecoder {
                             0b01 => Ok(Instruction::LSd(count, target, Size::Word, dir)),
                             0b10 => Ok(Instruction::ROXd(count, target, Size::Word, dir)),
                             0b11 => Ok(Instruction::ROd(count, target, Size::Word, dir)),
-                            _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         }
                     },
                 }
             },
-            _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
         }
     }
 
@@ -742,7 +745,7 @@ impl M68kDecoder {
 
             panic!("Not Implemented");
         } else {
-            Err(Error::processor(ERR_ILLEGAL_INSTRUCTION))
+            Err(Error::processor(Exceptions::IllegalInstruction as u32))
         }
     }
 
@@ -781,18 +784,47 @@ impl M68kDecoder {
                         let data = match size {
                             Some(Size::Byte) | Some(Size::Word) => self.read_instruction_word(system)? as u32,
                             Some(Size::Long) => self.read_instruction_long(system)?,
-                            None => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                            None => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         };
                         Target::Immediate(data)
                     },
-                    _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+                    _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                 }
             },
-            _ => return Err(Error::processor(ERR_ILLEGAL_INSTRUCTION)),
+            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
         };
         Ok(value)
     }
 
+    pub fn dump_disassembly(&mut self, system: &System, start: u32, length: u32) {
+        let mut next = start;
+        while next < (start + length) {
+            match self.decode_at(&system, next) {
+                Ok(()) => {
+                    self.dump_decoded(system);
+                    next = self.end;
+                },
+                Err(err) => {
+                    println!("{:?}", err);
+                    match err {
+                        Error { native, .. } if native == Exceptions::IllegalInstruction as u32 => {
+                            println!("    at {:08x}: {:04x}", self.start, system.get_bus().read_beu16(self.start as Address).unwrap());
+                        },
+                        _ => { },
+                    }
+                    return;
+                },
+            }
+        }
+    }
+
+    pub fn dump_decoded(&mut self, system: &System) {
+        let ins_data: Result<String, Error> =
+            (0..((self.end - self.start) / 2)).map(|offset|
+                Ok(format!("{:04x} ", system.get_bus().read_beu16((self.start + (offset * 2)) as Address).unwrap()))
+            ).collect();
+        debug!("{:#010x}: {}\n\t{:?}\n", self.start, ins_data.unwrap(), self.instruction);
+    }
 }
 
 #[inline(always)]

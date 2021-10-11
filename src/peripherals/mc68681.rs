@@ -45,13 +45,21 @@ const REG_IVR_WR: Address = 0x19;
 
 
 // Status Register Bits (SRA/SRB)
+#[allow(dead_code)]
 const SR_RECEIVED_BREAK: u8 = 0x80;
+#[allow(dead_code)]
 const SR_FRAMING_ERROR: u8 = 0x40;
+#[allow(dead_code)]
 const SR_PARITY_ERROR: u8 = 0x20;
+#[allow(dead_code)]
 const SR_OVERRUN_ERROR: u8 = 0x10;
+#[allow(dead_code)]
 const SR_TX_EMPTY: u8 = 0x08;
+#[allow(dead_code)]
 const SR_TX_READY: u8 = 0x04;
+#[allow(dead_code)]
 const SR_RX_FULL: u8 = 0x02;
+#[allow(dead_code)]
 const SR_RX_READY: u8 = 0x01;
 
 
@@ -160,6 +168,11 @@ pub struct MC68681 {
     pub timer_preload: u16,
     pub timer_count: u16,
     pub is_timing: bool,
+
+    pub input_pin_change: u8,
+    pub input_state: u8,
+    pub output_conf: u8,
+    pub output_state: u8,
 }
 
 impl MC68681 {
@@ -176,6 +189,11 @@ impl MC68681 {
             timer_preload: 0,
             timer_count: 0,
             is_timing: true,
+
+            input_pin_change: 0,
+            input_state: 0,
+            output_conf: 0,
+            output_state: 0,
         }
     }
 
@@ -247,6 +265,12 @@ impl Addressable for MC68681 {
             REG_ISR_RD => {
                 data[0] = self.int_status;
             },
+            REG_IPCR_RD => {
+                data[0] = self.input_pin_change;
+            },
+            REG_INPUT_RD => {
+                data[0] = self.input_state;
+            },
             REG_START_RD => {
                 self.timer_count = self.timer_preload;
                 self.is_timing = true;
@@ -271,9 +295,9 @@ impl Addressable for MC68681 {
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr);
         match addr {
-            //REG_MR1A_MR2A | REG_ACR_WR => {
-            //    // TODO config
-            //},
+            REG_MR1A_MR2A | REG_MR1B_MR2B | REG_CSRA_WR | REG_CSRB_WR => {
+                // NOTE we aren't simulating the serial speeds, so we aren't doing anything with these settings atm
+            },
             REG_ACR_WR => {
                 self.acr = data[0];
             }
@@ -308,6 +332,15 @@ impl Addressable for MC68681 {
             },
             REG_IVR_WR => {
                 self.int_vector = data[0];
+            },
+            REG_OPCR_WR => {
+                self.output_conf = data[0];
+            },
+            REG_OUT_SET => {
+                self.output_state |= data[0];
+            },
+            REG_OUT_RESET => {
+                self.output_state &= !data[0];
             },
             _ => { },
         }
