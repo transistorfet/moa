@@ -4,6 +4,7 @@ use crate::system::System;
 use crate::memory::{Address, Addressable};
 
 use super::state::M68k;
+use super::decode::M68kDecoder;
 
 pub struct StackTracer {
     pub calls: Vec<u32>,
@@ -47,10 +48,12 @@ impl M68kDebugger {
 }
 
 impl M68k {
+    #[allow(dead_code)]
     pub fn enable_tracing(&mut self) {
         self.debugger.use_tracing = true;
     }
 
+    #[allow(dead_code)]
     pub fn add_breakpoint(&mut self, addr: Address) {
         self.debugger.breakpoints.push(addr as u32);
     }
@@ -118,6 +121,10 @@ impl M68k {
                 for addr in &self.debugger.stack_tracer.calls {
                     println!("  {:08x}", system.get_bus().read_beu32(*addr as Address)?);
                 }
+            },
+            "dis" | "disassemble" => {
+                let mut decoder = M68kDecoder::new(self.cputype, 0, 0);
+                decoder.dump_disassembly(system, self.state.pc, 0x1000);
             },
             "so" | "stepout" => {
                 self.debugger.step_until_return = Some(self.debugger.stack_tracer.calls.len() - 1);

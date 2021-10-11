@@ -3,7 +3,6 @@
 pub enum ErrorType {
     Emulator,
     Processor,
-    Internal,
 }
 
 #[derive(Debug)]

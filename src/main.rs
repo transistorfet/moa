@@ -58,21 +58,6 @@ fn main() {
             },
         }
     }
-
-    /*
-    // TODO I need to add a way to decode and dump the assembly for a section of code, in debugger
-    cpu.enable_tracing();
-    cpu.state.pc = 0x0010781a;
-    while cpu.is_running() {
-        match cpu.decode_next(&system) {
-            Ok(()) => { },
-            Err(err) => {
-                cpu.dump_state(&system);
-                panic!("{:?}", err);
-            },
-        }
-    }
-    */
 }
 
 pub fn launch_terminal_emulator(name: String) {
@@ -84,7 +69,6 @@ pub fn launch_terminal_emulator(name: String) {
 }
 
 pub fn launch_slip_connection(name: String) {
-    use nix::unistd::sleep;
     use std::process::Command;
 
     Command::new("sudo").args(["slattach", "-s", "38400", "-p", "slip", &name]).spawn().unwrap();

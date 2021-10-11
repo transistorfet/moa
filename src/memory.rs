@@ -8,6 +8,7 @@ use crate::devices::{Clock, Steppable, AddressableDeviceBox};
 
 pub type Address = u64;
 
+/// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
     fn len(&self) -> usize;
     fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error>;
