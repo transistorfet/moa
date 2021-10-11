@@ -100,7 +100,7 @@ pub enum Target {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction {
-    //ABCD
+    ABCD(Target, Target),
     ADD(Target, Target, Size),
     AND(Target, Target, Size),
     ANDtoCCR(u8),
@@ -173,7 +173,7 @@ pub enum Instruction {
     RTS,
     RTD(i16),
 
-    //SBCD
+    SBCD(Target, Target),
     Scc(Condition, Target),
     STOP(u16),
     SUB(Target, Target, Size),
@@ -532,9 +532,14 @@ impl M68kDecoder {
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
                     let effective_addr = self.decode_lower_effective_address(system, ins, size)?;
                     Ok(Instruction::DIV(effective_addr, data_reg, Size::Word, sign))
-                } else if (ins & 0b000111110000) == 0b000100000000 {
-                    // TODO SBCD
-                    panic!("Not Implemented");
+                } else if (ins & 0x1F0) == 0x100 {
+                    let regx = get_high_reg(ins);
+                    let regy = get_low_reg(ins);
+
+                    match (ins & 0x08) == 0 {
+                        false => Ok(Instruction::SBCD(Target::DirectDReg(regy), Target::DirectDReg(regx))),
+                        true => Ok(Instruction::SBCD(Target::IndirectARegDec(regy), Target::IndirectARegDec(regx))),
+                    }
                 } else {
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
                     let effective_addr = self.decode_lower_effective_address(system, ins, size)?;
@@ -549,6 +554,8 @@ impl M68kDecoder {
                 match size {
                     Some(size) => {
                         if (ins & 0b100110000) == 0b100000000 {
+                            let mode = (ins & 0x08) == 0;
+
                             // TODO implement SUBX
                             panic!("Not Implemented");
                         } else {
@@ -596,8 +603,13 @@ impl M68kDecoder {
                 let size = get_size(ins);
 
                 if (ins & 0b000111110000) == 0b000100000000 {
-                    // TODO ABCD
-                    panic!("Not Implemented");
+                    let regx = get_high_reg(ins);
+                    let regy = get_low_reg(ins);
+
+                    match (ins & 0x08) == 0 {
+                        false => Ok(Instruction::ABCD(Target::DirectDReg(regy), Target::DirectDReg(regx))),
+                        true => Ok(Instruction::ABCD(Target::IndirectARegDec(regy), Target::IndirectARegDec(regx))),
+                    }
                 } else if (ins & 0b000100110000) == 0b000100000000 {
                     let regx = get_high_reg(ins);
                     let regy = get_low_reg(ins);
@@ -626,6 +638,8 @@ impl M68kDecoder {
                 match size {
                     Some(size) => {
                         if (ins & 0b100110000) == 0b100000000 {
+                            let mode = (ins & 0x08) == 0;
+
                             // TODO implement ADDX
                             panic!("Not Implemented");
                         } else {

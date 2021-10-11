@@ -29,8 +29,10 @@ fn init_test() -> (M68k, System) {
 
 #[cfg(test)]
 mod tests {
-    use super::{init_test, INIT_ADDR};
+    use crate::devices::Steppable;
     use crate::memory::{Address, Addressable};
+
+    use super::{init_test, INIT_ADDR};
     use super::super::decode::{Instruction, Target, Size, Sign, ShiftDirection};
 
     #[test]
