@@ -17,6 +17,8 @@ use super::decode::{
     sign_extend_to_long
 };
 
+const DEV_NAME: &'static str = "m68k-cpu";
+
 use super::state::{M68k, Status, Flags, Exceptions, InterruptPriority};
 
 impl Steppable for M68k {
@@ -27,6 +29,10 @@ impl Steppable for M68k {
 
     fn on_error(&mut self, system: &System) {
         self.dump_state(system);
+    }
+
+    fn on_debug(&mut self) {
+        self.enable_debugging();
     }
 }
 
@@ -64,9 +70,9 @@ impl M68k {
                 self.execute_current(system)?;
                 self.timer.cycle.end(timer);
 
-                if (self.timer.cycle.events % 500) == 0 {
-                    println!("{}", self.timer);
-                }
+                //if (self.timer.cycle.events % 500) == 0 {
+                //    println!("{}", self.timer);
+                //}
 
                 self.check_pending_interrupts(system)?;
 
@@ -90,6 +96,7 @@ impl M68k {
             let priority_mask = ((self.state.sr & Flags::IntMask as u16) >> 8) as u8;
 
             if (pending_ipl >= priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
+                debug!("{} interrupt: {} {}", DEV_NAME, pending_ipl, priority_mask);
                 self.state.current_ipl = self.state.pending_ipl;
                 self.exception(system, self.state.ipl_ack_num)?;
                 return Ok(());
@@ -104,7 +111,7 @@ impl M68k {
     }
 
     pub fn exception(&mut self, system: &System, number: u8) -> Result<(), Error> {
-        println!("raising exception {}", number);
+        debug!("{}: raising exception {}", DEV_NAME, number);
         let offset = (number as u16) << 2;
         self.push_word(system, offset)?;
         self.push_long(system, self.state.pc)?;
