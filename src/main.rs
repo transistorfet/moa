@@ -46,6 +46,7 @@ fn main() {
     //cpu.add_breakpoint(0x10bc9c);
     //cpu.add_breakpoint(0x106a94);
     //cpu.add_breakpoint(0x10b79c);
+    //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
 
     system.add_interruptable_device(wrap_interruptable(cpu)).unwrap();
     loop {
