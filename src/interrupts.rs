@@ -70,7 +70,7 @@ impl InterruptController {
         // TODO how does this find the specific device it's connected to?
         // TODO for the time being, this will find the first device to handle it or fail
 
-        println!("interrupts: priority {} state changed to {}", priority, state);
+        debug!("interrupts: priority {} state changed to {}", priority, state);
         match &self.target {
             Some(dev) => {
                 Ok(dev.borrow_mut().interrupt_state_change(state, priority, number)?)

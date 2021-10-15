@@ -40,6 +40,7 @@ fn main() {
 
 
     let mut cpu = M68k::new(M68kType::MC68010);
+    //let mut cpu = M68k::new(M68kType::MC68030);
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);
@@ -47,6 +48,7 @@ fn main() {
     //cpu.add_breakpoint(0x106a94);
     //cpu.add_breakpoint(0x10b79c);
     //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
+    //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
     system.add_interruptable_device(wrap_interruptable(cpu)).unwrap();
     loop {

@@ -49,9 +49,9 @@ pub enum ShiftDirection {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum RegisterType {
-    Data,
-    Address,
+pub enum XRegister {
+    Data(u8),
+    Address(u8),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -95,10 +95,10 @@ pub enum Target {
     IndirectARegInc(u8),
     IndirectARegDec(u8),
     IndirectARegOffset(u8, i32),
-    IndirectARegXRegOffset(u8, RegisterType, u8, i32, Size),
+    IndirectARegXRegOffset(u8, XRegister, i32, u8, Size),
     IndirectMemory(u32),
     IndirectPCOffset(i32),
-    IndirectPCXRegOffset(RegisterType, u8, i32, Size),
+    IndirectPCXRegOffset(XRegister, i32, u8, Size),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -131,7 +131,7 @@ pub enum Instruction {
     EORtoCCR(u8),
     EORtoSR(u16),
     EXG(Target, Target),
-    EXT(u8, Size),
+    EXT(u8, Size, Size),
 
     ILLEGAL,
 
@@ -328,7 +328,7 @@ impl M68kDecoder {
                 let ins_0f00 = ins & 0xF00;
                 let ins_00f0 = ins & 0x0F0;
 
-                if (ins & 0x180) == 0x180 {
+                if (ins & 0x180) == 0x180 && (ins & 0x038) != 0 {
                     if (ins & 0x040) == 0 {
                         let size = match get_size(ins) {
                             Some(Size::Word) => Size::Word,
@@ -382,7 +382,7 @@ impl M68kDecoder {
                         },
                         _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
-                } else if ins_0f00 == 0x800 {
+                } else if ins_0f00 == 0x800 || ins_0f00 == 0x900 {
                     let subselect = (ins & 0x01C0) >> 6;
                     let mode = get_low_mode(ins);
                     match (subselect, mode) {
@@ -400,10 +400,14 @@ impl M68kDecoder {
                             let target = self.decode_lower_effective_address(system, ins, None)?;
                             Ok(Instruction::PEA(target))
                         },
-                        (0b010, 0b000) |
+                        (0b010, 0b000) => {
+                            Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Word))
+                        },
                         (0b011, 0b000) => {
-                            let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
-                            Ok(Instruction::EXT(get_low_reg(ins), size))
+                            Ok(Instruction::EXT(get_low_reg(ins), Size::Word, Size::Long))
+                        },
+                        (0b111, 0b000) => {
+                            Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Long))
                         },
                         _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
@@ -509,7 +513,7 @@ impl M68kDecoder {
                 let mut disp = ((ins & 0xFF) as i8) as i32;
                 if disp == 0 {
                     disp = (self.read_instruction_word(system)? as i16) as i32;
-                } else if disp == 0xff && self.cputype >= M68kType::MC68020 {
+                } else if disp == -1 && self.cputype >= M68kType::MC68020 {
                     disp = self.read_instruction_long(system)? as i32;
                 }
                 let condition = get_condition(ins);
@@ -725,17 +729,17 @@ impl M68kDecoder {
 
     fn decode_extension_word(&mut self, system: &mut AddressableDeviceRefMut<'_>, areg: Option<u8>) -> Result<Target, Error> {
         let brief_extension = self.read_instruction_word(system)?;
-        let rtype = if (brief_extension & 0x8000) == 0 { RegisterType::Data } else { RegisterType::Address };
-        let xreg = ((brief_extension & 0x7000) >> 12) as u8;
+        let xreg_num = ((brief_extension & 0x7000) >> 12) as u8;
+        let xreg = if (brief_extension & 0x8000) == 0 { XRegister::Data(xreg_num) } else { XRegister::Address(xreg_num) };
         let size = if (brief_extension & 0x0800) == 0 { Size::Word } else { Size::Long };
+        let scale = ((brief_extension & 0x0600) >> 9) as u8;
         let use_full = (brief_extension & 0x0100) == 1;
-        let scale = (brief_extension & 0x0600) >> 9 as u8;
 
         if !use_full {
             let displacement = sign_extend_to_long((brief_extension & 0x00FF) as u32, Size::Byte);
             match areg {
-                Some(areg) => Ok(Target::IndirectARegXRegOffset(areg, rtype, xreg, displacement, size)),
-                None => Ok(Target::IndirectPCXRegOffset(rtype, xreg, displacement, size)),
+                Some(areg) => Ok(Target::IndirectARegXRegOffset(areg, xreg, displacement, scale, size)),
+                None => Ok(Target::IndirectPCXRegOffset(xreg, displacement, scale, size)),
             }
         } else if self.cputype >= M68kType::MC68020 {
             let use_base = (brief_extension & 0x0080) == 0;
@@ -821,7 +825,7 @@ impl M68kDecoder {
             (0..((self.end - self.start) / 2)).map(|offset|
                 Ok(format!("{:04x} ", system.get_bus().read_beu16((self.start + (offset * 2)) as Address).unwrap()))
             ).collect();
-        println!("{:#010x}: {}\n\t{}\n", self.start, ins_data.unwrap(), self.instruction);
+        println!("{:#010x}: {}\n\t{:?}\n", self.start, ins_data.unwrap(), self.instruction);
     }
 }
 
@@ -940,7 +944,7 @@ impl fmt::Display for Condition {
         match self {
             Condition::True => write!(f, "t"),
             Condition::False => write!(f, "f"),
-            Condition::High => write!(f, "h"),
+            Condition::High => write!(f, "hi"),
             Condition::LowOrSame => write!(f, "ls"),
             Condition::CarryClear => write!(f, "cc"),
             Condition::CarrySet => write!(f, "cs"),
@@ -966,6 +970,15 @@ impl fmt::Display for ControlRegister {
     }
 }
 
+impl fmt::Display for XRegister {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            XRegister::Data(reg) => write!(f, "d{}", reg),
+            XRegister::Address(reg) => write!(f, "a{}", reg),
+        }
+    }
+}
+
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -976,10 +989,16 @@ impl fmt::Display for Target {
             Target::IndirectARegInc(reg) => write!(f, "(%a{})+", reg),
             Target::IndirectARegDec(reg) => write!(f, "-(%a{})", reg),
             Target::IndirectARegOffset(reg, offset) => write!(f, "(%a{} + #{:04x})", reg, offset),
-            Target::IndirectARegXRegOffset(reg, rtype, xreg, offset, _) => write!(f, "(%a{} + %{}{} + #{:04x})", reg, if *rtype == RegisterType::Data { 'd' } else { 'a' }, xreg, offset),
+            Target::IndirectARegXRegOffset(reg, xreg, offset, scale, _) => {
+                let scale_str = if *scale != 0 { format!("<< {}", scale) } else { "".to_string() };
+                write!(f, "(%a{} + %{} + #{:04x}{})", reg, xreg, offset, scale_str)
+            },
             Target::IndirectMemory(value) => write!(f, "(#{:08x})", value),
             Target::IndirectPCOffset(offset) => write!(f, "(%pc + #{:04x})", offset),
-            Target::IndirectPCXRegOffset(rtype, xreg, offset, _) => write!(f, "(%pc + %{}{} + #{:04x})", if *rtype == RegisterType::Data { 'd' } else { 'a' }, xreg, offset),
+            Target::IndirectPCXRegOffset(xreg, offset, scale, _) => {
+                let scale_str = if *scale != 0 { format!("<< {}", scale) } else { "".to_string() };
+                write!(f, "(%pc + %{} + #{:04x}{})", xreg, offset, scale_str)
+            },
         }
     }
 }
@@ -1019,7 +1038,7 @@ impl fmt::Display for Instruction {
             Instruction::EORtoCCR(value) => write!(f, "eorb\t{:02x}, %ccr", value),
             Instruction::EORtoSR(value) => write!(f, "eorw\t{:04x}, %sr", value),
             Instruction::EXG(src, dest) => write!(f, "exg\t{}, {}", src, dest),
-            Instruction::EXT(reg, size) => write!(f, "ext{}\t%d{}", size, reg),
+            Instruction::EXT(reg, from_size, to_size) => write!(f, "ext{}{}\t%d{}", from_size, to_size, reg),
 
             Instruction::ILLEGAL => write!(f, "illegal"),
 

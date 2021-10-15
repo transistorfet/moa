@@ -278,10 +278,6 @@ impl Addressable for MC68681 {
     fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
         let mut data = vec![0; count];
 
-        if addr != REG_SRA_RD && addr != REG_SRB_RD {
-            debug!("{}: reading from {:0x}", DEV_NAME, addr);
-        }
-
         match addr {
             REG_SRA_RD => {
                 data[0] = self.port_a.status
@@ -324,6 +320,10 @@ impl Addressable for MC68681 {
                 self.set_interrupt_flag(ISR_TIMER_CHANGE, false);
             },
             _ => { },
+        }
+
+        if addr != REG_SRA_RD && addr != REG_SRB_RD {
+            debug!("{}: read from {:0x} of {:0x}", DEV_NAME, addr, data[0]);
         }
 
         Ok(data)
