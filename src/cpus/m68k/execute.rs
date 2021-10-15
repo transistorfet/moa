@@ -162,10 +162,10 @@ impl M68k {
                 self.set_logic_flags(result, size);
             },
             Instruction::ANDtoCCR(value) => {
-                self.state.sr = self.state.sr | (value as u16);
+                self.state.sr = self.state.sr & (value as u16);
             },
             Instruction::ANDtoSR(value) => {
-                self.state.sr = self.state.sr | value;
+                self.state.sr = self.state.sr & value;
             },
             Instruction::ASd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(system, count, size)? % 64;

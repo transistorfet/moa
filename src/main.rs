@@ -45,7 +45,7 @@ fn main() {
     //cpu.add_breakpoint(0x10781a);
     //cpu.add_breakpoint(0x10bc9c);
     //cpu.add_breakpoint(0x106a94);
-    //cpu.add_breakpoint(0x10d0c6);
+    //cpu.add_breakpoint(0x10b79c);
 
     system.add_interruptable_device(wrap_interruptable(cpu)).unwrap();
     loop {

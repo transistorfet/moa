@@ -79,9 +79,11 @@ const DEV_NAME: &'static str = "mc68681";
 pub struct MC68681Port {
     pub tty: Option<PtyMaster>,
     pub status: u8,
-    pub input: u8,
+
     pub tx_enabled: bool,
+
     pub rx_enabled: bool,
+    pub input: u8,
 }
 
 impl MC68681Port {
@@ -89,9 +91,11 @@ impl MC68681Port {
         MC68681Port {
             tty: None,
             status: 0,
-            input: 0,
+
             tx_enabled: false,
+
             rx_enabled: false,
+            input: 0,
         }
     }
 
@@ -109,19 +113,33 @@ impl MC68681Port {
         Ok(name)
     }
 
-    pub fn rx_ready(&self) -> bool {
-        (self.status & SR_RX_READY) != 0
+    pub fn send_byte(&mut self, data: u8) {
+        self.tty.as_mut().map(|tty| tty.write_all(&[data]));
+        self.set_tx_status(false);
     }
 
-    pub fn check_read(&mut self) -> Result<bool, Error> {
-        if self.rx_enabled && !self.rx_ready() && self.tty.is_some() {
+    pub fn set_tx_status(&mut self, value: bool) {
+        match value {
+            true => { self.status |= SR_TX_READY | SR_TX_EMPTY; },
+            false => { self.status &= !(SR_TX_READY | SR_TX_EMPTY); },
+        }
+    }
+
+    pub fn set_rx_status(&mut self, value: bool) {
+        match value {
+            true => { self.status |= SR_RX_READY; },
+            false => { self.status &= !SR_RX_READY; },
+        }
+    }
+
+    pub fn check_rx(&mut self) -> Result<bool, Error> {
+        if self.rx_enabled && (self.status & SR_RX_READY) == 0 && self.tty.is_some() {
             let mut buf = [0; 1];
             let tty = self.tty.as_mut().unwrap();
             match tty.read(&mut buf) {
                 Ok(count) => {
-                    println!("READ {:?}", count);
                     self.input = buf[0];
-                    self.status |= SR_RX_READY;
+                    self.set_rx_status(true);
                     return Ok(true);
                 },
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => { },
@@ -131,6 +149,11 @@ impl MC68681Port {
             }
         }
         Ok(false)
+    }
+
+    pub fn check_tx(&mut self) -> bool {
+        self.set_tx_status(self.tx_enabled);
+        self.tx_enabled
     }
 
     pub fn handle_command(&mut self, data: u8) -> Option<bool> {
@@ -144,11 +167,11 @@ impl MC68681Port {
         let tx_cmd = (data & 0x0C) >> 2;
         if tx_cmd == 0b01 {
             self.tx_enabled = true;
-            self.status |= SR_TX_READY | SR_TX_EMPTY;
+            self.set_tx_status(true);
             return Some(true);
         } else if tx_cmd == 0b10 {
             self.tx_enabled = false;
-            self.status &= !(SR_TX_READY | SR_TX_EMPTY);
+            self.set_tx_status(false);
             return Some(false);
         }
 
@@ -168,6 +191,7 @@ pub struct MC68681 {
     pub timer_preload: u16,
     pub timer_count: u16,
     pub is_timing: bool,
+    pub timer_divider: u16,
 
     pub input_pin_change: u8,
     pub input_state: u8,
@@ -189,6 +213,7 @@ impl MC68681 {
             timer_preload: 0,
             timer_count: 0,
             is_timing: true,
+            timer_divider: 0,
 
             input_pin_change: 0,
             input_state: 0,
@@ -198,28 +223,40 @@ impl MC68681 {
     }
 
     pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
-        if self.port_a.check_read()? {
-            self.int_status |= ISR_CH_A_RX_READY_FULL;
+        if self.port_a.check_rx()? {
+            self.set_interrupt_flag(ISR_CH_A_RX_READY_FULL, true);
         }
 
-        if self.port_b.check_read()? {
-            self.int_status |= ISR_CH_B_RX_READY_FULL;
+        if self.port_b.check_rx()? {
+            self.set_interrupt_flag(ISR_CH_B_RX_READY_FULL, true);
         }
 
         if self.is_timing {
-            self.timer_count = self.timer_count.wrapping_sub(1);
+            self.timer_divider = self.timer_divider.wrapping_sub(1);
+            if self.timer_divider == 0 {
+                self.timer_divider = 1;
+                self.timer_count = self.timer_count.wrapping_sub(1);
 
-            if self.timer_count == 0 {
-                self.int_status |= ISR_TIMER_CHANGE;
-                if (self.acr & 0x40) == 0 {
-                    self.is_timing = false;
-                } else {
-                    self.timer_count = self.timer_preload;
+                if self.timer_count == 0 {
+                    self.set_interrupt_flag(ISR_TIMER_CHANGE, true);
+                    if (self.acr & 0x40) == 0 {
+                        self.is_timing = false;
+                    } else {
+                        self.timer_count = self.timer_preload;
+                    }
                 }
             }
         }
 
         self.check_interrupt_state(system)?;
+
+        if self.port_a.check_tx() {
+            self.set_interrupt_flag(ISR_CH_A_TX_READY, true);
+        }
+
+        if self.port_b.check_tx() {
+            self.set_interrupt_flag(ISR_CH_B_TX_READY, true);
+        }
 
         Ok(())
     }
@@ -242,7 +279,7 @@ impl Addressable for MC68681 {
         let mut data = vec![0; count];
 
         if addr != REG_SRA_RD && addr != REG_SRB_RD {
-            println!("{}: reading from {:0x}", DEV_NAME, addr);
+            debug!("{}: reading from {:0x}", DEV_NAME, addr);
         }
 
         match addr {
@@ -251,16 +288,16 @@ impl Addressable for MC68681 {
             },
             REG_RBA_RD => {
                 data[0] = self.port_a.input;
-                self.port_a.status &= !SR_RX_READY;
-                self.int_status &= !ISR_CH_A_RX_READY_FULL;
+                self.port_a.set_rx_status(false);
+                self.set_interrupt_flag(ISR_CH_A_RX_READY_FULL, false);
             },
             REG_SRB_RD => {
                 data[0] = self.port_b.status
             },
             REG_RBB_RD => {
                 data[0] = self.port_b.input;
-                self.port_b.status &= !SR_RX_READY;
-                self.int_status &= !ISR_CH_B_RX_READY_FULL;
+                self.port_b.set_rx_status(false);
+                self.set_interrupt_flag(ISR_CH_B_RX_READY_FULL, false);
             },
             REG_ISR_RD => {
                 data[0] = self.int_status;
@@ -276,7 +313,6 @@ impl Addressable for MC68681 {
                 self.is_timing = true;
             },
             REG_STOP_RD => {
-                self.int_status &= !ISR_TIMER_CHANGE;
                 if (self.acr & 0x40) == 0 {
                     // Counter Mode
                     self.is_timing = false;
@@ -285,6 +321,7 @@ impl Addressable for MC68681 {
                     // Timer Mode
                     // Do nothing except reset the ISR bit
                 }
+                self.set_interrupt_flag(ISR_TIMER_CHANGE, false);
             },
             _ => { },
         }
@@ -293,7 +330,7 @@ impl Addressable for MC68681 {
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr);
+        debug!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr);
         match addr {
             REG_MR1A_MR2A | REG_MR1B_MR2B | REG_CSRA_WR | REG_CSRB_WR => {
                 // NOTE we aren't simulating the serial speeds, so we aren't doing anything with these settings atm
@@ -302,8 +339,9 @@ impl Addressable for MC68681 {
                 self.acr = data[0];
             }
             REG_TBA_WR => {
-                println!("{}a: write {}", DEV_NAME, data[0] as char);
-                self.port_a.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
+                debug!("{}a: write {}", DEV_NAME, data[0] as char);
+                self.port_a.send_byte(data[0]);
+                self.set_interrupt_flag(ISR_CH_A_TX_READY, false);
             },
             REG_CRA_WR => {
                 match self.port_a.handle_command(data[0]) {
@@ -312,8 +350,9 @@ impl Addressable for MC68681 {
                 }
             },
             REG_TBB_WR => {
-                println!("{}b: write {:x}", DEV_NAME, data[0]);
-                self.port_b.tty.as_mut().map(|tty| tty.write_all(&[data[0]]));
+                debug!("{}b: write {:x}", DEV_NAME, data[0]);
+                self.port_b.send_byte(data[0]);
+                self.set_interrupt_flag(ISR_CH_B_TX_READY, false);
             },
             REG_CRB_WR => {
                 match self.port_b.handle_command(data[0]) {
