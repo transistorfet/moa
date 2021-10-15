@@ -65,5 +65,15 @@ impl System {
             }
         }
     }
+
+    pub fn debug(&mut self) -> Result<(), Error> {
+        for dev in &self.devices {
+            match dev {
+                Device::Addressable(dev) => dev.borrow_mut().on_debug(),
+                Device::Interruptable(dev) => dev.borrow_mut().on_debug(),
+            }
+        }
+        Ok(())
+    }
 }
 

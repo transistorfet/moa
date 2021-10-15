@@ -701,14 +701,12 @@ impl M68kDecoder {
 
     fn read_instruction_word(&mut self, device: &mut AddressableDeviceRefMut<'_>) -> Result<u16, Error> {
         let word = device.read_beu16((self.end - self.base) as Address)?;
-        //debug!("{:#010x} {:#06x?}", self.end, word);
         self.end += 2;
         Ok(word)
     }
 
     fn read_instruction_long(&mut self, device: &mut AddressableDeviceRefMut<'_>) -> Result<u32, Error> {
         let word = device.read_beu32((self.end - self.base) as Address)?;
-        //debug!("{:#010x} {:#010x}", self.end, word);
         self.end += 4;
         Ok(word)
     }
@@ -823,7 +821,7 @@ impl M68kDecoder {
             (0..((self.end - self.start) / 2)).map(|offset|
                 Ok(format!("{:04x} ", system.get_bus().read_beu16((self.start + (offset * 2)) as Address).unwrap()))
             ).collect();
-        debug!("{:#010x}: {}\n\t{:?}\n", self.start, ins_data.unwrap(), self.instruction);
+        println!("{:#010x}: {}\n\t{:?}\n", self.start, ins_data.unwrap(), self.instruction);
     }
 }
 

@@ -54,6 +54,12 @@ impl M68k {
     }
 
     #[allow(dead_code)]
+    pub fn enable_debugging(&mut self) {
+        self.debugger.use_tracing = true;
+        self.debugger.use_debugger = true;
+    }
+
+    #[allow(dead_code)]
     pub fn add_breakpoint(&mut self, addr: Address) {
         self.debugger.breakpoints.push(addr as u32);
     }
@@ -62,8 +68,7 @@ impl M68k {
         for breakpoint in &self.debugger.breakpoints {
             if *breakpoint == self.state.pc {
                 println!("Breakpoint reached: {:08x}", *breakpoint);
-                self.debugger.use_tracing = true;
-                self.debugger.use_debugger = true;
+                self.enable_debugging();
                 break;
             }
         }
@@ -124,7 +129,7 @@ impl M68k {
             },
             "dis" | "disassemble" => {
                 let mut decoder = M68kDecoder::new(self.cputype, 0, 0);
-                //decoder.dump_disassembly(system, self.state.pc, 0x1000);
+                decoder.dump_disassembly(system, self.state.pc, 0x1000);
             },
             "so" | "stepout" => {
                 self.debugger.step_until_return = Some(self.debugger.stack_tracer.calls.len() - 1);

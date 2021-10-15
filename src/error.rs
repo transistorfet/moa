@@ -30,9 +30,17 @@ impl Error {
     }
 }
 
+static mut DEBUG_ENABLE: bool = true;
+
+pub fn debug_enabled() -> bool {
+    unsafe { DEBUG_ENABLE }
+}
+
 macro_rules! debug {
     ($($arg:tt)*) => ({
-        println!($($arg)*);
+        if crate::error::debug_enabled() {
+            println!($($arg)*);
+        }
     })
 }
 

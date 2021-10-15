@@ -1,4 +1,10 @@
 
+* there is a problem with the ANDtoSR instruction, such that interrupts don't occur and the system locks up before the shell starts, but I'm not sure
+  why it worked before and doesn't work now
+
+* add exception for privileged instructions.  Should you separate them in the `match` or just put a guard into the instructions, and if the latter, can
+  you use the emulator's errors to surface the execption up to the `step_internal` function but not to `System`?
+
 * make functions to print assembly out	
 * how can you add 68030 support?  Should it be all one module that checks maybe during decode if the instruction is supported?  Should it 'inherit' from the MC68010 object
 * make tests for each instruction

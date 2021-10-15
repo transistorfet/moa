@@ -98,14 +98,14 @@ impl Addressable for AtaDevice {
             ATA_REG_ERROR => {
                 data[0] = self.last_error;
             },
-            _ => { println!("{}: reading from {:0x}", DEV_NAME, addr); },
+            _ => { debug!("{}: reading from {:0x}", DEV_NAME, addr); },
         }
 
         Ok(data)
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        println!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             ATA_REG_DRIVE_HEAD => { self.selected_sector |= ((data[0] & 0x1F) as u32) << 24; },
             ATA_REG_CYL_HIGH => { self.selected_sector |= (data[0] as u32) << 16; },
@@ -114,11 +114,11 @@ impl Addressable for AtaDevice {
             ATA_REG_SECTOR_COUNT => { self.selected_count = (data[0] as u32) * ATA_SECTOR_SIZE; },
             ATA_REG_COMMAND => {
                 match data[0] {
-                    ATA_CMD_READ_SECTORS => { println!("{}: reading sector {:x}", DEV_NAME, self.selected_sector); },
-                    ATA_CMD_WRITE_SECTORS => { println!("{}: writing sector {:x}", DEV_NAME, self.selected_sector); },
+                    ATA_CMD_READ_SECTORS => { debug!("{}: reading sector {:x}", DEV_NAME, self.selected_sector); },
+                    ATA_CMD_WRITE_SECTORS => { debug!("{}: writing sector {:x}", DEV_NAME, self.selected_sector); },
                     ATA_CMD_IDENTIFY => { },
                     ATA_CMD_SET_FEATURE => { },
-                    _ => { println!("{}: unrecognized command {:x}", DEV_NAME, data[0]); },
+                    _ => { debug!("{}: unrecognized command {:x}", DEV_NAME, data[0]); },
                 }
             },
             ATA_REG_FEATURE => {
@@ -127,7 +127,7 @@ impl Addressable for AtaDevice {
             ATA_REG_DATA_BYTE => {
                 // TODO implement writing
             },
-            _ => { println!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+            _ => { debug!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
         Ok(())
     }

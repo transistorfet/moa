@@ -16,6 +16,7 @@ pub type Clock = u64;
 pub trait Steppable {
     fn step(&mut self, system: &System) -> Result<Clock, Error>;
     fn on_error(&mut self, _system: &System) { }
+    fn on_debug(&mut self) { }
 }
 
 /// A device that can receive an interrupt.  The `interrupt_state_change()` method
