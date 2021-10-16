@@ -1,14 +1,15 @@
 
-* add exception for privileged instructions.  Should you separate them in the `match` or just put a guard into the instructions, and if the latter, can
-  you use the emulator's errors to surface the execption up to the `step_internal` function but not to `System`?
+* make IO in mc68681 use a separate thread... will that improve performance of mc68681.step()?
 
-* make it possible to break out of the current execution, into the debugger
-* how can you add 68030 support?  Should it be all one module that checks maybe during decode if the instruction is supported?  Should it 'inherit' from the MC68010 object
+* make it possible to break out of the current execution, into the debugger, by using a certain keystroke
+* add support for MC68020+ indexing modes
+* add support for MMU
+* add support for FPU
 * make tests for each instruction
 
 * unimplemented: ABCD, ADDX, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SBCD, SUBX
 * undecoded: ADDX, SUBX
-* modify execution for >=MC68020: DIVSL, DIVUL, EXTB, LINK, MOVEM, MULSL, MULUL, RTM, TRAPcc, UNPK
+* modify execution for >=MC68020: DIVSL, DIVUL, LINK, MOVEM, MULSL, MULUL, RTM, TRAPcc, UNPK
 * implement the full extension word for MC68020+
 
 * >=MC68020 instructions: BFCHG, BFCLR, BFEXTS, BFEXTU, BFFFO, BFINS, BFSET, BFTST, CALLM, CAS, CAS2, CHK2, CMP2, PACK
