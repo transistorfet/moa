@@ -4,6 +4,7 @@ mod error;
 mod memory;
 mod timers;
 mod devices;
+mod ttys;
 mod interrupts;
 mod cpus;
 mod peripherals;

@@ -1,15 +1,9 @@
 
-use std::io::{Read, Write};
-use std::os::unix::io::AsRawFd;
-
-use nix::fcntl::OFlag;
-use nix::pty::{self, PtyMaster};
-use nix::fcntl::{fcntl, FcntlArg};
-
 use crate::error::Error;
 use crate::system::System;
 use crate::devices::{Clock, Steppable};
 use crate::memory::{Address, Addressable, MAX_READ};
+use crate::ttys::{SimplePty, SharedSimplePty};
 
 
 const REG_MR1A_MR2A: Address = 0x01;
@@ -77,7 +71,7 @@ const ISR_CH_A_TX_READY: u8 = 0x01;
 const DEV_NAME: &'static str = "mc68681";
 
 pub struct MC68681Port {
-    pub tty: Option<PtyMaster>,
+    pub tty: Option<SharedSimplePty>,
     pub status: u8,
 
     pub tx_enabled: bool,
@@ -100,21 +94,15 @@ impl MC68681Port {
     }
 
     pub fn open(&mut self) -> Result<String, Error> {
-        let master = pty::posix_openpt(OFlag::O_RDWR).and_then(|master| {
-            pty::grantpt(&master)?;
-            pty::unlockpt(&master)?;
-            fcntl(master.as_raw_fd(), FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
-            Ok(master)
-        }).map_err(|_| Error::new("Error opening new pseudoterminal"))?;
-
-        let name = unsafe { pty::ptsname(&master).map_err(|_| Error::new("Unable to get pty name"))? };
+        let pty = SimplePty::open()?;
+        let name = pty.lock().unwrap().name.clone();
         println!("{}: opening pts {}", DEV_NAME, name);
-        self.tty = Some(master);
+        self.tty = Some(pty);
         Ok(name)
     }
 
     pub fn send_byte(&mut self, data: u8) {
-        self.tty.as_mut().map(|tty| tty.write_all(&[data]));
+        self.tty.as_mut().map(|tty| tty.lock().unwrap().write(data));
         self.set_tx_status(false);
     }
 
@@ -134,18 +122,15 @@ impl MC68681Port {
 
     pub fn check_rx(&mut self) -> Result<bool, Error> {
         if self.rx_enabled && (self.status & SR_RX_READY) == 0 && self.tty.is_some() {
-            let mut buf = [0; 1];
             let tty = self.tty.as_mut().unwrap();
-            match tty.read(&mut buf) {
-                Ok(count) => {
-                    self.input = buf[0];
+            let result = tty.lock().unwrap().read();
+            match result {
+                Some(input) => {
+                    self.input = input;
                     self.set_rx_status(true);
                     return Ok(true);
                 },
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => { },
-                Err(err) => {
-                    println!("ERROR: {:?}", err);
-                }
+                None => { },
             }
         }
         Ok(false)

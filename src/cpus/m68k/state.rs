@@ -7,21 +7,19 @@ use super::decode::M68kDecoder;
 use super::debugger::M68kDebugger;
 
 
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum M68kType {
-    #[allow(dead_code)]
     MC68000,
-    #[allow(dead_code)]
     MC68010,
-    #[allow(dead_code)]
     MC68020,
-    #[allow(dead_code)]
     MC68030,
 }
 
 const FLAGS_ON_RESET: u16 = 0x2700;
 
 #[repr(u16)]
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Flags {
     Carry       = 0x0001,
@@ -36,6 +34,7 @@ pub enum Flags {
 }
 
 #[repr(u8)]
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Exceptions {
     BusError            = 2,
