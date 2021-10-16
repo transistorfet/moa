@@ -3,7 +3,7 @@ use std::fs;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::memory::{Address, Addressable};
+use crate::memory::{Address, Addressable, MAX_READ};
 use crate::devices::{Clock, Steppable};
 
 
@@ -69,13 +69,13 @@ impl Addressable for AtaDevice {
         0x30
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
-        let mut data = vec![0; count];
+    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
+        let mut data = [0; MAX_READ];
 
         match addr {
             ATA_REG_DATA_WORD => {
                 self.selected_count -= 2;
-                let offset = ((self.selected_sector * ATA_SECTOR_SIZE) + (ATA_SECTOR_SIZE -1 - self.selected_count)) as usize;
+                let offset = ((self.selected_sector * ATA_SECTOR_SIZE) + (ATA_SECTOR_SIZE - 1 - self.selected_count)) as usize;
                 data[0] = self.contents[offset];
                 data[1] = self.contents[offset + 1];
                 if self.selected_count == 0 {

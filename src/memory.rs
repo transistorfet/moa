@@ -6,12 +6,14 @@ use crate::system::System;
 use crate::devices::{Clock, Steppable, AddressableDeviceBox};
 
 
+pub const MAX_READ: usize = 4;
+
 pub type Address = u64;
 
 /// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
     fn len(&self) -> usize;
-    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error>;
+    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error>;
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error>;
 
     fn read_u8(&mut self, addr: Address) -> Result<u8, Error> {
@@ -80,8 +82,13 @@ impl Addressable for MemoryBlock {
         self.contents.len()
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
-        Ok(self.contents[(addr as usize) .. (addr as usize + count)].to_vec())
+    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
+        let mut data = [0; MAX_READ];
+        //self.contents[(addr as usize) .. (addr as usize + 4)].clone_from_slice(&data);
+        for i in 0..std::cmp::min(count, MAX_READ) {
+            data[i] = self.contents[(addr as usize) + i];
+        }
+        Ok(data)
     }
 
     fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
@@ -168,7 +175,7 @@ impl Addressable for Bus {
         (block.base as usize) + block.length
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
+    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
         let (dev, relative_addr) = self.get_device_at(addr, count)?;
         let result = dev.borrow_mut().read(relative_addr, count);
         result

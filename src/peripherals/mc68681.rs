@@ -9,7 +9,7 @@ use nix::fcntl::{fcntl, FcntlArg};
 use crate::error::Error;
 use crate::system::System;
 use crate::devices::{Clock, Steppable};
-use crate::memory::{Address, Addressable};
+use crate::memory::{Address, Addressable, MAX_READ};
 
 
 const REG_MR1A_MR2A: Address = 0x01;
@@ -275,8 +275,8 @@ impl Addressable for MC68681 {
         0x30
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Result<Vec<u8>, Error> {
-        let mut data = vec![0; count];
+    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
+        let mut data = [0; MAX_READ];
 
         match addr {
             REG_SRA_RD => {
