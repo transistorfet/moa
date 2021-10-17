@@ -1,9 +1,9 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Clock, Steppable};
-use crate::memory::{Address, Addressable, MAX_READ};
-use crate::ttys::{SimplePty, SharedSimplePty};
+use crate::devices::{Clock, Address, Steppable, Addressable, MAX_READ};
+
+use crate::host::ttys::{SimplePty, SharedSimplePty};
 
 
 const REG_MR1A_MR2A: Address = 0x01;

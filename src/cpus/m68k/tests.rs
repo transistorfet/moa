@@ -2,11 +2,11 @@
 #[cfg(test)]
 mod decode_tests {
     use crate::system::System;
-    use crate::devices::{Steppable, AddressableDeviceBox, wrap_addressable};
-    use crate::memory::{Address, Addressable, MemoryBlock};
+    use crate::memory::MemoryBlock;
+    use crate::devices::{Address, Addressable, Steppable, AddressableDeviceBox, wrap_addressable, MAX_READ};
 
     use crate::cpus::m68k::{M68k, M68kType};
-    use crate::cpus::m68k::decode::{Instruction, Target, Size, Sign, RegisterType, ShiftDirection};
+    use crate::cpus::m68k::decode::{Instruction, Target, Size, Sign, XRegister, ShiftDirection};
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
@@ -136,7 +136,7 @@ mod decode_tests {
 
         let memory = get_decode_memory(&mut cpu, &system);
         let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b110, 0b010, Some(size)).unwrap();
-        assert_eq!(target, Target::IndirectARegXRegOffset(2, RegisterType::Data, 3, offset, size));
+        assert_eq!(target, Target::IndirectARegXRegOffset(2, XRegister::Data(3), offset, 0, size));
     }
 
     #[test]
@@ -194,7 +194,7 @@ mod decode_tests {
 
         let memory = get_decode_memory(&mut cpu, &system);
         let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b111, 0b011, Some(size)).unwrap();
-        assert_eq!(target, Target::IndirectPCXRegOffset(RegisterType::Data, 3, offset, size));
+        assert_eq!(target, Target::IndirectPCXRegOffset(XRegister::Data(3), offset, 0, size));
     }
 
     #[test]
@@ -331,8 +331,8 @@ mod decode_tests {
 #[cfg(test)]
 mod execute_tests {
     use crate::system::System;
-    use crate::devices::{Steppable, wrap_addressable};
-    use crate::memory::{Address, Addressable, MemoryBlock};
+    use crate::memory::MemoryBlock;
+    use crate::devices::{Address, Addressable, Steppable, wrap_addressable};
 
     use crate::cpus::m68k::{M68k, M68kType};
     use crate::cpus::m68k::decode::{Instruction, Target, Size, Sign, ShiftDirection};
@@ -419,22 +419,22 @@ mod execute_tests {
     fn instruction_andi_sr() {
         let (mut cpu, system) = init_test();
 
-        cpu.state.sr = 0x87AA;
+        cpu.state.sr = 0xA7AA;
         cpu.decoder.instruction = Instruction::ANDtoSR(0xF8FF);
 
         cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state.sr, 0x80AA);
+        assert_eq!(cpu.state.sr, 0xA0AA);
     }
 
     #[test]
     fn instruction_ori_sr() {
         let (mut cpu, system) = init_test();
 
-        cpu.state.sr = 0x8755;
+        cpu.state.sr = 0xA755;
         cpu.decoder.instruction = Instruction::ORtoSR(0x00AA);
 
         cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state.sr, 0x87FF);
+        assert_eq!(cpu.state.sr, 0xA7FF);
     }
 
     #[test]

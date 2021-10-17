@@ -2,9 +2,9 @@
 use std::cell::{RefCell, RefMut};
 
 use crate::error::Error;
+use crate::memory::Bus;
 use crate::interrupts::InterruptController;
-use crate::memory::{Address, Bus};
-use crate::devices::{Device, AddressableDeviceBox, InterruptableDeviceBox, Clock};
+use crate::devices::{Address, Device, AddressableDeviceBox, InterruptableDeviceBox, Clock};
 
 
 pub struct System {

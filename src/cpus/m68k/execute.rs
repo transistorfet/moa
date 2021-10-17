@@ -1,8 +1,7 @@
 
 use crate::system::System;
 use crate::error::{ErrorType, Error};
-use crate::memory::{Address, Addressable};
-use crate::devices::{Clock, Steppable, Interruptable};
+use crate::devices::{Clock, Address, Steppable, Interruptable, Addressable};
 
 use super::decode::{
     Instruction,

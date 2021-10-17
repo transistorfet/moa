@@ -3,8 +3,7 @@ use std::fmt;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::memory::{Address, Addressable};
-use crate::devices::AddressableDeviceRefMut;
+use crate::devices::{Address, Addressable, AddressableDeviceRefMut};
 
 use super::state::{M68kType, Exceptions};
 

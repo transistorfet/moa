@@ -4,11 +4,12 @@ mod error;
 mod memory;
 mod timers;
 mod devices;
-mod ttys;
 mod interrupts;
+mod system;
+
+mod host;
 mod cpus;
 mod peripherals;
-mod system;
 
 use crate::system::System;
 use crate::memory::MemoryBlock;

@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::memory::{Address, Addressable};
+use crate::devices::{Address, Addressable};
 
 use super::state::M68k;
 use super::decode::M68kDecoder;
