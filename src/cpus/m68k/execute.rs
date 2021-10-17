@@ -640,9 +640,9 @@ impl M68k {
                 get_address_sized(system, (*addr).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectARegXRegOffset(reg, xreg, offset, scale, target_size) => {
-                let reg_offset = sign_extend_to_long(self.get_x_reg_value(xreg), target_size);
+                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
                 let addr = self.get_a_reg_mut(reg);
-                get_address_sized(system, ((*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) << scale) as Address, size)
+                get_address_sized(system, (*addr).wrapping_add(offset as u32).wrapping_add(index as u32) as Address, size)
             },
             Target::IndirectMemory(addr) => {
                 get_address_sized(system, addr as Address, size)
@@ -651,8 +651,8 @@ impl M68k {
                 get_address_sized(system, (self.decoder.start + 2).wrapping_add(offset as u32) as Address, size)
             },
             Target::IndirectPCXRegOffset(xreg, offset, scale, target_size) => {
-                let reg_offset = sign_extend_to_long(self.get_x_reg_value(xreg), target_size);
-                get_address_sized(system, ((self.decoder.start + 2).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) << scale) as Address, size)
+                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
+                get_address_sized(system, (self.decoder.start + 2).wrapping_add(offset as u32).wrapping_add(index as u32) as Address, size)
             },
         }
     }
@@ -683,9 +683,9 @@ impl M68k {
                 set_address_sized(system, (*addr).wrapping_add(offset as u32) as Address, value, size)?;
             },
             Target::IndirectARegXRegOffset(reg, xreg, offset, scale, target_size) => {
-                let reg_offset = sign_extend_to_long(self.get_x_reg_value(xreg), target_size);
+                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
                 let addr = self.get_a_reg_mut(reg);
-                set_address_sized(system, ((*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) << scale) as Address, value, size)?;
+                set_address_sized(system, (*addr).wrapping_add(offset as u32).wrapping_add(index as u32) as Address, value, size)?;
             },
             Target::IndirectMemory(addr) => {
                 set_address_sized(system, addr as Address, value, size)?;
@@ -703,9 +703,9 @@ impl M68k {
                 (*addr).wrapping_add(offset as u32)
             },
             Target::IndirectARegXRegOffset(reg, xreg, offset, scale, target_size) => {
-                let reg_offset = sign_extend_to_long(self.get_x_reg_value(xreg), target_size);
+                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
                 let addr = self.get_a_reg_mut(reg);
-                (*addr).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) << scale
+                (*addr).wrapping_add(offset as u32).wrapping_add(index as u32)
             },
             Target::IndirectMemory(addr) => {
                 addr
@@ -714,8 +714,8 @@ impl M68k {
                 (self.decoder.start + 2).wrapping_add(offset as u32)
             },
             Target::IndirectPCXRegOffset(xreg, offset, scale, target_size) => {
-                let reg_offset = sign_extend_to_long(self.get_x_reg_value(xreg), target_size);
-                (self.decoder.start + 2).wrapping_add(reg_offset as u32).wrapping_add(offset as u32) << scale
+                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
+                (self.decoder.start + 2).wrapping_add(offset as u32).wrapping_add(index as u32)
             },
             _ => return Err(Error::new(&format!("Invalid addressing target: {:?}", target))),
         };
