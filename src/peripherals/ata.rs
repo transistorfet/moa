@@ -3,7 +3,7 @@ use std::fs;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Clock, Address, Steppable, Addressable, MAX_READ};
+use crate::devices::{Clock, Address, Addressable, Transmutable, MAX_READ};
 
 
 const ATA_REG_DATA_WORD: Address        = 0x20;
@@ -132,9 +132,9 @@ impl Addressable for AtaDevice {
     }
 }
 
-impl Steppable for AtaDevice {
-    fn step(&mut self, _system: &System) -> Result<Clock, Error> {
-        Ok(1)
+impl Transmutable for AtaDevice {
+    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        Some(self)
     }
 }
 

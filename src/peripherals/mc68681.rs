@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Clock, Address, Steppable, Addressable, MAX_READ};
+use crate::devices::{Clock, Address, Steppable, Addressable, Transmutable, MAX_READ};
 
 use crate::host::ttys::{SimplePty, SharedSimplePty};
 
@@ -379,3 +379,12 @@ impl Steppable for MC68681 {
     }
 }
 
+impl Transmutable for MC68681 {
+    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        Some(self)
+    }
+
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
+}

@@ -3,7 +3,7 @@ use std::fs;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Clock, Address, Steppable, Addressable, AddressableDeviceBox, MAX_READ};
+use crate::devices::{Clock, Address, Steppable, Addressable, Transmutable, TransmutableBox, MAX_READ};
 
 
 pub struct MemoryBlock {
@@ -61,17 +61,18 @@ impl Addressable for MemoryBlock {
     }
 }
 
-impl Steppable for MemoryBlock {
-    fn step(&mut self, _system: &System) -> Result<Clock, Error> {
-        Ok(1)
+impl Transmutable for MemoryBlock {
+    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        Some(self)
     }
 }
+
 
 
 pub struct Block {
     pub base: Address,
     pub length: usize,
-    pub dev: AddressableDeviceBox,
+    pub dev: TransmutableBox,
 }
 
 pub struct Bus {
@@ -85,7 +86,7 @@ impl Bus {
         }
     }
 
-    pub fn insert(&mut self, base: Address, length: usize, dev: AddressableDeviceBox) {
+    pub fn insert(&mut self, base: Address, length: usize, dev: TransmutableBox) {
         let block = Block { base, length, dev };
         for i in 0..self.blocks.len() {
             if self.blocks[i].base > block.base {
@@ -96,7 +97,7 @@ impl Bus {
         self.blocks.insert(0, block);
     }
 
-    pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(AddressableDeviceBox, Address), Error> {
+    pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(TransmutableBox, Address), Error> {
         for block in &self.blocks {
             if addr >= block.base && addr <= (block.base + block.length as Address) {
                 let relative_addr = addr - block.base;
@@ -138,13 +139,13 @@ impl Addressable for Bus {
 
     fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
         let (dev, relative_addr) = self.get_device_at(addr, count)?;
-        let result = dev.borrow_mut().read(relative_addr, count);
+        let result = dev.borrow_mut().as_addressable().unwrap().read(relative_addr, count);
         result
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         let (dev, relative_addr) = self.get_device_at(addr, data.len())?;
-        let result = dev.borrow_mut().write(relative_addr, data);
+        let result = dev.borrow_mut().as_addressable().unwrap().write(relative_addr, data);
         result
     }
 }

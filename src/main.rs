@@ -16,7 +16,7 @@ use crate::memory::MemoryBlock;
 use crate::peripherals::ata::AtaDevice;
 use crate::cpus::m68k::{M68k, M68kType};
 use crate::peripherals::mc68681::MC68681;
-use crate::devices::{wrap_addressable, wrap_interruptable};
+use crate::devices::wrap_transmutable;
 
 fn main() {
     let mut system = System::new();
@@ -25,20 +25,20 @@ fn main() {
     for byte in monitor.contents.iter() {
         print!("{:02x} ", byte);
     }
-    system.add_addressable_device(0x00000000, wrap_addressable(monitor)).unwrap();
+    system.add_addressable_device(0x00000000, wrap_transmutable(monitor)).unwrap();
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
     ram.load_at(0, "binaries/kernel.bin").unwrap();
-    system.add_addressable_device(0x00100000, wrap_addressable(ram)).unwrap();
+    system.add_addressable_device(0x00100000, wrap_transmutable(ram)).unwrap();
 
     let mut ata = AtaDevice::new();
     ata.load("binaries/disk-with-partition-table.img").unwrap();
-    system.add_addressable_device(0x00600000, wrap_addressable(ata)).unwrap();
+    system.add_addressable_device(0x00600000, wrap_transmutable(ata)).unwrap();
 
     let mut serial = MC68681::new();
     launch_terminal_emulator(serial.port_a.open().unwrap());
-    launch_slip_connection(serial.port_b.open().unwrap());
-    system.add_addressable_device(0x00700000, wrap_addressable(serial)).unwrap();
+    //launch_slip_connection(serial.port_b.open().unwrap());
+    system.add_addressable_device(0x00700000, wrap_transmutable(serial)).unwrap();
 
 
     let mut cpu = M68k::new(M68kType::MC68010);
@@ -52,7 +52,7 @@ fn main() {
     //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
     //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
-    system.add_interruptable_device(wrap_interruptable(cpu)).unwrap();
+    system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
     loop {
         match system.step() {
             Ok(()) => { },

@@ -1,7 +1,7 @@
 
 use crate::system::System;
 use crate::error::{ErrorType, Error};
-use crate::devices::{Clock, Address, Steppable, Interruptable, Addressable};
+use crate::devices::{Clock, Address, Steppable, Interruptable, Addressable, Transmutable};
 
 use super::decode::{
     Instruction,
@@ -19,6 +19,7 @@ use super::decode::{
 const DEV_NAME: &'static str = "m68k-cpu";
 
 use super::state::{M68k, Status, Flags, Exceptions, InterruptPriority};
+
 
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<Clock, Error> {
@@ -52,6 +53,17 @@ impl Interruptable for M68k {
         Ok(())
     }
 }
+
+impl Transmutable for M68k {
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
+
+    fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
+        Some(self)
+    }
+}
+
 
 impl M68k {
     #[allow(dead_code)]

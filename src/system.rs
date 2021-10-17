@@ -4,12 +4,12 @@ use std::cell::{RefCell, RefMut};
 use crate::error::Error;
 use crate::memory::Bus;
 use crate::interrupts::InterruptController;
-use crate::devices::{Address, Device, AddressableDeviceBox, InterruptableDeviceBox, Clock};
+use crate::devices::{Clock, Address, Transmutable, TransmutableBox};
 
 
 pub struct System {
     pub clock: Clock,
-    pub devices: Vec<Device>,
+    pub devices: Vec<TransmutableBox>,
     pub bus: RefCell<Bus>,
     pub interrupt_controller: RefCell<InterruptController>,
 }
@@ -33,44 +33,44 @@ impl System {
     }
 
 
-    pub fn add_addressable_device(&mut self, addr: Address, device: AddressableDeviceBox) -> Result<(), Error> {
-        let length = device.borrow().len();
+    pub fn add_addressable_device(&mut self, addr: Address, device: TransmutableBox) -> Result<(), Error> {
+        let length = device.borrow_mut().as_addressable().unwrap().len();
         self.bus.borrow_mut().insert(addr, length, device.clone());
-        self.devices.push(Device::Addressable(device));
+        self.devices.push(device);
         Ok(())
     }
 
-    pub fn add_interruptable_device(&mut self, device: InterruptableDeviceBox) -> Result<(), Error> {
+    pub fn add_interruptable_device(&mut self, device: TransmutableBox) -> Result<(), Error> {
         self.interrupt_controller.borrow_mut().set_target(device.clone())?;
-        self.devices.push(Device::Interruptable(device));
+        self.devices.push(device);
         Ok(())
     }
 
     pub fn step(&mut self) -> Result<(), Error> {
         self.clock += 1;
         for dev in &self.devices {
-            match dev {
-                Device::Addressable(dev) => dev.borrow_mut().step(&self),
-                Device::Interruptable(dev) => dev.borrow_mut().step(&self),
-            }?;
+            match dev.borrow_mut().as_steppable() {
+                Some(dev) => { dev.step(&self)?; },
+                None => { },
+            }
         }
         Ok(())
     }
 
     pub fn exit_error(&mut self) {
         for dev in &self.devices {
-            match dev {
-                Device::Addressable(dev) => dev.borrow_mut().on_error(&self),
-                Device::Interruptable(dev) => dev.borrow_mut().on_error(&self),
+            match dev.borrow_mut().as_steppable() {
+                Some(dev) => dev.on_error(&self),
+                None => { },
             }
         }
     }
 
     pub fn debug(&mut self) -> Result<(), Error> {
         for dev in &self.devices {
-            match dev {
-                Device::Addressable(dev) => dev.borrow_mut().on_debug(),
-                Device::Interruptable(dev) => dev.borrow_mut().on_debug(),
+            match dev.borrow_mut().as_steppable() {
+                Some(dev) => dev.on_debug(),
+                None => { },
             }
         }
         Ok(())

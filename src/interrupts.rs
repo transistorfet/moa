@@ -2,7 +2,7 @@
 use std::iter;
 
 use crate::error::Error;
-use crate::devices::{InterruptableDeviceBox};
+use crate::devices::TransmutableBox;
 
 
 pub struct Signal {
@@ -35,7 +35,7 @@ impl Signal {
 
 
 pub struct InterruptController {
-    pub target: Option<InterruptableDeviceBox>,
+    pub target: Option<TransmutableBox>,
     pub priority: Vec<Signal>,
 }
 
@@ -47,7 +47,7 @@ impl InterruptController {
         }
     }
 
-    pub fn set_target(&mut self, dev: InterruptableDeviceBox) -> Result<(), Error> {
+    pub fn set_target(&mut self, dev: TransmutableBox) -> Result<(), Error> {
         if self.target.is_some() {
             return Err(Error::new("Interruptable device already set, and interrupt controller only supports one receiver"));
         }
@@ -73,7 +73,7 @@ impl InterruptController {
         debug!("interrupts: priority {} state changed to {}", priority, state);
         match &self.target {
             Some(dev) => {
-                Ok(dev.borrow_mut().interrupt_state_change(state, priority, number)?)
+                Ok(dev.borrow_mut().as_interruptable().unwrap().interrupt_state_change(state, priority, number)?)
             },
             None => {
                 Err(Error::new(&format!("unhandled interrupt: {:x}", number)))

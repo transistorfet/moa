@@ -11,6 +11,7 @@ pub const MAX_READ: usize = 4;
 pub type Clock = u64;
 pub type Address = u64;
 
+
 /// A device that can change state over time.  The `step()` method will be called
 /// by the containing `System` when the system clock advances.  If an error occurs
 /// with any device, the `on_error()` method will be called to display any state
@@ -21,11 +22,13 @@ pub trait Steppable {
     fn on_debug(&mut self) { }
 }
 
+
 /// A device that can receive an interrupt.  The `interrupt_state_change()` method
 /// will be called whenever an interrupt signal changes goes high or low.
 pub trait Interruptable {
     fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error>;
 }
+
 
 /// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
@@ -61,34 +64,6 @@ pub trait Addressable {
     }
 }
 
-
-pub trait AddressableDevice: Addressable + Steppable { }
-pub trait InterruptableDevice: Interruptable + Steppable { }
-
-pub type AddressableDeviceBox = Rc<RefCell<Box<dyn AddressableDevice>>>;
-pub type InterruptableDeviceBox = Rc<RefCell<Box<dyn InterruptableDevice>>>;
-
-pub type AddressableDeviceRefMut<'a> = RefMut<'a, Box<dyn AddressableDevice>>;
-
-impl<T: Addressable + Steppable> AddressableDevice for T { }
-impl<T: Interruptable + Steppable> InterruptableDevice for T { }
-
-pub fn wrap_addressable<T: AddressableDevice + 'static>(value: T) -> AddressableDeviceBox {
-    Rc::new(RefCell::new(Box::new(value)))
-}
-
-pub fn wrap_interruptable<T: InterruptableDevice + 'static>(value: T) -> InterruptableDeviceBox {
-    Rc::new(RefCell::new(Box::new(value)))
-}
-
-
-pub enum Device {
-    Addressable(AddressableDeviceBox),
-    Interruptable(InterruptableDeviceBox),
-}
-
-
-
 #[inline(always)]
 pub fn read_beu16(data: &[u8]) -> u16 {
     (data[0] as u16) << 8 |
@@ -119,5 +94,25 @@ pub fn write_beu32(value: u32) -> [u8; 4] {
         (value >> 8) as u8,
         value as u8,
     ]
+}
+
+pub trait Transmutable {
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        None
+    }
+
+    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        None
+    }
+
+    fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
+        None
+    }
+}
+
+pub type TransmutableBox = Rc<RefCell<Box<dyn Transmutable>>>;
+
+pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox {
+    Rc::new(RefCell::new(Box::new(value)))
 }
 

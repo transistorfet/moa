@@ -1,5 +1,9 @@
 
-* make IO in mc68681 use a separate thread... will that improve performance of mc68681.step()?
+* can you make Bus be an AddressableDeviceBox so that the CPU can have a ref to it instead of calling system.get_bus()
+  the alternative is having system.get_bus() take an argument or something to figure out what bus to return of multiple, for multibus systems
+* can you eventually make this all configurable via a config file?
+
+* test using mpsc to pass messages with the tty IO thread, and test if it's slower than what you have now
 
 * make it possible to break out of the current execution, into the debugger, by using a certain keystroke
 * add support for MC68020+ indexing modes
