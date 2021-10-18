@@ -2,8 +2,7 @@
 use std::fs;
 
 use crate::error::Error;
-use crate::system::System;
-use crate::devices::{Clock, Address, Addressable, Transmutable, MAX_READ};
+use crate::devices::{Address, Addressable, Transmutable, MAX_READ};
 
 
 const ATA_REG_DATA_WORD: Address        = 0x20;

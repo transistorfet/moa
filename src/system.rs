@@ -4,7 +4,7 @@ use std::cell::{RefCell, RefMut};
 use crate::error::Error;
 use crate::memory::Bus;
 use crate::interrupts::InterruptController;
-use crate::devices::{Clock, Address, Transmutable, TransmutableBox};
+use crate::devices::{Clock, Address, TransmutableBox};
 
 
 pub struct System {

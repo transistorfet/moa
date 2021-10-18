@@ -2,8 +2,7 @@
 use std::fs;
 
 use crate::error::Error;
-use crate::system::System;
-use crate::devices::{Clock, Address, Steppable, Addressable, Transmutable, TransmutableBox, MAX_READ};
+use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, MAX_READ};
 
 
 pub struct MemoryBlock {

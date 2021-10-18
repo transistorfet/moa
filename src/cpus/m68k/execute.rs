@@ -3,20 +3,21 @@ use crate::system::System;
 use crate::error::{ErrorType, Error};
 use crate::devices::{Clock, Address, Steppable, Interruptable, Addressable, Transmutable};
 
-use super::decode::{
-    Instruction,
-    Target,
+use super::instructions::{
+    Register,
     Size,
     Sign,
     Direction,
-    Condition,
     ShiftDirection,
-    ControlRegister,
-    Register,
     XRegister,
     RegOrImmediate,
-    sign_extend_to_long
+    ControlRegister,
+    Condition,
+    Target,
+    Instruction,
+    sign_extend_to_long,
 };
+
 
 const DEV_NAME: &'static str = "m68k-cpu";
 

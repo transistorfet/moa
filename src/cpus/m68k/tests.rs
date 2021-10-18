@@ -3,10 +3,10 @@
 mod decode_tests {
     use crate::system::System;
     use crate::memory::MemoryBlock;
-    use crate::devices::{Address, Addressable, Steppable, AddressableDeviceBox, wrap_addressable, MAX_READ};
+    use crate::devices::{Address, Addressable, Steppable, TransmutableBox, wrap_transmutable, MAX_READ};
 
     use crate::cpus::m68k::{M68k, M68kType};
-    use crate::cpus::m68k::decode::{Instruction, Target, Size, Sign, XRegister, ShiftDirection};
+    use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, XRegister, ShiftDirection};
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
@@ -17,7 +17,7 @@ mod decode_tests {
         // Insert basic initialization
         let data = vec![0; 0x00100000];
         let mem = MemoryBlock::new(data);
-        system.add_addressable_device(0x00000000, wrap_addressable(mem)).unwrap();
+        system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
         system.get_bus().write_beu32(0, INIT_STACK as u32).unwrap();
         system.get_bus().write_beu32(4, INIT_ADDR as u32).unwrap();
 
@@ -30,7 +30,7 @@ mod decode_tests {
         (cpu, system)
     }
 
-    fn get_decode_memory(cpu: &mut M68k, system: &System) -> AddressableDeviceBox {
+    fn get_decode_memory(cpu: &mut M68k, system: &System) -> TransmutableBox {
         let (memory, relative_addr) = system.get_bus().get_device_at(INIT_ADDR, 12).unwrap();
         cpu.decoder.init((INIT_ADDR - relative_addr) as u32, INIT_ADDR as u32);
         memory
@@ -48,7 +48,7 @@ mod decode_tests {
         let expected = 0x1234;
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b000, 0b001, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b000, 0b001, Some(size)).unwrap();
         assert_eq!(target, Target::DirectDReg(1));
     }
 
@@ -60,7 +60,7 @@ mod decode_tests {
         let expected = 0x1234;
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b001, 0b010, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b001, 0b010, Some(size)).unwrap();
         assert_eq!(target, Target::DirectAReg(2));
     }
 
@@ -75,7 +75,7 @@ mod decode_tests {
         system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b010, 0b010, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b010, 0b010, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectAReg(2));
     }
 
@@ -90,7 +90,7 @@ mod decode_tests {
         system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b011, 0b010, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b011, 0b010, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectARegInc(2));
     }
 
@@ -105,7 +105,7 @@ mod decode_tests {
         system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b100, 0b010, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b100, 0b010, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectARegDec(2));
     }
 
@@ -119,7 +119,7 @@ mod decode_tests {
         system.get_bus().write_beu16(INIT_ADDR, (offset as i16) as u16).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b101, 0b100, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b101, 0b100, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectARegOffset(4, offset));
     }
 
@@ -135,7 +135,7 @@ mod decode_tests {
         system.get_bus().write_beu16(INIT_ADDR + 2, (offset as i16) as u16).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b110, 0b010, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b110, 0b010, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectARegXRegOffset(2, XRegister::Data(3), offset, 0, size));
     }
 
@@ -149,7 +149,7 @@ mod decode_tests {
         system.get_bus().write_beu16(INIT_ADDR, expected as u16).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b111, 0b000, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b000, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectMemory(expected));
     }
 
@@ -163,7 +163,7 @@ mod decode_tests {
         system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b111, 0b001, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b001, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectMemory(expected));
     }
 
@@ -177,7 +177,7 @@ mod decode_tests {
         system.get_bus().write_beu16(INIT_ADDR, (offset as i16) as u16).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b111, 0b010, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b010, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectPCOffset(offset));
     }
 
@@ -193,7 +193,7 @@ mod decode_tests {
         system.get_bus().write_beu16(INIT_ADDR + 2, (offset as i16) as u16).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b111, 0b011, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b011, Some(size)).unwrap();
         assert_eq!(target, Target::IndirectPCXRegOffset(XRegister::Data(3), offset, 0, size));
     }
 
@@ -207,7 +207,7 @@ mod decode_tests {
         system.get_bus().write_beu16(INIT_ADDR, expected as u16).unwrap();
 
         let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(&mut memory.borrow_mut(), 0b111, 0b100, Some(size)).unwrap();
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b100, Some(size)).unwrap();
         assert_eq!(target, Target::Immediate(expected));
     }
 
@@ -332,10 +332,10 @@ mod decode_tests {
 mod execute_tests {
     use crate::system::System;
     use crate::memory::MemoryBlock;
-    use crate::devices::{Address, Addressable, Steppable, wrap_addressable};
+    use crate::devices::{Address, Addressable, Steppable, wrap_transmutable};
 
     use crate::cpus::m68k::{M68k, M68kType};
-    use crate::cpus::m68k::decode::{Instruction, Target, Size, Sign, ShiftDirection};
+    use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, ShiftDirection};
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
@@ -346,7 +346,7 @@ mod execute_tests {
         // Insert basic initialization
         let data = vec![0; 0x00100000];
         let mem = MemoryBlock::new(data);
-        system.add_addressable_device(0x00000000, wrap_addressable(mem)).unwrap();
+        system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
         system.get_bus().write_beu32(0, INIT_STACK as u32).unwrap();
         system.get_bus().write_beu32(4, INIT_ADDR as u32).unwrap();
 
