@@ -31,8 +31,22 @@ pub enum ShiftDirection {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum XRegister {
-    Data(u8),
-    Address(u8),
+    DReg(u8),
+    AReg(u8),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum BaseRegister {
+    None,
+    PC,
+    AReg(u8),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct IndexRegister {
+    pub xreg: XRegister,
+    pub scale: u8,
+    pub size: Size,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -41,11 +55,11 @@ pub enum RegOrImmediate {
     Immediate(u8),
 }
 
-
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ControlRegister {
     VBR,
 }
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Condition {
     True,
@@ -74,11 +88,10 @@ pub enum Target {
     IndirectAReg(Register),
     IndirectARegInc(Register),
     IndirectARegDec(Register),
-    IndirectARegOffset(Register, i32),
-    IndirectARegXRegOffset(Register, XRegister, i32, u8, Size),
+    IndirectRegOffset(BaseRegister, Option<IndexRegister>, i32),
+    IndirectMemoryPreindexed(BaseRegister, Option<IndexRegister>, i32, i32),
+    IndirectMemoryPostindexed(BaseRegister, Option<IndexRegister>, i32, i32),
     IndirectMemory(u32),
-    IndirectPCOffset(i32),
-    IndirectPCXRegOffset(XRegister, i32, u8, Size),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -267,9 +280,33 @@ impl fmt::Display for ControlRegister {
 impl fmt::Display for XRegister {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            XRegister::Data(reg) => write!(f, "d{}", reg),
-            XRegister::Address(reg) => write!(f, "a{}", reg),
+            XRegister::DReg(reg) => write!(f, "d{}", reg),
+            XRegister::AReg(reg) => write!(f, "a{}", reg),
         }
+    }
+}
+
+impl fmt::Display for BaseRegister {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BaseRegister::None => Ok(()),
+            BaseRegister::PC => write!(f, "%pc + "),
+            BaseRegister::AReg(reg) => write!(f, "%a{} + ", reg),
+        }
+    }
+}
+
+fn fmt_index_disp(index: &Option<IndexRegister>) -> String {
+    match index {
+        Some(index) => {
+            let mut result = format!("%{}", index.xreg);
+            if index.scale != 0 {
+                result += &format!("<< {}", index.scale);
+            }
+            result += " + ";
+            result
+        },
+        None => "".to_string(),
     }
 }
 
@@ -282,17 +319,19 @@ impl fmt::Display for Target {
             Target::IndirectAReg(reg) => write!(f, "(%a{})", reg),
             Target::IndirectARegInc(reg) => write!(f, "(%a{})+", reg),
             Target::IndirectARegDec(reg) => write!(f, "-(%a{})", reg),
-            Target::IndirectARegOffset(reg, offset) => write!(f, "(%a{} + #{:04x})", reg, offset),
-            Target::IndirectARegXRegOffset(reg, xreg, offset, scale, _) => {
-                let scale_str = if *scale != 0 { format!("<< {}", scale) } else { "".to_string() };
-                write!(f, "(%a{} + %{} + #{:04x}{})", reg, xreg, offset, scale_str)
+            Target::IndirectRegOffset(base_reg, index_reg, offset) => {
+                let index_str = fmt_index_disp(index_reg);
+                write!(f, "({}{}#{:04x})", base_reg, index_str, offset)
+            },
+            Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
+                let index_str = fmt_index_disp(index_reg);
+                write!(f, "([{}{}#{:08x}] + #{:08x})", base_reg, index_str, base_disp, outer_disp)
+            },
+            Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
+                let index_str = fmt_index_disp(index_reg);
+                write!(f, "([{}#{:08x}]{} + #{:08x})", base_reg, base_disp, index_str, outer_disp)
             },
             Target::IndirectMemory(value) => write!(f, "(#{:08x})", value),
-            Target::IndirectPCOffset(offset) => write!(f, "(%pc + #{:04x})", offset),
-            Target::IndirectPCXRegOffset(xreg, offset, scale, _) => {
-                let scale_str = if *scale != 0 { format!("<< {}", scale) } else { "".to_string() };
-                write!(f, "(%pc + %{} + #{:04x}{})", xreg, offset, scale_str)
-            },
         }
     }
 }

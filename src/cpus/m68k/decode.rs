@@ -10,6 +10,8 @@ use super::instructions::{
     Direction,
     ShiftDirection,
     XRegister,
+    BaseRegister,
+    IndexRegister,
     RegOrImmediate,
     ControlRegister,
     Condition,
@@ -108,7 +110,7 @@ impl M68kDecoder {
                     let dir = if (ins & 0x0800) == 0 { Direction::FromTarget } else { Direction::ToTarget };
                     let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
                     let offset = sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word);
-                    Ok(Instruction::MOVEP(dreg, Target::IndirectARegOffset(areg, offset), size, dir))
+                    Ok(Instruction::MOVEP(dreg, Target::IndirectRegOffset(BaseRegister::AReg(areg), None, offset), size, dir))
                 } else if (ins & 0x0100) == 0x0100 || (ins & 0x0F00) == 0x0800 {
                     let bitnum = if (ins & 0x0100) == 0x0100 {
                         Target::DirectDReg(get_high_reg(ins))
@@ -606,25 +608,53 @@ impl M68kDecoder {
         self.get_mode_as_target(memory, mode, reg, size)
     }
 
+    fn get_extension_displacement(&mut self, memory: &mut dyn Addressable, select: u16) -> Result<i32, Error> {
+        let result = match select {
+            0b00 | 0b01 => 0,
+            0b10 => sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word),
+            0b11 => self.read_instruction_long(memory)? as i32,
+            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+        };
+        Ok(result)
+    }
+
     fn decode_extension_word(&mut self, memory: &mut dyn Addressable, areg: Option<u8>) -> Result<Target, Error> {
         let brief_extension = self.read_instruction_word(memory)?;
+        let use_full = (brief_extension & 0x0100) != 0;
+
+        // Decode Index Register
         let xreg_num = ((brief_extension & 0x7000) >> 12) as u8;
-        let xreg = if (brief_extension & 0x8000) == 0 { XRegister::Data(xreg_num) } else { XRegister::Address(xreg_num) };
+        let xreg = if (brief_extension & 0x8000) == 0 { XRegister::DReg(xreg_num) } else { XRegister::AReg(xreg_num) };
         let size = if (brief_extension & 0x0800) == 0 { Size::Word } else { Size::Long };
         let scale = ((brief_extension & 0x0600) >> 9) as u8;
-        let use_full = (brief_extension & 0x0100) != 0;
+        let index_reg = IndexRegister { xreg, scale, size };
 
         if !use_full {
             let displacement = sign_extend_to_long((brief_extension & 0x00FF) as u32, Size::Byte);
             match areg {
-                Some(areg) => Ok(Target::IndirectARegXRegOffset(areg, xreg, displacement, scale, size)),
-                None => Ok(Target::IndirectPCXRegOffset(xreg, displacement, scale, size)),
+                Some(areg) => Ok(Target::IndirectRegOffset(BaseRegister::AReg(areg), Some(index_reg), displacement)),
+                None => Ok(Target::IndirectRegOffset(BaseRegister::PC, Some(index_reg), displacement)),
             }
         } else if self.cputype >= M68kType::MC68020 {
-            let use_base = (brief_extension & 0x0080) == 0;
+            let use_base_reg = (brief_extension & 0x0080) == 0;
             let use_index = (brief_extension & 0x0040) == 0;
+            let use_sub_indirect = (brief_extension & 0x0007) != 0;
+            let pre_not_post = (brief_extension & 0x0004) == 0;
 
-            panic!("Not Implemented");
+            let opt_base_reg = match (use_base_reg, areg) {
+                (false, _) => BaseRegister::None,
+                (true, None) => BaseRegister::PC,
+                (true, Some(areg)) => BaseRegister::AReg(areg),
+            };
+            let opt_index_reg = if use_index { Some(index_reg) } else { None };
+            let base_disp = self.get_extension_displacement(memory, (brief_extension & 0x0030) >> 4)?;
+            let outer_disp = self.get_extension_displacement(memory, brief_extension & 0x0003)?;
+
+            match (use_sub_indirect, pre_not_post) {
+                (false, _) => Ok(Target::IndirectRegOffset(opt_base_reg, opt_index_reg, base_disp)),
+                (true, true) => Ok(Target::IndirectMemoryPreindexed(opt_base_reg, opt_index_reg, base_disp, outer_disp)),
+                (true, false) => Ok(Target::IndirectMemoryPostindexed(opt_base_reg, opt_index_reg, base_disp, outer_disp)),
+            }
         } else {
             Err(Error::processor(Exceptions::IllegalInstruction as u32))
         }
@@ -638,8 +668,8 @@ impl M68kDecoder {
             0b011 => Target::IndirectARegInc(reg),
             0b100 => Target::IndirectARegDec(reg),
             0b101 => {
-                let data = sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word);
-                Target::IndirectARegOffset(reg, data)
+                let displacement = sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word);
+                Target::IndirectRegOffset(BaseRegister::AReg(reg), None, displacement)
             },
             0b110 => {
                 self.decode_extension_word(memory, Some(reg))?
@@ -655,8 +685,8 @@ impl M68kDecoder {
                         Target::IndirectMemory(value)
                     },
                     0b010 => {
-                        let data = sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word);
-                        Target::IndirectPCOffset(data)
+                        let displacement = sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word);
+                        Target::IndirectRegOffset(BaseRegister::PC, None, displacement)
                     },
                     0b011 => {
                         self.decode_extension_word(memory, None)?

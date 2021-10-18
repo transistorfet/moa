@@ -1,4 +1,7 @@
 
+* rearrange the order of Target::IndirectARegXReg...
+* should you make a new type for the index, c/w proper Display formatter
+
 * can you eventually make the system connections all configurable via a config file?
 * test using mpsc to pass messages with the tty IO thread, and test if it's slower than what you have now
 

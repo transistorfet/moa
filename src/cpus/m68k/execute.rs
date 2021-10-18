@@ -10,6 +10,8 @@ use super::instructions::{
     Direction,
     ShiftDirection,
     XRegister,
+    BaseRegister,
+    IndexRegister,
     RegOrImmediate,
     ControlRegister,
     Condition,
@@ -389,16 +391,16 @@ impl M68k {
             //Instruction::ILLEGAL => {
             //},
             Instruction::JMP(target) => {
-                self.state.pc = self.get_target_address(target)?;
+                self.state.pc = self.get_target_address(system, target)?;
             },
             Instruction::JSR(target) => {
                 self.push_long(system, self.state.pc)?;
                 let sp = *self.get_stack_pointer_mut();
                 self.debugger.stack_tracer.push_return(sp);
-                self.state.pc = self.get_target_address(target)?;
+                self.state.pc = self.get_target_address(system, target)?;
             },
             Instruction::LEA(target, reg) => {
-                let value = self.get_target_address(target)?;
+                let value = self.get_target_address(system, target)?;
                 let addr = self.get_a_reg_mut(reg);
                 *addr = value;
             },
@@ -472,7 +474,7 @@ impl M68k {
                 // TODO moving words requires a sign extension to 32 bits
                 if size != Size::Long { return Err(Error::new("Unsupported size in MOVEM instruction")); }
 
-                let mut addr = self.get_target_address(target)?;
+                let mut addr = self.get_target_address(system, target)?;
                 if dir == Direction::ToTarget {
                     let mut mask = mask;
                     for i in (0..8).rev() {
@@ -567,7 +569,7 @@ impl M68k {
                 self.state.sr = self.state.sr | value;
             },
             Instruction::PEA(target) => {
-                let value = self.get_target_address(target)?;
+                let value = self.get_target_address(system, target)?;
                 self.push_long(system, value)?;
             },
             //Instruction::RESET => {
@@ -697,25 +699,29 @@ impl M68k {
                 *addr -= size.in_bytes();
                 get_address_sized(system, *addr as Address, size)
             },
-            Target::IndirectARegOffset(reg, offset) => {
-                let addr = self.get_a_reg_mut(reg);
-                get_address_sized(system, (*addr).wrapping_add(offset as u32) as Address, size)
+
+            Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                get_address_sized(system, base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32) as Address, size)
             },
-            Target::IndirectARegXRegOffset(reg, xreg, offset, scale, target_size) => {
-                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
-                let addr = self.get_a_reg_mut(reg);
-                get_address_sized(system, (*addr).wrapping_add(offset as u32).wrapping_add(index as u32) as Address, size)
+            Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
+                get_address_sized(system, intermediate.wrapping_add(outer_disp as u32) as Address, size)
+            },
+            Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
+                get_address_sized(system, intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, size)
             },
             Target::IndirectMemory(addr) => {
                 get_address_sized(system, addr as Address, size)
             },
-            Target::IndirectPCOffset(offset) => {
-                get_address_sized(system, (self.decoder.start + 2).wrapping_add(offset as u32) as Address, size)
-            },
-            Target::IndirectPCXRegOffset(xreg, offset, scale, target_size) => {
-                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
-                get_address_sized(system, (self.decoder.start + 2).wrapping_add(offset as u32).wrapping_add(index as u32) as Address, size)
-            },
+
+            _ => return Err(Error::new(&format!("Unimplemented addressing target: {:?}", target))),
         }
     }
 
@@ -740,14 +746,22 @@ impl M68k {
                 *addr -= size.in_bytes();
                 set_address_sized(system, *addr as Address, value, size)?;
             },
-            Target::IndirectARegOffset(reg, offset) => {
-                let addr = self.get_a_reg_mut(reg);
-                set_address_sized(system, (*addr).wrapping_add(offset as u32) as Address, value, size)?;
+            Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                set_address_sized(system, base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32) as Address, value, size)?;
             },
-            Target::IndirectARegXRegOffset(reg, xreg, offset, scale, target_size) => {
-                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
-                let addr = self.get_a_reg_mut(reg);
-                set_address_sized(system, (*addr).wrapping_add(offset as u32).wrapping_add(index as u32) as Address, value, size)?;
+            Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
+                set_address_sized(system, intermediate.wrapping_add(outer_disp as u32) as Address, value, size);
+            },
+            Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
+                set_address_sized(system, intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, value, size);
             },
             Target::IndirectMemory(addr) => {
                 set_address_sized(system, addr as Address, value, size)?;
@@ -757,27 +771,28 @@ impl M68k {
         Ok(())
     }
 
-    pub fn get_target_address(&mut self, target: Target) -> Result<u32, Error> {
+    pub fn get_target_address(&mut self, system: &System, target: Target) -> Result<u32, Error> {
         let addr = match target {
             Target::IndirectAReg(reg) | Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => *self.get_a_reg_mut(reg),
-            Target::IndirectARegOffset(reg, offset) => {
-                let addr = self.get_a_reg_mut(reg);
-                (*addr).wrapping_add(offset as u32)
+            Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32)
             },
-            Target::IndirectARegXRegOffset(reg, xreg, offset, scale, target_size) => {
-                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
-                let addr = self.get_a_reg_mut(reg);
-                (*addr).wrapping_add(offset as u32).wrapping_add(index as u32)
+            Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
+                intermediate.wrapping_add(outer_disp as u32)
+            },
+            Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
+                let base_value = self.get_base_reg_value(base_reg);
+                let index_value = self.get_index_reg_value(&index_reg);
+                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
+                intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32)
             },
             Target::IndirectMemory(addr) => {
                 addr
-            },
-            Target::IndirectPCOffset(offset) => {
-                (self.decoder.start + 2).wrapping_add(offset as u32)
-            },
-            Target::IndirectPCXRegOffset(xreg, offset, scale, target_size) => {
-                let index = sign_extend_to_long(self.get_x_reg_value(xreg), target_size) << scale;
-                (self.decoder.start + 2).wrapping_add(offset as u32).wrapping_add(index as u32)
             },
             _ => return Err(Error::new(&format!("Invalid addressing target: {:?}", target))),
         };
@@ -800,6 +815,31 @@ impl M68k {
         }
     }
 
+    fn get_x_reg_value(&self, xreg: XRegister) -> u32 {
+        match xreg {
+            XRegister::DReg(reg) => self.state.d_reg[reg as usize],
+            XRegister::AReg(reg) => self.state.a_reg[reg as usize],
+        }
+    }
+
+    fn get_base_reg_value(&self, base_reg: BaseRegister) -> u32 {
+        match base_reg {
+            BaseRegister::None => 0,
+            BaseRegister::PC => self.decoder.start + 2,
+            BaseRegister::AReg(reg) if reg == 7 => if self.is_supervisor() { self.state.msp } else { self.state.usp },
+            BaseRegister::AReg(reg) => self.state.a_reg[reg as usize],
+        }
+    }
+
+    fn get_index_reg_value(&self, index_reg: &Option<IndexRegister>) -> i32 {
+        match index_reg {
+            None => 0,
+            Some(IndexRegister { xreg, scale, size }) => {
+                sign_extend_to_long(self.get_x_reg_value(*xreg), *size) << scale
+            }
+        }
+    }
+
     fn get_control_reg_mut(&mut self, control_reg: ControlRegister) -> &mut u32 {
         match control_reg {
             ControlRegister::VBR => &mut self.state.vbr,
@@ -817,13 +857,6 @@ impl M68k {
             if self.is_supervisor() { &mut self.state.msp } else { &mut self.state.usp }
         } else {
             &mut self.state.a_reg[reg as usize]
-        }
-    }
-
-    fn get_x_reg_value(&self, xreg: XRegister) -> u32 {
-        match xreg {
-            XRegister::Data(reg) => self.state.d_reg[reg as usize],
-            XRegister::Address(reg) => self.state.a_reg[reg as usize],
         }
     }
 
