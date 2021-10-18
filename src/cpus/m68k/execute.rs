@@ -279,7 +279,7 @@ impl M68k {
 
                 let right_offset = 32 - offset - width;
                 let mut ext = 0;
-                for i in 0..(offset + right_offset) {
+                for _ in 0..(offset + right_offset) {
                     ext = (ext >> 1) | 0x80000000;
                 }
                 self.state.d_reg[reg as usize] = (field >> right_offset) | ext;
@@ -699,7 +699,6 @@ impl M68k {
                 *addr -= size.in_bytes();
                 get_address_sized(system, *addr as Address, size)
             },
-
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
@@ -720,8 +719,6 @@ impl M68k {
             Target::IndirectMemory(addr) => {
                 get_address_sized(system, addr as Address, size)
             },
-
-            _ => return Err(Error::new(&format!("Unimplemented addressing target: {:?}", target))),
         }
     }
 
@@ -755,13 +752,13 @@ impl M68k {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
                 let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
-                set_address_sized(system, intermediate.wrapping_add(outer_disp as u32) as Address, value, size);
+                set_address_sized(system, intermediate.wrapping_add(outer_disp as u32) as Address, value, size)?;
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
                 let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
-                set_address_sized(system, intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, value, size);
+                set_address_sized(system, intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, value, size)?;
             },
             Target::IndirectMemory(addr) => {
                 set_address_sized(system, addr as Address, value, size)?;
@@ -1082,7 +1079,7 @@ fn get_msb_mask(value: u32, size: Size) -> u32 {
 
 fn get_bit_field_mask(offset: u32, width: u32) -> u32 {
     let mut mask = 0;
-    for i in 0..width {
+    for _ in 0..width {
         mask = (mask >> 1) | 0x80000000;
     }
     mask >> offset

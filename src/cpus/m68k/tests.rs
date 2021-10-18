@@ -1,17 +1,19 @@
 
 #[cfg(test)]
 mod decode_tests {
+    use crate::error::{Error, ErrorType};
     use crate::system::System;
     use crate::memory::MemoryBlock;
     use crate::devices::{Address, Addressable, Steppable, TransmutableBox, wrap_transmutable, MAX_READ};
 
     use crate::cpus::m68k::{M68k, M68kType};
-    use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, XRegister, ShiftDirection};
+    use crate::cpus::m68k::state::Exceptions;
+    use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, XRegister, BaseRegister, IndexRegister, ShiftDirection};
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
 
-    fn init_decode_test() -> (M68k, System) {
+    fn init_decode_test(cputype: M68kType) -> (M68k, System) {
         let mut system = System::new();
 
         // Insert basic initialization
@@ -22,7 +24,7 @@ mod decode_tests {
         system.get_bus().write_beu32(4, INIT_ADDR as u32).unwrap();
 
         // Initialize the CPU and make sure it's in the expected state
-        let mut cpu = M68k::new(M68kType::MC68010);
+        let mut cpu = M68k::new(cputype);
         cpu.init(&system).unwrap();
         assert_eq!(cpu.state.pc, INIT_ADDR as u32);
         assert_eq!(cpu.state.msp, INIT_STACK as u32);
@@ -42,7 +44,7 @@ mod decode_tests {
 
     #[test]
     fn target_direct_d() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
@@ -54,7 +56,7 @@ mod decode_tests {
 
     #[test]
     fn target_direct_a() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
@@ -66,7 +68,7 @@ mod decode_tests {
 
     #[test]
     fn target_indirect_a() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Long;
         let expected_addr = INIT_ADDR;
@@ -81,7 +83,7 @@ mod decode_tests {
 
     #[test]
     fn target_indirect_a_inc() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Long;
         let expected_addr = INIT_ADDR;
@@ -96,7 +98,7 @@ mod decode_tests {
 
     #[test]
     fn target_indirect_a_dec() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Long;
         let expected_addr = INIT_ADDR + 4;
@@ -111,7 +113,7 @@ mod decode_tests {
 
     #[test]
     fn target_indirect_a_reg_offset() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Long;
         let offset = -8;
@@ -120,12 +122,12 @@ mod decode_tests {
 
         let memory = get_decode_memory(&mut cpu, &system);
         let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b101, 0b100, Some(size)).unwrap();
-        assert_eq!(target, Target::IndirectARegOffset(4, offset));
+        assert_eq!(target, Target::IndirectRegOffset(BaseRegister::AReg(4), None, offset));
     }
 
     #[test]
-    fn target_indirect_a_reg_extension_word() {
-        let (mut cpu, system) = init_decode_test();
+    fn target_indirect_a_reg_brief_extension_word() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Long;
         let offset = -8;
@@ -136,12 +138,107 @@ mod decode_tests {
 
         let memory = get_decode_memory(&mut cpu, &system);
         let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b110, 0b010, Some(size)).unwrap();
-        assert_eq!(target, Target::IndirectARegXRegOffset(2, XRegister::Data(3), offset, 0, size));
+        assert_eq!(target, Target::IndirectRegOffset(BaseRegister::AReg(2), Some(IndexRegister { xreg: XRegister::DReg(3), scale: 0, size: size }), offset));
     }
 
     #[test]
+    fn target_indirect_a_reg_full_extension_word() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68020);
+
+        let size = Size::Word;
+        let offset = -1843235 as i32;
+        let brief_extension = 0xF330;
+
+        system.get_bus().write_beu16(INIT_ADDR, brief_extension).unwrap();
+        system.get_bus().write_beu32(INIT_ADDR + 2, offset as u32).unwrap();
+
+        let memory = get_decode_memory(&mut cpu, &system);
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b110, 0b010, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectRegOffset(BaseRegister::AReg(2), Some(IndexRegister { xreg: XRegister::AReg(7), scale: 1, size: size }), offset));
+    }
+
+    #[test]
+    fn target_indirect_a_reg_full_extension_word_no_base() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68020);
+
+        let size = Size::Word;
+        let offset = -1843235 as i32;
+        let brief_extension = 0xF3B0;
+
+        system.get_bus().write_beu16(INIT_ADDR, brief_extension).unwrap();
+        system.get_bus().write_beu32(INIT_ADDR + 2, offset as u32).unwrap();
+
+        let memory = get_decode_memory(&mut cpu, &system);
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b110, 0b010, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectRegOffset(BaseRegister::None, Some(IndexRegister { xreg: XRegister::AReg(7), scale: 1, size: size }), offset));
+    }
+
+    #[test]
+    fn target_indirect_a_reg_full_extension_word_no_index() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68020);
+
+        let size = Size::Word;
+        let offset = -1843235 as i32;
+        let brief_extension = 0xF370;
+
+        system.get_bus().write_beu16(INIT_ADDR, brief_extension).unwrap();
+        system.get_bus().write_beu32(INIT_ADDR + 2, offset as u32).unwrap();
+
+        let memory = get_decode_memory(&mut cpu, &system);
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b110, 0b010, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectRegOffset(BaseRegister::AReg(2), None, offset));
+    }
+
+    #[test]
+    fn target_indirect_pc_offset() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
+
+        let size = Size::Long;
+        let offset = -8;
+
+        system.get_bus().write_beu16(INIT_ADDR, (offset as i16) as u16).unwrap();
+
+        let memory = get_decode_memory(&mut cpu, &system);
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b010, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectRegOffset(BaseRegister::PC, None, offset));
+    }
+
+    #[test]
+    fn target_indirect_pc_brief_extension_word() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
+
+        let size = Size::Word;
+        let offset = -8;
+        let brief_extension = 0x3000 | (((offset as i8) as u8) as u16);
+
+        system.get_bus().write_beu16(INIT_ADDR, brief_extension).unwrap();
+        system.get_bus().write_beu16(INIT_ADDR + 2, (offset as i16) as u16).unwrap();
+
+        let memory = get_decode_memory(&mut cpu, &system);
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b011, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectRegOffset(BaseRegister::PC, Some(IndexRegister { xreg: XRegister::DReg(3), scale: 0, size: size }), offset));
+    }
+
+    #[test]
+    fn target_indirect_pc_full_extension_word() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68020);
+
+        let size = Size::Word;
+        let offset = -1843235 as i32;
+        let brief_extension = 0xF330;
+
+        system.get_bus().write_beu16(INIT_ADDR, brief_extension).unwrap();
+        system.get_bus().write_beu32(INIT_ADDR + 2, offset as u32).unwrap();
+
+        let memory = get_decode_memory(&mut cpu, &system);
+        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b011, Some(size)).unwrap();
+        assert_eq!(target, Target::IndirectRegOffset(BaseRegister::PC, Some(IndexRegister { xreg: XRegister::AReg(7), scale: 1, size: size }), offset));
+    }
+
+
+    #[test]
     fn target_indirect_immediate_word() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
@@ -155,7 +252,7 @@ mod decode_tests {
 
     #[test]
     fn target_indirect_immediate_long() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x12345678;
@@ -168,38 +265,8 @@ mod decode_tests {
     }
 
     #[test]
-    fn target_indirect_pc_offset() {
-        let (mut cpu, system) = init_decode_test();
-
-        let size = Size::Long;
-        let offset = -8;
-
-        system.get_bus().write_beu16(INIT_ADDR, (offset as i16) as u16).unwrap();
-
-        let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b010, Some(size)).unwrap();
-        assert_eq!(target, Target::IndirectPCOffset(offset));
-    }
-
-    #[test]
-    fn target_indirect_pc_extension_word() {
-        let (mut cpu, system) = init_decode_test();
-
-        let size = Size::Word;
-        let offset = -8;
-        let brief_extension = 0x3000 | (((offset as i8) as u8) as u16);
-
-        system.get_bus().write_beu16(INIT_ADDR, brief_extension).unwrap();
-        system.get_bus().write_beu16(INIT_ADDR + 2, (offset as i16) as u16).unwrap();
-
-        let memory = get_decode_memory(&mut cpu, &system);
-        let target = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b111, 0b011, Some(size)).unwrap();
-        assert_eq!(target, Target::IndirectPCXRegOffset(XRegister::Data(3), offset, 0, size));
-    }
-
-    #[test]
     fn target_immediate() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
@@ -211,13 +278,29 @@ mod decode_tests {
         assert_eq!(target, Target::Immediate(expected));
     }
 
+    #[test]
+    fn target_full_extension_word_unsupported_on_mc68010() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
+
+        let brief_extension = 0x0100;
+
+        system.get_bus().write_beu16(INIT_ADDR, brief_extension).unwrap();
+
+        let memory = get_decode_memory(&mut cpu, &system);
+        let result = cpu.decoder.get_mode_as_target(memory.borrow_mut().as_addressable().unwrap(), 0b110, 0b010, Some(Size::Long));
+        match result {
+            Err(Error { err: ErrorType::Processor, native, .. }) if native == Exceptions::IllegalInstruction as u32 => { },
+            result => panic!("Expected illegal instruction but found: {:?}", result),
+        }
+    }
+
     //
     // Instruction Decode Tests
     //
 
     #[test]
     fn instruction_nop() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR, 0x4e71).unwrap();
         cpu.decode_next(&system).unwrap();
@@ -226,7 +309,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_ori() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR,     0x0008).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 2, 0x00FF).unwrap();
@@ -236,7 +319,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_cmpi_equal() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR,     0x7020).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 2, 0x0C00).unwrap();
@@ -248,7 +331,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_cmpi_greater() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR,     0x7020).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 2, 0x0C00).unwrap();
@@ -260,7 +343,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_cmpi_less() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR,     0x7020).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 2, 0x0C00).unwrap();
@@ -272,7 +355,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_andi_sr() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR,     0x027C).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 2, 0xF8FF).unwrap();
@@ -282,7 +365,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_muls() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR,     0xC1FC).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 2, 0x0276).unwrap();
@@ -292,7 +375,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_asli() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR, 0xE300).unwrap();
         cpu.decode_next(&system).unwrap();
@@ -301,7 +384,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_asri() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR, 0xE200).unwrap();
         cpu.decode_next(&system).unwrap();
@@ -310,7 +393,7 @@ mod decode_tests {
 
     #[test]
     fn instruction_roli() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR, 0xE318).unwrap();
         cpu.decode_next(&system).unwrap();
@@ -319,11 +402,26 @@ mod decode_tests {
 
     #[test]
     fn instruction_rori() {
-        let (mut cpu, system) = init_decode_test();
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         system.get_bus().write_beu16(INIT_ADDR, 0xE218).unwrap();
         cpu.decode_next(&system).unwrap();
         assert_eq!(cpu.decoder.instruction, Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right));
+    }
+
+    #[test]
+    fn instruction_movel_full_extension() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68030);
+
+        let mut addr = INIT_ADDR;
+        let data = [0x21bc, 0x0010, 0x14c4, 0x09b0, 0x0010, 0xdf40];
+        for word in data {
+            system.get_bus().write_beu16(addr, word).unwrap();
+            addr += 2;
+        }
+
+        cpu.decode_next(&system).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::MOVE(Target::Immediate(1053892), Target::IndirectRegOffset(BaseRegister::None, Some(IndexRegister { xreg: XRegister::DReg(0), scale: 0, size: Size::Long }), 0x10df40), Size::Long));
     }
 }
 

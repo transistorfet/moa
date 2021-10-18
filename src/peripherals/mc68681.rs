@@ -260,7 +260,7 @@ impl Addressable for MC68681 {
         0x30
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
+    fn read(&mut self, addr: Address, _count: usize) -> Result<[u8; MAX_READ], Error> {
         let mut data = [0; MAX_READ];
 
         match addr {
