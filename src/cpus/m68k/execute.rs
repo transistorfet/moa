@@ -12,7 +12,9 @@ use super::decode::{
     Condition,
     ShiftDirection,
     ControlRegister,
+    Register,
     XRegister,
+    RegOrImmediate,
     sign_extend_to_long
 };
 
@@ -78,7 +80,9 @@ impl M68k {
             Status::Running => {
                 match self.cycle_one(system) {
                     Ok(()) => Ok(()),
-                    Err(Error { err: ErrorType::Processor, native, .. }) => {
+                    //Err(Error { err: ErrorType::Processor, native, .. }) => {
+                    // TODO temporary: we are passing illegal instructions upward in order to fix them
+                    Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
                         self.exception(system, native as u8)?;
                         Ok(())
                     },
@@ -152,8 +156,6 @@ impl M68k {
 
         if self.debugger.use_tracing {
             self.decoder.dump_decoded(system);
-            // TODO for debugging temporarily
-            self.dump_state(system);
         }
 
         if self.debugger.use_debugger {
@@ -249,6 +251,65 @@ impl M68k {
                 value = value | mask;
                 self.set_target_value(system, target, value, size)?;
             },
+            Instruction::BFCHG(target, offset, width) => {
+                let (offset, width) = self.get_bit_field_args(offset, width);
+                let mask = get_bit_field_mask(offset, width);
+                let value = self.get_target_value(system, target, Size::Long)?;
+                let field = value & mask;
+                self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
+                self.set_target_value(system, target, (value & !mask) | (!field & mask), Size::Long)?;
+            },
+            Instruction::BFCLR(target, offset, width) => {
+                let (offset, width) = self.get_bit_field_args(offset, width);
+                let mask = get_bit_field_mask(offset, width);
+                let value = self.get_target_value(system, target, Size::Long)?;
+                let field = value & mask;
+                self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
+                self.set_target_value(system, target, value & !mask, Size::Long)?;
+            },
+            Instruction::BFEXTS(target, offset, width, reg) => {
+                let (offset, width) = self.get_bit_field_args(offset, width);
+                let mask = get_bit_field_mask(offset, width);
+                let value = self.get_target_value(system, target, Size::Long)?;
+                let field = value & mask;
+                self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
+
+                let right_offset = 32 - offset - width;
+                let mut ext = 0;
+                for i in 0..(offset + right_offset) {
+                    ext = (ext >> 1) | 0x80000000;
+                }
+                self.state.d_reg[reg as usize] = (field >> right_offset) | ext;
+            },
+            Instruction::BFEXTU(target, offset, width, reg) => {
+                let (offset, width) = self.get_bit_field_args(offset, width);
+                let mask = get_bit_field_mask(offset, width);
+                let value = self.get_target_value(system, target, Size::Long)?;
+                let field = value & mask;
+                self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
+                self.state.d_reg[reg as usize] = field >> (32 - offset - width);
+            },
+            //Instruction::BFFFO(target, offset, width, reg) => {
+            //},
+            //Instruction::BFINS(reg, target, offset, width) => {
+            //},
+            Instruction::BFSET(target, offset, width) => {
+                let (offset, width) = self.get_bit_field_args(offset, width);
+                let mask = get_bit_field_mask(offset, width);
+                let value = self.get_target_value(system, target, Size::Long)?;
+                let field = value & mask;
+                self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
+                self.set_target_value(system, target, value | mask, Size::Long)?;
+            },
+            Instruction::BFTST(target, offset, width) => {
+                let (offset, width) = self.get_bit_field_args(offset, width);
+                let mask = get_bit_field_mask(offset, width);
+                let value = self.get_target_value(system, target, Size::Long)?;
+                let field = value & mask;
+                self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
+            },
+            //Instruction::BKPT(u8) => {
+            //},
             Instruction::CLR(target, size) => {
                 self.set_target_value(system, target, 0, size)?;
                 // Clear flags except Zero flag
@@ -722,6 +783,22 @@ impl M68k {
         Ok(addr)
     }
 
+    pub fn get_bit_field_args(&self, offset: RegOrImmediate, width: RegOrImmediate) -> (u32, u32) {
+        let offset = self.get_reg_or_immediate(offset);
+        let mut width = self.get_reg_or_immediate(width) % 32;
+        if width == 0 {
+            width = 32;
+        }
+        (offset, width)
+    }
+
+    fn get_reg_or_immediate(&self, value: RegOrImmediate) -> u32 {
+        match value {
+            RegOrImmediate::DReg(reg) => self.state.d_reg[reg as usize],
+            RegOrImmediate::Immediate(value) => value as u32,
+        }
+    }
+
     fn get_control_reg_mut(&mut self, control_reg: ControlRegister) -> &mut u32 {
         match control_reg {
             ControlRegister::VBR => &mut self.state.vbr,
@@ -734,7 +811,7 @@ impl M68k {
     }
 
     #[inline(always)]
-    fn get_a_reg_mut(&mut self, reg: u8) -> &mut u32 {
+    fn get_a_reg_mut(&mut self, reg: Register) -> &mut u32 {
         if reg == 7 {
             if self.is_supervisor() { &mut self.state.msp } else { &mut self.state.usp }
         } else {
@@ -809,6 +886,16 @@ impl M68k {
         mask
     }
 
+    fn set_bit_field_test_flags(&mut self, field: u32, msb_mask: u32) {
+        let mut flags = 0x0000;
+        if (field & msb_mask) != 0 {
+            flags |= Flags::Negative as u16;
+        }
+        if field == 0 {
+            flags |= Flags::Zero as u16;
+        }
+        self.state.sr = (self.state.sr & 0xFFF0) | flags;
+    }
 
     fn get_current_condition(&self, cond: Condition) -> bool {
         match cond {
@@ -958,4 +1045,17 @@ fn get_msb_mask(value: u32, size: Size) -> u32 {
         Size::Long => value & 0x80000000,
     }
 }
+
+fn get_bit_field_mask(offset: u32, width: u32) -> u32 {
+    let mut mask = 0;
+    for i in 0..width {
+        mask = (mask >> 1) | 0x80000000;
+    }
+    mask >> offset
+}
+
+fn get_bit_field_msb(offset: u32) -> u32 {
+    0x80000000 >> offset
+}
+
 

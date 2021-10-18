@@ -1,22 +1,19 @@
 
-* can you make Bus be an AddressableDeviceBox so that the CPU can have a ref to it instead of calling system.get_bus()
-  the alternative is having system.get_bus() take an argument or something to figure out what bus to return of multiple, for multibus systems
-* can you eventually make this all configurable via a config file?
-
+* can you eventually make the system connections all configurable via a config file?
 * test using mpsc to pass messages with the tty IO thread, and test if it's slower than what you have now
 
 * make it possible to break out of the current execution, into the debugger, by using a certain keystroke
-* add support for MC68020+ indexing modes
-* add support for MMU
-* add support for FPU
+
+* add support for MC68020+ indexing modes, implement the full extension word for MC68020+
 * make tests for each instruction
 
-* unimplemented: ABCD, ADDX, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SBCD, SUBX
+* unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SBCD, SUBX
 * undecoded: ADDX, SUBX
 * modify execution for >=MC68020: DIVSL, DIVUL, LINK, MOVEM, MULSL, MULUL, RTM, TRAPcc, UNPK
-* implement the full extension word for MC68020+
+* >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, PACK
 
-* >=MC68020 instructions: BFCHG, BFCLR, BFEXTS, BFEXTU, BFFFO, BFINS, BFSET, BFTST, CALLM, CAS, CAS2, CHK2, CMP2, PACK
+* add support for MMU
+* add support for FPU
 * Coprocessor instructions: cpBcc, cpDBcc, cpGEN, cpScc, cpTRAPcc
 
 

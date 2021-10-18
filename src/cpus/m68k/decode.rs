@@ -29,6 +29,8 @@ const OPCG_RESERVED1: u8 = 0xA;
 const OPCG_RESERVED2: u8 = 0xF;
 
 
+pub type Register = u8;
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Sign {
     Signed,
@@ -52,6 +54,13 @@ pub enum XRegister {
     Data(u8),
     Address(u8),
 }
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum RegOrImmediate {
+    DReg(u8),
+    Immediate(u8),
+}
+
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ControlRegister {
@@ -88,13 +97,13 @@ pub enum Condition {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Target {
     Immediate(u32),
-    DirectDReg(u8),
-    DirectAReg(u8),
-    IndirectAReg(u8),
-    IndirectARegInc(u8),
-    IndirectARegDec(u8),
-    IndirectARegOffset(u8, i32),
-    IndirectARegXRegOffset(u8, XRegister, i32, u8, Size),
+    DirectDReg(Register),
+    DirectAReg(Register),
+    IndirectAReg(Register),
+    IndirectARegInc(Register),
+    IndirectARegDec(Register),
+    IndirectARegOffset(Register, i32),
+    IndirectARegXRegOffset(Register, XRegister, i32, u8, Size),
     IndirectMemory(u32),
     IndirectPCOffset(i32),
     IndirectPCXRegOffset(XRegister, i32, u8, Size),
@@ -116,41 +125,49 @@ pub enum Instruction {
     BCLR(Target, Target, Size),
     BSET(Target, Target, Size),
     BTST(Target, Target, Size),
+    BFCHG(Target, RegOrImmediate, RegOrImmediate),
+    BFCLR(Target, RegOrImmediate, RegOrImmediate),
+    BFEXTS(Target, RegOrImmediate, RegOrImmediate, Register),
+    BFEXTU(Target, RegOrImmediate, RegOrImmediate, Register),
+    BFFFO(Target, RegOrImmediate, RegOrImmediate, Register),
+    BFINS(Register, Target, RegOrImmediate, RegOrImmediate),
+    BFSET(Target, RegOrImmediate, RegOrImmediate),
+    BFTST(Target, RegOrImmediate, RegOrImmediate),
     BKPT(u8),
 
-    CHK(Target, u8, Size),
+    CHK(Target, Register, Size),
     CLR(Target, Size),
     CMP(Target, Target, Size),
-    CMPA(Target, u8, Size),
+    CMPA(Target, Register, Size),
 
-    DBcc(Condition, u8, i16),
+    DBcc(Condition, Register, i16),
     DIV(Target, Target, Size, Sign),
 
     EOR(Target, Target, Size),
     EORtoCCR(u8),
     EORtoSR(u16),
     EXG(Target, Target),
-    EXT(u8, Size, Size),
+    EXT(Register, Size, Size),
 
     ILLEGAL,
 
     JMP(Target),
     JSR(Target),
 
-    LEA(Target, u8),
-    LINK(u8, i16),
+    LEA(Target, Register),
+    LINK(Register, i16),
     LSd(Target, Target, Size, ShiftDirection),
 
     MOVE(Target, Target, Size),
-    MOVEA(Target, u8, Size),
+    MOVEA(Target, Register, Size),
     MOVEfromSR(Target),
     MOVEtoSR(Target),
     MOVEfromCCR(Target),
     MOVEtoCCR(Target),
     MOVEC(Target, ControlRegister, Direction),
     MOVEM(Target, Size, Direction, u16),
-    MOVEP(u8, Target, Size, Direction),
-    MOVEQ(u8, u8),
+    MOVEP(Register, Target, Size, Direction),
+    MOVEQ(u8, Register),
     MOVEUSP(Target, Direction),
     MUL(Target, Target, Size, Sign),
 
@@ -179,14 +196,14 @@ pub enum Instruction {
     Scc(Condition, Target),
     STOP(u16),
     SUB(Target, Target, Size),
-    SWAP(u8),
+    SWAP(Register),
 
     TAS(Target),
     TST(Target, Size),
     TRAP(u8),
     TRAPV,
 
-    UNLK(u8),
+    UNLK(Register),
 }
 
 
@@ -686,14 +703,44 @@ impl M68kDecoder {
                     },
                     None => {
                         let target = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
-                        let count = Target::Immediate(1);
 
-                        match (ins & 0x0600) >> 9 {
-                            0b00 => Ok(Instruction::ASd(count, target, Size::Word, dir)),
-                            0b01 => Ok(Instruction::LSd(count, target, Size::Word, dir)),
-                            0b10 => Ok(Instruction::ROXd(count, target, Size::Word, dir)),
-                            0b11 => Ok(Instruction::ROd(count, target, Size::Word, dir)),
-                            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        let count = Target::Immediate(1);
+                        if (ins & 0x800) == 0 {
+                            match (ins & 0x0600) >> 9 {
+                                0b00 => Ok(Instruction::ASd(count, target, Size::Word, dir)),
+                                0b01 => Ok(Instruction::LSd(count, target, Size::Word, dir)),
+                                0b10 => Ok(Instruction::ROXd(count, target, Size::Word, dir)),
+                                0b11 => Ok(Instruction::ROd(count, target, Size::Word, dir)),
+                                _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                            }
+                        } else if self.cputype > M68kType::MC68020 {
+                            // Bitfield instructions (MC68020+)
+                            let ext = self.read_instruction_word(memory)?;
+                            let reg = ((ext & 0x7000) >> 12) as u8;
+
+                            let offset = match (ext & 0x0800) == 0 {
+                                true => RegOrImmediate::Immediate(((ext & 0x07C0) >> 6) as u8),
+                                false => RegOrImmediate::DReg(((ext & 0x01C0) >> 6) as u8),
+                            };
+
+                            let width = match (ext & 0x0020) == 0 {
+                                true => RegOrImmediate::Immediate((ext & 0x001F) as u8),
+                                false => RegOrImmediate::DReg((ext & 0x0007) as u8),
+                            };
+
+                            match (ins & 0x0700) >> 8 {
+                                0b010 => Ok(Instruction::BFCHG(target, offset, width)),
+                                0b100 => Ok(Instruction::BFCLR(target, offset, width)),
+                                0b011 => Ok(Instruction::BFEXTS(target, offset, width, reg)),
+                                0b001 => Ok(Instruction::BFEXTU(target, offset, width, reg)),
+                                0b101 => Ok(Instruction::BFFFO(target, offset, width, reg)),
+                                0b111 => Ok(Instruction::BFINS(reg, target, offset, width)),
+                                0b110 => Ok(Instruction::BFSET(target, offset, width)),
+                                0b000 => Ok(Instruction::BFTST(target, offset, width)),
+                                _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                            }
+                        } else {
+                            return Err(Error::processor(Exceptions::IllegalInstruction as u32));
                         }
                     },
                 }
@@ -732,7 +779,7 @@ impl M68kDecoder {
         let xreg = if (brief_extension & 0x8000) == 0 { XRegister::Data(xreg_num) } else { XRegister::Address(xreg_num) };
         let size = if (brief_extension & 0x0800) == 0 { Size::Word } else { Size::Long };
         let scale = ((brief_extension & 0x0600) >> 9) as u8;
-        let use_full = (brief_extension & 0x0100) == 1;
+        let use_full = (brief_extension & 0x0100) != 0;
 
         if !use_full {
             let displacement = sign_extend_to_long((brief_extension & 0x00FF) as u32, Size::Byte);
@@ -1062,7 +1109,10 @@ impl fmt::Display for Instruction {
                 Direction::ToTarget => write!(f, "movem{}\t{}, {}", size, fmt_movem_mask(*mask), target),
                 Direction::FromTarget => write!(f, "movem{}\t{}, {}", size, target, fmt_movem_mask(*mask)),
             },
-            //Instruction::MOVEP(reg, target, size, dir),
+            Instruction::MOVEP(reg, target, size, dir) => match dir {
+                Direction::ToTarget => write!(f, "movep{}\t%d{}, {}", size, reg, target),
+                Direction::FromTarget => write!(f, "movep{}\t{}, %d{}", size, target, reg),
+            },
             Instruction::MOVEQ(value, reg) => write!(f, "moveq\t#{:02x}, %d{}", value, reg),
             Instruction::MOVEUSP(target, dir) => match dir {
                 Direction::ToTarget => write!(f, "movel\t%usp, {}", target),
