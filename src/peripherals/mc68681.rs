@@ -3,7 +3,7 @@ use crate::error::Error;
 use crate::system::System;
 use crate::devices::{Clock, Address, Steppable, Addressable, Transmutable, MAX_READ};
 
-use crate::host::ttys::{SimplePty, SharedSimplePty};
+use crate::host::tty::{SimplePty, SharedSimplePty};
 
 
 const REG_MR1A_MR2A: Address = 0x01;

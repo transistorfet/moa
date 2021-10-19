@@ -1,3 +1,3 @@
  
-pub mod ttys;
+pub mod tty;
 

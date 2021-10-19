@@ -19,9 +19,14 @@ use crate::peripherals::mc68681::MC68681;
 use crate::devices::wrap_transmutable;
 
 fn main() {
+    run_computie();
+}
+
+fn run_computie() {
     let mut system = System::new();
 
     let monitor = MemoryBlock::load("binaries/monitor.bin").unwrap();
+    //let monitor = MemoryBlock::load("binaries/monitor-68030.bin").unwrap();
     for byte in monitor.contents.iter() {
         print!("{:02x} ", byte);
     }
@@ -29,6 +34,7 @@ fn main() {
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
     ram.load_at(0, "binaries/kernel.bin").unwrap();
+    //ram.load_at(0, "binaries/kernel-68030.bin").unwrap();
     system.add_addressable_device(0x00100000, wrap_transmutable(ram)).unwrap();
 
     let mut ata = AtaDevice::new();
@@ -37,7 +43,7 @@ fn main() {
 
     let mut serial = MC68681::new();
     launch_terminal_emulator(serial.port_a.open().unwrap());
-    //launch_slip_connection(serial.port_b.open().unwrap());
+    launch_slip_connection(serial.port_b.open().unwrap());
     system.add_addressable_device(0x00700000, wrap_transmutable(serial)).unwrap();
 
 
@@ -48,29 +54,22 @@ fn main() {
     //cpu.add_breakpoint(0x10781a);
     //cpu.add_breakpoint(0x10bc9c);
     //cpu.add_breakpoint(0x106a94);
-    //cpu.add_breakpoint(0x10b79c);
+    //cpu.add_breakpoint(0x1015b2);
+    //cpu.add_breakpoint(0x103332);
     //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
     //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
     system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
-    loop {
-        match system.step() {
-            Ok(()) => { },
-            Err(err) => {
-                system.exit_error();
-                println!("{:?}", err);
-                break;
-            },
-        }
-    }
+    system.run_loop();
 }
 
 pub fn launch_terminal_emulator(name: String) {
-    use nix::unistd::sleep;
+    use std::thread;
+    use std::time::Duration;
     use std::process::Command;
 
     Command::new("x-terminal-emulator").arg("-e").arg(&format!("pyserial-miniterm {}", name)).spawn().unwrap();
-    sleep(1);
+    thread::sleep(Duration::from_secs(1));
 }
 
 pub fn launch_slip_connection(name: String) {
@@ -83,4 +82,5 @@ pub fn launch_slip_connection(name: String) {
     Command::new("sudo").args(["iptables", "-A", "FORWARD", "-o", "sl0", "-j", "ACCEPT"]).status().unwrap();
     Command::new("sudo").args(["sh", "-c", "echo 1 > /proc/sys/net/ipv4/ip_forward"]).status().unwrap();
 }
+
 

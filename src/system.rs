@@ -75,5 +75,18 @@ impl System {
         }
         Ok(())
     }
+
+    pub fn run_loop(&mut self) {
+        loop {
+            match self.step() {
+                Ok(()) => { },
+                Err(err) => {
+                    self.exit_error();
+                    println!("{:?}", err);
+                    break;
+                },
+            }
+        }
+    }
 }
 

@@ -499,65 +499,8 @@ impl M68k {
                     Direction::FromTarget => { self.state.usp = self.get_target_value(system, target, Size::Long)?; },
                 }
             },
-            Instruction::MOVEM(target, size, dir, mut mask) => {
-                // TODO moving words requires a sign extension to 32 bits
-                if size != Size::Long { return Err(Error::new("Unsupported size in MOVEM instruction")); }
-
-                let mut addr = self.get_target_address(system, target)?;
-
-                // If we're using a MC68020 or higher, and it was Post-Inc/Pre-Dec target, then update the value before it's stored
-                if self.cputype >= M68kType::MC68020 {
-                    match target {
-                        Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
-                            let a_reg_mut = self.get_a_reg_mut(reg);
-                            *a_reg_mut = addr + (mask.count_ones() * size.in_bytes());
-                        }
-                        _ => { },
-                    }
-                }
-
-                if dir == Direction::ToTarget {
-                    for i in (0..8).rev() {
-                        if (mask & 0x01) != 0 {
-                            let value = *self.get_a_reg_mut(i);
-                            addr -= size.in_bytes();
-                            set_address_sized(system, addr as Address, value, size)?;
-                        }
-                        mask >>= 1;
-                    }
-                    for i in (0..8).rev() {
-                        if (mask & 0x01) != 0 {
-                            addr -= size.in_bytes();
-                            set_address_sized(system, addr as Address, self.state.d_reg[i], size)?;
-                        }
-                        mask >>= 1;
-                    }
-                } else {
-                    let mut mask = mask;
-                    for i in 0..8 {
-                        if (mask & 0x01) != 0 {
-                            self.state.d_reg[i] = get_address_sized(system, addr as Address, size)?;
-                            addr += size.in_bytes();
-                        }
-                        mask >>= 1;
-                    }
-                    for i in 0..8 {
-                        if (mask & 0x01) != 0 {
-                            *self.get_a_reg_mut(i) = get_address_sized(system, addr as Address, size)?;
-                            addr += size.in_bytes();
-                        }
-                        mask >>= 1;
-                    }
-                }
-
-                // If it was Post-Inc/Pre-Dec target, then update the value
-                match target {
-                    Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
-                        let a_reg_mut = self.get_a_reg_mut(reg);
-                        *a_reg_mut = addr;
-                    }
-                    _ => { },
-                }
+            Instruction::MOVEM(target, size, dir, mask) => {
+                self.execute_movem(system, target, size, dir, mask)?;
             },
             Instruction::MOVEQ(data, reg) => {
                 let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
@@ -705,6 +648,66 @@ impl M68k {
         }
 
         self.timer.execute.end(timer);
+        Ok(())
+    }
+
+    fn execute_movem(&mut self, system: &System, target: Target, size: Size, dir: Direction, mut mask: u16) -> Result<(), Error> {
+        let mut addr = self.get_target_address(system, target)?;
+
+        // If we're using a MC68020 or higher, and it was Post-Inc/Pre-Dec target, then update the value before it's stored
+        if self.cputype >= M68kType::MC68020 {
+            match target {
+                Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
+                    let a_reg_mut = self.get_a_reg_mut(reg);
+                    *a_reg_mut = addr + (mask.count_ones() * size.in_bytes());
+                }
+                _ => { },
+            }
+        }
+
+        if dir == Direction::ToTarget {
+            for i in (0..8).rev() {
+                if (mask & 0x01) != 0 {
+                    let value = *self.get_a_reg_mut(i);
+                    addr -= size.in_bytes();
+                    set_address_sized(system, addr as Address, value, size)?;
+                }
+                mask >>= 1;
+            }
+            for i in (0..8).rev() {
+                if (mask & 0x01) != 0 {
+                    addr -= size.in_bytes();
+                    set_address_sized(system, addr as Address, self.state.d_reg[i], size)?;
+                }
+                mask >>= 1;
+            }
+        } else {
+            let mut mask = mask;
+            for i in 0..8 {
+                if (mask & 0x01) != 0 {
+                    self.state.d_reg[i] = sign_extend_to_long(get_address_sized(system, addr as Address, size)?, size) as u32;
+                    addr += size.in_bytes();
+                }
+                mask >>= 1;
+            }
+            for i in 0..8 {
+                if (mask & 0x01) != 0 {
+                    *self.get_a_reg_mut(i) = sign_extend_to_long(get_address_sized(system, addr as Address, size)?, size) as u32;
+                    addr += size.in_bytes();
+                }
+                mask >>= 1;
+            }
+        }
+
+        // If it was Post-Inc/Pre-Dec target, then update the value
+        match target {
+            Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
+                let a_reg_mut = self.get_a_reg_mut(reg);
+                *a_reg_mut = addr;
+            }
+            _ => { },
+        }
+
         Ok(())
     }
 
