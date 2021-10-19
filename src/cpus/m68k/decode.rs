@@ -547,10 +547,9 @@ impl M68kDecoder {
                         }
                     },
                     None => {
-                        let target = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
-
-                        let count = Target::Immediate(1);
                         if (ins & 0x800) == 0 {
+                            let target = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
+                            let count = Target::Immediate(1);
                             match (ins & 0x0600) >> 9 {
                                 0b00 => Ok(Instruction::ASd(count, target, Size::Word, dir)),
                                 0b01 => Ok(Instruction::LSd(count, target, Size::Word, dir)),
@@ -573,6 +572,7 @@ impl M68kDecoder {
                                 false => RegOrImmediate::DReg((ext & 0x0007) as u8),
                             };
 
+                            let target = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
                             match (ins & 0x0700) >> 8 {
                                 0b010 => Ok(Instruction::BFCHG(target, offset, width)),
                                 0b100 => Ok(Instruction::BFCLR(target, offset, width)),
