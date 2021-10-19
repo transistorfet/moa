@@ -196,13 +196,21 @@ impl M68kDecoder {
                         Ok(Instruction::LEA(src, dest))
                     }
                 } else if (ins & 0xB80) == 0x880 && (ins & 0x038) != 0 {
-                    let mode = get_low_mode(ins);
                     let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
-
                     let data = self.read_instruction_word(memory)?;
                     let target = self.decode_lower_effective_address(memory, ins, None)?;
                     let dir = if (ins & 0x0400) == 0 { Direction::ToTarget } else { Direction::FromTarget };
                     Ok(Instruction::MOVEM(target, size, dir, data))
+                } else if (ins & 0xF80) == 0xC00 && self.cputype >= M68kType::MC68020 {
+                    let extension = self.read_instruction_word(memory)?;
+                    let reg_h = if (extension & 0x0400) != 0 { Some(get_low_reg(ins)) } else { None };
+                    let reg_l = ((extension & 0x7000) >> 12) as u8;
+                    let target = self.decode_lower_effective_address(memory, ins, Some(Size::Long))?;
+                    let sign = if (ins & 0x0800) == 0 { Sign::Unsigned } else { Sign::Signed };
+                    match (ins & 0x040) == 0 {
+                        true => Ok(Instruction::MULL(target, reg_h, reg_l, sign)),
+                        false => Ok(Instruction::DIVL(target, reg_h, reg_l, sign)),
+                    }
                 } else if (ins & 0x800) == 0 {
                     let target = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
                     match (ins & 0x0700) >> 8 {
@@ -237,6 +245,10 @@ impl M68kDecoder {
                     let subselect = (ins & 0x01C0) >> 6;
                     let mode = get_low_mode(ins);
                     match (subselect, mode) {
+                        (0b000, 0b001) if self.cputype >= M68kType::MC68020 => {
+                            let data = self.read_instruction_long(memory)? as i32;
+                            Ok(Instruction::LINK(get_low_reg(ins), data))
+                        },
                         (0b000, _) => {
                             let target = self.decode_lower_effective_address(memory, ins, Some(Size::Byte))?;
                             Ok(Instruction::NBCD(target))
@@ -285,8 +297,8 @@ impl M68kDecoder {
                     } else if ins_00f0 == 0x50 {
                         let reg = get_low_reg(ins);
                         if (ins & 0b1000) == 0 {
-                            let data = self.read_instruction_word(memory)?;
-                            Ok(Instruction::LINK(reg, data as i16))
+                            let data = (self.read_instruction_word(memory)? as i16) as i32;
+                            Ok(Instruction::LINK(reg, data))
                         } else {
                             Ok(Instruction::UNLK(reg))
                         }
@@ -387,9 +399,8 @@ impl M68kDecoder {
 
                 if size.is_none() {
                     let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
-                    let data_reg = Target::DirectDReg(get_high_reg(ins));
                     let effective_addr = self.decode_lower_effective_address(memory, ins, size)?;
-                    Ok(Instruction::DIV(effective_addr, data_reg, Size::Word, sign))
+                    Ok(Instruction::DIVW(effective_addr, get_high_reg(ins), sign))
                 } else if (ins & 0x1F0) == 0x100 {
                     let regx = get_high_reg(ins);
                     let regy = get_low_reg(ins);
@@ -479,9 +490,8 @@ impl M68kDecoder {
                     }
                 } else if size.is_none() {
                     let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
-                    let data_reg = Target::DirectDReg(get_high_reg(ins));
                     let effective_addr = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
-                    Ok(Instruction::MUL(effective_addr, data_reg, Size::Word, sign))
+                    Ok(Instruction::MULW(effective_addr, get_high_reg(ins), sign))
                 } else {
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
                     let effective_addr = self.decode_lower_effective_address(memory, ins, size)?;

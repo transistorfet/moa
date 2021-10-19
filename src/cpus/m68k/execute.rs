@@ -23,7 +23,7 @@ use super::instructions::{
 
 const DEV_NAME: &'static str = "m68k-cpu";
 
-use super::state::{M68k, Status, Flags, Exceptions, InterruptPriority};
+use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority};
 
 
 impl Steppable for M68k {
@@ -340,26 +340,55 @@ impl M68k {
                     }
                 }
             },
-            Instruction::DIV(src, dest, size, sign) => {
-                if size == Size::Long {
-                    return Err(Error::new("Unsupported multiplication size"));
-                }
-
-                let value = self.get_target_value(system, src, size)?;
+            Instruction::DIVW(src, dest, sign) => {
+                let value = self.get_target_value(system, src, Size::Word)?;
                 if value == 0 {
                     self.exception(system, Exceptions::ZeroDivide as u8)?;
                     return Ok(());
                 }
 
-                let existing = self.get_target_value(system, dest, Size::Long)?;
-                let result = match sign {
+                let existing = get_value_sized(self.state.d_reg[dest as usize], Size::Word);
+                let (remainder, quotient) = match sign {
                     Sign::Signed => {
-                        let value = sign_extend_to_long(value, size) as u32;
-                        ((existing % value) << 16) | (0xFFFF & (existing / value))
+                        let value = sign_extend_to_long(value, Size::Word) as u32;
+                        (existing % value, existing / value)
                     },
-                    Sign::Unsigned => ((existing % value)  << 16) | (0xFFFF & (existing / value)),
+                    Sign::Unsigned => (existing % value, existing / value),
                 };
-                self.set_target_value(system, dest, result, Size::Long)?;
+
+                self.set_compare_flags(quotient as u32, Size::Long, false, (quotient & 0xFFFF0000) != 0);
+                self.state.d_reg[dest as usize] = (remainder << 16) | (0xFFFF & quotient);
+            },
+            Instruction::DIVL(src, dest_h, dest_l, sign) => {
+                let value = self.get_target_value(system, src, Size::Long)?;
+                if value == 0 {
+                    self.exception(system, Exceptions::ZeroDivide as u8)?;
+                    return Ok(());
+                }
+
+                let existing_l = self.state.d_reg[dest_l as usize];
+                let (remainder, quotient) = match sign {
+                    Sign::Signed => {
+                        let value = (value as i32) as i64;
+                        let existing = match dest_h {
+                            Some(reg) => (((self.state.d_reg[reg as usize] as u64) << 32) | (existing_l as u64)) as i64,
+                            None => (existing_l as i32) as i64,
+                        };
+                        ((existing % value) as u64, (existing / value) as u64)
+                    },
+                    Sign::Unsigned => {
+                        let value = value as u64;
+                        let existing_h = dest_h.map(|reg| self.state.d_reg[reg as usize]).unwrap_or(0);
+                        let existing = ((existing_h as u64) << 32) | (existing_l as u64);
+                        (existing % value, existing / value)
+                    },
+                };
+
+                self.set_compare_flags(quotient as u32, Size::Long, false, (quotient & 0xFFFFFFFF00000000) != 0);
+                if let Some(dest_h) = dest_h {
+                    self.state.d_reg[dest_h as usize] = remainder as u32;
+                }
+                self.state.d_reg[dest_l as usize] = quotient as u32;
             },
             Instruction::EOR(src, dest, size) => {
                 let value = self.get_target_value(system, src, size)?;
@@ -470,13 +499,24 @@ impl M68k {
                     Direction::FromTarget => { self.state.usp = self.get_target_value(system, target, Size::Long)?; },
                 }
             },
-            Instruction::MOVEM(target, size, dir, mask) => {
+            Instruction::MOVEM(target, size, dir, mut mask) => {
                 // TODO moving words requires a sign extension to 32 bits
                 if size != Size::Long { return Err(Error::new("Unsupported size in MOVEM instruction")); }
 
                 let mut addr = self.get_target_address(system, target)?;
+
+                // If we're using a MC68020 or higher, and it was Post-Inc/Pre-Dec target, then update the value before it's stored
+                if self.cputype >= M68kType::MC68020 {
+                    match target {
+                        Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
+                            let a_reg_mut = self.get_a_reg_mut(reg);
+                            *a_reg_mut = addr + (mask.count_ones() * size.in_bytes());
+                        }
+                        _ => { },
+                    }
+                }
+
                 if dir == Direction::ToTarget {
-                    let mut mask = mask;
                     for i in (0..8).rev() {
                         if (mask & 0x01) != 0 {
                             let value = *self.get_a_reg_mut(i);
@@ -524,18 +564,30 @@ impl M68k {
                 self.state.d_reg[reg as usize] = value;
                 self.set_logic_flags(value, Size::Long);
             },
-            Instruction::MUL(src, dest, size, sign) => {
-                if size == Size::Long {
-                    return Err(Error::new("Unsupported multiplication size"));
-                }
-
-                let value = self.get_target_value(system, src, size)?;
-                let existing = self.get_target_value(system, dest, size)?;
+            Instruction::MULW(src, dest, sign) => {
+                let value = self.get_target_value(system, src, Size::Word)?;
+                let existing = get_value_sized(self.state.d_reg[dest as usize], Size::Word);
                 let result = match sign {
-                    Sign::Signed => (sign_extend_to_long(existing, Size::Word) * sign_extend_to_long(value, Size::Word)) as u32,
-                    Sign::Unsigned => existing as u32 * value as u32,
+                    Sign::Signed => ((((existing as u16) as i16) as i64) * (((value as u16) as i16) as i64)) as u64,
+                    Sign::Unsigned => existing as u64 * value as u64,
                 };
-                self.set_target_value(system, dest, result, Size::Long)?;
+
+                self.set_compare_flags(result as u32, Size::Long, false, (result & 0xFFFFFFFF00000000) != 0);
+                self.state.d_reg[dest as usize] = result as u32;
+            },
+            Instruction::MULL(src, dest_h, dest_l, sign) => {
+                let value = self.get_target_value(system, src, Size::Long)?;
+                let existing = get_value_sized(self.state.d_reg[dest_l as usize], Size::Long);
+                let result = match sign {
+                    Sign::Signed => (((existing as i32) as i64) * ((value as i32) as i64)) as u64,
+                    Sign::Unsigned => existing as u64 * value as u64,
+                };
+
+                self.set_compare_flags(result as u32, Size::Long, false, false);
+                if let Some(dest_h) = dest_h {
+                    self.state.d_reg[dest_h as usize] = (result >> 32) as u32;
+                }
+                self.state.d_reg[dest_l as usize] = (result & 0x00000000FFFFFFFF) as u32;
             },
             //Instruction::NBCD(Target) => {
             //},

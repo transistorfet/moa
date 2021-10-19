@@ -1,19 +1,15 @@
 
-* rearrange the order of Target::IndirectARegXReg...
-* should you make a new type for the index, c/w proper Display formatter
-
 * can you eventually make the system connections all configurable via a config file?
 * test using mpsc to pass messages with the tty IO thread, and test if it's slower than what you have now
 
 * make it possible to break out of the current execution, into the debugger, by using a certain keystroke
 
-* add support for MC68020+ indexing modes, implement the full extension word for MC68020+
 * make tests for each instruction
 
 * unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SBCD, SUBX
 * undecoded: ADDX, SUBX
-* modify execution for >=MC68020: DIVSL, DIVUL, LINK, MOVEM, MULSL, MULUL, RTM, TRAPcc, UNPK
-* >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, PACK
+* modify execution for >=MC68020: MOVEM
+* >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
 
 * add support for MMU
 * add support for FPU

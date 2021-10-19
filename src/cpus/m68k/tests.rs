@@ -374,6 +374,17 @@ mod decode_tests {
     }
 
     #[test]
+    fn instruction_mulsl() {
+        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
+
+        system.get_bus().write_beu16(INIT_ADDR,     0x4c3c).unwrap();
+        system.get_bus().write_beu16(INIT_ADDR + 2, 0x0800).unwrap();
+        system.get_bus().write_beu16(INIT_ADDR + 4, 0x0000).unwrap();
+        cpu.decode_next(&system).unwrap();
+        assert_eq!(cpu.decoder.instruction, Instruction::MUL(Target::Immediate(0x276), Target::DirectDReg(0), Size::Word, Sign::Signed));
+    }
+
+    #[test]
     fn instruction_asli() {
         let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 

@@ -98,7 +98,7 @@ impl M68k {
     }
 
     pub fn run_debugger_command(&mut self, system: &System, args: Vec<&str>) -> Result<bool, Error> {
-        if args.len() <= 0 {
+        if args.len() == 0 {
             return Ok(true);
         }
 

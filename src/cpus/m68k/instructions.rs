@@ -126,7 +126,8 @@ pub enum Instruction {
     CMPA(Target, Register, Size),
 
     DBcc(Condition, Register, i16),
-    DIV(Target, Target, Size, Sign),
+    DIVW(Target, Register, Sign),
+    DIVL(Target, Option<Register>, Register, Sign),
 
     EOR(Target, Target, Size),
     EORtoCCR(u8),
@@ -140,7 +141,7 @@ pub enum Instruction {
     JSR(Target),
 
     LEA(Target, Register),
-    LINK(Register, i16),
+    LINK(Register, i32),
     LSd(Target, Target, Size, ShiftDirection),
 
     MOVE(Target, Target, Size),
@@ -154,7 +155,8 @@ pub enum Instruction {
     MOVEP(Register, Target, Size, Direction),
     MOVEQ(u8, Register),
     MOVEUSP(Target, Direction),
-    MUL(Target, Target, Size, Sign),
+    MULW(Target, Register, Sign),
+    MULL(Target, Option<Register>, Register, Sign),
 
     NBCD(Target),
     NEG(Target, Size),
@@ -365,7 +367,11 @@ impl fmt::Display for Instruction {
             Instruction::CMPA(target, reg, size) => write!(f, "cmpa{}\t{}, %a{}", size, target, reg),
 
             Instruction::DBcc(cond, reg, offset) => write!(f, "db{}\t%d{}, {}", cond, reg, offset),
-            Instruction::DIV(src, dest, size, sign) => write!(f, "div{}{}\t{}, {}", sign, size, src, dest),
+            Instruction::DIVW(src, dest, sign) => write!(f, "div{}w\t{}, %d{}", sign, src, dest),
+            Instruction::DIVL(src, desth, destl, sign) => {
+                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or("".to_string());
+                write!(f, "div{}l\t{}, {}%d{}", sign, src, opt_reg, destl)
+            },
 
             Instruction::EOR(src, dest, size) => write!(f, "eor{}\t{}, {}", size, src, dest),
             Instruction::EORtoCCR(value) => write!(f, "eorb\t{:02x}, %ccr", value),
@@ -405,7 +411,11 @@ impl fmt::Display for Instruction {
                 Direction::ToTarget => write!(f, "movel\t%usp, {}", target),
                 Direction::FromTarget => write!(f, "movel\t{}, %usp", target),
             },
-            Instruction::MUL(src, dest, size, sign) => write!(f, "mul{}{}\t{}, {}", sign, size, src, dest),
+            Instruction::MULW(src, dest, sign) => write!(f, "mul{}w\t{}, %d{}", sign, src, dest),
+            Instruction::MULL(src, desth, destl, sign) => {
+                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or("".to_string());
+                write!(f, "mul{}l\t{}, {}%d{}", sign, src, opt_reg, destl)
+            },
 
             Instruction::NBCD(target) => write!(f, "nbcd\t{}", target),
             Instruction::NEG(target, size) => write!(f, "neg{}\t{}", size, target),
