@@ -76,12 +76,21 @@ pub struct Block {
 
 pub struct Bus {
     pub blocks: Vec<Block>,
+    pub mask: Address,
 }
 
 impl Bus {
     pub fn new() -> Bus {
         Bus {
             blocks: vec!(),
+            mask: !0,
+        }
+    }
+
+    pub fn address_limit(&mut self, bits: u8) {
+        self.mask = 0;
+        for _ in 0..bits {
+            self.mask = (self.mask << 1) | 0x01;
         }
     }
 
@@ -97,6 +106,7 @@ impl Bus {
     }
 
     pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(TransmutableBox, Address), Error> {
+        let addr = addr & self.mask;
         for block in &self.blocks {
             if addr >= block.base && addr <= (block.base + block.length as Address) {
                 let relative_addr = addr - block.base;

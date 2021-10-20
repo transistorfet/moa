@@ -370,18 +370,19 @@ mod decode_tests {
         system.get_bus().write_beu16(INIT_ADDR,     0xC1FC).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 2, 0x0276).unwrap();
         cpu.decode_next(&system).unwrap();
-        assert_eq!(cpu.decoder.instruction, Instruction::MUL(Target::Immediate(0x276), Target::DirectDReg(0), Size::Word, Sign::Signed));
+        assert_eq!(cpu.decoder.instruction, Instruction::MULW(Target::Immediate(0x276), 0, Sign::Signed));
     }
 
     #[test]
     fn instruction_mulsl() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
+        let (mut cpu, system) = init_decode_test(M68kType::MC68030);
 
         system.get_bus().write_beu16(INIT_ADDR,     0x4c3c).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 2, 0x0800).unwrap();
         system.get_bus().write_beu16(INIT_ADDR + 4, 0x0000).unwrap();
+        system.get_bus().write_beu16(INIT_ADDR + 6, 0x0097).unwrap();
         cpu.decode_next(&system).unwrap();
-        assert_eq!(cpu.decoder.instruction, Instruction::MUL(Target::Immediate(0x276), Target::DirectDReg(0), Size::Word, Sign::Signed));
+        assert_eq!(cpu.decoder.instruction, Instruction::MULL(Target::Immediate(0x97), None, 0, Sign::Signed));
     }
 
     #[test]
@@ -552,7 +553,7 @@ mod execute_tests {
 
         let value = 0x0276;
         cpu.state.d_reg[0] = 0x0200;
-        cpu.decoder.instruction = Instruction::MUL(Target::Immediate(value), Target::DirectDReg(0), Size::Word, Sign::Signed);
+        cpu.decoder.instruction = Instruction::MULW(Target::Immediate(value), 0, Sign::Signed);
 
         cpu.execute_current(&system).unwrap();
         assert_eq!(cpu.state.d_reg[0], 0x4ec00);
@@ -564,7 +565,7 @@ mod execute_tests {
 
         let value = 0x0245;
         cpu.state.d_reg[0] = 0x40000;
-        cpu.decoder.instruction = Instruction::DIV(Target::Immediate(value), Target::DirectDReg(0), Size::Word, Sign::Unsigned);
+        cpu.decoder.instruction = Instruction::DIVW(Target::Immediate(value), 0, Sign::Unsigned);
 
         cpu.execute_current(&system).unwrap();
         assert_eq!(cpu.state.d_reg[0], 0x007101C3);
@@ -616,6 +617,58 @@ mod execute_tests {
         cpu.execute_current(&system).unwrap();
         assert_eq!(cpu.state.d_reg[0], 0x00000080);
         assert_eq!(cpu.state.sr & 0x1F, 0x09);
+    }
+
+    #[test]
+    fn instruction_roxl() {
+        let (mut cpu, system) = init_test();
+
+        cpu.state.d_reg[0] = 0x80;
+        cpu.state.sr = 0x2700;
+        cpu.decoder.instruction = Instruction::ROXd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left);
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state.d_reg[0], 0x00000000);
+        assert_eq!(cpu.state.sr & 0x1F, 0x15);
+    }
+
+    #[test]
+    fn instruction_roxr() {
+        let (mut cpu, system) = init_test();
+
+        cpu.state.d_reg[0] = 0x01;
+        cpu.state.sr = 0x2700;
+        cpu.decoder.instruction = Instruction::ROXd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right);
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state.d_reg[0], 0x00000000);
+        assert_eq!(cpu.state.sr & 0x1F, 0x15);
+    }
+
+    #[test]
+    fn instruction_roxl_2() {
+        let (mut cpu, system) = init_test();
+
+        cpu.state.d_reg[0] = 0x80;
+        cpu.state.sr = 0x2700;
+        cpu.decoder.instruction = Instruction::ROXd(Target::Immediate(2), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left);
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state.d_reg[0], 0x00000001);
+        assert_eq!(cpu.state.sr & 0x1F, 0x00);
+    }
+
+    #[test]
+    fn instruction_roxr_2() {
+        let (mut cpu, system) = init_test();
+
+        cpu.state.d_reg[0] = 0x01;
+        cpu.state.sr = 0x2700;
+        cpu.decoder.instruction = Instruction::ROXd(Target::Immediate(2), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right);
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state.d_reg[0], 0x00000080);
+        assert_eq!(cpu.state.sr & 0x1F, 0x08);
     }
 
 

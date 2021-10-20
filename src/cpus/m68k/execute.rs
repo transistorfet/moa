@@ -347,7 +347,7 @@ impl M68k {
                     return Ok(());
                 }
 
-                let existing = get_value_sized(self.state.d_reg[dest as usize], Size::Word);
+                let existing = get_value_sized(self.state.d_reg[dest as usize], Size::Long);
                 let (remainder, quotient) = match sign {
                     Sign::Signed => {
                         let value = sign_extend_to_long(value, Size::Word) as u32;
@@ -574,7 +574,7 @@ impl M68k {
                 let count = self.get_target_value(system, count, size)? % 64;
                 let mut pair = (self.get_target_value(system, target, size)?, false);
                 for _ in 0..count {
-                    pair = rotate_operation(pair.0, size, shift_dir);
+                    pair = rotate_operation(pair.0, size, shift_dir, None);
                 }
                 self.set_logic_flags(pair.0, size);
                 if pair.1 {
@@ -582,8 +582,19 @@ impl M68k {
                 }
                 self.set_target_value(system, target, pair.0, size)?;
             },
-            //Instruction::ROXd(Target, Target, Size, ShiftDirection) => {
-            //},
+            Instruction::ROXd(count, target, size, shift_dir) => {
+                let count = self.get_target_value(system, count, size)? % 64;
+                let mut pair = (self.get_target_value(system, target, size)?, false);
+                for _ in 0..count {
+                    pair = rotate_operation(pair.0, size, shift_dir, Some(self.get_flag(Flags::Extend)));
+                    self.set_flag(Flags::Extend, pair.1);
+                }
+                self.set_logic_flags(pair.0, size);
+                if pair.1 {
+                    self.set_flag(Flags::Carry, true);
+                }
+                self.set_target_value(system, target, pair.0, size)?;
+            },
             Instruction::RTE => {
                 self.require_supervisor()?;
                 self.state.sr = self.pop_word(system)?;
@@ -791,11 +802,11 @@ impl M68k {
             Target::IndirectARegInc(reg) => {
                 let addr = self.get_a_reg_mut(reg);
                 set_address_sized(system, *addr as Address, value, size)?;
-                *addr += size.in_bytes();
+                *addr = (*addr).wrapping_add(size.in_bytes());
             },
             Target::IndirectARegDec(reg) => {
                 let addr = self.get_a_reg_mut(reg);
-                *addr -= size.in_bytes();
+                *addr = (*addr).wrapping_sub(size.in_bytes());
                 set_address_sized(system, *addr as Address, value, size)?;
             },
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
@@ -1056,11 +1067,11 @@ fn shift_operation(value: u32, size: Size, dir: ShiftDirection, arithmetic: bool
     }
 }
 
-fn rotate_operation(value: u32, size: Size, dir: ShiftDirection) -> (u32, bool) {
+fn rotate_operation(value: u32, size: Size, dir: ShiftDirection, use_extend: Option<bool>) -> (u32, bool) {
     match dir {
         ShiftDirection::Left => {
             let bit = get_msb(value, size);
-            let mask = if bit { 0x01 } else { 0x00 };
+            let mask = if use_extend.unwrap_or(bit) { 0x01 } else { 0x00 };
             match size {
                 Size::Byte => (mask | ((value as u8) << 1) as u32, bit),
                 Size::Word => (mask | ((value as u16) << 1) as u32, bit),
@@ -1069,7 +1080,7 @@ fn rotate_operation(value: u32, size: Size, dir: ShiftDirection) -> (u32, bool) 
         },
         ShiftDirection::Right => {
             let bit = if (value & 0x01) != 0 { true } else { false };
-            let mask = if bit { get_msb_mask(0xffffffff, size) } else { 0x0 };
+            let mask = if use_extend.unwrap_or(bit) { get_msb_mask(0xffffffff, size) } else { 0x0 };
             ((value >> 1) | mask, bit)
         },
     }
