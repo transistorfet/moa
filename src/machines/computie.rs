@@ -1,32 +1,18 @@
 
-#[macro_use]
-mod error;
-mod memory;
-mod timers;
-mod devices;
-mod interrupts;
-mod system;
-
-mod host;
-mod cpus;
-mod peripherals;
-
 use crate::system::System;
 use crate::memory::MemoryBlock;
-use crate::peripherals::ata::AtaDevice;
-use crate::cpus::m68k::{M68k, M68kType};
-use crate::peripherals::mc68681::MC68681;
+use crate::host::frontend::Frontend;
 use crate::devices::wrap_transmutable;
 
-fn main() {
-    run_computie();
-}
+use crate::cpus::m68k::{M68k, M68kType};
+use crate::peripherals::ata::AtaDevice;
+use crate::peripherals::mc68681::MC68681;
 
-fn run_computie() {
+
+pub fn run_computie(frontend: &mut dyn Frontend) {
     let mut system = System::new();
 
     let monitor = MemoryBlock::load("binaries/monitor.bin").unwrap();
-    //let monitor = MemoryBlock::load("binaries/monitor-68030.bin").unwrap();
     for byte in monitor.contents.iter() {
         print!("{:02x} ", byte);
     }
@@ -34,7 +20,6 @@ fn run_computie() {
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
     ram.load_at(0, "binaries/kernel.bin").unwrap();
-    //ram.load_at(0, "binaries/kernel-68030.bin").unwrap();
     system.add_addressable_device(0x00100000, wrap_transmutable(ram)).unwrap();
 
     let mut ata = AtaDevice::new();
@@ -48,7 +33,41 @@ fn run_computie() {
 
 
     let mut cpu = M68k::new(M68kType::MC68010);
-    //let mut cpu = M68k::new(M68kType::MC68030);
+
+    //cpu.enable_tracing();
+    //cpu.add_breakpoint(0x10781a);
+    //cpu.add_breakpoint(0x10bc9c);
+    //cpu.add_breakpoint(0x106a94);
+    //cpu.add_breakpoint(0x1015b2);
+    //cpu.add_breakpoint(0x103332);
+    //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
+    //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
+
+    system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
+    system.run_loop();
+}
+
+pub fn run_computie_k30(frontend: &mut dyn Frontend) {
+    let mut system = System::new();
+
+    let monitor = MemoryBlock::load("binaries/monitor-68030.bin").unwrap();
+    system.add_addressable_device(0x00000000, wrap_transmutable(monitor)).unwrap();
+
+    let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
+    ram.load_at(0, "binaries/kernel-68030.bin").unwrap();
+    system.add_addressable_device(0x00100000, wrap_transmutable(ram)).unwrap();
+
+    let mut ata = AtaDevice::new();
+    ata.load("binaries/disk-with-partition-table.img").unwrap();
+    system.add_addressable_device(0x00600000, wrap_transmutable(ata)).unwrap();
+
+    let mut serial = MC68681::new();
+    launch_terminal_emulator(serial.port_a.open().unwrap());
+    //launch_slip_connection(serial.port_b.open().unwrap());
+    system.add_addressable_device(0x00700000, wrap_transmutable(serial)).unwrap();
+
+
+    let mut cpu = M68k::new(M68kType::MC68030);
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);
@@ -82,5 +101,4 @@ pub fn launch_slip_connection(name: String) {
     Command::new("sudo").args(["iptables", "-A", "FORWARD", "-o", "sl0", "-j", "ACCEPT"]).status().unwrap();
     Command::new("sudo").args(["sh", "-c", "echo 1 > /proc/sys/net/ipv4/ip_forward"]).status().unwrap();
 }
-
 

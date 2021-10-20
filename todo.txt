@@ -1,4 +1,10 @@
 
+* should the frontend and simulator parts be separated so that the simulator part can be a library package?
+* it should be call something other than canvas because it'll have input as well
+* how will you get the canvas/app shared object between the sim thread and the io thread?  It kind of has to be passed through the system-creation
+  functions (an only if they need them), which raises questions about how to configure things.  It'd be nice if you could still run the same hardware
+  simulated without using a frontend
+
 * can you eventually make the system connections all configurable via a config file?
 * test using mpsc to pass messages with the tty IO thread, and test if it's slower than what you have now
 
