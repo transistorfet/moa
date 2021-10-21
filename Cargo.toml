@@ -3,7 +3,13 @@ name = "moa"
 version = "0.1.0"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+members = [".", "frontends/moa-console", "frontends/moa-piston"]
+default-members = ["frontends/moa-console"]
+
+[features]
+tty = ["nix"]
 
 [dependencies]
-nix = "0.23"
+nix = { version = "0.23", optional = true }
+
