@@ -399,7 +399,7 @@ impl M68kDecoder {
 
                 if size.is_none() {
                     let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
-                    let effective_addr = self.decode_lower_effective_address(memory, ins, size)?;
+                    let effective_addr = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
                     Ok(Instruction::DIVW(effective_addr, get_high_reg(ins), sign))
                 } else if (ins & 0x1F0) == 0x100 {
                     let regx = get_high_reg(ins);
