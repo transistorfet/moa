@@ -1,15 +1,17 @@
 
+use crate::error::Error;
 use crate::system::System;
 use crate::memory::MemoryBlock;
-use crate::host::frontend::Frontend;
 use crate::devices::wrap_transmutable;
 
 use crate::cpus::m68k::{M68k, M68kType};
 use crate::peripherals::ata::AtaDevice;
 use crate::peripherals::mc68681::MC68681;
 
+use crate::host::traits::Host;
 
-pub fn run_computie(frontend: &mut dyn Frontend) {
+
+pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     let mut system = System::new();
 
     let monitor = MemoryBlock::load("binaries/monitor.bin").unwrap();
@@ -44,10 +46,11 @@ pub fn run_computie(frontend: &mut dyn Frontend) {
     //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
     system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
-    system.run_loop();
+
+    Ok(system)
 }
 
-pub fn run_computie_k30(frontend: &mut dyn Frontend) {
+pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     let mut system = System::new();
 
     let monitor = MemoryBlock::load("binaries/monitor-68030.bin").unwrap();
@@ -79,7 +82,8 @@ pub fn run_computie_k30(frontend: &mut dyn Frontend) {
     //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
     system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
-    system.run_loop();
+
+    Ok(system)
 }
 
 pub fn launch_terminal_emulator(name: String) {

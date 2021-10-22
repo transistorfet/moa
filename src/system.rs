@@ -88,5 +88,20 @@ impl System {
             }
         }
     }
+
+    pub fn run_for(&mut self, clocks: Clock) -> Result<(), Error> {
+        let target = self.clock + clocks;
+        while self.clock < target {
+            match self.step() {
+                Ok(()) => { },
+                Err(err) => {
+                    self.exit_error();
+                    println!("{:?}", err);
+                    return Err(err);
+                },
+            }
+        }
+        Ok(())
+    }
 }
 

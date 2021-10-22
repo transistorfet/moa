@@ -1,4 +1,10 @@
 
+
+* generics for the frontend that's passed to the builder functions is much better than a trait object
+* you could possibly use a backend representation that is given to the frontened, rather than vice versa
+* you could use callbacks in some way (ie. callbacks from the gui loop to the system)
+
+
 * should the frontend and simulator parts be separated so that the simulator part can be a library package?
 * it should be call something other than canvas because it'll have input as well
 * how will you get the canvas/app shared object between the sim thread and the io thread?  It kind of has to be passed through the system-creation
