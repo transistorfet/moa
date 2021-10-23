@@ -9,29 +9,27 @@ use crate::peripherals::ata::AtaDevice;
 use crate::peripherals::mc68681::MC68681;
 
 use crate::host::traits::Host;
+use crate::host::tty::SimplePty;
 
 
 pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     let mut system = System::new();
 
-    let monitor = MemoryBlock::load("binaries/monitor.bin").unwrap();
-    for byte in monitor.contents.iter() {
-        print!("{:02x} ", byte);
-    }
-    system.add_addressable_device(0x00000000, wrap_transmutable(monitor)).unwrap();
+    let monitor = MemoryBlock::load("binaries/monitor.bin")?;
+    system.add_addressable_device(0x00000000, wrap_transmutable(monitor))?;
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
-    ram.load_at(0, "binaries/kernel.bin").unwrap();
-    system.add_addressable_device(0x00100000, wrap_transmutable(ram)).unwrap();
+    ram.load_at(0, "binaries/kernel.bin")?;
+    system.add_addressable_device(0x00100000, wrap_transmutable(ram))?;
 
     let mut ata = AtaDevice::new();
-    ata.load("binaries/disk-with-partition-table.img").unwrap();
-    system.add_addressable_device(0x00600000, wrap_transmutable(ata)).unwrap();
+    ata.load("binaries/disk-with-partition-table.img")?;
+    system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
     let mut serial = MC68681::new();
-    launch_terminal_emulator(serial.port_a.open().unwrap());
-    launch_slip_connection(serial.port_b.open().unwrap());
-    system.add_addressable_device(0x00700000, wrap_transmutable(serial)).unwrap();
+    launch_terminal_emulator(serial.port_a.connect(Box::new(SimplePty::open()?))?);
+    launch_slip_connection(serial.port_b.connect(Box::new(SimplePty::open()?))?);
+    system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
     let mut cpu = M68k::new(M68kType::MC68010);
@@ -45,7 +43,7 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
     //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
-    system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
+    system.add_interruptable_device(wrap_transmutable(cpu))?;
 
     Ok(system)
 }
@@ -53,21 +51,21 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
 pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     let mut system = System::new();
 
-    let monitor = MemoryBlock::load("binaries/monitor-68030.bin").unwrap();
-    system.add_addressable_device(0x00000000, wrap_transmutable(monitor)).unwrap();
+    let monitor = MemoryBlock::load("binaries/monitor-68030.bin")?;
+    system.add_addressable_device(0x00000000, wrap_transmutable(monitor))?;
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
-    ram.load_at(0, "binaries/kernel-68030.bin").unwrap();
-    system.add_addressable_device(0x00100000, wrap_transmutable(ram)).unwrap();
+    ram.load_at(0, "binaries/kernel-68030.bin")?;
+    system.add_addressable_device(0x00100000, wrap_transmutable(ram))?;
 
     let mut ata = AtaDevice::new();
-    ata.load("binaries/disk-with-partition-table.img").unwrap();
-    system.add_addressable_device(0x00600000, wrap_transmutable(ata)).unwrap();
+    ata.load("binaries/disk-with-partition-table.img")?;
+    system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
     let mut serial = MC68681::new();
-    launch_terminal_emulator(serial.port_a.open().unwrap());
-    //launch_slip_connection(serial.port_b.open().unwrap());
-    system.add_addressable_device(0x00700000, wrap_transmutable(serial)).unwrap();
+    launch_terminal_emulator(serial.port_a.connect(Box::new(SimplePty::open()?))?);
+    //launch_slip_connection(serial.port_b.connect(Box::new(SimplePty::open()?))?);
+    system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
     let mut cpu = M68k::new(M68kType::MC68030);
@@ -81,7 +79,7 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
     //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
-    system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
+    system.add_interruptable_device(wrap_transmutable(cpu))?;
 
     Ok(system)
 }

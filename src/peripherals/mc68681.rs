@@ -3,7 +3,7 @@ use crate::error::Error;
 use crate::system::System;
 use crate::devices::{Clock, Address, Steppable, Addressable, Transmutable, MAX_READ};
 
-use crate::host::tty::{SimplePty, SharedSimplePty};
+use crate::host::traits::Tty;
 
 
 const REG_MR1A_MR2A: Address = 0x01;
@@ -71,7 +71,7 @@ const ISR_CH_A_TX_READY: u8 = 0x01;
 const DEV_NAME: &'static str = "mc68681";
 
 pub struct MC68681Port {
-    pub tty: Option<SharedSimplePty>,
+    pub tty: Option<Box<dyn Tty>>,
     pub status: u8,
 
     pub tx_enabled: bool,
@@ -93,16 +93,15 @@ impl MC68681Port {
         }
     }
 
-    pub fn open(&mut self) -> Result<String, Error> {
-        let pty = SimplePty::open()?;
-        let name = pty.lock().unwrap().name.clone();
+    pub fn connect(&mut self, pty: Box<dyn Tty>) -> Result<String, Error> {
+        let name = pty.device_name();
         println!("{}: opening pts {}", DEV_NAME, name);
         self.tty = Some(pty);
         Ok(name)
     }
 
     pub fn send_byte(&mut self, data: u8) {
-        self.tty.as_mut().map(|tty| tty.lock().unwrap().write(data));
+        self.tty.as_mut().map(|tty| tty.write(data));
         self.set_tx_status(false);
     }
 
@@ -123,7 +122,7 @@ impl MC68681Port {
     pub fn check_rx(&mut self) -> Result<bool, Error> {
         if self.rx_enabled && (self.status & SR_RX_READY) == 0 && self.tty.is_some() {
             let tty = self.tty.as_mut().unwrap();
-            let result = tty.lock().unwrap().read();
+            let result = tty.read();
             match result {
                 Some(input) => {
                     self.input = input;
