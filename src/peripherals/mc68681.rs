@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Clock, Address, Steppable, Addressable, Transmutable, MAX_READ};
+use crate::devices::{ClockElapsed, Address, Steppable, Addressable, Transmutable, MAX_READ};
 
 use crate::host::traits::Tty;
 
@@ -206,7 +206,17 @@ impl MC68681 {
         }
     }
 
-    pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
+    fn set_interrupt_flag(&mut self, flag: u8, value: bool) {
+        self.int_status = (self.int_status & !flag) | (if value { flag } else { 0 });
+    }
+
+    fn check_interrupt_state(&mut self, system: &System) -> Result<(), Error> {
+        system.get_interrupt_controller().set((self.int_status & self.int_mask) != 0, 4, self.int_vector)
+    }
+}
+
+impl Steppable for MC68681 {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         if self.port_a.check_rx()? {
             self.set_interrupt_flag(ISR_CH_A_RX_READY_FULL, true);
         }
@@ -242,15 +252,7 @@ impl MC68681 {
             self.set_interrupt_flag(ISR_CH_B_TX_READY, true);
         }
 
-        Ok(())
-    }
-
-    fn set_interrupt_flag(&mut self, flag: u8, value: bool) {
-        self.int_status = (self.int_status & !flag) | (if value { flag } else { 0 });
-    }
-
-    fn check_interrupt_state(&mut self, system: &System) -> Result<(), Error> {
-        system.get_interrupt_controller().set((self.int_status & self.int_mask) != 0, 4, self.int_vector)
+        Ok(1_000_000_000 / 3_646_800)
     }
 }
 
@@ -368,13 +370,6 @@ impl Addressable for MC68681 {
             _ => { },
         }
         Ok(())
-    }
-}
-
-impl Steppable for MC68681 {
-    fn step(&mut self, system: &System) -> Result<Clock, Error> {
-        self.step_internal(system)?;
-        Ok(1)
     }
 }
 

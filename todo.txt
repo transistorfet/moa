@@ -1,19 +1,8 @@
 
+* should you simulate clock ticks, and only step devices when they next request it
 
-* generics for the frontend that's passed to the builder functions is much better than a trait object
-* you could possibly use a backend representation that is given to the frontened, rather than vice versa
-* you could use callbacks in some way (ie. callbacks from the gui loop to the system)
-
-
-* should the frontend and simulator parts be separated so that the simulator part can be a library package?
-* it should be call something other than canvas because it'll have input as well
-* how will you get the canvas/app shared object between the sim thread and the io thread?  It kind of has to be passed through the system-creation
-  functions (an only if they need them), which raises questions about how to configure things.  It'd be nice if you could still run the same hardware
-  simulated without using a frontend
 
 * can you eventually make the system connections all configurable via a config file?
-* test using mpsc to pass messages with the tty IO thread, and test if it's slower than what you have now
-
 * make it possible to break out of the current execution, into the debugger, by using a certain keystroke
 
 * make tests for each instruction
@@ -28,7 +17,6 @@
 * Coprocessor instructions: cpBcc, cpDBcc, cpGEN, cpScc, cpTRAPcc
 
 
-* should you simulate clock ticks, and only step devices when they next request it
 * how can you have multple CPUs
 * should you simulate bus arbitration?
 

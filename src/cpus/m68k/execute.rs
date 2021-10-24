@@ -1,7 +1,7 @@
 
 use crate::system::System;
 use crate::error::{ErrorType, Error};
-use crate::devices::{Clock, Address, Steppable, Interruptable, Addressable, Transmutable};
+use crate::devices::{ClockElapsed, Address, Steppable, Interruptable, Addressable, Transmutable};
 
 use super::instructions::{
     Register,
@@ -27,9 +27,9 @@ use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority}
 
 
 impl Steppable for M68k {
-    fn step(&mut self, system: &System) -> Result<Clock, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         self.step_internal(system)?;
-        Ok(1)
+        Ok(1_000_000_000 / 8_000_000)
     }
 
     fn on_error(&mut self, system: &System) {
@@ -86,7 +86,7 @@ impl M68k {
                     //Err(Error { err: ErrorType::Processor, native, .. }) => {
                     // TODO temporary: we are passing illegal instructions upward in order to fix them
                     Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
-                        self.exception(system, native as u8)?;
+                        self.exception(system, native as u8, false)?;
                         Ok(())
                     },
                     Err(err) => Err(err),
@@ -126,7 +126,7 @@ impl M68k {
             if (pending_ipl >= priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
                 debug!("{} interrupt: {} {}", DEV_NAME, pending_ipl, priority_mask);
                 self.state.current_ipl = self.state.pending_ipl;
-                self.exception(system, self.state.ipl_ack_num)?;
+                self.exception(system, self.state.ipl_ack_num, true)?;
                 return Ok(());
             }
         }
@@ -138,7 +138,7 @@ impl M68k {
         Ok(())
     }
 
-    pub fn exception(&mut self, system: &System, number: u8) -> Result<(), Error> {
+    pub fn exception(&mut self, system: &System, number: u8, update_ipl: bool) -> Result<(), Error> {
         debug!("{}: raising exception {}", DEV_NAME, number);
         let offset = (number as u16) << 2;
         self.push_word(system, offset)?;
@@ -146,6 +146,9 @@ impl M68k {
         self.push_word(system, self.state.sr)?;
         self.set_flag(Flags::Supervisor, true);
         self.set_flag(Flags::Tracing, false);
+        if update_ipl {
+            self.state.sr = (self.state.sr & !(Flags::IntMask as u16)) | ((self.state.current_ipl as u16) << 8);
+        }
         self.state.pc = system.get_bus().read_beu32((self.state.vbr + offset as u32) as Address)?;
         Ok(())
     }
@@ -343,7 +346,7 @@ impl M68k {
             Instruction::DIVW(src, dest, sign) => {
                 let value = self.get_target_value(system, src, Size::Word)?;
                 if value == 0 {
-                    self.exception(system, Exceptions::ZeroDivide as u8)?;
+                    self.exception(system, Exceptions::ZeroDivide as u8, false)?;
                     return Ok(());
                 }
 
@@ -362,7 +365,7 @@ impl M68k {
             Instruction::DIVL(src, dest_h, dest_l, sign) => {
                 let value = self.get_target_value(system, src, Size::Long)?;
                 if value == 0 {
-                    self.exception(system, Exceptions::ZeroDivide as u8)?;
+                    self.exception(system, Exceptions::ZeroDivide as u8, false)?;
                     return Ok(());
                 }
 
@@ -641,11 +644,11 @@ impl M68k {
                 self.set_logic_flags(value, size);
             },
             Instruction::TRAP(number) => {
-                self.exception(system, 32 + number)?;
+                self.exception(system, 32 + number, false)?;
             },
             Instruction::TRAPV => {
                 if self.get_flag(Flags::Overflow) {
-                    self.exception(system, Exceptions::TrapvInstruction as u8)?;
+                    self.exception(system, Exceptions::TrapvInstruction as u8, false)?;
                 }
             },
             Instruction::UNLK(reg) => {
