@@ -32,7 +32,7 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
-    let mut cpu = M68k::new(M68kType::MC68010);
+    let mut cpu = M68k::new(M68kType::MC68010, 10_000_000);
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);
@@ -68,7 +68,7 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
-    let mut cpu = M68k::new(M68kType::MC68030);
+    let mut cpu = M68k::new(M68kType::MC68030, 10_000_000);
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);

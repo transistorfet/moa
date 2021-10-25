@@ -29,7 +29,7 @@ use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority}
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         self.step_internal(system)?;
-        Ok(1_000_000_000 / 8_000_000)
+        Ok((1_000_000_000 / self.frequency as u64) * 4)
     }
 
     fn on_error(&mut self, system: &System) {

@@ -30,17 +30,50 @@ impl Error {
     }
 }
 
-static mut DEBUG_ENABLE: bool = true;
 
-pub fn debug_enabled() -> bool {
-    unsafe { DEBUG_ENABLE }
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+pub enum LogLevel {
+    Error,
+    Warning,
+    Info,
+    Debug,
+}
+
+static mut LOG_LEVEL: LogLevel = LogLevel::Debug;
+
+pub fn log_level() -> LogLevel {
+    unsafe { LOG_LEVEL }
+}
+
+macro_rules! printlog {
+    ($level:expr, $($arg:tt)*) => ({
+        if $level <= crate::error::log_level() {
+            println!($($arg)*);
+        }
+    })
+}
+
+macro_rules! error {
+    ($($arg:tt)*) => ({
+        printlog!(crate::error::LogLevel::Error, $($arg)*);
+    })
+}
+
+macro_rules! warning {
+    ($($arg:tt)*) => ({
+        printlog!(crate::error::LogLevel::Warning, $($arg)*);
+    })
+}
+
+macro_rules! info {
+    ($($arg:tt)*) => ({
+        printlog!(crate::error::LogLevel::Info, $($arg)*);
+    })
 }
 
 macro_rules! debug {
     ($($arg:tt)*) => ({
-        if crate::error::debug_enabled() {
-            println!($($arg)*);
-        }
+        printlog!(crate::error::LogLevel::Debug, $($arg)*);
     })
 }
 

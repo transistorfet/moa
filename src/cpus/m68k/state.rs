@@ -121,6 +121,7 @@ impl M68kState {
 
 pub struct M68k {
     pub cputype: M68kType,
+    pub frequency: u32,
     pub state: M68kState,
     pub decoder: M68kDecoder,
     pub debugger: M68kDebugger,
@@ -128,9 +129,10 @@ pub struct M68k {
 }
 
 impl M68k {
-    pub fn new(cputype: M68kType) -> M68k {
+    pub fn new(cputype: M68kType, frequency: u32) -> M68k {
         M68k {
             cputype,
+            frequency,
             state: M68kState::new(),
             decoder: M68kDecoder::new(cputype, 0, 0),
             debugger: M68kDebugger::new(),

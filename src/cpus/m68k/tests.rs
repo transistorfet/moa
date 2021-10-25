@@ -24,7 +24,7 @@ mod decode_tests {
         system.get_bus().write_beu32(4, INIT_ADDR as u32).unwrap();
 
         // Initialize the CPU and make sure it's in the expected state
-        let mut cpu = M68k::new(cputype);
+        let mut cpu = M68k::new(cputype, 10_000_000);
         cpu.init(&system).unwrap();
         assert_eq!(cpu.state.pc, INIT_ADDR as u32);
         assert_eq!(cpu.state.msp, INIT_STACK as u32);
@@ -470,7 +470,7 @@ mod execute_tests {
         system.get_bus().write_beu32(0, INIT_STACK as u32).unwrap();
         system.get_bus().write_beu32(4, INIT_ADDR as u32).unwrap();
 
-        let mut cpu = M68k::new(M68kType::MC68010);
+        let mut cpu = M68k::new(M68kType::MC68010, 10_000_000);
         cpu.step(&system).unwrap();
         assert_eq!(cpu.state.pc, INIT_ADDR as u32);
         assert_eq!(cpu.state.msp, INIT_STACK as u32);
