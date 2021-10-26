@@ -2,11 +2,13 @@
 use std::fmt;
 use std::time::Instant;
 
+#[derive(Clone)]
 pub struct AverageTimer {
     pub high: u32,
     pub average: f32,
     pub low: u32,
     pub events: u32,
+    pub start: Option<Instant>,
 }
 
 impl AverageTimer {
@@ -16,15 +18,16 @@ impl AverageTimer {
             average: 0.0,
             low: u32::MAX,
             events: 0,
+            start: None,
         }
     }
 
-    pub fn start(&self) -> Instant {
-        Instant::now()
+    pub fn start(&mut self) {
+        self.start = Some(Instant::now())
     }
 
-    pub fn end(&mut self, timer: Instant) {
-        let time = timer.elapsed().as_nanos() as u32;
+    pub fn end(&mut self) {
+        let time = self.start.unwrap().elapsed().as_nanos() as u32;
 
         self.events += 1;
         if time > self.high {
@@ -68,5 +71,4 @@ impl fmt::Display for CpuTimer {
         Ok(())
     }
 }
-
 

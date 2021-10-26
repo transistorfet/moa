@@ -103,10 +103,10 @@ impl M68k {
     }
 
     pub fn cycle_one(&mut self, system: &System) -> Result<(), Error> {
-        let timer = self.timer.cycle.start();
+        self.timer.cycle.start();
         self.decode_next(system)?;
         self.execute_current(system)?;
-        self.timer.cycle.end(timer);
+        self.timer.cycle.end();
 
         //if (self.timer.cycle.events % 500) == 0 {
         //    println!("{}", self.timer);
@@ -156,9 +156,9 @@ impl M68k {
     pub fn decode_next(&mut self, system: &System) -> Result<(), Error> {
         self.check_breakpoints();
 
-        let timer = self.timer.decode.start();
+        self.timer.decode.start();
         self.decoder.decode_at(system, self.state.pc)?;
-        self.timer.decode.end(timer);
+        self.timer.decode.end();
 
         if self.debugger.use_tracing {
             self.decoder.dump_decoded(system);
@@ -173,7 +173,7 @@ impl M68k {
     }
 
     pub fn execute_current(&mut self, system: &System) -> Result<(), Error> {
-        let timer = self.timer.decode.start();
+        self.timer.execute.start();
         match self.decoder.instruction {
             Instruction::ADD(src, dest, size) => {
                 let value = self.get_target_value(system, src, size)?;
@@ -336,7 +336,7 @@ impl M68k {
             Instruction::DBcc(cond, reg, offset) => {
                 let condition_true = self.get_current_condition(cond);
                 if !condition_true {
-                    let next = (get_value_sized(self.state.d_reg[reg as usize], Size::Word) as u16) as i16 - 1;
+                    let next = ((get_value_sized(self.state.d_reg[reg as usize], Size::Word) as u16) as i16).wrapping_sub(1);
                     set_value_sized(&mut self.state.d_reg[reg as usize], next as u32, Size::Word);
                     if next != -1 {
                         self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
@@ -661,7 +661,7 @@ impl M68k {
             _ => { return Err(Error::new("Unsupported instruction")); },
         }
 
-        self.timer.execute.end(timer);
+        self.timer.execute.end();
         Ok(())
     }
 
