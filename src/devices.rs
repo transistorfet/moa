@@ -102,6 +102,13 @@ pub fn write_beu32(value: u32) -> [u8; 4] {
     ]
 }
 
+/// A device that can debugged by putting it into debug mode, or setting breakpoints
+pub trait Debuggable {
+    fn enable_debugging(&mut self);
+    fn add_breakpoint(&mut self, addr: Address);
+}
+
+
 pub trait Transmutable {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
         None
@@ -112,6 +119,10 @@ pub trait Transmutable {
     }
 
     fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
+        None
+    }
+
+    fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
         None
     }
 }

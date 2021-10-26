@@ -1,7 +1,7 @@
 
 use crate::system::System;
 use crate::error::{ErrorType, Error};
-use crate::devices::{ClockElapsed, Address, Steppable, Interruptable, Addressable, Transmutable};
+use crate::devices::{ClockElapsed, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
 use super::instructions::{
     Register,
@@ -65,6 +65,10 @@ impl Transmutable for M68k {
     }
 
     fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
+        Some(self)
+    }
+
+    fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
         Some(self)
     }
 }

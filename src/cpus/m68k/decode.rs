@@ -88,7 +88,7 @@ impl M68kDecoder {
                             let data = self.read_instruction_word(memory)?;
                             match optype {
                                 0b0000 => Ok(Instruction::ORtoCCR(data as u8)),
-                                0b0001 => Ok(Instruction::ANDtoCCR(data as u8)),
+                                0b0010 => Ok(Instruction::ANDtoCCR(data as u8)),
                                 0b1010 => Ok(Instruction::EORtoCCR(data as u8)),
                                 _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
@@ -423,10 +423,12 @@ impl M68kDecoder {
                 match size {
                     Some(size) => {
                         if (ins & 0b100110000) == 0b100000000 {
-                            let mode = (ins & 0x08) == 0;
-
-                            // TODO implement SUBX
-                            panic!("Not Implemented");
+                            let src = get_low_reg(ins);
+                            let dest = get_high_reg(ins);
+                            match (ins & 0x08) == 0 {
+                                true => Ok(Instruction::SUBX(Target::DirectDReg(src), Target::DirectDReg(dest), size)),
+                                false => Ok(Instruction::SUBX(Target::IndirectARegDec(src), Target::DirectDReg(dest), size)),
+                            }
                         } else {
                             let target = self.decode_lower_effective_address(memory, ins, Some(size))?;
                             if dir == 0 {
@@ -506,10 +508,12 @@ impl M68kDecoder {
                 match size {
                     Some(size) => {
                         if (ins & 0b100110000) == 0b100000000 {
-                            let mode = (ins & 0x08) == 0;
-
-                            // TODO implement ADDX
-                            panic!("Not Implemented");
+                            let src = get_low_reg(ins);
+                            let dest = get_high_reg(ins);
+                            match (ins & 0x08) == 0 {
+                                true => Ok(Instruction::ADDX(Target::DirectDReg(src), Target::DirectDReg(dest), size)),
+                                false => Ok(Instruction::ADDX(Target::IndirectARegDec(src), Target::DirectDReg(dest), size)),
+                            }
                         } else {
                             let target = self.decode_lower_effective_address(memory, ins, Some(size))?;
                             if dir == 0 {

@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Address, Addressable};
+use crate::devices::{Address, Addressable, Debuggable};
 
 use super::state::M68k;
 use super::decode::M68kDecoder;
@@ -47,21 +47,21 @@ impl M68kDebugger {
     }
 }
 
-impl M68k {
-    #[allow(dead_code)]
-    pub fn enable_tracing(&mut self) {
-        self.debugger.use_tracing = true;
-    }
-
-    #[allow(dead_code)]
-    pub fn enable_debugging(&mut self) {
+impl Debuggable for M68k {
+    fn enable_debugging(&mut self) {
         self.debugger.use_tracing = true;
         self.debugger.use_debugger = true;
     }
 
-    #[allow(dead_code)]
-    pub fn add_breakpoint(&mut self, addr: Address) {
+    fn add_breakpoint(&mut self, addr: Address) {
         self.debugger.breakpoints.push(addr as u32);
+    }
+}
+
+impl M68k {
+    #[allow(dead_code)]
+    pub fn enable_tracing(&mut self) {
+        self.debugger.use_tracing = true;
     }
 
     pub fn check_breakpoints(&mut self) {

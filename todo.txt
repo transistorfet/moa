@@ -1,15 +1,11 @@
 
-* should you simulate clock ticks, and only step devices when they next request it
-
-
+* make devices nameable, using a hashmap to store them
 * can you eventually make the system connections all configurable via a config file?
-* make it possible to break out of the current execution, into the debugger, by using a certain keystroke
+
 
 * make tests for each instruction
 
 * unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SBCD, SUBX
-* undecoded: ADDX, SUBX
-* modify execution for >=MC68020: MOVEM
 * >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
 
 * add support for MMU

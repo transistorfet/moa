@@ -32,7 +32,7 @@ fn main() {
         system.add_addressable_device(0x00700000, wrap_transmutable(serial)).unwrap();
 
 
-        let mut cpu = M68k::new(M68kType::MC68030);
+        let mut cpu = M68k::new(M68kType::MC68030, 8_000_000);
 
         //cpu.enable_tracing();
         //cpu.add_breakpoint(0x10781a);
