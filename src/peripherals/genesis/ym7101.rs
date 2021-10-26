@@ -1,0 +1,557 @@
+
+use std::iter::Iterator;
+use std::sync::{Arc, Mutex};
+
+use crate::error::Error;
+use crate::system::System;
+use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, MAX_READ, read_beu16, read_beu32, write_beu16};
+use crate::host::traits::{Host, BlitableSurface};
+use crate::host::gfx::{Frame, FrameSwapper};
+
+
+const REG_MODE_SET_1: usize             = 0x00;
+const REG_MODE_SET_2: usize             = 0x01;
+const REG_SCROLL_A_ADDR: usize          = 0x02;
+const REG_WINDOW_ADDR: usize            = 0x03;
+const REG_SCROLL_B_ADDR: usize          = 0x04;
+const REG_SPRITES_ADDR: usize           = 0x05;
+// Register 0x06 Unused
+const REG_BACKGROUND: usize             = 0x07;
+// Register 0x08 Unused
+// Register 0x09 Unused
+const REG_H_INTERRUPT: usize            = 0x0A;
+const REG_MODE_SET_3: usize             = 0x0B;
+const REG_MODE_SET_4: usize             = 0x0C;
+const REG_HSCROLL_ADDR: usize           = 0x0D;
+// Register 0x0E Unused
+const REG_AUTO_INCREMENT: usize         = 0x0F;
+const REG_SCROLL_SIZE: usize            = 0x10;
+const REG_WINDOW_H_POS: usize           = 0x11;
+const REG_WINDOW_V_POS: usize           = 0x12;
+const REG_DMA_COUNTER_LOW: usize        = 0x13;
+const REG_DMA_COUNTER_HIGH: usize       = 0x14;
+const REG_DMA_ADDR_LOW: usize           = 0x15;
+const REG_DMA_ADDR_MID: usize           = 0x16;
+const REG_DMA_ADDR_HIGH: usize          = 0x17;
+
+
+const STATUS_PAL_MODE: u16              = 0x0001;
+const STATUS_DMA_BUSY: u16              = 0x0002;
+const STATUS_IN_HBLANK: u16             = 0x0004;
+const STATUS_IN_VBLANK: u16             = 0x0008;
+const STATUS_ODD_FRAME: u16             = 0x0010;
+const STATUS_SPRITE_COLLISION: u16      = 0x0020;
+const STATUS_SPRITE_OVERFLOW: u16       = 0x0040;
+const STATUS_V_INTERRUPT: u16           = 0x0080;
+const STATUS_FIFO_FULL: u16             = 0x0100;
+const STATUS_FIFO_EMPTY: u16            = 0x0200;
+
+const MODE1_BF_ENABLE_HV_COUNTER: u8    = 0x02;
+const MODE1_BF_HSYNC_INTERRUPT: u8      = 0x10;
+
+const MODE2_BF_V_CELL_MODE: u8          = 0x08;
+const MODE2_BF_VSYNC_INTERRUPT: u8      = 0x20;
+
+const MODE4_BF_H_CELL_MODE: u8          = 0x01;
+
+
+
+const DEV_NAME: &'static str = "ym7101";
+
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum DmaType {
+    None,
+    Memory,
+    Fill,
+    Copy,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum TargetType {
+   Vram,
+   Cram,
+   Vsram,
+}
+
+pub struct Ym7101State {
+    pub status: u16,
+    pub regs: [u8; 24],
+    pub vram: [u8; 0x10000],
+    pub cram: [u8; 128],
+    pub vsram: [u8; 80],
+    pub transfer_type: u8,
+    pub transfer_addr: u32,
+    pub transfer_fill: u16,
+    pub transfer_run: DmaType,
+    pub transfer_target: TargetType,
+    pub transfer_upper: Option<u16>,
+
+    pub last_clock: Clock,
+    pub h_clock: u32,
+    pub v_clock: u32,
+    pub h_scanlines: u8,
+
+    pub reset_int: bool,
+}
+
+impl Ym7101State {
+    pub fn new() -> Self {
+        Self {
+            status: STATUS_FIFO_EMPTY,
+            regs: [0; 24],
+            vram: [0; 0x10000],
+            cram: [0; 128],
+            vsram: [0; 80],
+            transfer_type: 0,
+            transfer_addr: 0,
+            transfer_fill: 0,
+            transfer_run: DmaType::None,
+            transfer_target: TargetType::Vram,
+            transfer_upper: None,
+
+            last_clock: 0,
+            h_clock: 0,
+            v_clock: 0,
+            h_scanlines: 0,
+
+            reset_int: false,
+        }
+    }
+
+    fn set_register(&mut self, data: u16) {
+        let reg = (data & 0x1F00) >> 8;
+        self.regs[reg as usize] = (data & 0x00FF) as u8;
+        debug!("{}: register {:x} set to {:x}", DEV_NAME, reg, self.regs[reg as usize]);
+    }
+
+    pub fn set_dma_mode(&mut self, mode: DmaType) {
+        match mode {
+            DmaType::None => {
+                self.status &= !STATUS_DMA_BUSY;
+                self.transfer_run = DmaType::None;
+            },
+            _ => {
+                self.status |= STATUS_DMA_BUSY;
+                self.transfer_run = mode;
+            },
+        }
+    }
+
+    pub fn get_dma_src_addr(&mut self) -> u32 {
+        let src_addr = (((self.regs[REG_DMA_ADDR_HIGH] & 0x7F) as u32) << 17)
+                       | ((self.regs[REG_DMA_ADDR_MID] as u32) << 9)
+                       | ((self.regs[REG_DMA_ADDR_LOW] as u32) << 1);
+
+        if (self.regs[REG_DMA_ADDR_HIGH] & 0x80) == 0 {
+            src_addr
+        } else {
+            src_addr & !0x00800000
+        }
+    }
+
+    pub fn get_dma_count(&mut self) -> i32 {
+        (((self.regs[REG_DMA_COUNTER_HIGH] as u32) << 8) | (self.regs[REG_DMA_COUNTER_LOW] as u32)) as i32
+    }
+
+    pub fn setup_dma_transfer(&mut self, upper: u16, lower: u16) {
+        self.transfer_upper = None;
+        self.transfer_type = ((((upper & 0xC000) >> 14) | ((lower & 0x00F0) >> 2))) as u8;
+        self.transfer_addr = ((upper & 0x3FFF) | ((lower & 0x0003) << 14)) as u32;
+        self.transfer_target = match self.transfer_type & 0x0E {
+            0 => TargetType::Vram,
+            4 => TargetType::Vsram,
+            _ => TargetType::Cram,
+        };
+        debug!("{}: transfer requested of type {:x} ({:?}) to address {:x}", DEV_NAME, self.transfer_type, self.transfer_target, self.transfer_addr);
+        if (self.transfer_type & 0x20) != 0 {
+            if (self.transfer_type & 0x10) != 0 {
+                self.set_dma_mode(DmaType::Copy);
+            } else if (self.regs[REG_DMA_ADDR_HIGH] & 0x80) == 0 {
+                self.set_dma_mode(DmaType::Memory);
+            }
+        }
+    }
+
+    pub fn get_transfer_target_mut(&mut self) -> &mut [u8] {
+        match self.transfer_target {
+            TargetType::Vram => &mut self.vram,
+            TargetType::Cram => &mut self.cram,
+            TargetType::Vsram => &mut self.vsram,
+        }
+    }
+
+    #[inline(always)]
+    fn hsync_int_enabled(&self) -> bool {
+        (self.regs[REG_MODE_SET_1] & MODE1_BF_HSYNC_INTERRUPT) != 0
+    }
+
+   #[inline(always)]
+    fn vsync_int_enabled(&self) -> bool {
+        (self.regs[REG_MODE_SET_2] & MODE2_BF_VSYNC_INTERRUPT) != 0
+    }
+
+    pub fn get_vram_scroll_a_addr(&self) -> u32 {
+        ((self.regs[REG_SCROLL_A_ADDR] as u16) << 10) as u32
+    }
+
+    pub fn get_vram_scroll_b_addr(&self) -> u32 {
+        ((self.regs[REG_SCROLL_B_ADDR] as u16) << 13) as u32
+    }
+
+    pub fn get_vram_window_addr(&self) -> u32 {
+        ((self.regs[REG_WINDOW_ADDR] as u16) << 10) as u32
+    }
+
+    pub fn get_palette_colour(&self, palette: u8, colour: u8) -> u32 {
+        let rgb = read_beu16(&self.cram[((palette * 16) + colour) as usize..]);
+        (((rgb & 0xF00) as u32) >> 4) | (((rgb & 0x0F0) as u32) << 8) | (((rgb & 0x00F) as u32) << 20)
+    }
+
+    pub fn get_pattern_iter<'a>(&'a self, pattern_name: u16) -> PatternIterator<'a> {
+        let pattern_addr = (pattern_name & 0x07FF) << 5;
+        let pattern_palette = ((pattern_name & 0x6000) >> 13) as u8;
+        PatternIterator::new(&self, pattern_addr as u32, pattern_palette)
+    }
+
+    pub fn get_scroll_size(&self) -> (u16, u16) {
+        let h = scroll_size(self.regs[REG_SCROLL_SIZE] & 0x03);
+        let v = scroll_size((self.regs[REG_SCROLL_SIZE] >> 4) & 0x03);
+        (h, v)
+    }
+
+    pub fn get_window_coords(&self) -> ((u16, u16), (u16, u16)) {
+        let h_cells = if (self.regs[REG_MODE_SET_4] & MODE4_BF_H_CELL_MODE) == 0 { 32 } else { 40 };
+        let v_cells = if (self.regs[REG_MODE_SET_2] & MODE2_BF_V_CELL_MODE) == 0 { 28 } else { 30 };
+        let win_h = ((self.regs[REG_WINDOW_H_POS] & 0x1F) << 1) as u16;
+        let win_v = (self.regs[REG_WINDOW_V_POS] & 0x1F) as u16;
+
+        // TODO this ignores the upper bits of the registers
+        if (self.regs[REG_WINDOW_H_POS] & 0x80) != 0 || (self.regs[REG_WINDOW_V_POS] & 0x80) != 0 {
+            panic!("window variations not implemented yet");
+        }
+
+        ((win_h, win_v), (win_h + h_cells, win_v + v_cells))
+    }
+
+    pub fn draw_frame(&mut self, frame: &mut Frame) {
+        let coords = self.get_window_coords();
+        let scroll_size = self.get_scroll_size();
+
+        let bg_colour = self.get_palette_colour((self.regs[REG_BACKGROUND] & 0x30) >> 4, self.regs[REG_BACKGROUND] & 0x0f);
+        for i in 0..(frame.width as usize * frame.height as usize) {
+            frame.bitmap[i] = bg_colour;
+        }
+
+        //self.draw_cell_table(frame, self.get_vram_scroll_b_addr(), coords, scroll_size);
+        self.draw_cell_table(frame, self.get_vram_scroll_a_addr(), coords, scroll_size);
+        //self.draw_cell_table(frame, self.get_vram_window_addr(), coords, scroll_size);
+        //self.draw_sprites(frame, (self.regs[REG_SPRITES_ADDR] as u32) << 9, coords, scroll_size);
+    }
+
+    pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: u32, coords: ((u16, u16), (u16, u16)), scroll_size: (u16, u16)) {
+        let ((win_x_start, win_y_start), (win_x_end, win_y_end)) = coords;
+        for cell_y in win_y_start..win_y_end {
+            for cell_x in win_x_start..win_x_end {
+                let pattern_name = read_beu16(&self.vram[(cell_table + (cell_x + (cell_y * scroll_size.0) << 1) as u32) as usize..]);
+                let iter = self.get_pattern_iter(pattern_name);
+                frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
+            }
+        }
+    }
+
+    pub fn draw_sprites(&mut self, frame: &mut Frame, sprite_table: u32, coords: ((u16, u16), (u16, u16)), scroll_size: (u16, u16)) {
+        let ((win_x_start, win_y_start), (win_x_end, win_y_end)) = coords;
+
+        for i in 0..(scroll_size.0 as u32 * 2) {
+            let sprite_addr = (sprite_table + (i * 8)) as usize;
+            let v_pos = read_beu16(&self.vram[sprite_addr..]);
+            let size = self.vram[sprite_addr + 2];
+            let link = self.vram[sprite_addr + 3];
+            let pattern_name = read_beu16(&self.vram[(sprite_addr + 4)..]);
+            let h_pos = read_beu16(&self.vram[(sprite_addr + 6)..]);
+
+            let iter = self.get_pattern_iter(pattern_name);
+            frame.blit(h_pos as u32, v_pos as u32, iter, 8, 8);
+        }
+    }
+}
+
+fn scroll_size(size: u8) -> u16 {
+    match size {
+        0b00 => 32,
+        0b01 => 64,
+        0b11 => 128,
+        _ => panic!("{}: invalid scroll size option {:x}", DEV_NAME, size),
+    }
+}
+
+pub struct PatternIterator<'a> {
+    state: &'a Ym7101State,
+    palette: u8,
+    next: usize,
+    second: bool,
+}
+
+impl<'a> PatternIterator<'a> {
+    pub fn new(state: &'a Ym7101State, start: u32, palette: u8) -> Self {
+        Self {
+            state,
+            palette,
+            next: start as usize,
+            second: false,
+        }
+    }
+}
+
+impl<'a> Iterator for PatternIterator<'a> {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        //if self.next >= 32 {
+        //    None
+        //}
+        if !self.second {
+            let value = self.state.get_palette_colour(self.palette, self.state.vram[self.next] >> 4);
+            self.second = true;
+            Some(value)
+        } else {
+            let value = self.state.get_palette_colour(self.palette, self.state.vram[self.next] & 0x0f);
+            self.next += 1;
+            self.second = false;
+            Some(value)
+        }
+    }
+}
+
+
+
+pub struct Ym7101 {
+    pub swapper: Arc<Mutex<FrameSwapper>>,
+    pub state: Ym7101State,
+}
+
+impl Ym7101 {
+    pub fn new<H: Host>(host: &H) -> Ym7101 {
+        let swapper = FrameSwapper::new_shared();
+        swapper.lock().map(|mut swapper| {
+            swapper.current.set_size(320, 224);
+            swapper.previous.set_size(320, 224);
+        });
+
+        host.add_window(FrameSwapper::to_boxed(swapper.clone()));
+
+        Ym7101 {
+            swapper,
+            state: Ym7101State::new(),
+        }
+    }
+}
+
+impl Transmutable for Ym7101 {
+    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        Some(self)
+    }
+
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
+}
+
+impl Steppable for Ym7101 {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+        let diff = (system.clock - self.state.last_clock) as u32;
+        self.state.last_clock = system.clock;
+
+        if self.state.reset_int {
+            system.get_interrupt_controller().set(false, 4, 28)?;
+            system.get_interrupt_controller().set(false, 6, 30)?;
+        }
+
+        self.state.h_clock += diff;
+        if self.state.h_clock > 63_500 {
+            self.state.h_clock = 0;
+            self.state.h_scanlines = self.state.h_scanlines.wrapping_add(1);
+            if self.state.hsync_int_enabled() && self.state.h_scanlines >= self.state.regs[REG_H_INTERRUPT] {
+                self.state.h_scanlines = 0;
+                system.get_interrupt_controller().set(true, 4, 28)?;
+                self.state.reset_int = true;
+            }
+        }
+
+        self.state.v_clock += diff;
+        if self.state.v_clock > 16_630_000 {
+            self.state.v_clock = 0;
+            if self.state.vsync_int_enabled() {
+                system.get_interrupt_controller().set(true, 6, 30)?;
+                self.state.reset_int = true;
+            }
+
+            let mut swapper = self.swapper.lock().unwrap();
+            self.state.draw_frame(&mut swapper.current);
+
+            /*
+            // Print Palette
+            for i in 0..16 {
+                println!("{:x}", self.state.get_palette_colour(0, i));
+            }
+            */
+
+            /*
+            // Print Pattern Table
+            let mut swapper = self.swapper.lock().unwrap();
+            let coords = self.state.get_window_coords();
+            for cell_y in coords.0.1..coords.1.1 {
+                for cell_x in coords.0.0..coords.1.0 {
+                    let pattern_addr = (cell_x + (cell_y * 40)) * 32;
+                    let iter = PatternIterator::new(&self.state, pattern_addr as u32, 0);
+                    swapper.current.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
+                }
+            }
+            */
+
+        }
+
+        if self.state.transfer_run != DmaType::None {
+            // TODO we will just do the full dma transfer here, but it really should be stepped
+
+            match self.state.transfer_run {
+                DmaType::Memory => {
+                    let mut src_addr = self.state.get_dma_src_addr();
+                    let mut count = self.state.get_dma_count();
+
+                    debug!("{}: starting dma transfer {:x} from Mem:{:x} to {:?}:{:x} ({} bytes)", DEV_NAME, self.state.transfer_type, src_addr, self.state.transfer_target, self.state.transfer_addr, count);
+                    let mut bus = system.get_bus();
+                    while count > 0 {
+                        let data = bus.read(src_addr as Address, 2)?;
+
+                        {
+                            let addr = self.state.transfer_addr;
+                            let mut target = self.state.get_transfer_target_mut();
+                            target[addr as usize] = data[0];
+                            target[addr as usize + 1] = data[1];
+                        }
+
+                        self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                        src_addr += 2;
+                        count -= 2;
+                    }
+                },
+                DmaType::Copy => {
+                    let mut src_addr = self.state.get_dma_src_addr();
+                    let mut count = self.state.get_dma_count();
+
+                    debug!("{}: starting dma copy from VRAM:{:x} to VRAM:{:x} ({} bytes)", DEV_NAME, src_addr, self.state.transfer_addr, count);
+                    while count > 0 {
+                        self.state.vram[self.state.transfer_addr as usize] = self.state.vram[src_addr as usize];
+                        self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                        src_addr += 1;
+                        count -= 1;
+                    }
+                },
+                DmaType::Fill => {
+                    let mut count = self.state.get_dma_count();
+
+                    debug!("{}: starting dma fill to VRAM:{:x} ({} bytes) with {:x}", DEV_NAME, self.state.transfer_addr, count, self.state.transfer_fill);
+                    while count > 0 {
+                        self.state.vram[self.state.transfer_addr as usize] = self.state.transfer_fill as u8;
+                        self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                        count -= 1;
+                    }
+                },
+                _ => { warning!("{}: !!! error unexpected transfer mode {:x}", DEV_NAME, self.state.transfer_type); },
+            }
+
+            self.state.set_dma_mode(DmaType::None);
+        }
+
+        Ok(1_000_000_000 / 13_423_294)
+    }
+}
+
+impl Addressable for Ym7101 {
+    fn len(&self) -> usize {
+        0x20
+    }
+
+    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
+        let mut data = [0; MAX_READ];
+
+        match addr {
+            // Read from Data Port
+            0x00 => {
+                {
+                    let addr = self.state.transfer_addr;
+                    let target = self.state.get_transfer_target_mut();
+                    for i in 0..count {
+                        data[i] = target[addr as usize + i];
+                    }
+                }
+                self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                debug!("{}: data port read {} bytes from {:?}:{:x} returning {:x},{:x}", DEV_NAME, count, self.state.transfer_target, addr, data[0], data[1]);
+            },
+
+            // Read from Control Port
+            0x04 | 0x06 => {
+                debug!("{}: read status byte {:x}", DEV_NAME, self.state.status);
+                data[0] = (self.state.status >> 8) as u8;
+                data[1] = (self.state.status & 0x00FF) as u8;
+            },
+
+            _ => { println!("{}: !!! unhandled read from {:x}", DEV_NAME, addr); },
+        }
+        Ok(data)
+    }
+
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+        match addr {
+            // Write to Data Port
+            0x00 => {
+                if (self.state.transfer_type & 0x30) == 0x20 {
+                    self.state.transfer_upper = None;
+                    // TODO this caused problems, might not correct
+                    //self.state.transfer_fill = read_beu16(data);
+                    self.state.transfer_fill = (data[0] as u16) << 8 | (data[1] as u16);
+                    self.state.set_dma_mode(DmaType::Fill);
+                } else {
+                    {
+                        let addr = self.state.transfer_addr as usize;
+                        let target = self.state.get_transfer_target_mut();
+                        for i in 0..data.len() {
+                            target[addr + i] = data[i];
+                        }
+                    }
+                    self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                    debug!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.state.transfer_target, addr, data);
+                }
+            },
+
+            // Write to Control Port
+            0x04 | 0x06 => {
+                //debug!("{}: write {} bytes to port {:x} with data {:?}", DEV_NAME, data.len(), addr, data);
+                let value = read_beu16(data);
+                if (value & 0xC000) == 0x8000 {
+                    self.state.set_register(value);
+                    if data.len() == 4 {
+                        let value = read_beu16(&data[2..]);
+                        if (value & 0xC000) != 0x8000 {
+                            panic!("Unexpected");
+                        }
+                        self.state.set_register(value);
+                    }
+                } else {
+                    match (data.len(), self.state.transfer_upper) {
+                        (2, None) => { self.state.transfer_upper = Some(value) },
+                        (2, Some(upper)) => self.state.setup_dma_transfer(upper, read_beu16(data)),
+                        (4, None) => self.state.setup_dma_transfer(value, read_beu16(&data[2..])),
+                        _ => { error!("{}: !!! error when writing to control port with {} bytes of {:?}", DEV_NAME, data.len(), data); },
+                    }
+                }
+            },
+
+            _ => { warning!("{}: !!! unhandled write to {:x} with {:?}", DEV_NAME, addr, data); },
+        }
+        Ok(())
+    }
+}
+
