@@ -1,4 +1,5 @@
 
+use std::rc::Rc;
 use std::cmp::Ordering;
 use std::cell::{RefCell, RefMut};
 use std::collections::BinaryHeap;
@@ -13,7 +14,7 @@ pub struct System {
     pub clock: Clock,
     pub devices: Vec<TransmutableBox>,
     pub event_queue: BinaryHeap<EventDevice>,
-    pub bus: RefCell<Bus>,
+    pub bus: Rc<RefCell<Bus>>,
     pub interrupt_controller: RefCell<InterruptController>,
 }
 
@@ -23,7 +24,7 @@ impl System {
             clock: 0,
             devices: vec![],
             event_queue: BinaryHeap::new(),
-            bus: RefCell::new(Bus::new()),
+            bus: Rc::new(RefCell::new(Bus::new())),
             interrupt_controller: RefCell::new(InterruptController::new()),
         }
     }

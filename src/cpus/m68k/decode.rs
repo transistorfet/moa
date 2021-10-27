@@ -44,17 +44,15 @@ const OPCG_RESERVED2: u8 = 0xF;
 
 pub struct M68kDecoder {
     pub cputype: M68kType,
-    pub base: u32,
     pub start: u32,
     pub end: u32,
     pub instruction: Instruction,
 }
 
 impl M68kDecoder {
-    pub fn new(cputype: M68kType, base: u32, start: u32) -> M68kDecoder {
+    pub fn new(cputype: M68kType, start: u32) -> M68kDecoder {
         M68kDecoder {
             cputype,
-            base: base,
             start: start,
             end: start,
             instruction: Instruction::NOP,
@@ -62,16 +60,14 @@ impl M68kDecoder {
     }
 
     #[inline(always)]
-    pub fn init(&mut self, base: u32, start: u32) {
-        self.base = base;
+    pub fn init(&mut self, start: u32) {
         self.start = start;
         self.end = start;
     }
 
-    pub fn decode_at(&mut self, system: &System, start: u32) -> Result<(), Error> {
-        let (memory, relative_addr) = system.get_bus().get_device_at(start as Address, 12)?;
-        self.init(start - relative_addr as u32, start);
-        self.instruction = self.decode_one(memory.borrow_mut().as_addressable().unwrap())?;
+    pub fn decode_at(&mut self, memory: &mut dyn Addressable, start: u32) -> Result<(), Error> {
+        self.init(start);
+        self.instruction = self.decode_one(memory)?;
         Ok(())
     }
 
@@ -599,13 +595,13 @@ impl M68kDecoder {
     }
 
     fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Error> {
-        let word = device.read_beu16((self.end - self.base) as Address)?;
+        let word = device.read_beu16(self.end as Address)?;
         self.end += 2;
         Ok(word)
     }
 
     fn read_instruction_long(&mut self, device: &mut dyn Addressable) -> Result<u32, Error> {
-        let word = device.read_beu32((self.end - self.base) as Address)?;
+        let word = device.read_beu32(self.end as Address)?;
         self.end += 4;
         Ok(word)
     }
@@ -721,19 +717,19 @@ impl M68kDecoder {
         Ok(value)
     }
 
-    pub fn dump_disassembly(&mut self, system: &System, start: u32, length: u32) {
+    pub fn dump_disassembly(&mut self, memory: &mut dyn Addressable, start: u32, length: u32) {
         let mut next = start;
         while next < (start + length) {
-            match self.decode_at(&system, next) {
+            match self.decode_at(memory, next) {
                 Ok(()) => {
-                    self.dump_decoded(system);
+                    self.dump_decoded(memory);
                     next = self.end;
                 },
                 Err(err) => {
                     println!("{:?}", err);
                     match err {
                         Error { native, .. } if native == Exceptions::IllegalInstruction as u32 => {
-                            println!("    at {:08x}: {:04x}", self.start, system.get_bus().read_beu16(self.start as Address).unwrap());
+                            println!("    at {:08x}: {:04x}", self.start, memory.read_beu16(self.start as Address).unwrap());
                         },
                         _ => { },
                     }
@@ -743,10 +739,10 @@ impl M68kDecoder {
         }
     }
 
-    pub fn dump_decoded(&mut self, system: &System) {
+    pub fn dump_decoded(&mut self, memory: &mut dyn Addressable) {
         let ins_data: Result<String, Error> =
             (0..((self.end - self.start) / 2)).map(|offset|
-                Ok(format!("{:04x} ", system.get_bus().read_beu16((self.start + (offset * 2)) as Address).unwrap()))
+                Ok(format!("{:04x} ", memory.read_beu16((self.start + (offset * 2)) as Address).unwrap()))
             ).collect();
         println!("{:#010x}: {}\n\t{:?}\n", self.start, ins_data.unwrap(), self.instruction);
     }

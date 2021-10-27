@@ -100,8 +100,8 @@ impl M68k {
     }
 
     pub fn init(&mut self, system: &System) -> Result<(), Error> {
-        self.state.msp = system.get_bus().read_beu32(0)?;
-        self.state.pc = system.get_bus().read_beu32(4)?;
+        self.state.msp = self.port.read_beu32(0)?;
+        self.state.pc = self.port.read_beu32(4)?;
         self.state.status = Status::Running;
         Ok(())
     }
@@ -153,7 +153,7 @@ impl M68k {
         if update_ipl {
             self.state.sr = (self.state.sr & !(Flags::IntMask as u16)) | ((self.state.current_ipl as u16) << 8);
         }
-        self.state.pc = system.get_bus().read_beu32((self.state.vbr + offset as u32) as Address)?;
+        self.state.pc = self.port.read_beu32((self.state.vbr + offset as u32) as Address)?;
         Ok(())
     }
 
@@ -161,11 +161,11 @@ impl M68k {
         self.check_breakpoints();
 
         self.timer.decode.start();
-        self.decoder.decode_at(system, self.state.pc)?;
+        self.decoder.decode_at(&mut self.port, self.state.pc)?;
         self.timer.decode.end();
 
         if self.debugger.use_tracing {
-            self.decoder.dump_decoded(system);
+            self.decoder.dump_decoded(&mut self.port);
         }
 
         if self.debugger.use_debugger {
@@ -688,14 +688,14 @@ impl M68k {
                 if (mask & 0x01) != 0 {
                     let value = *self.get_a_reg_mut(i);
                     addr -= size.in_bytes();
-                    set_address_sized(system, addr as Address, value, size)?;
+                    self.set_address_sized(addr as Address, value, size)?;
                 }
                 mask >>= 1;
             }
             for i in (0..8).rev() {
                 if (mask & 0x01) != 0 {
                     addr -= size.in_bytes();
-                    set_address_sized(system, addr as Address, self.state.d_reg[i], size)?;
+                    self.set_address_sized(addr as Address, self.state.d_reg[i], size)?;
                 }
                 mask >>= 1;
             }
@@ -703,14 +703,14 @@ impl M68k {
             let mut mask = mask;
             for i in 0..8 {
                 if (mask & 0x01) != 0 {
-                    self.state.d_reg[i] = sign_extend_to_long(get_address_sized(system, addr as Address, size)?, size) as u32;
+                    self.state.d_reg[i] = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
                     addr += size.in_bytes();
                 }
                 mask >>= 1;
             }
             for i in 0..8 {
                 if (mask & 0x01) != 0 {
-                    *self.get_a_reg_mut(i) = sign_extend_to_long(get_address_sized(system, addr as Address, size)?, size) as u32;
+                    *self.get_a_reg_mut(i) = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
                     addr += size.in_bytes();
                 }
                 mask >>= 1;
@@ -730,28 +730,28 @@ impl M68k {
     }
 
     fn push_word(&mut self, system: &System, value: u16) -> Result<(), Error> {
-        let reg = self.get_stack_pointer_mut();
-        *reg -= 2;
-        system.get_bus().write_beu16(*reg as Address, value)
+        *self.get_stack_pointer_mut() -= 2;
+        let addr = *self.get_stack_pointer_mut();
+        self.port.write_beu16(addr as Address, value)
     }
 
     fn pop_word(&mut self, system: &System) -> Result<u16, Error> {
-        let reg = self.get_stack_pointer_mut();
-        let value = system.get_bus().read_beu16(*reg as Address)?;
-        *reg += 2;
+        let addr = *self.get_stack_pointer_mut();
+        let value = self.port.read_beu16(addr as Address)?;
+        *self.get_stack_pointer_mut() += 2;
         Ok(value)
     }
 
     fn push_long(&mut self, system: &System, value: u32) -> Result<(), Error> {
-        let reg = self.get_stack_pointer_mut();
-        *reg -= 4;
-        system.get_bus().write_beu32(*reg as Address, value)
+        *self.get_stack_pointer_mut() -= 4;
+        let addr = *self.get_stack_pointer_mut();
+        self.port.write_beu32(addr as Address, value)
     }
 
     fn pop_long(&mut self, system: &System) -> Result<u32, Error> {
-        let reg = self.get_stack_pointer_mut();
-        let value = system.get_bus().read_beu32(*reg as Address)?;
-        *reg += 4;
+        let addr = *self.get_stack_pointer_mut();
+        let value = self.port.read_beu32(addr as Address)?;
+        *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }
 
@@ -760,37 +760,40 @@ impl M68k {
             Target::Immediate(value) => Ok(value),
             Target::DirectDReg(reg) => Ok(get_value_sized(self.state.d_reg[reg as usize], size)),
             Target::DirectAReg(reg) => Ok(get_value_sized(*self.get_a_reg_mut(reg), size)),
-            Target::IndirectAReg(reg) => get_address_sized(system, *self.get_a_reg_mut(reg) as Address, size),
+            Target::IndirectAReg(reg) => {
+                let addr = *self.get_a_reg_mut(reg);
+                self.get_address_sized(addr as Address, size)
+            },
             Target::IndirectARegInc(reg) => {
-                let addr = self.get_a_reg_mut(reg);
-                let result = get_address_sized(system, *addr as Address, size);
-                *addr += size.in_bytes();
+                let addr = *self.get_a_reg_mut(reg);
+                let result = self.get_address_sized(addr as Address, size);
+                *self.get_a_reg_mut(reg) += size.in_bytes();
                 result
             },
             Target::IndirectARegDec(reg) => {
-                let addr = self.get_a_reg_mut(reg);
-                *addr -= size.in_bytes();
-                get_address_sized(system, *addr as Address, size)
+                *self.get_a_reg_mut(reg) -= size.in_bytes();
+                let addr = *self.get_a_reg_mut(reg);
+                self.get_address_sized(addr as Address, size)
             },
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                get_address_sized(system, base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32) as Address, size)
+                self.get_address_sized(base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32) as Address, size)
             },
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
-                get_address_sized(system, intermediate.wrapping_add(outer_disp as u32) as Address, size)
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
+                self.get_address_sized(intermediate.wrapping_add(outer_disp as u32) as Address, size)
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
-                get_address_sized(system, intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, size)
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
+                self.get_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, size)
             },
             Target::IndirectMemory(addr) => {
-                get_address_sized(system, addr as Address, size)
+                self.get_address_sized(addr as Address, size)
             },
         }
     }
@@ -804,37 +807,40 @@ impl M68k {
                 set_value_sized(self.get_a_reg_mut(reg), value, size);
             },
             Target::IndirectAReg(reg) => {
-                set_address_sized(system, *self.get_a_reg_mut(reg) as Address, value, size)?;
+                let addr = *self.get_a_reg_mut(reg);
+                self.set_address_sized(addr as Address, value, size)?;
             },
             Target::IndirectARegInc(reg) => {
+                let addr = *self.get_a_reg_mut(reg);
+                self.set_address_sized(addr as Address, value, size)?;
                 let addr = self.get_a_reg_mut(reg);
-                set_address_sized(system, *addr as Address, value, size)?;
                 *addr = (*addr).wrapping_add(size.in_bytes());
             },
             Target::IndirectARegDec(reg) => {
                 let addr = self.get_a_reg_mut(reg);
                 *addr = (*addr).wrapping_sub(size.in_bytes());
-                set_address_sized(system, *addr as Address, value, size)?;
+                let addr = *self.get_a_reg_mut(reg);
+                self.set_address_sized(addr as Address, value, size)?;
             },
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                set_address_sized(system, base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32) as Address, value, size)?;
+                self.set_address_sized(base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32) as Address, value, size)?;
             },
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
-                set_address_sized(system, intermediate.wrapping_add(outer_disp as u32) as Address, value, size)?;
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
+                self.set_address_sized(intermediate.wrapping_add(outer_disp as u32) as Address, value, size)?;
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
-                set_address_sized(system, intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, value, size)?;
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
+                self.set_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, value, size)?;
             },
             Target::IndirectMemory(addr) => {
-                set_address_sized(system, addr as Address, value, size)?;
+                self.set_address_sized(addr as Address, value, size)?;
             },
             _ => return Err(Error::new(&format!("Unimplemented addressing target: {:?}", target))),
         }
@@ -852,13 +858,13 @@ impl M68k {
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
                 intermediate.wrapping_add(outer_disp as u32)
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = get_address_sized(system, base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
                 intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32)
             },
             Target::IndirectMemory(addr) => {
@@ -867,6 +873,22 @@ impl M68k {
             _ => return Err(Error::new(&format!("Invalid addressing target: {:?}", target))),
         };
         Ok(addr)
+    }
+
+    pub fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, Error> {
+        match size {
+            Size::Byte => self.port.read_u8(addr).map(|value| value as u32),
+            Size::Word => self.port.read_beu16(addr).map(|value| value as u32),
+            Size::Long => self.port.read_beu32(addr),
+        }
+    }
+
+    pub fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), Error> {
+        match size {
+            Size::Byte => self.port.write_u8(addr, value as u8),
+            Size::Word => self.port.write_beu16(addr, value as u16),
+            Size::Long => self.port.write_beu32(addr, value),
+        }
     }
 
     pub fn get_bit_field_args(&self, offset: RegOrImmediate, width: RegOrImmediate) -> (u32, u32) {
@@ -1102,27 +1124,11 @@ fn get_value_sized(value: u32, size: Size) -> u32 {
     }
 }
 
-fn get_address_sized(system: &System, addr: Address, size: Size) -> Result<u32, Error> {
-    match size {
-        Size::Byte => system.get_bus().read_u8(addr).map(|value| value as u32),
-        Size::Word => system.get_bus().read_beu16(addr).map(|value| value as u32),
-        Size::Long => system.get_bus().read_beu32(addr),
-    }
-}
-
 fn set_value_sized(addr: &mut u32, value: u32, size: Size) {
     match size {
         Size::Byte => { *addr = (*addr & 0xFFFFFF00) | (0x000000FF & value); }
         Size::Word => { *addr = (*addr & 0xFFFF0000) | (0x0000FFFF & value); }
         Size::Long => { *addr = value; }
-    }
-}
-
-fn set_address_sized(system: &System, addr: Address, value: u32, size: Size) -> Result<(), Error> {
-    match size {
-        Size::Byte => system.get_bus().write_u8(addr, value as u8),
-        Size::Word => system.get_bus().write_beu16(addr, value as u16),
-        Size::Long => system.get_bus().write_beu32(addr, value),
     }
 }
 

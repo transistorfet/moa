@@ -2,6 +2,7 @@
 use crate::system::System;
 use crate::devices::Address;
 use crate::timers::CpuTimer;
+use crate::memory::BusPort;
 
 use super::decode::M68kDecoder;
 use super::debugger::M68kDebugger;
@@ -125,17 +126,19 @@ pub struct M68k {
     pub state: M68kState,
     pub decoder: M68kDecoder,
     pub debugger: M68kDebugger,
+    pub port: BusPort,
     pub timer: CpuTimer,
 }
 
 impl M68k {
-    pub fn new(cputype: M68kType, frequency: u32) -> M68k {
+    pub fn new(cputype: M68kType, frequency: u32, port: BusPort) -> M68k {
         M68k {
             cputype,
             frequency,
             state: M68kState::new(),
-            decoder: M68kDecoder::new(cputype, 0, 0),
+            decoder: M68kDecoder::new(cputype, 0),
             debugger: M68kDebugger::new(),
+            port: port,
             timer: CpuTimer::new(),
         }
     }
@@ -143,11 +146,11 @@ impl M68k {
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.state = M68kState::new();
-        self.decoder = M68kDecoder::new(self.cputype, 0, 0);
+        self.decoder = M68kDecoder::new(self.cputype, 0);
         self.debugger = M68kDebugger::new();
     }
 
-    pub fn dump_state(&self, system: &System) {
+    pub fn dump_state(&mut self, system: &System) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#010x}", self.state.pc);
         println!("SR: {:#06x}", self.state.sr);
@@ -160,7 +163,7 @@ impl M68k {
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
         println!("");
-        system.get_bus().dump_memory(self.state.msp as Address, 0x40);
+        self.port.dump_memory(self.state.msp as Address, 0x40);
         println!("");
     }
 }

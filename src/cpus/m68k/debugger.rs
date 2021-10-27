@@ -116,20 +116,20 @@ impl M68k {
                 if args.len() > 1 {
                     let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?;
                     let len = if args.len() > 2 { u32::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse length"))? } else { 0x20 };
-                    system.get_bus().dump_memory(addr as Address, len as Address);
+                    self.port.dump_memory(addr as Address, len as Address);
                 } else {
-                    system.get_bus().dump_memory(self.state.msp as Address, 0x40 as Address);
+                    self.port.dump_memory(self.state.msp as Address, 0x40 as Address);
                 }
             },
             "ds" | "stack" | "dumpstack" => {
                 println!("Stack:");
                 for addr in &self.debugger.stack_tracer.calls {
-                    println!("  {:08x}", system.get_bus().read_beu32(*addr as Address)?);
+                    println!("  {:08x}", self.port.read_beu32(*addr as Address)?);
                 }
             },
             "dis" | "disassemble" => {
-                let mut decoder = M68kDecoder::new(self.cputype, 0, 0);
-                decoder.dump_disassembly(system, self.state.pc, 0x1000);
+                let mut decoder = M68kDecoder::new(self.cputype, 0);
+                decoder.dump_disassembly(&mut self.port, self.state.pc, 0x1000);
             },
             "so" | "stepout" => {
                 self.debugger.step_until_return = Some(self.debugger.stack_tracer.calls.len() - 1);

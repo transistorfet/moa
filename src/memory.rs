@@ -1,5 +1,7 @@
 
 use std::fs;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::error::Error;
 use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, MAX_READ};
@@ -74,21 +76,12 @@ pub struct Block {
 
 pub struct Bus {
     pub blocks: Vec<Block>,
-    pub address_mask: Address,
 }
 
 impl Bus {
     pub fn new() -> Bus {
         Bus {
             blocks: vec!(),
-            address_mask: !0,
-        }
-    }
-
-    pub fn set_address_bits(&mut self, bits: u8) {
-        self.address_mask = 0;
-        for _ in 0..bits {
-            self.address_mask = (self.address_mask << 1) | 0x01;
         }
     }
 
@@ -104,7 +97,6 @@ impl Bus {
     }
 
     pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(TransmutableBox, Address), Error> {
-        let addr = addr & self.address_mask;
         for block in &self.blocks {
             if addr >= block.base && addr <= (block.base + block.length as Address) {
                 let relative_addr = addr - block.base;
@@ -154,6 +146,59 @@ impl Addressable for Bus {
         let (dev, relative_addr) = self.get_device_at(addr, data.len())?;
         let result = dev.borrow_mut().as_addressable().unwrap().write(relative_addr, data);
         result
+    }
+}
+
+pub struct BusPort {
+    pub offset: Address,
+    pub address_mask: Address,
+    pub data_width: u8,
+    pub subdevice: Rc<RefCell<Bus>>,
+}
+
+impl BusPort {
+    pub fn new(offset: Address, address_bits: u8, data_bits: u8, bus: Rc<RefCell<Bus>>) -> Self {
+        let mut address_mask = 0;
+        for _ in 0..address_bits {
+            address_mask = (address_mask << 1) | 0x01;
+        }
+
+        Self {
+            offset,
+            address_mask,
+            data_width: data_bits / 8,
+            subdevice: bus,
+        }
+    }
+
+    pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
+        self.subdevice.borrow_mut().dump_memory(addr, count)
+    }
+}
+
+impl Addressable for BusPort {
+    fn len(&self) -> usize {
+        self.subdevice.borrow().len()
+    }
+
+    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        let addr = self.offset + (addr & self.address_mask);
+        let mut subdevice = self.subdevice.borrow_mut();
+        for i in (0..data.len()).step_by(self.data_width as usize) {
+            let end = std::cmp::min(i + self.data_width as usize, data.len());
+            subdevice.read(addr + i as Address, &mut data[i..end])?;
+        }
+        Ok(())
+    }
+
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+        let addr = self.offset + (addr & self.address_mask);
+        let mut subdevice = self.subdevice.borrow_mut();
+        for i in (0..data.len()).step_by(self.data_width as usize) {
+            let end = std::cmp::min(i + self.data_width as usize, data.len());
+            subdevice.write(addr + i as Address, &data[i..end])?;
+        }
+        Ok(())
     }
 }
 
