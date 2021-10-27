@@ -261,9 +261,7 @@ impl Addressable for MC68681 {
         0x30
     }
 
-    fn read(&mut self, addr: Address, _count: usize) -> Result<[u8; MAX_READ], Error> {
-        let mut data = [0; MAX_READ];
-
+    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             REG_SRA_RD => {
                 data[0] = self.port_a.status
@@ -312,7 +310,7 @@ impl Addressable for MC68681 {
             debug!("{}: read from {:0x} of {:0x}", DEV_NAME, addr, data[0]);
         }
 
-        Ok(data)
+        Ok(())
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {

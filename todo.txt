@@ -1,4 +1,12 @@
 
+* each device that can make a bus request should have a BusPort which is used to access the bus.  Not sure how it'll be created or passed to the device, since
+  the offset should be set by the builder or system, and the mask and data size should be sent by the CPU (although I suppose some systems could hook it up differently)
+* what about even vs odd accesses?  If you access a byte, should the bus port possible turn it into a word access, and return only the byte portion?
+  this would be more accurate for the 68000 which doesn't have an A0 address pin
+* there is clearly an issue with the ROM writing 4 bytes to the data port when the autoincrement is only 2.  This might be an issue with the fact that the CPU
+  is making full long word requests even though the 68000 shouldn't be able to (a long word would be 2 word accesses)
+
+
 * make devices nameable, using a hashmap to store them
 * can you eventually make the system connections all configurable via a config file?
 

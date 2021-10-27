@@ -67,9 +67,7 @@ impl Addressable for AtaDevice {
         0x30
     }
 
-    fn read(&mut self, addr: Address, _count: usize) -> Result<[u8; MAX_READ], Error> {
-        let mut data = [0; MAX_READ];
-
+    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             ATA_REG_DATA_WORD => {
                 self.selected_count -= 2;
@@ -99,7 +97,7 @@ impl Addressable for AtaDevice {
             _ => { debug!("{}: reading from {:0x}", DEV_NAME, addr); },
         }
 
-        Ok(data)
+        Ok(())
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {

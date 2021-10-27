@@ -42,13 +42,11 @@ impl Addressable for MemoryBlock {
         self.contents.len()
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
-        let mut data = [0; MAX_READ];
-        //self.contents[(addr as usize) .. (addr as usize + 4)].clone_from_slice(&data);
-        for i in 0..std::cmp::min(count, MAX_READ) {
+    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        for i in 0..data.len() {
             data[i] = self.contents[(addr as usize) + i];
         }
-        Ok(data)
+        Ok(())
     }
 
     fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
@@ -76,21 +74,21 @@ pub struct Block {
 
 pub struct Bus {
     pub blocks: Vec<Block>,
-    pub mask: Address,
+    pub address_mask: Address,
 }
 
 impl Bus {
     pub fn new() -> Bus {
         Bus {
             blocks: vec!(),
-            mask: !0,
+            address_mask: !0,
         }
     }
 
-    pub fn address_limit(&mut self, bits: u8) {
-        self.mask = 0;
+    pub fn set_address_bits(&mut self, bits: u8) {
+        self.address_mask = 0;
         for _ in 0..bits {
-            self.mask = (self.mask << 1) | 0x01;
+            self.address_mask = (self.address_mask << 1) | 0x01;
         }
     }
 
@@ -106,7 +104,7 @@ impl Bus {
     }
 
     pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(TransmutableBox, Address), Error> {
-        let addr = addr & self.mask;
+        let addr = addr & self.address_mask;
         for block in &self.blocks {
             if addr >= block.base && addr <= (block.base + block.length as Address) {
                 let relative_addr = addr - block.base;
@@ -146,9 +144,9 @@ impl Addressable for Bus {
         (block.base as usize) + block.length
     }
 
-    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error> {
-        let (dev, relative_addr) = self.get_device_at(addr, count)?;
-        let result = dev.borrow_mut().as_addressable().unwrap().read(relative_addr, count);
+    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        let (dev, relative_addr) = self.get_device_at(addr, data.len())?;
+        let result = dev.borrow_mut().as_addressable().unwrap().read(relative_addr, data);
         result
     }
 
@@ -158,5 +156,4 @@ impl Addressable for Bus {
         result
     }
 }
-
 

@@ -39,19 +39,25 @@ pub trait Interruptable {
 /// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
     fn len(&self) -> usize;
-    fn read(&mut self, addr: Address, count: usize) -> Result<[u8; MAX_READ], Error>;
+    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error>;
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error>;
 
     fn read_u8(&mut self, addr: Address) -> Result<u8, Error> {
-        Ok(self.read(addr, 1)?[0])
+        let mut data = [0; 1];
+        self.read(addr, &mut data)?;
+        Ok(data[0])
     }
 
     fn read_beu16(&mut self, addr: Address) -> Result<u16, Error> {
-        Ok(read_beu16(&self.read(addr, 2)?))
+        let mut data = [0; 2];
+        self.read(addr, &mut data)?;
+        Ok(read_beu16(&data))
     }
 
     fn read_beu32(&mut self, addr: Address) -> Result<u32, Error> {
-        Ok(read_beu32(&self.read(addr, 4)?))
+        let mut data = [0; 4];
+        self.read(addr, &mut data)?;
+        Ok(read_beu32(&data))
     }
 
     fn write_u8(&mut self, addr: Address, value: u8) -> Result<(), Error> {
