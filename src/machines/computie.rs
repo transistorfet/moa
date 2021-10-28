@@ -15,15 +15,15 @@ use crate::host::tty::SimplePty;
 pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     let mut system = System::new();
 
-    let monitor = MemoryBlock::load("binaries/monitor.bin")?;
+    let monitor = MemoryBlock::load("binaries/computie/monitor.bin")?;
     system.add_addressable_device(0x00000000, wrap_transmutable(monitor))?;
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
-    ram.load_at(0, "binaries/kernel.bin")?;
+    ram.load_at(0, "binaries/computie/kernel.bin")?;
     system.add_addressable_device(0x00100000, wrap_transmutable(ram))?;
 
     let mut ata = AtaDevice::new();
-    ata.load("binaries/disk-with-partition-table.img")?;
+    ata.load("binaries/computie/disk-with-partition-table.img")?;
     system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
     let mut serial = MC68681::new();
@@ -51,15 +51,15 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
 pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     let mut system = System::new();
 
-    let monitor = MemoryBlock::load("binaries/monitor-68030.bin")?;
+    let monitor = MemoryBlock::load("binaries/computie/monitor-68030.bin")?;
     system.add_addressable_device(0x00000000, wrap_transmutable(monitor))?;
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
-    ram.load_at(0, "binaries/kernel-68030.bin")?;
+    ram.load_at(0, "binaries/computie/kernel-68030.bin")?;
     system.add_addressable_device(0x00100000, wrap_transmutable(ram))?;
 
     let mut ata = AtaDevice::new();
-    ata.load("binaries/disk-with-partition-table.img")?;
+    ata.load("binaries/computie/disk-with-partition-table.img")?;
     system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
     let mut serial = MC68681::new();
