@@ -1,0 +1,12 @@
+[package]
+name = "moa-minifb"
+version = "0.1.0"
+edition = "2018"
+default-run = "moa-genesis"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+moa = { path = "../../" }
+minifb = "0.19"
+

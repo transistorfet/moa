@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2018"
 
 [workspace]
-members = [".", "frontends/moa-console"]
+members = [".", "frontends/moa-console", "frontends/moa-minifb"]
 default-members = ["frontends/moa-console"]
 
 [features]

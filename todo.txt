@@ -1,4 +1,7 @@
 
+* modify the interrupt handling to make the interrupted device acknowledge the interrupt, probably via the interrupt controller somehow.  It might need to be async
+  such that the cpu tells the int_controller it's acknowledged, and then the interrupting device can check the interrupt controller if it needs to see the ack
+
 * each device that can make a bus request should have a BusPort which is used to access the bus.  Not sure how it'll be created or passed to the device, since
   the offset should be set by the builder or system, and the mask and data size should be sent by the CPU (although I suppose some systems could hook it up differently)
 * what about even vs odd accesses?  If you access a byte, should the bus port possible turn it into a word access, and return only the byte portion?
@@ -9,6 +12,7 @@
 
 * make devices nameable, using a hashmap to store them
 * can you eventually make the system connections all configurable via a config file?
+* you could modify read/write to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
 
 
 * make tests for each instruction
