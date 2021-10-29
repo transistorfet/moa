@@ -48,10 +48,10 @@ impl Addressable for CoprocessorMemory {
                 }
             },
             0x200 => {
-                if data[0] != 0 {
-                    self.reset = false;
-                } else {
+                if data[0] == 0 {
                     self.reset = true;
+                } else {
+                    self.reset = false;
                 }
             },
             _ => { warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr); },

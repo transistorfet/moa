@@ -1,6 +1,19 @@
 
+* implement a Z80
+* master system emulation?
+* what about a Z280?  Is it just an extension, like the 68k variants?
+* separate the debugger out of m68k
+
+* i need a better way of handling disperate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
+
+* add instruction timing to M68k
+* YM7101 timing is causing it to be very slow... speeding this up increasing rendering speed a lot, even though the frame shouldn't be drawn that often
+* improve the speed of the event loop somehow (replace heap?)
+
 * modify the interrupt handling to make the interrupted device acknowledge the interrupt, probably via the interrupt controller somehow.  It might need to be async
-  such that the cpu tells the int_controller it's acknowledged, and then the interrupting device can check the interrupt controller if it needs to see the ack
+  such that the cpu tells the int_controller it's acknowledged, and then the interrupting device can check the interrupt controller if it needs to see the ack.
+  The ym7101 could use the ack as the "off" signal, and perhaps use that for the vsync int bit
+
 
 * each device that can make a bus request should have a BusPort which is used to access the bus.  Not sure how it'll be created or passed to the device, since
   the offset should be set by the builder or system, and the mask and data size should be sent by the CPU (although I suppose some systems could hook it up differently)
@@ -13,6 +26,8 @@
 * make devices nameable, using a hashmap to store them
 * can you eventually make the system connections all configurable via a config file?
 * you could modify read/write to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
+
+* maybe see about a Mac 128k or something
 
 
 * make tests for each instruction

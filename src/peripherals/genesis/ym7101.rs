@@ -504,7 +504,7 @@ impl Steppable for Ym7101 {
             self.state.set_dma_mode(DmaType::None);
         }
 
-        Ok(1_000_000_000 / 13_423_294)
+        Ok((1_000_000_000 / 13_423_294) * 4)
     }
 }
 
