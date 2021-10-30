@@ -39,7 +39,7 @@ pub enum LogLevel {
     Debug,
 }
 
-static mut LOG_LEVEL: LogLevel = LogLevel::Warning;
+static mut LOG_LEVEL: LogLevel = LogLevel::Debug;
 
 pub fn log_level() -> LogLevel {
     unsafe { LOG_LEVEL }

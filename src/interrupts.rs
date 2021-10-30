@@ -33,17 +33,18 @@ impl Signal {
 }
 
 
-
 pub struct InterruptController {
     pub target: Option<TransmutableBox>,
-    pub priority: Vec<Signal>,
+    pub interrupts: Vec<(bool, u8)>,
+    pub highest: u8,
 }
 
 impl InterruptController {
     pub fn new() -> InterruptController {
         InterruptController {
             target: None,
-            priority: iter::repeat_with(|| Signal::new()).take(7).collect::<Vec<_>>(), //vec![Signal::new(); 7],
+            interrupts: vec![(false, 0); 7],
+            highest: 0,
         }
     }
 
@@ -57,28 +58,29 @@ impl InterruptController {
     }
 
     pub fn set(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
-        let signal = &mut self.priority[priority as usize];
-        signal.set(state);
-        match signal.has_changed() {
-            Some(value) => self.notify_interrupt_state(value, priority, number)?,
-            None => { },
+        self.interrupts[priority as usize].0 = state;
+        self.interrupts[priority as usize].1 = number;
+        if state && priority > self.highest {
+            self.highest = priority;
         }
         Ok(())
     }
 
-    fn notify_interrupt_state(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
-        // TODO how does this find the specific device it's connected to?
-        // TODO for the time being, this will find the first device to handle it or fail
-
-        debug!("interrupts: priority {} state changed to {}", priority, state);
-        match &self.target {
-            Some(dev) => {
-                Ok(dev.borrow_mut().as_interruptable().unwrap().interrupt_state_change(state, priority, number)?)
-            },
-            None => {
-                Err(Error::new(&format!("unhandled interrupt: {:x}", number)))
-            },
+    pub fn check(&mut self) -> (bool, u8) {
+        if self.highest > 0 {
+            (true, self.highest)
+        } else {
+            (false, 0)
         }
+    }
+
+    pub fn acknowledge(&mut self, priority: u8) -> Result<u8, Error> {
+        let acknowledge = self.interrupts[priority as usize].1;
+        self.interrupts[priority as usize].0 = false;
+        while self.highest > 0 && !self.interrupts[self.highest as usize].0 {
+            self.highest -= 1;
+        }
+        Ok(acknowledge)
     }
 }
 

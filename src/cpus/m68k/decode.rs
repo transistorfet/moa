@@ -67,7 +67,8 @@ impl M68kDecoder {
 
     pub fn decode_at(&mut self, memory: &mut dyn Addressable, start: u32) -> Result<(), Error> {
         self.init(start);
-        self.instruction = self.decode_one(memory)
+        self.instruction = self.decode_one(memory)?;
+        Ok(())
     }
 
     pub fn decode_one(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {

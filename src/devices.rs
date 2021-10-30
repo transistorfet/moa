@@ -32,7 +32,7 @@ pub trait Steppable {
 /// A device that can receive an interrupt.  The `interrupt_state_change()` method
 /// will be called whenever an interrupt signal changes goes high or low.
 pub trait Interruptable {
-    fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error>;
+    //fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error>;
 }
 
 

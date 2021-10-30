@@ -88,7 +88,6 @@ pub struct M68kState {
     pub status: Status,
     pub current_ipl: InterruptPriority,
     pub pending_ipl: InterruptPriority,
-    pub ipl_ack_num: u8,
 
     pub pc: u32,
     pub sr: u16,
@@ -106,7 +105,6 @@ impl M68kState {
             status: Status::Init,
             current_ipl: InterruptPriority::NoInterrupt,
             pending_ipl: InterruptPriority::NoInterrupt,
-            ipl_ack_num: 0,
 
             pc: 0,
             sr: FLAGS_ON_RESET,

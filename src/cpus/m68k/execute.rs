@@ -41,23 +41,7 @@ impl Steppable for M68k {
     }
 }
 
-impl Interruptable for M68k {
-    fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
-        let ipl = if state {
-            InterruptPriority::from_u8(priority)
-        } else {
-            InterruptPriority::NoInterrupt
-        };
-
-        if ipl != self.state.pending_ipl {
-            self.state.pending_ipl = ipl;
-            if ipl != InterruptPriority::NoInterrupt {
-                self.state.ipl_ack_num = number;
-            }
-        }
-        Ok(())
-    }
-}
+impl Interruptable for M68k { }
 
 impl Transmutable for M68k {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
@@ -90,7 +74,7 @@ impl M68k {
                     //Err(Error { err: ErrorType::Processor, native, .. }) => {
                     // TODO match arm conditional is temporary: illegal instructions generate a top level error in order to debug and fix issues with decode
                     Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
-                        self.exception(system, native as u8)?;
+                        self.exception(system, native as u8, false)?;
                         Ok(())
                     },
                     Err(err) => Err(err),
@@ -121,17 +105,22 @@ impl M68k {
     }
 
     pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), Error> {
+        self.state.pending_ipl = match system.get_interrupt_controller().check() {
+            (true, priority) => InterruptPriority::from_u8(priority),
+            (false, _) => InterruptPriority::NoInterrupt,
+        };
+
         let current_ipl = self.state.current_ipl as u8;
         let pending_ipl = self.state.pending_ipl as u8;
 
         if self.state.pending_ipl != InterruptPriority::NoInterrupt {
             let priority_mask = ((self.state.sr & Flags::IntMask as u16) >> 8) as u8;
 
-            if (pending_ipl >= priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
+            if (pending_ipl > priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
                 debug!("{} interrupt: {} {}", DEV_NAME, pending_ipl, priority_mask);
                 self.state.current_ipl = self.state.pending_ipl;
-                self.exception(system, self.state.ipl_ack_num)?;
-                self.state.sr = (self.state.sr & !(Flags::IntMask as u16)) | ((self.state.current_ipl as u16) << 8);
+                let ack_num = system.get_interrupt_controller().acknowledge(self.state.current_ipl as u8)?;
+                self.exception(system, ack_num, true)?;
                 return Ok(());
             }
         }
@@ -143,7 +132,7 @@ impl M68k {
         Ok(())
     }
 
-    pub fn exception(&mut self, system: &System, number: u8) -> Result<(), Error> {
+    pub fn exception(&mut self, system: &System, number: u8, is_interrupt: bool) -> Result<(), Error> {
         debug!("{}: raising exception {}", DEV_NAME, number);
         let offset = (number as u16) << 2;
         if self.cputype >= M68kType::MC68010 {
@@ -151,8 +140,13 @@ impl M68k {
         }
         self.push_long(system, self.state.pc)?;
         self.push_word(system, self.state.sr)?;
+
+        // Changes to the flags must happen after the previous value has been pushed to the stack
         self.set_flag(Flags::Supervisor, true);
         self.set_flag(Flags::Tracing, false);
+        if is_interrupt {
+            self.state.sr = (self.state.sr & !(Flags::IntMask as u16)) | ((self.state.current_ipl as u16) << 8);
+        }
 
         self.state.pc = self.port.read_beu32((self.state.vbr + offset as u32) as Address)?;
         Ok(())
@@ -351,7 +345,7 @@ impl M68k {
             Instruction::DIVW(src, dest, sign) => {
                 let value = self.get_target_value(system, src, Size::Word)?;
                 if value == 0 {
-                    self.exception(system, Exceptions::ZeroDivide as u8)?;
+                    self.exception(system, Exceptions::ZeroDivide as u8, false)?;
                     return Ok(());
                 }
 
@@ -370,7 +364,7 @@ impl M68k {
             Instruction::DIVL(src, dest_h, dest_l, sign) => {
                 let value = self.get_target_value(system, src, Size::Long)?;
                 if value == 0 {
-                    self.exception(system, Exceptions::ZeroDivide as u8)?;
+                    self.exception(system, Exceptions::ZeroDivide as u8, false)?;
                     return Ok(());
                 }
 
@@ -651,11 +645,11 @@ impl M68k {
                 self.set_logic_flags(value, size);
             },
             Instruction::TRAP(number) => {
-                self.exception(system, 32 + number)?;
+                self.exception(system, 32 + number, false)?;
             },
             Instruction::TRAPV => {
                 if self.get_flag(Flags::Overflow) {
-                    self.exception(system, Exceptions::TrapvInstruction as u8)?;
+                    self.exception(system, Exceptions::TrapvInstruction as u8, false)?;
                 }
             },
             Instruction::UNLK(reg) => {
