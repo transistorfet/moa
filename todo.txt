@@ -1,7 +1,13 @@
 
+* check out game Out Of this World
+* how can you do devices that change their dadress map duritg operation, like mac which puts rom at 0 nad ram at 600000 temperarily 
+
 * i need a better way of handling disperate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
 * should you modify Addressable to also take the absolute address as input?  I'm thinking of how the same device could be mapped to multiple addresses in memory instead
   of taking up a whole range of addresses
+
+* could you use a generic sharable signal thing for sharing data, such as the VIA in mac128 where a single output bit determines the video mode (which would be a separate device)
+  So both could share the same Signal, one setting it and the other reading it, but how would you actually configure/build that?
 
 
 * implement a Z80
@@ -10,10 +16,6 @@
 * add instruction timing to M68k
 * YM7101 timing is causing it to be very slow... speeding this up increasing rendering speed a lot, even though the frame shouldn't be drawn that often... not sure what's wrong with the timing
 * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
-
-
-* each device that can make a bus request should have a BusPort which is used to access the bus
-
 
 
 * separate the debugger out of m68k
@@ -35,5 +37,6 @@
 
 
 * how can you have multple CPUs
+* each device that can make a bus request should have a BusPort which is used to access the bus
 * can you eventually make the system connections all configurable via a config file?
 

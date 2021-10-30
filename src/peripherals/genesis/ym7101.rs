@@ -69,9 +69,9 @@ pub enum DmaType {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TargetType {
-   Vram,
-   Cram,
-   Vsram,
+    Vram,
+    Cram,
+    Vsram,
 }
 
 pub struct Ym7101State {
@@ -98,7 +98,7 @@ pub struct Ym7101State {
 impl Ym7101State {
     pub fn new() -> Self {
         Self {
-            status: STATUS_FIFO_EMPTY,
+            status: 0x3400 | STATUS_FIFO_EMPTY,
             regs: [0; 24],
             vram: [0; 0x10000],
             cram: [0; 128],
@@ -186,7 +186,7 @@ impl Ym7101State {
         (self.regs[REG_MODE_SET_1] & MODE1_BF_HSYNC_INTERRUPT) != 0
     }
 
-   #[inline(always)]
+    #[inline(always)]
     fn vsync_int_enabled(&self) -> bool {
         (self.regs[REG_MODE_SET_2] & MODE2_BF_VSYNC_INTERRUPT) != 0
     }
@@ -225,59 +225,85 @@ impl Ym7101State {
         (h, v)
     }
 
-    pub fn get_window_coords(&self) -> ((u16, u16), (u16, u16)) {
+    pub fn get_screen_size(&self) -> (u16, u16) {
         let h_cells = if (self.regs[REG_MODE_SET_4] & MODE4_BF_H_CELL_MODE) == 0 { 32 } else { 40 };
         let v_cells = if (self.regs[REG_MODE_SET_2] & MODE2_BF_V_CELL_MODE) == 0 { 28 } else { 30 };
+        (h_cells, v_cells)
+    }
+
+    pub fn get_window_coords(&self, screen_size: (u16, u16)) -> (u16, u16) {
         let win_h = ((self.regs[REG_WINDOW_H_POS] & 0x1F) << 1) as u16;
         let win_v = (self.regs[REG_WINDOW_V_POS] & 0x1F) as u16;
+        let right = (self.regs[REG_WINDOW_H_POS] & 0x80) != 0;
+        let down = (self.regs[REG_WINDOW_V_POS] & 0x80) != 0;
 
-        // TODO this ignores the upper bits of the registers
-        if (self.regs[REG_WINDOW_H_POS] & 0x80) != 0 || (self.regs[REG_WINDOW_V_POS] & 0x80) != 0 {
-            panic!("window variations not implemented yet");
+        match (right, down) {
+            (false, false) => (win_h, win_v),
+            (true, false) => (win_h - screen_size.0, win_v),
+            (false, true) => (win_h, win_v - screen_size.1),
+            (true, true) => (win_h - screen_size.0, win_v - screen_size.1),
         }
-
-        ((win_h, win_v), (win_h + h_cells, win_v + v_cells))
     }
 
     pub fn draw_frame(&mut self, frame: &mut Frame) {
-        let coords = self.get_window_coords();
-        let scroll_size = self.get_scroll_size();
-
         let bg_colour = self.get_palette_colour((self.regs[REG_BACKGROUND] & 0x30) >> 4, self.regs[REG_BACKGROUND] & 0x0f);
         for i in 0..(frame.width as usize * frame.height as usize) {
             frame.bitmap[i] = bg_colour;
         }
 
-        self.draw_cell_table(frame, self.get_vram_scroll_b_addr(), coords, scroll_size);
-        self.draw_cell_table(frame, self.get_vram_scroll_a_addr(), coords, scroll_size);
-        self.draw_cell_table(frame, self.get_vram_window_addr(), coords, scroll_size);
-        self.draw_sprites(frame, (self.regs[REG_SPRITES_ADDR] as u32) << 9, coords, scroll_size);
+        self.draw_cell_table(frame, self.get_vram_scroll_b_addr());
+        self.draw_cell_table(frame, self.get_vram_scroll_a_addr());
+        //self.draw_window(frame);
+        self.draw_sprites(frame);
     }
 
-    pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: u32, coords: ((u16, u16), (u16, u16)), scroll_size: (u16, u16)) {
-        let ((win_x_start, win_y_start), (win_x_end, win_y_end)) = coords;
-        for cell_y in win_y_start..win_y_end {
-            for cell_x in win_x_start..win_x_end {
-                let pattern_name = read_beu16(&self.vram[(cell_table + (cell_x + (cell_y * scroll_size.0) << 1) as u32) as usize..]);
+    pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: u32) {
+        let (scroll_h, scroll_v) = self.get_scroll_size();
+        let (cells_h, cells_v) = self.get_screen_size();
+        let (offset_x, offset_y) = self.get_window_coords((cells_h, cells_v));
+
+        for cell_y in 0..cells_v {
+            for cell_x in 0..cells_h {
+                let pattern_name = read_beu16(&self.vram[(cell_table + (((cell_x + offset_x) + ((cell_y + offset_y) * scroll_h)) << 1) as u32) as usize..]);
                 let iter = self.get_pattern_iter(pattern_name);
                 frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
             }
         }
     }
 
-    pub fn draw_sprites(&mut self, frame: &mut Frame, sprite_table: u32, coords: ((u16, u16), (u16, u16)), scroll_size: (u16, u16)) {
-        let ((win_x_start, win_y_start), (win_x_end, win_y_end)) = coords;
+    pub fn draw_window(&mut self, frame: &mut Frame) {
+        let cell_table = self.get_vram_window_addr();
+        let (scroll_h, scroll_v) = self.get_scroll_size();
+        let (cells_h, cells_v) = self.get_screen_size();
 
-        for i in 0..(scroll_size.0 as u32 * 2) {
+        for cell_y in 0..cells_v {
+            for cell_x in 0..cells_h {
+                let pattern_name = read_beu16(&self.vram[(cell_table + ((cell_x + (cell_y * scroll_h)) << 1) as u32) as usize..]);
+                let iter = self.get_pattern_iter(pattern_name);
+                frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
+            }
+        }
+    }
+
+    pub fn draw_sprites(&mut self, frame: &mut Frame) {
+        let sprite_table = (self.regs[REG_SPRITES_ADDR] as u32) << 9;
+        let (scroll_h, scroll_v) = self.get_scroll_size();
+
+        for i in 0..(scroll_h as u32 * 2) {
             let sprite_addr = (sprite_table + (i * 8)) as usize;
             let v_pos = read_beu16(&self.vram[sprite_addr..]);
             let size = self.vram[sprite_addr + 2];
+            let (size_h, size_v) = (((size >> 2) & 0x03) as u16, (size & 0x03) as u16);
             let link = self.vram[sprite_addr + 3];
             let pattern_name = read_beu16(&self.vram[(sprite_addr + 4)..]);
             let h_pos = read_beu16(&self.vram[(sprite_addr + 6)..]);
 
-            let iter = self.get_pattern_iter(pattern_name);
-            frame.blit(h_pos as u32, v_pos as u32, iter, 8, 8);
+            for h in 0..size_h {
+                for v in 0..size_v {
+                    let iter = self.get_pattern_iter(pattern_name + (h * size_v) + v);
+                    frame.blit((h_pos + h * 8) as u32, (v_pos + v  * 8) as u32, iter, 8, 8);
+                }
+            }
         }
     }
 }
@@ -546,7 +572,7 @@ impl Addressable for Ym7101 {
             0x00 | 0x02 => {
                 if (self.state.transfer_type & 0x30) == 0x20 {
                     self.state.transfer_upper = None;
-                    self.state.transfer_fill = read_beu16(data);
+                    self.state.transfer_fill = if data.len() >= 2 { read_beu16(data) } else { data[0] as u16 };
                     self.state.set_dma_mode(DmaType::Fill);
                 } else {
                     info!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.state.transfer_target, self.state.transfer_addr, data);

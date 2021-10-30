@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::wrap_transmutable;
+use crate::devices::{Debuggable, wrap_transmutable};
 use crate::memory::{MemoryBlock, BusPort};
 
 use crate::cpus::m68k::{M68k, M68kType};
@@ -42,6 +42,8 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     //cpu.add_breakpoint(0x103332);
     //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
     //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
+
+    cpu.add_breakpoint(0);
 
     system.add_interruptable_device(wrap_transmutable(cpu))?;
 
