@@ -88,7 +88,7 @@ impl M68k {
                 match self.cycle_one(system) {
                     Ok(()) => Ok(()),
                     //Err(Error { err: ErrorType::Processor, native, .. }) => {
-                    // TODO temporary: we are passing illegal instructions upward in order to fix them
+                    // TODO match arm conditional is temporary: illegal instructions generate a top level error in order to debug and fix issues with decode
                     Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
                         self.exception(system, native as u8)?;
                         Ok(())

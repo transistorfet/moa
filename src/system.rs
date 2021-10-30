@@ -1,8 +1,7 @@
 
 use std::rc::Rc;
-use std::cmp::Ordering;
 use std::cell::{RefCell, RefMut};
-use std::collections::BinaryHeap;
+use std::collections::HashMap;
 
 use crate::error::Error;
 use crate::memory::Bus;
@@ -13,7 +12,7 @@ use crate::devices::{Clock, ClockElapsed, Address, TransmutableBox};
 pub struct System {
     pub clock: Clock,
     pub devices: Vec<TransmutableBox>,
-    pub event_queue: BinaryHeap<EventDevice>,
+    pub event_queue: Vec<SteppableDevice>,
     pub bus: Rc<RefCell<Bus>>,
     pub interrupt_controller: RefCell<InterruptController>,
 }
@@ -23,7 +22,7 @@ impl System {
         System {
             clock: 0,
             devices: vec![],
-            event_queue: BinaryHeap::new(),
+            event_queue: vec![],
             bus: Rc::new(RefCell::new(Bus::new())),
             interrupt_controller: RefCell::new(InterruptController::new()),
         }
@@ -40,23 +39,15 @@ impl System {
     pub fn add_addressable_device(&mut self, addr: Address, device: TransmutableBox) -> Result<(), Error> {
         let length = device.borrow_mut().as_addressable().unwrap().len();
         self.bus.borrow_mut().insert(addr, length, device.clone());
-        self.insert_steppable_device(device.clone());
+        self.try_queue_device(device.clone());
         self.devices.push(device);
         Ok(())
     }
 
     pub fn add_interruptable_device(&mut self, device: TransmutableBox) -> Result<(), Error> {
         self.interrupt_controller.borrow_mut().set_target(device.clone())?;
-        self.insert_steppable_device(device.clone());
+        self.try_queue_device(device.clone());
         self.devices.push(device);
-        Ok(())
-    }
-
-    fn insert_steppable_device(&mut self, device: TransmutableBox) -> Result<(), Error> {
-        if device.borrow_mut().as_steppable().is_some() {
-            let event_device = EventDevice::new(device);
-            self.event_queue.push(event_device);
-        }
         Ok(())
     }
 
@@ -64,7 +55,7 @@ impl System {
         let mut event_device = self.event_queue.pop().unwrap();
         self.clock = event_device.next_clock;
         event_device.next_clock = self.clock + event_device.device.borrow_mut().as_steppable().unwrap().step(&self)?;
-        self.event_queue.push(event_device);
+        self.queue_device(event_device);
         Ok(())
     }
 
@@ -106,41 +97,37 @@ impl System {
         }
         Ok(())
     }
+
+
+    fn try_queue_device(&mut self, device: TransmutableBox) {
+        if device.borrow_mut().as_steppable().is_some() {
+            self.queue_device(SteppableDevice::new(device));
+        }
+    }
+
+    fn queue_device(&mut self, event_device: SteppableDevice) {
+        for i in (0..self.event_queue.len()).rev() {
+            if self.event_queue[i].next_clock > event_device.next_clock {
+                self.event_queue.insert(i + 1, event_device);
+                return;
+            }
+        }
+        self.event_queue.insert(0, event_device);
+    }
 }
 
 
-pub struct EventDevice {
+pub struct SteppableDevice {
     pub next_clock: Clock,
     pub device: TransmutableBox,
 }
 
-impl EventDevice {
+impl SteppableDevice {
     pub fn new(device: TransmutableBox) -> Self {
         Self {
             next_clock: 0,
             device,
         }
-    }
-}
-
-impl Ord for EventDevice {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // NOTE this is reversed so that an event with a lower clock will be higher
-        other.next_clock.cmp(&self.next_clock)
-    }
-}
-
-impl PartialOrd for EventDevice {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Eq for EventDevice {}
-
-impl PartialEq for EventDevice {
-    fn eq(&self, other: &Self) -> bool {
-        self.next_clock == other.next_clock
     }
 }
 

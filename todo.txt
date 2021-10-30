@@ -13,6 +13,7 @@
 * modify the interrupt handling to make the interrupted device acknowledge the interrupt, probably via the interrupt controller somehow.  It might need to be async
   such that the cpu tells the int_controller it's acknowledged, and then the interrupting device can check the interrupt controller if it needs to see the ack.
   The ym7101 could use the ack as the "off" signal, and perhaps use that for the vsync int bit
+* there's potentially an issue with interrupts for m68k where it might not properly mask interrupts causing overlapping interrupts that cause problems (eventually executing RAM in Sonic)
 
 
 * each device that can make a bus request should have a BusPort which is used to access the bus.  Not sure how it'll be created or passed to the device, since
