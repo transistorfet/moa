@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::error::Error;
 use crate::system::System;
+use crate::signals::SyncSignal;
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, MAX_READ, read_beu16, read_beu32, write_beu16};
 use crate::host::traits::{Host, BlitableSurface};
 use crate::host::gfx::{Frame, FrameSwapper};
@@ -91,8 +92,6 @@ pub struct Ym7101State {
     pub h_clock: u32,
     pub v_clock: u32,
     pub h_scanlines: u8,
-
-    pub reset_int: bool,
 }
 
 impl Ym7101State {
@@ -114,8 +113,6 @@ impl Ym7101State {
             h_clock: 0,
             v_clock: 0,
             h_scanlines: 0,
-
-            reset_int: false,
         }
     }
 
@@ -290,18 +287,19 @@ impl Ym7101State {
         let (scroll_h, scroll_v) = self.get_scroll_size();
 
         for i in 0..(scroll_h as u32 * 2) {
-            let sprite_addr = (sprite_table + (i * 8)) as usize;
-            let v_pos = read_beu16(&self.vram[sprite_addr..]);
-            let size = self.vram[sprite_addr + 2];
+            let sprite_data = &self.vram[((sprite_table + (i * 8)) as usize)..];
+            let v_pos = read_beu16(&sprite_data[0..]);
+            let size = sprite_data[2];
+            let link = sprite_data[3];
+            let pattern_name = read_beu16(&sprite_data[4..]);
+            let h_pos = read_beu16(&sprite_data[6..]);
+
             let (size_h, size_v) = (((size >> 2) & 0x03) as u16, (size & 0x03) as u16);
-            let link = self.vram[sprite_addr + 3];
-            let pattern_name = read_beu16(&self.vram[(sprite_addr + 4)..]);
-            let h_pos = read_beu16(&self.vram[(sprite_addr + 6)..]);
 
             for h in 0..size_h {
                 for v in 0..size_v {
                     let iter = self.get_pattern_iter(pattern_name + (h * size_v) + v);
-                    frame.blit((h_pos + h * 8) as u32, (v_pos + v  * 8) as u32, iter, 8, 8);
+                    frame.blit((h_pos + (h * 8)) as u32, (v_pos + (v  * 8)) as u32, iter, 8, 8);
                 }
             }
         }
@@ -374,10 +372,11 @@ impl<'a> Iterator for PatternIterator<'a> {
 pub struct Ym7101 {
     pub swapper: Arc<Mutex<FrameSwapper>>,
     pub state: Ym7101State,
+    pub external_interrupt: SyncSignal<bool>,
 }
 
 impl Ym7101 {
-    pub fn new<H: Host>(host: &H) -> Ym7101 {
+    pub fn new<H: Host>(host: &H, external_interrupt: SyncSignal<bool>) -> Ym7101 {
         let swapper = FrameSwapper::new_shared();
         swapper.lock().map(|mut swapper| {
             swapper.current.set_size(320, 224);
@@ -389,6 +388,7 @@ impl Ym7101 {
         Ym7101 {
             swapper,
             state: Ym7101State::new(),
+            external_interrupt,
         }
     }
 }
@@ -408,9 +408,9 @@ impl Steppable for Ym7101 {
         let diff = (system.clock - self.state.last_clock) as u32;
         self.state.last_clock = system.clock;
 
-        if self.state.reset_int {
-            system.get_interrupt_controller().set(false, 4, 28)?;
-            system.get_interrupt_controller().set(false, 6, 30)?;
+        if self.external_interrupt.get() {
+            self.external_interrupt.set(false);
+            system.get_interrupt_controller().set(true, 2, 26)?;
         }
 
         self.state.h_clock += diff;
@@ -424,7 +424,6 @@ impl Steppable for Ym7101 {
             if self.state.hsync_int_enabled() && self.state.h_scanlines == 0  {
                 self.state.h_scanlines = self.state.regs[REG_H_INTERRUPT];
                 system.get_interrupt_controller().set(true, 4, 28)?;
-                self.state.reset_int = true;
             }
         }
 
@@ -437,7 +436,6 @@ impl Steppable for Ym7101 {
             self.state.v_clock = 0;
             if self.state.vsync_int_enabled() {
                 system.get_interrupt_controller().set(true, 6, 30)?;
-                self.state.reset_int = true;
             }
 
             let mut swapper = self.swapper.lock().unwrap();

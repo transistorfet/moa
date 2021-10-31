@@ -1,13 +1,27 @@
 
-* check out game Out Of this World
-* how can you do devices that change their dadress map duritg operation, like mac which puts rom at 0 nad ram at 600000 temperarily 
+* fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
 
+* how do you do the external interrupt, which is controlled by the YM7101 but the ... input comes from the controllers.  I suppose it could actually come through the updater,
+  the video would have a reference to the controllers even...  I don't really like config details in the sub devices, so is there a way to use JoystickUpdater or something like
+  it, such that the YM7101 would be given two generic joystick objects, which are also passed to or produced by the controller impl, so you could in theory swap the controllers out
+  and the YM7101 should use them just the same
+* sort out how inputing keys will work
+* separate the debugger out of m68k, use on_debug or something to print out debug info
+* make devices nameable, using a hashmap to store them
+
+* how can you do devices that change their address map during operation, like mac which puts rom at 0 and ram at 600000 temporarily 
 * i need a better way of handling disperate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
 * should you modify Addressable to also take the absolute address as input?  I'm thinking of how the same device could be mapped to multiple addresses in memory instead
   of taking up a whole range of addresses
-
 * could you use a generic sharable signal thing for sharing data, such as the VIA in mac128 where a single output bit determines the video mode (which would be a separate device)
   So both could share the same Signal, one setting it and the other reading it, but how would you actually configure/build that?
+
+
+We Need:
+  * devices that change address mapping during operation
+  * device that can be mapped to multiple separated locations while sharing data
+  * subdevices that can share data (eg. signal from one to another (mac128 via outputs), or being a subdevice with a special trait (joystick))
+
 
 
 * implement a Z80
@@ -18,8 +32,6 @@
 * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
 
 
-* separate the debugger out of m68k
-* make devices nameable, using a hashmap to store them
 * you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
 * should you simulate bus arbitration?
 

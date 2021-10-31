@@ -3,6 +3,7 @@
 pub mod error;
 pub mod memory;
 pub mod timers;
+pub mod signals;
 pub mod devices;
 pub mod interrupts;
 pub mod system;

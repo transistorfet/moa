@@ -1,6 +1,10 @@
 
+use std::sync::{Arc, Mutex};
+
 use crate::error::Error;
+use crate::signals::{Signal, SyncSignal};
 use crate::devices::{Address, Addressable, Transmutable, MAX_READ};
+use crate::host::traits::{Host, JoystickDevice, JoystickUpdater};
 
 
 const REG_VERSION: Address      = 0x01;
@@ -21,7 +25,7 @@ pub struct GenesisControllerPort {
     /// Data contains bits:
     /// 11 | 10 | 9 |    8 |     7 | 6 | 5 | 4 |     3 |    2 |    1 |  0
     ///  X |  Y | Z | MODE | START | A | B | C | RIGHT | LEFT | DOWN | UP
-    pub data: u16,
+    pub data: SyncSignal<u16>,
 
     pub ctrl: u8,
     pub th_count: u8,
@@ -33,7 +37,7 @@ pub struct GenesisControllerPort {
 impl GenesisControllerPort {
     pub fn new() -> Self {
         Self {
-            data: 0,
+            data: SyncSignal::new(0),
             ctrl: 0,
             th_count: 0,
             next_read: 0,
@@ -48,17 +52,18 @@ impl GenesisControllerPort {
         if (self.next_read ^ prev_th) != 0 {
             // TH bit was toggled
             self.th_count += 1;
+            let data = self.data.get();
             self.next_read = match self.th_count {
-                0 => self.next_read | ((self.data & 0x003F) as u8),
-                1 => self.next_read | (((self.data & 0x00C0) >> 2) as u8) | ((self.data & 0x0003) as u8),
-                2 => self.next_read | ((self.data & 0x003F) as u8),
-                3 => self.next_read | (((self.data & 0x00C0) >> 2) as u8),
-                4 => self.next_read | ((self.data & 0x0030) as u8) | (((self.data & 0x0F00) >> 8) as u8),
-                5 => self.next_read | (((self.data & 0x00C0) >> 2) as u8) | 0x0F,
-                6 => self.next_read | ((self.data & 0x003F) as u8),
+                0 => self.next_read | ((data & 0x003F) as u8),
+                1 => self.next_read | (((data & 0x00C0) >> 2) as u8) | ((data & 0x0003) as u8),
+                2 => self.next_read | ((data & 0x003F) as u8),
+                3 => self.next_read | (((data & 0x00C0) >> 2) as u8),
+                4 => self.next_read | ((data & 0x0030) as u8) | (((data & 0x0F00) >> 8) as u8),
+                5 => self.next_read | (((data & 0x00C0) >> 2) as u8) | 0x0F,
+                6 => self.next_read | ((data & 0x003F) as u8),
                 7 => {
                     self.th_count = 0;
-                    self.next_read | (((self.data & 0x00C0) >> 2) as u8) | ((self.data & 0x0003) as u8)
+                    self.next_read | (((data & 0x00C0) >> 2) as u8) | ((data & 0x0003) as u8)
                 },
                 _ => {
                     self.th_count = 0;
@@ -69,12 +74,24 @@ impl GenesisControllerPort {
     }
 }
 
+pub struct GenesisControllerUpdater(SyncSignal<u16>, SyncSignal<bool>);
+
+impl JoystickUpdater for GenesisControllerUpdater {
+    fn update_joystick(&mut self, modifiers: u16) {
+        self.0.set(modifiers);
+        if modifiers != 0 {
+            self.1.set(true);
+        }
+    }
+}
+
 
 
 pub struct GenesisController {
     pub port_1: GenesisControllerPort,
     pub port_2: GenesisControllerPort,
     pub expansion: GenesisControllerPort,
+    pub interrupt: SyncSignal<bool>,
 }
 
 impl GenesisController {
@@ -83,7 +100,23 @@ impl GenesisController {
             port_1: GenesisControllerPort::new(),
             port_2: GenesisControllerPort::new(),
             expansion: GenesisControllerPort::new(),
+            interrupt: SyncSignal::new(false),
         }
+    }
+
+    pub fn create<H: Host>(host: &H) -> Result<Self, Error> {
+        let controller = GenesisController::new();
+
+        let joystick1 = Box::new(GenesisControllerUpdater(controller.port_1.data.clone(), controller.interrupt.clone()));
+        host.register_joystick(JoystickDevice::A, joystick1)?;
+        let joystick2 = Box::new(GenesisControllerUpdater(controller.port_2.data.clone(), controller.interrupt.clone()));
+        host.register_joystick(JoystickDevice::B, joystick2)?;
+
+        Ok(controller)
+    }
+
+    pub fn get_interrupt_signal(&self) -> SyncSignal<bool> {
+        self.interrupt.clone()
     }
 }
 

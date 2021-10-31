@@ -5,34 +5,6 @@ use crate::error::Error;
 use crate::devices::TransmutableBox;
 
 
-pub struct Signal {
-    pub current: bool,
-    pub previous: bool,
-}
-
-impl Signal {
-    pub fn new() -> Signal {
-        Signal {
-            current: false,
-            previous: false,
-        }
-    }
-
-    pub fn has_changed(&mut self) -> Option<bool> {
-        if self.current != self.previous {
-            self.previous = self.current;
-            Some(self.current)
-        } else {
-            None
-        }
-    }
-
-    pub fn set(&mut self, value: bool) {
-        self.current = value;
-    }
-}
-
-
 pub struct InterruptController {
     pub target: Option<TransmutableBox>,
     pub interrupts: Vec<(bool, u8)>,
