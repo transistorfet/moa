@@ -51,7 +51,7 @@ pub fn build_genesis<H: Host>(host: &H) -> Result<System, Error> {
     //cpu.add_breakpoint(0x16ee);
     //cpu.decoder.dump_disassembly(&mut system, 0x206, 0x2000);
 
-    system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
+    system.add_interruptable_device("cpu", wrap_transmutable(cpu)).unwrap();
 
     Ok(system)
 }

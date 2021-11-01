@@ -74,7 +74,7 @@ impl MiniFrontend {
                 for key in keys {
                     match key {
                         Key::Enter => { modifiers |= 0xffff; },
-                        Key::D => { system.get_interrupt_controller().target.as_ref().map(|target| target.borrow_mut().as_debuggable().unwrap().enable_debugging()); },
+                        Key::D => { system.enable_debugging(); },
                         _ => { },
                     }
                 }

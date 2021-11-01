@@ -35,10 +35,6 @@ impl Steppable for M68k {
     fn on_error(&mut self, system: &System) {
         self.dump_state(system);
     }
-
-    fn on_debug(&mut self) {
-        self.enable_debugging();
-    }
 }
 
 impl Interruptable for M68k { }
@@ -153,7 +149,7 @@ impl M68k {
     }
 
     pub fn decode_next(&mut self, system: &System) -> Result<(), Error> {
-        self.check_breakpoints();
+        self.check_breakpoints(system);
 
         self.timer.decode.start();
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
@@ -161,10 +157,6 @@ impl M68k {
 
         if self.debugger.use_tracing {
             self.decoder.dump_decoded(&mut self.port);
-        }
-
-        if self.debugger.use_debugger {
-            self.run_debugger(system);
         }
 
         self.state.pc = self.decoder.end;
@@ -406,7 +398,11 @@ impl M68k {
                 self.require_supervisor()?;
                 self.state.sr = self.state.sr ^ value;
             },
-            //Instruction::EXG(Target, Target) => {
+            //Instruction::EXG(target1, target2) => {
+            //    let value1 = self.get_target_value(system, target1, Size::Long)?;
+            //    let value2 = self.get_target_value(system, target2, Size::Long)?;
+            //    self.set_target_value(system, target1, value2, Size::Long)?;
+            //    self.set_target_value(system, target2, value1, Size::Long)?;
             //},
             Instruction::EXT(reg, from_size, to_size) => {
                 let input = self.state.d_reg[reg as usize];

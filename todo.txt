@@ -1,10 +1,8 @@
 
 * fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
 
-* how do you do the external interrupt, which is controlled by the YM7101 but the ... input comes from the controllers.  I suppose it could actually come through the updater,
-  the video would have a reference to the controllers even...  I don't really like config details in the sub devices, so is there a way to use JoystickUpdater or something like
-  it, such that the YM7101 would be given two generic joystick objects, which are also passed to or produced by the controller impl, so you could in theory swap the controllers out
-  and the YM7101 should use them just the same
+* could have a remapper device, which takes a big swath of addresses in and maps them to another set of addresses (for Mac VIA generic to bus-hookup-in-mac adapter)
+
 * sort out how inputing keys will work
 * separate the debugger out of m68k, use on_debug or something to print out debug info
 * make devices nameable, using a hashmap to store them

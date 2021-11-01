@@ -5,6 +5,7 @@ pub mod memory;
 pub mod timers;
 pub mod signals;
 pub mod devices;
+pub mod debugger;
 pub mod interrupts;
 pub mod system;
 

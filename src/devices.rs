@@ -25,9 +25,7 @@ pub type Address = u64;
 pub trait Steppable {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error>;
     fn on_error(&mut self, _system: &System) { }
-    fn on_debug(&mut self) { }
 }
-
 
 /// A device that can receive an interrupt.  The `interrupt_state_change()` method
 /// will be called whenever an interrupt signal changes goes high or low.
@@ -35,6 +33,15 @@ pub trait Interruptable {
     //fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error>;
 }
 
+/// A device that can debugged using the built-in debugger
+pub trait Debuggable {
+    fn add_breakpoint(&mut self, addr: Address);
+    fn remove_breakpoint(&mut self, addr: Address);
+
+    fn print_current_step(&mut self, system: &System) -> Result<(), Error>;
+    fn print_disassembly(&mut self, addr: Address, count: usize);
+    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error>;
+}
 
 /// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
@@ -106,12 +113,6 @@ pub fn write_beu32(value: u32) -> [u8; 4] {
         (value >> 8) as u8,
         value as u8,
     ]
-}
-
-/// A device that can debugged by putting it into debug mode, or setting breakpoints
-pub trait Debuggable {
-    fn enable_debugging(&mut self);
-    fn add_breakpoint(&mut self, addr: Address);
 }
 
 
