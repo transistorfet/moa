@@ -2,7 +2,14 @@
 use crate::error::Error;
 use crate::devices::{Address, Addressable};
 
-use super::state::{Z80, Z80Type};
+use super::state::{Z80, Z80Type, Register};
+
+
+#[derive(Copy, Clone, Debug)]
+pub enum Size {
+    Byte,
+    Word,
+}
 
 #[derive(Copy, Clone, Debug)]
 pub enum Condition {
@@ -17,31 +24,25 @@ pub enum Condition {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum Register {
-    A,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
-    F,
-}
-
-#[derive(Copy, Clone, Debug)]
 pub enum RegisterPair {
     BC,
     DE,
     HL,
-    SP,
     AF,
+    SP,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum SpecialRegister {
+    I,
+    R,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub enum Target {
-    DirectRegByte(Register),
-    IndirectRegByte(RegisterPair),
-    ImmediateByte(u8),
+    DirectReg(Register),
+    IndirectReg(RegisterPair),
+    Immediate(u8),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -51,6 +52,7 @@ pub enum LoadTarget {
     IndirectRegByte(RegisterPair),
     IndirectRegWord(RegisterPair),
     DirectAltRegByte(Register),
+    DirectSpecialRegByte(SpecialRegister),
     IndirectByte(u16),
     IndirectWord(u16),
     ImmediateByte(u8),
@@ -59,66 +61,96 @@ pub enum LoadTarget {
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
-    ADDa(Target),
     ADCa(Target),
+    ADChl(RegisterPair),
+    ADDa(Target),
     ADDhl(RegisterPair),
     AND(Target),
     CP(Target),
-    CALL(u16),
-    CALLcc(Condition, u16),
+    NEG,
+    OR(Target),
+    SBCa(Target),
+    SBChl(RegisterPair),
+    SUB(Target),
+    XOR(Target),
+
+    BIT(u8, Target),
+    RES(u8, Target),
+    RL(Target),
+    RLC(Target),
+    RR(Target),
+    RRC(Target),
+    SET(u8, Target),
+    SLA(Target),
+    SLL(Target),
+    SRA(Target),
+    SRL(Target),
+
     DEC8(Target),
     DEC16(RegisterPair),
-    DJNZ(i8),
-    DI,
-    EI,
+    INC8(Target),
+    INC16(RegisterPair),
+
     EXX,
     EXafaf,
     EXhlsp,
     EXhlde,
-    INx(u8),
-    INic(Register),
-    INC8(Target),
-    INC16(RegisterPair),
-    JP(u16),
-    JPcc(Condition, u16),
-    JPIndirectHL,
-    JR(i8),
-    JRcc(Condition, i8),
     LD(LoadTarget, LoadTarget),
-    NOP,
-    HALT,
     POP(RegisterPair),
     PUSH(RegisterPair),
-    RET,
-    RETcc(Condition),
-    RST(u8),
-    OR(Target),
+
+    INx(u8),
+    INic(Register),
     OUTx(u8),
     OUTic(Register),
-    SUB(Target),
-    SBCa(Target),
-    XOR(Target),
 
-    RLC(Target),
-    RRC(Target),
-    RL(Target),
-    RR(Target),
-    SLA(Target),
-    SRA(Target),
-    SLL(Target),
-    SRL(Target),
-    BIT(u8, Target),
-    RES(u8, Target),
-    SET(u8, Target),
+    CALL(u16),
+    CALLcc(Condition, u16),
+    DJNZ(i8),
+    JP(u16),
+    JPIndirectHL,
+    JPcc(Condition, u16),
+    JR(i8),
+    JRcc(Condition, i8),
+    RET,
+    RETI,
+    RETN,
+    RETcc(Condition),
 
-    RLCA,
-    RRCA,
-    RLA,
-    RRA,
-    DAA,
-    CPL,
-    SCF,
+    DI,
+    EI,
+    IM(u8),
+    NOP,
+    HALT,
+    RST(u8),
+
     CCF,
+    CPL,
+    DAA,
+    RLA,
+    RLCA,
+    RRA,
+    RRCA,
+    RRD,
+    RLD,
+    SCF,
+
+    CPD,
+    CPDR,
+    CPI,
+    CPIR,
+    IND,
+    INDR,
+    INI,
+    INIR,
+    LDD,
+    LDDR,
+    LDI,
+    LDIR,
+    OTDR,
+    OTIR,
+    OUTD,
+    OUTI,
 }
 
 pub struct Z80Decoder {
@@ -190,7 +222,7 @@ impl Z80Decoder {
                             }
                         } else {
                             let addr = self.read_instruction_word(memory)?;
-                            match ((ins >> 3) & 0x03) {
+                            match (ins >> 3) & 0x03 {
                                 0 => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(RegisterPair::HL))),
                                 1 => Ok(Instruction::LD(LoadTarget::IndirectByte(addr), LoadTarget::DirectRegByte(Register::A))),
                                 2 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::HL), LoadTarget::IndirectWord(addr))),
@@ -310,7 +342,7 @@ impl Z80Decoder {
                     }
                     6 => {
                         let data = self.read_instruction_byte(memory)?;
-                        Ok(get_alu_instruction(get_ins_y(ins), Target::ImmediateByte(data)))
+                        Ok(get_alu_instruction(get_ins_y(ins), Target::Immediate(data)))
                     },
                     7 => {
                         Ok(Instruction::RST(get_ins_y(ins) * 8))
@@ -343,45 +375,85 @@ impl Z80Decoder {
         match get_ins_x(ins) {
             0 => Ok(Instruction::NOP),
             1 => {
-                /*
                 match get_ins_z(ins) {
                     0 => {
-                        let y = get_ins_y(ins);
-                        if y == 6 {
-                            //Ok(Instruction::INic),
-                            panic!("");
+                        let target = get_register(get_ins_y(ins));
+                        if let Target::DirectReg(reg) = target {
+                            Ok(Instruction::INic(reg))
                         } else {
-                            //Ok(Instruction::INic(get_register(y))),
+                            //Ok(Instruction::INic())
+                            panic!("Unimplemented");
                         }
                     },
                     1 => {
+                        let target = get_register(get_ins_y(ins));
+                        if let Target::DirectReg(reg) = target {
+                            Ok(Instruction::OUTic(reg))
+                        } else {
+                            //Ok(Instruction::OUTic())
+                            panic!("Unimplemented");
+                        }
                     },
                     2 => {
+                        if get_ins_q(ins) == 0 {
+                            Ok(Instruction::SBChl(get_register_pair(get_ins_p(ins))))
+                        } else {
+                            Ok(Instruction::ADChl(get_register_pair(get_ins_p(ins))))
+                        }
                     },
                     3 => {
+                        let addr = self.read_instruction_word(memory)?;
+                        if get_ins_q(ins) == 0 {
+                            Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins)))))
+                        } else {
+                            Ok(Instruction::LD(LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins))), LoadTarget::IndirectWord(addr)))
+                        }
                     },
                     4 => {
+                        Ok(Instruction::NEG)
                     },
                     5 => {
+                        if get_ins_y(ins) == 1 {
+                            Ok(Instruction::RETI)
+                        } else {
+                            Ok(Instruction::RETN)
+                        }
                     },
                     6 => {
+                        Ok(Instruction::IM(get_ins_y(ins)))
                     },
                     7 => {
+                        match get_ins_y(ins) {
+                            0 => Ok(Instruction::LD(LoadTarget::DirectSpecialRegByte(SpecialRegister::I), LoadTarget::DirectRegByte(Register::A))),
+                            1 => Ok(Instruction::LD(LoadTarget::DirectSpecialRegByte(SpecialRegister::R), LoadTarget::DirectRegByte(Register::A))),
+                            2 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), LoadTarget::DirectSpecialRegByte(SpecialRegister::I))),
+                            3 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), LoadTarget::DirectSpecialRegByte(SpecialRegister::R))),
+                            4 => Ok(Instruction::RRD),
+                            5 => Ok(Instruction::RLD),
+                            _ => Ok(Instruction::NOP),
+                        }
                     },
                     _ => panic!("InternalError: impossible value"),
                 }
-                */
-                panic!("random instructions are unimplemented");
             },
             2 => {
-                match ins & 0xF0 {
-                    // TODO implement block
-                    //0xA0 => {
-
-                    //},
-                    //0xB0 => {
-
-                    //},
+                match ins {
+                    0xA0 => Ok(Instruction::LDI),
+                    0xA1 => Ok(Instruction::CPI),
+                    0xA2 => Ok(Instruction::INI),
+                    0xA3 => Ok(Instruction::OUTI),
+                    0xA8 => Ok(Instruction::LDD),
+                    0xA9 => Ok(Instruction::CPD),
+                    0xAA => Ok(Instruction::IND),
+                    0xAB => Ok(Instruction::OUTD),
+                    0xB0 => Ok(Instruction::LDIR),
+                    0xB1 => Ok(Instruction::CPIR),
+                    0xB2 => Ok(Instruction::INIR),
+                    0xB3 => Ok(Instruction::OTIR),
+                    0xB8 => Ok(Instruction::LDDR),
+                    0xB9 => Ok(Instruction::CPDR),
+                    0xBA => Ok(Instruction::INDR),
+                    0xBB => Ok(Instruction::OTDR),
                     _ => Ok(Instruction::NOP),
                 }
             },
@@ -402,14 +474,14 @@ impl Z80Decoder {
     }
 
     fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Error> {
-        let word = device.read_beu16(self.end as Address)?;
+        let word = device.read_leu16(self.end as Address)?;
         self.end += 2;
         Ok(word)
     }
 
     pub fn dump_decoded(&mut self, memory: &mut dyn Addressable) {
         let ins_data: Result<String, Error> =
-            (0..((self.end - self.start) / 2)).map(|offset|
+            (0..(self.end - self.start)).map(|offset|
                 Ok(format!("{:02x} ", memory.read_u8((self.start + offset) as Address).unwrap()))
             ).collect();
         println!("{:#06x}: {}\n\t{:?}\n", self.start, ins_data.unwrap(), self.instruction);
@@ -446,23 +518,23 @@ fn get_rot_instruction(rot: u8, target: Target) -> Instruction {
 
 fn get_register(reg: u8) -> Target {
     match reg {
-        0 => Target::DirectRegByte(Register::B),
-        1 => Target::DirectRegByte(Register::C),
-        2 => Target::DirectRegByte(Register::D),
-        3 => Target::DirectRegByte(Register::E),
-        4 => Target::DirectRegByte(Register::H),
-        5 => Target::DirectRegByte(Register::L),
-        6 => Target::IndirectRegByte(RegisterPair::HL),
-        7 => Target::DirectRegByte(Register::A),
+        0 => Target::DirectReg(Register::B),
+        1 => Target::DirectReg(Register::C),
+        2 => Target::DirectReg(Register::D),
+        3 => Target::DirectReg(Register::E),
+        4 => Target::DirectReg(Register::H),
+        5 => Target::DirectReg(Register::L),
+        6 => Target::IndirectReg(RegisterPair::HL),
+        7 => Target::DirectReg(Register::A),
         _ => panic!("InternalError: impossible value"),
     }
 }
 
 fn to_load_target(target: Target) -> LoadTarget {
     match target {
-        Target::DirectRegByte(reg) => LoadTarget::DirectRegByte(reg),
-        Target::IndirectRegByte(reg) => LoadTarget::IndirectRegByte(reg),
-        Target::ImmediateByte(data) => LoadTarget::ImmediateByte(data),
+        Target::DirectReg(reg) => LoadTarget::DirectRegByte(reg),
+        Target::IndirectReg(reg) => LoadTarget::IndirectRegByte(reg),
+        Target::Immediate(data) => LoadTarget::ImmediateByte(data),
     }
 }
 

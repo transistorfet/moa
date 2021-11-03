@@ -25,56 +25,27 @@ pub enum Status {
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Flags {
-    Carry       = 0x0001,
-    Overflow    = 0x0002,
-    Zero        = 0x0004,
-    Negative    = 0x0008,
-    Extend      = 0x0010,
+    Carry       = 0x01,
+    AddSubtract = 0x02,
+    Parity      = 0x04,
+    HalfCarry   = 0x10,
+    Zero        = 0x40,
+    Sign        = 0x80,
 }
-
-/*
-#[repr(u8)]
-#[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Exceptions {
-    BusError            = 2,
-    AddressError        = 3,
-    IllegalInstruction  = 4,
-    ZeroDivide          = 5,
-    ChkInstruction      = 6,
-    TrapvInstruction    = 7,
-    PrivilegeViolation  = 8,
-}
-
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum InterruptPriority {
-    NoInterrupt = 0,
-    Level1 = 1,
-    Level2 = 2,
-    Level3 = 3,
-    Level4 = 4,
-    Level5 = 5,
-    Level6 = 6,
-    Level7 = 7,
+#[derive(Copy, Clone, Debug)]
+pub enum Register {
+    B = 0,
+    C = 1,
+    D = 2,
+    E = 3,
+    H = 4,
+    L = 5,
+    A = 6,
+    F = 7,
 }
 
-impl InterruptPriority {
-    pub fn from_u8(priority: u8) -> InterruptPriority {
-        match priority {
-            0 => InterruptPriority::NoInterrupt,
-            1 => InterruptPriority::Level1,
-            2 => InterruptPriority::Level2,
-            3 => InterruptPriority::Level3,
-            4 => InterruptPriority::Level4,
-            5 => InterruptPriority::Level5,
-            6 => InterruptPriority::Level6,
-            _ => InterruptPriority::Level7,
-        }
-    }
-}
-*/
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Z80State {
