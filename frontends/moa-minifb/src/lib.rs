@@ -9,8 +9,8 @@ use moa::system::System;
 use moa::host::traits::{Host, JoystickDevice, JoystickUpdater, WindowUpdater};
 
 
-const WIDTH: usize = 640;
-const HEIGHT: usize = 360;
+const WIDTH: usize = 320;
+const HEIGHT: usize = 224;
 
 pub struct MiniFrontend {
     pub buffer: Mutex<Vec<u32>>,
@@ -53,11 +53,14 @@ impl MiniFrontend {
 
     //pub fn start(&self) {
     pub fn start(&self, mut system: System) {
+        let mut options = minifb::WindowOptions::default();
+        options.scale = minifb::Scale::X4;
+
         let mut window = minifb::Window::new(
             "Test - ESC to exit",
             WIDTH,
             HEIGHT,
-            minifb::WindowOptions::default(),
+            options,
         )
         .unwrap_or_else(|e| {
             panic!("{}", e);
