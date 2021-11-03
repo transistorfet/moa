@@ -4,8 +4,8 @@ use std::cell::{Cell, RefCell, RefMut};
 use std::collections::HashMap;
 
 use crate::memory::Bus;
-use crate::error::Error;
 use crate::debugger::Debugger;
+use crate::error::{Error, ErrorType};
 use crate::interrupts::InterruptController;
 use crate::devices::{Clock, ClockElapsed, Address, TransmutableBox};
 
@@ -16,6 +16,8 @@ pub struct System {
     pub event_queue: Vec<DeviceStep>,
 
     pub debug_enabled: Cell<bool>,
+    pub debugger: RefCell<Debugger>,
+
     pub bus: Rc<RefCell<Bus>>,
     pub interrupt_controller: RefCell<InterruptController>,
 }
@@ -28,6 +30,8 @@ impl System {
             event_queue: vec![],
 
             debug_enabled: Cell::new(false),
+            debugger: RefCell::new(Debugger::new()),
+
             bus: Rc::new(RefCell::new(Bus::new())),
             interrupt_controller: RefCell::new(InterruptController::new()),
         }
@@ -67,9 +71,15 @@ impl System {
     pub fn step(&mut self) -> Result<(), Error> {
         let mut event_device = self.event_queue.pop().unwrap();
         self.clock = event_device.next_clock;
-        event_device.next_clock = self.clock + event_device.device.borrow_mut().as_steppable().unwrap().step(&self)?;
+        let result = match event_device.device.borrow_mut().as_steppable().unwrap().step(&self) {
+            Ok(diff) => {
+                event_device.next_clock = self.clock + diff;
+                Ok(())
+            },
+            Err(err) => Err(err),
+        };
         self.queue_device(event_device);
-        Ok(())
+        result
     }
 
     pub fn run_for(&mut self, clocks: Clock) -> Result<(), Error> {
@@ -77,11 +87,15 @@ impl System {
 
         while self.clock < target {
             if self.debug_enabled.get() && self.event_queue[self.event_queue.len() - 1].device.borrow_mut().as_debuggable().is_some() {
-                Debugger::run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone()).unwrap();
+                self.debugger.borrow_mut().run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone()).unwrap();
             }
 
             match self.step() {
                 Ok(()) => { }
+                Err(err) if err.err == ErrorType::Breakpoint => {
+                    println!("Breakpoint reached: {}", err.msg);
+                    self.enable_debugging();
+                },
                 Err(err) => {
                     self.exit_error();
                     println!("{:?}", err);

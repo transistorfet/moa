@@ -1,8 +1,9 @@
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ErrorType {
     Emulator,
     Processor,
+    Breakpoint,
 }
 
 #[derive(Debug)]
@@ -28,6 +29,14 @@ impl Error {
             msg: "".to_string(),
         }
     }
+
+    pub fn breakpoint(msg: &str) -> Error {
+        Error {
+            err: ErrorType::Breakpoint,
+            native: 0,
+            msg: msg.to_string(),
+        }
+    }
 }
 
 
@@ -39,7 +48,7 @@ pub enum LogLevel {
     Debug,
 }
 
-static mut LOG_LEVEL: LogLevel = LogLevel::Debug;
+static mut LOG_LEVEL: LogLevel = LogLevel::Info;
 
 pub fn log_level() -> LogLevel {
     unsafe { LOG_LEVEL }

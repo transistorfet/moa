@@ -1,4 +1,12 @@
 
+At 0x16cde, a move writes an invalid value to 0 via an indirect %a2 reg.  The value of the reg might have changed during an interrupt, but it definitely breaks when the next interrupt occurs
+Before the loop is 0x16a0e which then calculates the count and such
+0x16584 is where the memory address 0xffd11a is updated, which is then used for the bad 0x0000 address which causes the improper write.  0x16570 is a better start
+On broken cycle: %a1 = 1df40, moves that location + 1 to %d0
+
+
+* there is a problem where something writes to the rom area which causes a crash
+
 * fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
 
 * could have a remapper device, which takes a big swath of addresses in and maps them to another set of addresses (for Mac VIA generic to bus-hookup-in-mac adapter)

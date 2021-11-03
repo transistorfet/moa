@@ -26,20 +26,38 @@ impl StackTracer {
 }
 */
 
-pub struct Debugger;
+pub struct Debugger {
+    pub last_command: Option<String>,
+    pub repeat: u32,
+}
 
 
 impl Debugger {
-    pub fn run_debugger(system: &System, target: TransmutableBox) -> Result<(), Error> {
+    pub fn new() -> Self {
+        Self {
+            last_command: None,
+            repeat: 0,
+        }
+    }
+
+    pub fn run_debugger(&mut self, system: &System, target: TransmutableBox) -> Result<(), Error> {
         let mut target = target.borrow_mut();
         let debug_obj = target.as_debuggable().unwrap();
         debug_obj.print_current_step(system)?;
+
+        if self.repeat > 0 {
+            self.repeat -= 1;
+            let last_command = self.last_command.clone().unwrap();
+            let args: Vec<&str> = vec![&last_command];
+            self.run_debugger_command(system, debug_obj, &args)?;
+            return Ok(());
+        }
 
         loop {
             let mut buffer = String::new();
             std::io::stdin().read_line(&mut buffer).unwrap();
             let args: Vec<&str> = buffer.split_whitespace().collect();
-            match Debugger::run_debugger_command(system, debug_obj, &args) {
+            match self.run_debugger_command(system, debug_obj, &args) {
                 Ok(true) => return Ok(()),
                 Ok(false) => { },
                 Err(err) => {
@@ -49,8 +67,9 @@ impl Debugger {
         }
     }
 
-    pub fn run_debugger_command(system: &System, debug_obj: &mut dyn Debuggable, args: &[&str]) -> Result<bool, Error> {
+    pub fn run_debugger_command(&mut self, system: &System, debug_obj: &mut dyn Debuggable, args: &[&str]) -> Result<bool, Error> {
         if args.len() == 0 {
+            // The Default Command
             return Ok(true);
         }
 
@@ -65,6 +84,11 @@ impl Debugger {
                 }
             },
             "c" | "continue" => {
+                if args.len() > 1 {
+                    self.repeat = u32::from_str_radix(args[1], 10).map_err(|_| Error::new("Unable to parse repeat number"))?;
+                    self.last_command = Some("c".to_string());
+                }
+
                 system.disable_debugging();
                 return Ok(true);
             },
@@ -80,6 +104,9 @@ impl Debugger {
             "dis" | "disassemble" => {
                 debug_obj.print_disassembly(0, 0);
             },
+            "s" | "step" => {
+                return Ok(true);
+            },
             //"ds" | "stack" | "dumpstack" => {
             //    println!("Stack:");
             //    for addr in &self.debugger.stack_tracer.calls {
@@ -92,7 +119,7 @@ impl Debugger {
             //},
             _ => {
                 if debug_obj.execute_command(system, args)? {
-                    return Ok(true);
+                    println!("Error: unknown command {}", args[0]);
                 }
             },
         }

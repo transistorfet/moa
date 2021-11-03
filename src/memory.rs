@@ -8,12 +8,14 @@ use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, MAX_RE
 
 
 pub struct MemoryBlock {
+    pub read_only: bool,
     pub contents: Vec<u8>,
 }
 
 impl MemoryBlock {
     pub fn new(contents: Vec<u8>) -> MemoryBlock {
         MemoryBlock {
+            read_only: false,
             contents
         }
     }
@@ -37,6 +39,10 @@ impl MemoryBlock {
             Err(_) => Err(Error::new(&format!("Error reading contents of {}", filename))),
         }
     }
+
+    pub fn read_only(&mut self) {
+        self.read_only = true;
+    }
 }
 
 impl Addressable for MemoryBlock {
@@ -52,6 +58,10 @@ impl Addressable for MemoryBlock {
     }
 
     fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
+        if self.read_only {
+            return Err(Error::breakpoint(&format!("Attempt to write to read-only memory at {:x} with data {:?}", addr, data)));
+        }
+
         for byte in data {
             self.contents[addr as usize] = *byte;
             addr += 1;
@@ -172,7 +182,7 @@ impl BusPort {
     }
 
     pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
-        self.subdevice.borrow_mut().dump_memory(addr, count)
+        self.subdevice.borrow_mut().dump_memory(self.offset + (addr & self.address_mask), count)
     }
 }
 
