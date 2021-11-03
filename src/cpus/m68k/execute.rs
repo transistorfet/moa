@@ -145,6 +145,7 @@ impl M68k {
         }
 
         self.state.pc = self.port.read_beu32((self.state.vbr + offset as u32) as Address)?;
+
         Ok(())
     }
 
@@ -170,11 +171,14 @@ impl M68k {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, size)?;
                 let (result, carry) = overflowing_add_sized(existing, value, size);
-                match dest {
-                    Target::DirectAReg(_) => { },
-                    _ => self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size)),
-                }
+                self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size));
                 self.set_target_value(system, dest, result, size)?;
+            },
+            Instruction::ADDA(src, dest, size) => {
+                let value = self.get_target_value(system, src, size)?;
+                let existing = *self.get_a_reg_mut(dest);
+                let (result, carry) = overflowing_add_sized(existing, value, Size::Long);
+                *self.get_a_reg_mut(dest) = result;
             },
             Instruction::AND(src, dest, size) => {
                 let value = self.get_target_value(system, src, size)?;
@@ -624,11 +628,14 @@ impl M68k {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, size)?;
                 let (result, carry) = overflowing_sub_sized(existing, value, size);
-                match dest {
-                    Target::DirectAReg(_) => { },
-                    _ => self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size)),
-                }
+                self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size));
                 self.set_target_value(system, dest, result, size)?;
+            },
+            Instruction::SUBA(src, dest, size) => {
+                let value = self.get_target_value(system, src, size)?;
+                let existing = *self.get_a_reg_mut(dest);
+                let (result, carry) = overflowing_sub_sized(existing, value, size);
+                *self.get_a_reg_mut(dest) = result;
             },
             Instruction::SWAP(reg) => {
                 let value = self.state.d_reg[reg as usize];

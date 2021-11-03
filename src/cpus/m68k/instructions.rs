@@ -98,6 +98,7 @@ pub enum Target {
 pub enum Instruction {
     ABCD(Target, Target),
     ADD(Target, Target, Size),
+    ADDA(Target, Register, Size),
     ADDX(Target, Target, Size),
     AND(Target, Target, Size),
     ANDtoCCR(u8),
@@ -184,6 +185,7 @@ pub enum Instruction {
     Scc(Condition, Target),
     STOP(u16),
     SUB(Target, Target, Size),
+    SUBA(Target, Register, Size),
     SUBX(Target, Target, Size),
     SWAP(Register),
 

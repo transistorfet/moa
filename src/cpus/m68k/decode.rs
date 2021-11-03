@@ -437,7 +437,7 @@ impl M68kDecoder {
                     None => {
                         let size = if dir == 0 { Size::Word } else { Size::Long };
                         let target = self.decode_lower_effective_address(memory, ins, Some(size))?;
-                        Ok(Instruction::SUB(target, Target::DirectAReg(reg), size))
+                        Ok(Instruction::SUBA(target, reg, size))
                     },
                 }
             },
@@ -522,7 +522,7 @@ impl M68kDecoder {
                     None => {
                         let size = if dir == 0 { Size::Word } else { Size::Long };
                         let target = self.decode_lower_effective_address(memory, ins, Some(size))?;
-                        Ok(Instruction::ADD(target, Target::DirectAReg(reg), size))
+                        Ok(Instruction::ADDA(target, reg, size))
                     },
                 }
             },
