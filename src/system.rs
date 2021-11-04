@@ -62,6 +62,7 @@ impl System {
 
     pub fn enable_debugging(&self) {
         self.debug_enabled.set(true);
+        self.debugger.borrow_mut().breakpoint_occurred();
     }
 
     pub fn disable_debugging(&self) {

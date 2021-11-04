@@ -130,7 +130,7 @@ impl M68k {
     }
 
     pub fn exception(&mut self, system: &System, number: u8, is_interrupt: bool) -> Result<(), Error> {
-        info!("{}: raising exception {}", DEV_NAME, number);
+        debug!("{}: raising exception {}", DEV_NAME, number);
         let offset = (number as u16) << 2;
         if self.cputype >= M68kType::MC68010 {
             self.push_word(system, offset)?;
@@ -231,28 +231,28 @@ impl M68k {
                 self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
             },
             Instruction::BCHG(bitnum, target, size) => {
-                let bitnum = self.get_target_value(system, bitnum, Size::Byte)? % get_bit_op_max(size);
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
                 let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = (value & !mask) | (!(value & mask) & mask);
                 self.set_target_value(system, target, value, size)?;
             },
             Instruction::BCLR(bitnum, target, size) => {
-                let bitnum = self.get_target_value(system, bitnum, Size::Byte)? % get_bit_op_max(size);
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
                 let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = value & !mask;
                 self.set_target_value(system, target, value, size)?;
             },
             Instruction::BSET(bitnum, target, size) => {
-                let bitnum = self.get_target_value(system, bitnum, Size::Byte)? % get_bit_op_max(size);
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
                 let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = value | mask;
                 self.set_target_value(system, target, value, size)?;
             },
             Instruction::BTST(bitnum, target, size) => {
-                let bitnum = self.get_target_value(system, bitnum, Size::Byte)? % get_bit_op_max(size);
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
                 let value = self.get_target_value(system, target, size)?;
                 self.set_bit_test_flags(value, bitnum, size);
             },
@@ -415,7 +415,7 @@ impl M68k {
                 self.set_target_value(system, target2, value1, Size::Long)?;
             },
             Instruction::EXT(reg, from_size, to_size) => {
-                let input = self.state.d_reg[reg as usize];
+                let input = get_value_sized(self.state.d_reg[reg as usize], from_size);
                 let result = match (from_size, to_size) {
                     (Size::Byte, Size::Word) => ((((input as u8) as i8) as i16) as u16) as u32,
                     (Size::Word, Size::Long) => (((input as u16) as i16) as i32) as u32,
@@ -503,7 +503,7 @@ impl M68k {
             Instruction::MOVEM(target, size, dir, mask) => {
                 self.execute_movem(system, target, size, dir, mask)?;
             },
-            //Instruction::MOVEP(Register, Target, Size, Direction) => {
+            //Instruction::MOVEP(reg, target, size, dir) => {
             //},
             Instruction::MOVEQ(data, reg) => {
                 let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
@@ -1167,14 +1167,6 @@ fn get_msb_mask(value: u32, size: Size) -> u32 {
         Size::Byte => value & 0x00000080,
         Size::Word => value & 0x00008000,
         Size::Long => value & 0x80000000,
-    }
-}
-
-fn get_bit_op_max(size: Size) -> u32 {
-    match size {
-        Size::Byte => 8,
-        Size::Long => 32,
-        Size::Word => panic!("bit ops cannot be word size"),
     }
 }
 

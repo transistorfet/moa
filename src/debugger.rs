@@ -31,6 +31,7 @@ impl StackTracer {
 pub struct Debugger {
     pub last_command: Option<String>,
     pub repeat: u32,
+    pub trace_only: bool,
 }
 
 
@@ -39,13 +40,22 @@ impl Debugger {
         Self {
             last_command: None,
             repeat: 0,
+            trace_only: false,
         }
+    }
+
+    pub fn breakpoint_occurred(&mut self) {
+        self.trace_only = false;
     }
 
     pub fn run_debugger(&mut self, system: &System, target: TransmutableBox) -> Result<(), Error> {
         let mut target = target.borrow_mut();
         let debug_obj = target.as_debuggable().unwrap();
         debug_obj.print_current_step(system)?;
+
+        if self.trace_only {
+            return Ok(());
+        }
 
         if self.repeat > 0 {
             self.repeat -= 1;
@@ -116,6 +126,10 @@ impl Debugger {
                 self.check_repeat_arg(args)?;
                 return Ok(true);
             },
+            "t" | "trace" => {
+                self.trace_only = true;
+                return Ok(true);
+            }
             //"ds" | "stack" | "dumpstack" => {
             //    println!("Stack:");
             //    for addr in &self.debugger.stack_tracer.calls {
