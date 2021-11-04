@@ -347,10 +347,18 @@ impl M68kDecoder {
                             data = 8;
                         }
 
-                        if (ins & 0x0100) == 0 {
-                            Ok(Instruction::ADD(Target::Immediate(data), target, size))
+                        if let Target::DirectAReg(reg) = target {
+                            if (ins & 0x0100) == 0 {
+                                Ok(Instruction::ADDA(Target::Immediate(data), reg, size))
+                            } else {
+                                Ok(Instruction::SUBA(Target::Immediate(data), reg, size))
+                            }
                         } else {
-                            Ok(Instruction::SUB(Target::Immediate(data), target, size))
+                            if (ins & 0x0100) == 0 {
+                                Ok(Instruction::ADD(Target::Immediate(data), target, size))
+                            } else {
+                                Ok(Instruction::SUB(Target::Immediate(data), target, size))
+                            }
                         }
                     },
                     None => {

@@ -1,4 +1,6 @@
 
+use std::io::Write;
+
 use crate::error::Error;
 use crate::system::System;
 use crate::devices::{Address, Debuggable, TransmutableBox};
@@ -55,6 +57,7 @@ impl Debugger {
 
         loop {
             let mut buffer = String::new();
+            std::io::stdout().write_all(b"> ");
             std::io::stdin().read_line(&mut buffer).unwrap();
             let args: Vec<&str> = buffer.split_whitespace().collect();
             match self.run_debugger_command(system, debug_obj, &args) {
@@ -83,14 +86,14 @@ impl Debugger {
                     println!("Breakpoint set for {:08x}", addr);
                 }
             },
-            "c" | "continue" => {
-                if args.len() > 1 {
-                    self.repeat = u32::from_str_radix(args[1], 10).map_err(|_| Error::new("Unable to parse repeat number"))?;
-                    self.last_command = Some("c".to_string());
+            "r" | "remove" => {
+                if args.len() != 2 {
+                    println!("Usage: breakpoint <addr>");
+                } else {
+                    let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse breakpoint address"))?;
+                    debug_obj.remove_breakpoint(addr as Address);
+                    println!("Breakpoint removed for {:08x}", addr);
                 }
-
-                system.disable_debugging();
-                return Ok(true);
             },
             "d" | "dump" => {
                 if args.len() > 1 {
@@ -104,7 +107,13 @@ impl Debugger {
             "dis" | "disassemble" => {
                 debug_obj.print_disassembly(0, 0);
             },
+            "c" | "continue" => {
+                self.check_repeat_arg(args)?;
+                system.disable_debugging();
+                return Ok(true);
+            },
             "s" | "step" => {
+                self.check_repeat_arg(args)?;
                 return Ok(true);
             },
             //"ds" | "stack" | "dumpstack" => {
@@ -124,6 +133,14 @@ impl Debugger {
             },
         }
         Ok(false)
+    }
+
+    fn check_repeat_arg(&mut self, args: &[&str]) -> Result<(), Error> {
+        if args.len() > 1 {
+            self.repeat = u32::from_str_radix(args[1], 10).map_err(|_| Error::new("Unable to parse repeat number"))?;
+            self.last_command = Some("c".to_string());
+        }
+        Ok(())
     }
 }
 

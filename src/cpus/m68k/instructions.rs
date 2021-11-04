@@ -181,9 +181,9 @@ pub enum Instruction {
     RTS,
     RTD(i16),
 
-    SBCD(Target, Target),
     Scc(Condition, Target),
     STOP(u16),
+    SBCD(Target, Target),
     SUB(Target, Target, Size),
     SUBA(Target, Register, Size),
     SUBX(Target, Target, Size),

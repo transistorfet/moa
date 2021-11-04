@@ -531,7 +531,7 @@ mod execute_tests {
     use crate::devices::{Address, Addressable, Steppable, wrap_transmutable};
 
     use crate::cpus::m68k::{M68k, M68kType};
-    use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, ShiftDirection};
+    use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, ShiftDirection, Condition};
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
@@ -553,6 +553,7 @@ mod execute_tests {
         };
         let mut cpu = M68k::new(cputype, 10_000_000, port);
         cpu.step(&system).unwrap();
+        cpu.decoder.init(cpu.state.pc);
         assert_eq!(cpu.state.pc, INIT_ADDR as u32);
         assert_eq!(cpu.state.msp, INIT_STACK as u32);
         assert_eq!(cpu.decoder.instruction, Instruction::NOP);
@@ -615,6 +616,39 @@ mod execute_tests {
         cpu.execute_current(&system).unwrap();
         assert_eq!(cpu.state, expected_state);
     }
+
+    #[test]
+    fn instruction_blt() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x20;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x30), Target::DirectDReg(0), Size::Byte);
+        cpu.execute_current(&system).unwrap();
+        cpu.decoder.instruction = Instruction::Bcc(Condition::LessThan, 8);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.pc = expected_state.pc + 8 + 2;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+    #[test]
+    fn instruction_blt_not() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x30;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x20), Target::DirectDReg(0), Size::Byte);
+        cpu.execute_current(&system).unwrap();
+        cpu.decoder.instruction = Instruction::Bcc(Condition::LessThan, 8);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.pc = expected_state.pc + 8 + 2;
+
+        cpu.execute_current(&system).unwrap();
+        assert_ne!(cpu.state, expected_state);
+    }
+
 
     #[test]
     fn instruction_cmpi_less() {

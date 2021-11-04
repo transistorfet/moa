@@ -97,6 +97,7 @@ impl M68k {
         //}
 
         self.check_pending_interrupts(system)?;
+        self.check_breakpoints(system);
         Ok(())
     }
 
@@ -129,7 +130,7 @@ impl M68k {
     }
 
     pub fn exception(&mut self, system: &System, number: u8, is_interrupt: bool) -> Result<(), Error> {
-        debug!("{}: raising exception {}", DEV_NAME, number);
+        info!("{}: raising exception {}", DEV_NAME, number);
         let offset = (number as u16) << 2;
         if self.cputype >= M68kType::MC68010 {
             self.push_word(system, offset)?;
@@ -150,8 +151,6 @@ impl M68k {
     }
 
     pub fn decode_next(&mut self, system: &System) -> Result<(), Error> {
-        self.check_breakpoints(system);
-
         self.timer.decode.start();
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
         self.timer.decode.end();
@@ -161,12 +160,15 @@ impl M68k {
         }
 
         self.state.pc = self.decoder.end;
+
         Ok(())
     }
 
     pub fn execute_current(&mut self, system: &System) -> Result<(), Error> {
         self.timer.execute.start();
         match self.decoder.instruction {
+            //Instruction::ABCD(Target) => {
+            //},
             Instruction::ADD(src, dest, size) => {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, size)?;
@@ -175,11 +177,13 @@ impl M68k {
                 self.set_target_value(system, dest, result, size)?;
             },
             Instruction::ADDA(src, dest, size) => {
-                let value = self.get_target_value(system, src, size)?;
+                let value = sign_extend_to_long(self.get_target_value(system, src, size)?, size) as u32;
                 let existing = *self.get_a_reg_mut(dest);
-                let (result, carry) = overflowing_add_sized(existing, value, Size::Long);
+                let (result, _) = overflowing_add_sized(existing, value, Size::Long);
                 *self.get_a_reg_mut(dest) = result;
             },
+            //Instruction::ADDX(Target) => {
+            //},
             Instruction::AND(src, dest, size) => {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, size)?;
@@ -188,7 +192,7 @@ impl M68k {
                 self.set_logic_flags(result, size);
             },
             Instruction::ANDtoCCR(value) => {
-                self.state.sr = self.state.sr & (value as u16);
+                self.state.sr = (self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) & (value as u16));
             },
             Instruction::ANDtoSR(value) => {
                 self.require_supervisor()?;
@@ -226,31 +230,31 @@ impl M68k {
                 self.debugger.stack_tracer.push_return(sp);
                 self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
             },
-            Instruction::BTST(bitnum, target, size) => {
-                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
-                let value = self.get_target_value(system, target, size)?;
-                self.set_bit_test_flags(value, bitnum, size);
-            },
             Instruction::BCHG(bitnum, target, size) => {
-                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)? % get_bit_op_max(size);
                 let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = (value & !mask) | (!(value & mask) & mask);
                 self.set_target_value(system, target, value, size)?;
             },
             Instruction::BCLR(bitnum, target, size) => {
-                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)? % get_bit_op_max(size);
                 let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = value & !mask;
                 self.set_target_value(system, target, value, size)?;
             },
             Instruction::BSET(bitnum, target, size) => {
-                let bitnum = self.get_target_value(system, bitnum, Size::Byte)?;
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)? % get_bit_op_max(size);
                 let mut value = self.get_target_value(system, target, size)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = value | mask;
                 self.set_target_value(system, target, value, size)?;
+            },
+            Instruction::BTST(bitnum, target, size) => {
+                let bitnum = self.get_target_value(system, bitnum, Size::Byte)? % get_bit_op_max(size);
+                let value = self.get_target_value(system, target, size)?;
+                self.set_bit_test_flags(value, bitnum, size);
             },
             Instruction::BFCHG(target, offset, width) => {
                 let (offset, width) = self.get_bit_field_args(offset, width);
@@ -310,6 +314,8 @@ impl M68k {
                 self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
             },
             //Instruction::BKPT(u8) => {
+            //},
+            //Instruction::CHK(Target, Size) => {
             //},
             Instruction::CLR(target, size) => {
                 self.set_target_value(system, target, 0, size)?;
@@ -396,18 +402,18 @@ impl M68k {
                 self.set_logic_flags(result, size);
             },
             Instruction::EORtoCCR(value) => {
-                self.state.sr = self.state.sr ^ (value as u16);
+                self.state.sr = (self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) ^ (value as u16));
             },
             Instruction::EORtoSR(value) => {
                 self.require_supervisor()?;
                 self.state.sr = self.state.sr ^ value;
             },
-            //Instruction::EXG(target1, target2) => {
-            //    let value1 = self.get_target_value(system, target1, Size::Long)?;
-            //    let value2 = self.get_target_value(system, target2, Size::Long)?;
-            //    self.set_target_value(system, target1, value2, Size::Long)?;
-            //    self.set_target_value(system, target2, value1, Size::Long)?;
-            //},
+            Instruction::EXG(target1, target2) => {
+                let value1 = self.get_target_value(system, target1, Size::Long)?;
+                let value2 = self.get_target_value(system, target2, Size::Long)?;
+                self.set_target_value(system, target1, value2, Size::Long)?;
+                self.set_target_value(system, target2, value1, Size::Long)?;
+            },
             Instruction::EXT(reg, from_size, to_size) => {
                 let input = self.state.d_reg[reg as usize];
                 let result = match (from_size, to_size) {
@@ -494,20 +500,22 @@ impl M68k {
                     },
                 }
             },
+            Instruction::MOVEM(target, size, dir, mask) => {
+                self.execute_movem(system, target, size, dir, mask)?;
+            },
+            //Instruction::MOVEP(Register, Target, Size, Direction) => {
+            //},
+            Instruction::MOVEQ(data, reg) => {
+                let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
+                self.state.d_reg[reg as usize] = value;
+                self.set_logic_flags(value, Size::Long);
+            },
             Instruction::MOVEUSP(target, dir) => {
                 self.require_supervisor()?;
                 match dir {
                     Direction::ToTarget => self.set_target_value(system, target, self.state.usp, Size::Long)?,
                     Direction::FromTarget => { self.state.usp = self.get_target_value(system, target, Size::Long)?; },
                 }
-            },
-            Instruction::MOVEM(target, size, dir, mask) => {
-                self.execute_movem(system, target, size, dir, mask)?;
-            },
-            Instruction::MOVEQ(data, reg) => {
-                let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
-                self.state.d_reg[reg as usize] = value;
-                self.set_logic_flags(value, Size::Long);
             },
             Instruction::MULW(src, dest, sign) => {
                 let value = self.get_target_value(system, src, Size::Word)?;
@@ -559,7 +567,7 @@ impl M68k {
                 self.set_logic_flags(result, size);
             },
             Instruction::ORtoCCR(value) => {
-                self.state.sr = self.state.sr | (value as u16);
+                self.state.sr = (self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) | (value as u16));
             },
             Instruction::ORtoSR(value) => {
                 self.require_supervisor()?;
@@ -611,6 +619,8 @@ impl M68k {
                 self.debugger.stack_tracer.pop_return();
                 self.state.pc = self.pop_long(system)?;
             },
+            //Instruction::RTD(i16) => {
+            //},
             Instruction::Scc(cond, target) => {
                 let condition_true = self.get_current_condition(cond);
                 if condition_true {
@@ -624,6 +634,8 @@ impl M68k {
                 self.state.sr = flags;
                 self.state.status = Status::Stopped;
             },
+            //Instruction::SBCD(Target) => {
+            //},
             Instruction::SUB(src, dest, size) => {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, size)?;
@@ -632,11 +644,13 @@ impl M68k {
                 self.set_target_value(system, dest, result, size)?;
             },
             Instruction::SUBA(src, dest, size) => {
-                let value = self.get_target_value(system, src, size)?;
+                let value = sign_extend_to_long(self.get_target_value(system, src, size)?, size) as u32;
                 let existing = *self.get_a_reg_mut(dest);
-                let (result, carry) = overflowing_sub_sized(existing, value, size);
+                let (result, _) = overflowing_sub_sized(existing, value, Size::Long);
                 *self.get_a_reg_mut(dest) = result;
             },
+            //Instruction::SUBX(Target) => {
+            //},
             Instruction::SWAP(reg) => {
                 let value = self.state.d_reg[reg as usize];
                 self.state.d_reg[reg as usize] = ((value & 0x0000FFFF) << 16) | ((value & 0xFFFF0000) >> 16);
@@ -1153,6 +1167,14 @@ fn get_msb_mask(value: u32, size: Size) -> u32 {
         Size::Byte => value & 0x00000080,
         Size::Word => value & 0x00008000,
         Size::Long => value & 0x80000000,
+    }
+}
+
+fn get_bit_op_max(size: Size) -> u32 {
+    match size {
+        Size::Byte => 8,
+        Size::Long => 32,
+        Size::Word => panic!("bit ops cannot be word size"),
     }
 }
 
