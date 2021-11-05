@@ -589,7 +589,68 @@ mod execute_tests {
     }
 
     #[test]
-    fn instruction_cmpi_equal() {
+    fn instruction_add_no_overflow() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x00;
+        cpu.decoder.instruction = Instruction::ADD(Target::Immediate(0x7f), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.d_reg[0] = 0x7f;
+        expected_state.sr = 0x2700;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+    #[test]
+    fn instruction_add_no_overflow_negative() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x01;
+        cpu.decoder.instruction = Instruction::ADD(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.d_reg[0] = 0x81;
+        expected_state.sr = 0x2708;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+    #[test]
+    fn instruction_add_overflow() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x01;
+        cpu.decoder.instruction = Instruction::ADD(Target::Immediate(0x7f), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.d_reg[0] = 0x80;
+        expected_state.sr = 0x270A;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+    #[test]
+    fn instruction_add_carry() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x80;
+        cpu.decoder.instruction = Instruction::ADD(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.d_reg[0] = 0x00;
+        expected_state.sr = 0x2717;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+
+    #[test]
+    fn instruction_cmp_equal() {
         let (mut cpu, system) = init_test(M68kType::MC68010);
 
         let value = 0x20;
@@ -604,7 +665,7 @@ mod execute_tests {
     }
 
     #[test]
-    fn instruction_cmpi_greater() {
+    fn instruction_cmp_greater_than() {
         let (mut cpu, system) = init_test(M68kType::MC68010);
 
         cpu.state.d_reg[0] = 0x20;
@@ -616,6 +677,108 @@ mod execute_tests {
         cpu.execute_current(&system).unwrap();
         assert_eq!(cpu.state, expected_state);
     }
+
+    #[test]
+    fn instruction_cmp_less_than() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x20;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x10), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.sr = 0x2700;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+    #[test]
+    fn instruction_cmp_no_overflow() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x00;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x7f), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.sr = 0x2709;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+    #[test]
+    fn instruction_cmp_no_overflow_2() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x00;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x8001), Target::DirectDReg(0), Size::Word);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.sr = 0x2701;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+
+    #[test]
+    fn instruction_cmp_overflow() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x00;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.sr = 0x270B;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+    #[test]
+    fn instruction_cmp_overflow_2() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x01;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x8001), Target::DirectDReg(0), Size::Word);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.sr = 0x270B;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+
+    #[test]
+    fn instruction_cmp_no_carry() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0xFF;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x01), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.sr = 0x2708;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+    #[test]
+    fn instruction_cmp_carry() {
+        let (mut cpu, system) = init_test(M68kType::MC68010);
+
+        cpu.state.d_reg[0] = 0x01;
+        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0xFF), Target::DirectDReg(0), Size::Byte);
+
+        let mut expected_state = cpu.state.clone();
+        expected_state.sr = 0x2701;
+
+        cpu.execute_current(&system).unwrap();
+        assert_eq!(cpu.state, expected_state);
+    }
+
+
 
     #[test]
     fn instruction_blt() {
@@ -649,20 +812,6 @@ mod execute_tests {
         assert_ne!(cpu.state, expected_state);
     }
 
-
-    #[test]
-    fn instruction_cmpi_less() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x20;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x10), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2700;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
 
     #[test]
     fn instruction_andi_sr() {
@@ -855,7 +1004,7 @@ mod execute_tests {
         cpu.decoder.instruction = Instruction::NEG(Target::DirectDReg(0), Size::Word);
 
         let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2709;
+        expected_state.sr = 0x2719;
         expected_state.d_reg[0] = 0x0000FF80;
 
         cpu.execute_current(&system).unwrap();

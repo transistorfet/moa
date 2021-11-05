@@ -173,7 +173,9 @@ impl M68k {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, size)?;
                 let (result, carry) = overflowing_add_sized(existing, value, size);
-                self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size));
+                let (_, overflow) = overflowing_add_signed_sized(existing, value, size);
+                self.set_compare_flags(result, size, carry, overflow);
+                self.set_flag(Flags::Extend, carry);
                 self.set_target_value(system, dest, result, size)?;
             },
             Instruction::ADDA(src, dest, size) => {
@@ -326,13 +328,15 @@ impl M68k {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, size)?;
                 let (result, carry) = overflowing_sub_sized(existing, value, size);
-                self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size));
+                let (_, overflow) = overflowing_add_signed_sized(existing, value, size);
+                self.set_compare_flags(result, size, carry, overflow);
             },
             Instruction::CMPA(src, reg, size) => {
                 let value = sign_extend_to_long(self.get_target_value(system, src, size)?, size) as u32;
                 let existing = *self.get_a_reg_mut(reg);
                 let (result, carry) = overflowing_sub_sized(existing, value, Size::Long);
-                self.set_compare_flags(result, Size::Long, carry, get_overflow(existing, value, result, Size::Long));
+                let (_, overflow) = overflowing_add_signed_sized(existing, value, size);
+                self.set_compare_flags(result, Size::Long, carry, overflow);
             },
             Instruction::DBcc(cond, reg, offset) => {
                 let condition_true = self.get_current_condition(cond);
@@ -546,9 +550,10 @@ impl M68k {
             //},
             Instruction::NEG(target, size) => {
                 let original = self.get_target_value(system, target, size)?;
-                let (value, _) = (0 as u32).overflowing_sub(original);
-                self.set_target_value(system, target, value, size)?;
-                self.set_compare_flags(value, size, value != 0, get_overflow(0, original, value, size));
+                let (result, overflow) = overflowing_sub_signed_sized(0, original, size);
+                self.set_target_value(system, target, result, size)?;
+                self.set_compare_flags(result, size, result != 0, overflow);
+                self.set_flag(Flags::Extend, self.get_flag(Flags::Carry));
             },
             //Instruction::NEGX(Target, Size) => {
             //},
@@ -640,7 +645,9 @@ impl M68k {
                 let value = self.get_target_value(system, src, size)?;
                 let existing = self.get_target_value(system, dest, size)?;
                 let (result, carry) = overflowing_sub_sized(existing, value, size);
-                self.set_compare_flags(result, size, carry, get_overflow(existing, value, result, size));
+                let (_, overflow) = overflowing_add_signed_sized(existing, value, size);
+                self.set_compare_flags(result, size, carry, overflow);
+                self.set_flag(Flags::Extend, carry);
                 self.set_target_value(system, dest, result, size)?;
             },
             Instruction::SUBA(src, dest, size) => {
@@ -1093,6 +1100,40 @@ fn overflowing_sub_sized(operand1: u32, operand2: u32, size: Size) -> (u32, bool
     }
 }
 
+fn overflowing_add_signed_sized(operand1: u32, operand2: u32, size: Size) -> (u32, bool) {
+    match size {
+        Size::Byte => {
+            let (result, overflow) = (operand1 as i8).overflowing_add(operand2 as i8);
+            (result as u32, overflow)
+        },
+        Size::Word => {
+            let (result, overflow) = (operand1 as i16).overflowing_add(operand2 as i16);
+            (result as u32, overflow)
+        },
+        Size::Long => {
+            let (result, overflow) = (operand1 as i32).overflowing_add(operand2 as i32);
+            (result as u32, overflow)
+        },
+    }
+}
+
+fn overflowing_sub_signed_sized(operand1: u32, operand2: u32, size: Size) -> (u32, bool) {
+    match size {
+        Size::Byte => {
+            let (result, overflow) = (operand1 as i8).overflowing_sub(operand2 as i8);
+            (result as u32, overflow)
+        },
+        Size::Word => {
+            let (result, overflow) = (operand1 as i16).overflowing_sub(operand2 as i16);
+            (result as u32, overflow)
+        },
+        Size::Long => {
+            let (result, overflow) = (operand1 as i32).overflowing_sub(operand2 as i32);
+            (result as u32, overflow)
+        },
+    }
+}
+
 fn shift_operation(value: u32, size: Size, dir: ShiftDirection, arithmetic: bool) -> (u32, bool) {
     match dir {
         ShiftDirection::Left => {
@@ -1151,7 +1192,11 @@ fn get_overflow(operand1: u32, operand2: u32, result: u32, size: Size) -> bool {
     let msb2 = get_msb(operand2, size);
     let msb_res = get_msb(result, size);
 
-    msb1 && msb2 && !msb_res
+    (msb1 && msb2 && !msb_res) || (!msb1 && !msb2 && msb_res)
+}
+
+fn get_twos_complement(value: u32, size: Size) -> u32 {
+    get_value_sized(!value + 1, size)
 }
 
 fn get_msb(value: u32, size: Size) -> bool {
