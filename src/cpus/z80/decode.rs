@@ -67,6 +67,7 @@ pub enum Instruction {
     ADDhl(RegisterPair),
     AND(Target),
     CP(Target),
+    CPL,
     NEG,
     OR(Target),
     SBCa(Target),
@@ -125,7 +126,6 @@ pub enum Instruction {
     RST(u8),
 
     CCF,
-    CPL,
     DAA,
     RLA,
     RLCA,
@@ -479,12 +479,17 @@ impl Z80Decoder {
         Ok(word)
     }
 
-    pub fn dump_decoded(&mut self, memory: &mut dyn Addressable) {
-        let ins_data: Result<String, Error> =
+    pub fn format_instruction_bytes(&mut self, memory: &mut dyn Addressable) -> String {
+        let ins_data: String =
             (0..(self.end - self.start)).map(|offset|
-                Ok(format!("{:02x} ", memory.read_u8((self.start + offset) as Address).unwrap()))
+                format!("{:02x} ", memory.read_u8((self.start + offset) as Address).unwrap())
             ).collect();
-        println!("{:#06x}: {}\n\t{:?}\n", self.start, ins_data.unwrap(), self.instruction);
+        ins_data
+    }
+
+    pub fn dump_decoded(&mut self, memory: &mut dyn Addressable) {
+        let ins_data = self.format_instruction_bytes(memory);
+        println!("{:#06x}: {}\n\t{:?}\n", self.start, ins_data, self.instruction);
     }
 }
 

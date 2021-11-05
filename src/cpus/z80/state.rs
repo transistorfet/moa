@@ -50,6 +50,7 @@ pub enum Register {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Z80State {
     pub status: Status,
+    pub interrupts_enabled: bool,
 
     pub pc: u16,
     pub sp: u16,
@@ -57,7 +58,7 @@ pub struct Z80State {
     pub iy: u16,
 
     pub reg: [u8; 8],
-    pub alt_reg: [u8; 8],
+    pub shadow_reg: [u8; 8],
 
     pub i: u8,
     pub r: u8,
@@ -67,6 +68,7 @@ impl Z80State {
     pub fn new() -> Self {
         Self {
             status: Status::Init,
+            interrupts_enabled: false,
 
             pc: 0,
             sp: 0,
@@ -74,7 +76,7 @@ impl Z80State {
             iy: 0,
 
             reg: [0; 8],
-            alt_reg: [0; 8],
+            shadow_reg: [0; 8],
 
             i: 0,
             r: 0,
@@ -110,23 +112,22 @@ impl Z80 {
         //self.debugger = M68kDebugger::new();
     }
 
-    /*
     pub fn dump_state(&mut self, system: &System) {
         println!("Status: {:?}", self.state.status);
-        println!("PC: {:#010x}", self.state.pc);
-        println!("SR: {:#06x}", self.state.sr);
-        for i in 0..7 {
-            println!("D{}: {:#010x}        A{}:  {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
-        }
-        println!("D7: {:#010x}", self.state.d_reg[7]);
-        println!("MSP: {:#010x}", self.state.msp);
-        println!("USP: {:#010x}", self.state.usp);
+        println!("PC: {:#06x}", self.state.pc);
+        println!("SP: {:#06x}", self.state.sp);
+        println!("IX: {:#06x}", self.state.ix);
+        println!("IY: {:#06x}", self.state.iy);
 
-        println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
+        println!("A: {:#04x}        F:  {:#04x}", self.state.reg[Register::A as usize], self.state.reg[Register::F as usize]);
+        println!("B: {:#04x}        C:  {:#04x}", self.state.reg[Register::B as usize], self.state.reg[Register::C as usize]);
+        println!("D: {:#04x}        E:  {:#04x}", self.state.reg[Register::D as usize], self.state.reg[Register::B as usize]);
+        println!("H: {:#04x}        L:  {:#04x}", self.state.reg[Register::H as usize], self.state.reg[Register::L as usize]);
+
+        println!("Current Instruction: {} {:?}", self.decoder.format_instruction_bytes(&mut self.port), self.decoder.instruction);
         println!("");
-        self.port.dump_memory(self.state.msp as Address, 0x40);
+        self.port.dump_memory(self.state.sp as Address, 0x40);
         println!("");
     }
-    */
 }
 

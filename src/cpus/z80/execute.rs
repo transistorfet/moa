@@ -3,8 +3,9 @@ use crate::system::System;
 use crate::error::{ErrorType, Error};
 use crate::devices::{ClockElapsed, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
-use super::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair};
+use super::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, Size};
 use super::state::{Z80, Status, Flags, Register};
+
 
 impl Steppable for Z80 {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
@@ -19,6 +20,35 @@ impl Steppable for Z80 {
 
 impl Interruptable for Z80 { }
 
+impl Debuggable for Z80 {
+    fn add_breakpoint(&mut self, addr: Address) {
+        //self.debugger.breakpoints.push(addr as u32);
+    }
+
+    fn remove_breakpoint(&mut self, addr: Address) {
+        //if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == addr as u32) {
+        //    self.debugger.breakpoints.remove(index);
+        //}
+    }
+
+    fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
+        //self.decoder.decode_at(&mut self.port, self.state.pc)?;
+        //self.decoder.dump_decoded(&mut self.port);
+        self.dump_state(system);
+        Ok(())
+    }
+
+    fn print_disassembly(&mut self, addr: Address, count: usize) {
+        //let mut decoder = M68kDecoder::new(self.cputype, 0);
+        //decoder.dump_disassembly(&mut self.port, self.state.pc, 0x1000);
+    }
+
+    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
+        Ok(false)
+    }
+}
+
+
 impl Transmutable for Z80 {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
         Some(self)
@@ -28,9 +58,9 @@ impl Transmutable for Z80 {
         Some(self)
     }
 
-    //fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
-    //    Some(self)
-    //}
+    fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
+        Some(self)
+    }
 }
 
 
@@ -83,7 +113,7 @@ impl Z80 {
         //self.timer.decode.end();
 
         //if self.debugger.use_tracing {
-            self.decoder.dump_decoded(&mut self.port);
+            self.dump_state(system);
         //}
 
         self.state.pc = self.decoder.end;
@@ -96,14 +126,39 @@ impl Z80 {
             //},
             //Instruction::ADChl(regpair) => {
             //},
-            //Instruction::ADDa(target) => {
-            //},
-            //Instruction::ADDhl(regpair) => {
-            //},
-            //Instruction::AND(target) => {
-            //},
-            //Instruction::CP(target) => {
-            //},
+            Instruction::ADDa(target) => {
+                let src = self.get_target_value(target)?;
+                let acc = self.get_register_value(Register::A);
+                let (result, carry) = acc.overflowing_add(src);
+                self.set_add_flags(result as u16, Size::Byte, carry);
+                self.set_register_value(Register::A, result);
+            },
+            Instruction::ADDhl(regpair) => {
+                let src = self.get_register_pair_value(regpair);
+                let hl = self.get_register_pair_value(RegisterPair::HL);
+                let (result, carry) = hl.overflowing_add(src);
+                self.set_add_flags(result as u16, Size::Word, carry);
+                self.set_register_pair_value(RegisterPair::HL, result);
+            },
+            Instruction::AND(target) => {
+                let acc = self.get_register_value(Register::A);
+                let value = self.get_target_value(target)?;
+                let result = acc & value;
+                self.set_register_value(Register::A, result);
+                self.set_logic_op_flags(result as u16, Size::Byte, true);
+            },
+            Instruction::CP(target) => {
+                let src = self.get_target_value(target)?;
+                let acc = self.get_register_value(Register::A);
+                let (result, carry) = acc.overflowing_sub(src);
+                self.set_sub_flags(result as u16, Size::Byte, carry);
+            },
+            Instruction::CPL => {
+                let value = self.get_register_value(Register::A);
+                self.set_register_value(Register::A, !value);
+                self.set_flag(Flags::HalfCarry, true);
+                self.set_flag(Flags::AddSubtract, true);
+            },
             //Instruction::NEG => {
             //},
             Instruction::OR(target) => {
@@ -111,16 +166,26 @@ impl Z80 {
                 let value = self.get_target_value(target)?;
                 let result = acc | value;
                 self.set_register_value(Register::A, result);
-                self.set_op_flags(result, false);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
             },
             //Instruction::SBCa(target) => {
             //},
             //Instruction::SBChl(regpair) => {
             //},
-            //Instruction::SUB(target) => {
-            //},
-            //Instruction::XOR(target) => {
-            //},
+            Instruction::SUB(target) => {
+                let src = self.get_target_value(target)?;
+                let acc = self.get_register_value(Register::A);
+                let (result, carry) = acc.overflowing_sub(src);
+                self.set_sub_flags(result as u16, Size::Byte, carry);
+                self.set_register_value(Register::A, result);
+            },
+            Instruction::XOR(target) => {
+                let acc = self.get_register_value(Register::A);
+                let value = self.get_target_value(target)?;
+                let result = acc ^ value;
+                self.set_register_value(Register::A, result);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+            },
 
             //Instruction::BIT(u8, target) => {
             //},
@@ -146,25 +211,55 @@ impl Z80 {
             //},
 
             Instruction::DEC8(target) => {
-                let (result, overflow) = self.get_target_value(target)?.overflowing_sub(1);
-                self.set_op_flags(result, false);
-                self.set_target_value(target, result);
+                let value = self.get_target_value(target)?;
+                let (result, carry) = value.overflowing_sub(1);
+                self.set_sub_flags(result as u16, Size::Byte, carry);
+                self.set_target_value(target, result)?;
             },
-            //Instruction::DEC16(regpair) => {
-            //},
-            //Instruction::INC8(target) => {
-            //},
-            //Instruction::INC16(regpair) => {
-            //},
+            Instruction::DEC16(regpair) => {
+                let value = self.get_register_pair_value(regpair);
+                let (result, carry) = value.overflowing_sub(1);
+                self.set_sub_flags(result, Size::Word, carry);
+                self.set_register_pair_value(regpair, result);
+            },
+            Instruction::INC8(target) => {
+                let value = self.get_target_value(target)?;
+                let (result, carry) = value.overflowing_add(1);
+                self.set_add_flags(result as u16, Size::Byte, carry);
+                self.set_target_value(target, result)?;
+            },
+            Instruction::INC16(regpair) => {
+                let value = self.get_register_pair_value(regpair);
+                let (result, carry) = value.overflowing_add(1);
+                self.set_add_flags(result, Size::Word, carry);
+                self.set_register_pair_value(regpair, result);
+            },
 
-            //Instruction::EXX => {
-            //},
-            //Instruction::EXafaf => {
-            //},
-            //Instruction::EXhlsp => {
-            //},
-            //Instruction::EXhlde => {
-            //},
+            Instruction::EXX => {
+                for i in 0..6 {
+                    let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
+                    self.state.reg[i] = shadow;
+                    self.state.shadow_reg[i] = normal;
+                }
+            },
+            Instruction::EXafaf => {
+                for i in 6..8 {
+                    let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
+                    self.state.reg[i] = shadow;
+                    self.state.shadow_reg[i] = normal;
+                }
+            },
+            Instruction::EXhlsp => {
+                let (sp_addr, hl) = (self.get_register_pair_value(RegisterPair::SP), self.get_register_pair_value(RegisterPair::HL));
+                let sp = self.port.read_leu16(sp_addr as Address)?;
+                self.set_register_pair_value(RegisterPair::HL, sp);
+                self.port.write_leu16(sp_addr as Address, hl)?;
+            },
+            Instruction::EXhlde => {
+                let (hl, de) = (self.get_register_pair_value(RegisterPair::HL), self.get_register_pair_value(RegisterPair::DE));
+                self.set_register_pair_value(RegisterPair::DE, hl);
+                self.set_register_pair_value(RegisterPair::HL, de);
+            },
             Instruction::LD(dest, src) => {
                 let src_value = self.get_load_target_value(src)?;
                 self.set_load_target_value(dest, src_value)?;
@@ -199,13 +294,23 @@ impl Z80 {
                     self.state.pc = addr;
                 }
             },
-            //Instruction::DJNZ(i8) => {
-            //},
+            Instruction::DJNZ(offset) => {
+                let value = self.get_register_value(Register::B);
+                let result = value.wrapping_sub(1);
+                self.set_register_value(Register::B, result);
+
+                if result != 0 {
+                    self.state.pc = ((self.state.pc as i16) + (offset as i16)) as u16;
+                }
+            },
             Instruction::JP(addr) => {
                 self.state.pc = addr;
             },
-            //Instruction::JPIndirectHL => {
-            //},
+            Instruction::JPIndirectHL => {
+                let hl = self.get_register_pair_value(RegisterPair::HL);
+                let addr = self.port.read_leu16(hl as Address)?;
+                self.state.pc = addr;
+            },
             Instruction::JPcc(cond, addr) => {
                 if self.get_current_condition(cond) {
                     self.state.pc = addr;
@@ -226,25 +331,32 @@ impl Z80 {
             //},
             //Instruction::RETN => {
             //},
-            //Instruction::RETcc(cond) => {
-            //},
+            Instruction::RETcc(cond) => {
+                if self.get_current_condition(cond) {
+                    self.state.pc = self.pop_word()?;
+                }
+            },
 
-            //Instruction::DI => {
-            //},
-            //Instruction::EI => {
-            //},
+            Instruction::DI => {
+                self.state.interrupts_enabled = false;
+            },
+            Instruction::EI => {
+                self.state.interrupts_enabled = true;
+            },
             //Instruction::IM(u8) => {
             //},
             Instruction::NOP => { },
-            //Instruction::HALT => {
-            //},
-            //Instruction::RST(u8) => {
-            //},
+            Instruction::HALT => {
+                self.state.status = Status::Halted;
+            },
+            Instruction::RST(addr) => {
+                self.push_word(self.decoder.end)?;
+                self.state.pc = addr as u16;
+            },
 
-            //Instruction::CCF => {
-            //},
-            //Instruction::CPL => {
-            //},
+            Instruction::CCF => {
+                self.set_flag(Flags::Carry, false);
+            },
             //Instruction::DAA => {
             //},
             //Instruction::RLA => {
@@ -259,8 +371,9 @@ impl Z80 {
             //},
             //Instruction::RLD => {
             //},
-            //Instruction::SCF => {
-            //},
+            Instruction::SCF => {
+                self.set_flag(Flags::Carry, true);
+            },
 
             //Instruction::CPD => {
             //},
@@ -460,17 +573,55 @@ impl Z80 {
         }
     }
 
-    fn set_op_flags(&mut self, value: u8, carry: bool) {
+    fn set_add_flags(&mut self, value: u16, size: Size, carry: bool) {
         let mut flags = 0;
 
+        if get_msb(value, size) {
+            flags |= Flags::Sign as u8;
+        }
         if value == 0 {
             flags |= Flags::Zero as u8;
         }
-        if (value as i8) < 0 {
-            flags |= Flags::Sign as u8;
+        if (value & 0x10) != 0 {
+            flags |= Flags::HalfCarry as u8;
         }
+        // TODO need overflow
         if carry {
             flags |= Flags::Carry as u8;
+        }
+        self.state.reg[Register::F as usize] = flags;
+    }
+
+    fn set_sub_flags(&mut self, value: u16, size: Size, carry: bool) {
+        let mut flags = Flags::AddSubtract as u8;
+
+        if get_msb(value, size) {
+            flags |= Flags::Sign as u8;
+        }
+        if value == 0 {
+            flags |= Flags::Zero as u8;
+        }
+        // TODO need overflow and half carry
+        if carry {
+            flags |= Flags::Carry as u8;
+        }
+        self.state.reg[Register::F as usize] = flags;
+    }
+
+    fn set_logic_op_flags(&mut self, value: u16, size: Size, half_carry: bool) {
+        let mut flags = 0;
+
+        if get_msb(value, size) {
+            flags |= Flags::Sign as u8;
+        }
+        if value == 0 {
+            flags |= Flags::Zero as u8;
+        }
+        if half_carry {
+            flags |= Flags::HalfCarry as u8;
+        }
+        if (value.count_ones() & 0x01) == 0 {
+            flags |= Flags::Parity as u8;
         }
         self.state.reg[Register::F as usize] = flags;
     }
@@ -485,5 +636,19 @@ impl Z80 {
         self.get_flags() & (flag as u8) != 0
     }
 
+    #[inline(always)]
+    fn set_flag(&mut self, flag: Flags, value: bool) {
+        self.state.reg[Register::F as usize] = self.state.reg[Register::F as usize] & !(flag as u8);
+        if value {
+            self.state.reg[Register::F as usize] |= flag as u8;
+        }
+    }
+}
+
+fn get_msb(value: u16, size: Size) -> bool {
+    match size {
+        Size::Byte => (value & 0x0080) != 0,
+        Size::Word => (value & 0x8000) != 0,
+    }
 }
 
