@@ -30,6 +30,22 @@ pub enum RegisterPair {
     HL,
     AF,
     SP,
+    IX,
+    IY,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum IndexRegister {
+    IX,
+    IY,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum IndexRegisterHalf {
+    IXH,
+    IXL,
+    IYH,
+    IYL,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -41,16 +57,20 @@ pub enum SpecialRegister {
 #[derive(Copy, Clone, Debug)]
 pub enum Target {
     DirectReg(Register),
+    DirectRegHalf(IndexRegisterHalf),
     IndirectReg(RegisterPair),
+    IndirectOffset(IndexRegister, i8),
     Immediate(u8),
 }
 
 #[derive(Copy, Clone, Debug)]
 pub enum LoadTarget {
     DirectRegByte(Register),
+    DirectRegHalfByte(IndexRegisterHalf),
     DirectRegWord(RegisterPair),
     IndirectRegByte(RegisterPair),
     IndirectRegWord(RegisterPair),
+    IndirectOffsetByte(IndexRegister, i8),
     DirectAltRegByte(Register),
     DirectSpecialRegByte(SpecialRegister),
     IndirectByte(u16),
@@ -59,98 +79,92 @@ pub enum LoadTarget {
     ImmediateWord(u16),
 }
 
+pub type OptionalSource = Option<(IndexRegister, i8)>;
+
 #[derive(Clone, Debug)]
 pub enum Instruction {
     ADCa(Target),
-    ADChl(RegisterPair),
+    ADC16(RegisterPair, RegisterPair),
     ADDa(Target),
-    ADDhl(RegisterPair),
+    ADD16(RegisterPair, RegisterPair),
     AND(Target),
-    CP(Target),
-    CPL,
-    NEG,
-    OR(Target),
-    SBCa(Target),
-    SBChl(RegisterPair),
-    SUB(Target),
-    XOR(Target),
-
     BIT(u8, Target),
-    RES(u8, Target),
-    RL(Target),
-    RLC(Target),
-    RR(Target),
-    RRC(Target),
-    SET(u8, Target),
-    SLA(Target),
-    SLL(Target),
-    SRA(Target),
-    SRL(Target),
-
-    DEC8(Target),
-    DEC16(RegisterPair),
-    INC8(Target),
-    INC16(RegisterPair),
-
-    EXX,
-    EXafaf,
-    EXhlsp,
-    EXhlde,
-    LD(LoadTarget, LoadTarget),
-    POP(RegisterPair),
-    PUSH(RegisterPair),
-
-    INx(u8),
-    INic(Register),
-    OUTx(u8),
-    OUTic(Register),
-
     CALL(u16),
     CALLcc(Condition, u16),
+    CCF,
+    CP(Target),
+    CPD,
+    CPDR,
+    CPI,
+    CPIR,
+    CPL,
+    DAA,
+    DEC16(RegisterPair),
+    DEC8(Target),
+    DI,
     DJNZ(i8),
+    EI,
+    EXX,
+    EXafaf,
+    EXhlde,
+    EXhlsp,
+    HALT,
+    IM(u8),
+    INC16(RegisterPair),
+    INC8(Target),
+    IND,
+    INDR,
+    INI,
+    INIR,
+    INic(Register),
+    INx(u8),
     JP(u16),
     JPIndirectHL,
     JPcc(Condition, u16),
     JR(i8),
     JRcc(Condition, i8),
-    RET,
-    RETI,
-    RETN,
-    RETcc(Condition),
-
-    DI,
-    EI,
-    IM(u8),
-    NOP,
-    HALT,
-    RST(u8),
-
-    CCF,
-    DAA,
-    RLA,
-    RLCA,
-    RRA,
-    RRCA,
-    RRD,
-    RLD,
-    SCF,
-
-    CPD,
-    CPDR,
-    CPI,
-    CPIR,
-    IND,
-    INDR,
-    INI,
-    INIR,
+    LD(LoadTarget, LoadTarget),
     LDD,
     LDDR,
     LDI,
     LDIR,
+    NEG,
+    NOP,
+    OR(Target),
     OTDR,
     OTIR,
     OUTD,
     OUTI,
+    OUTic(Register),
+    OUTx(u8),
+    POP(RegisterPair),
+    PUSH(RegisterPair),
+    RES(u8, Target, OptionalSource),
+    RET,
+    RETI,
+    RETN,
+    RETcc(Condition),
+    RL(Target, OptionalSource),
+    RLA,
+    RLC(Target, OptionalSource),
+    RLCA,
+    RLD,
+    RR(Target, OptionalSource),
+    RRA,
+    RRC(Target, OptionalSource),
+    RRCA,
+    RRD,
+    RST(u8),
+    SBCa(Target),
+    SBC16(RegisterPair, RegisterPair),
+    SCF,
+    SET(u8, Target, OptionalSource),
+    SLA(Target, OptionalSource),
+    SLL(Target, OptionalSource),
+    SRA(Target, OptionalSource),
+    SRL(Target, OptionalSource),
+    SUB(Target),
+    XOR(Target),
 }
 
 pub struct Z80Decoder {
@@ -206,7 +220,7 @@ impl Z80Decoder {
                             let data = self.read_instruction_word(memory)?;
                             Ok(Instruction::LD(LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins))), LoadTarget::ImmediateWord(data)))
                         } else {
-                            Ok(Instruction::ADDhl(get_register_pair(get_ins_p(ins))))
+                            Ok(Instruction::ADD16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
                         }
                     },
                     2 => {
@@ -216,7 +230,7 @@ impl Z80Decoder {
                                 true => LoadTarget::IndirectRegByte(RegisterPair::DE),
                             };
 
-                            match (ins & 0x08) != 0 {
+                            match get_ins_q(ins) != 0 {
                                 false => Ok(Instruction::LD(target, LoadTarget::DirectRegByte(Register::A))),
                                 true => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), target)),
                             }
@@ -224,8 +238,8 @@ impl Z80Decoder {
                             let addr = self.read_instruction_word(memory)?;
                             match (ins >> 3) & 0x03 {
                                 0 => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(RegisterPair::HL))),
-                                1 => Ok(Instruction::LD(LoadTarget::IndirectByte(addr), LoadTarget::DirectRegByte(Register::A))),
-                                2 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::HL), LoadTarget::IndirectWord(addr))),
+                                1 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::HL), LoadTarget::IndirectWord(addr))),
+                                2 => Ok(Instruction::LD(LoadTarget::IndirectByte(addr), LoadTarget::DirectRegByte(Register::A))),
                                 3 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), LoadTarget::IndirectByte(addr))),
                                 _ => panic!("InternalError: impossible value"),
                             }
@@ -333,9 +347,9 @@ impl Z80Decoder {
                                     let addr = self.read_instruction_word(memory)?;
                                     Ok(Instruction::CALL(addr))
                                 },
-                                1 => self.decode_prefix_dd(memory),
+                                1 => self.decode_prefix_dd_fd(memory, IndexRegister::IX),
                                 2 => self.decode_prefix_ed(memory),
-                                3 => self.decode_prefix_fd(memory),
+                                3 => self.decode_prefix_dd_fd(memory, IndexRegister::IY),
                                 _ => panic!("Undecoded Instruction"),
                             }
                         }
@@ -357,16 +371,35 @@ impl Z80Decoder {
     pub fn decode_prefix_cb(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
         let ins = self.read_instruction_byte(memory)?;
         match get_ins_x(ins) {
-            0 => Ok(get_rot_instruction(get_ins_y(ins), get_register(get_ins_z(ins)))),
+            0 => Ok(get_rot_instruction(get_ins_y(ins), get_register(get_ins_z(ins)), None)),
             1 => Ok(Instruction::BIT(get_ins_y(ins), get_register(get_ins_z(ins)))),
-            2 => Ok(Instruction::RES(get_ins_y(ins), get_register(get_ins_z(ins)))),
-            3 => Ok(Instruction::SET(get_ins_y(ins), get_register(get_ins_z(ins)))),
+            2 => Ok(Instruction::RES(get_ins_y(ins), get_register(get_ins_z(ins)), None)),
+            3 => Ok(Instruction::SET(get_ins_y(ins), get_register(get_ins_z(ins)), None)),
             _ => panic!("InternalError: impossible value"),
         }
     }
 
-    pub fn decode_prefix_dd(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
-        panic!("DD instructions unimplemented")
+    pub fn decode_sub_prefix_cb(&mut self, memory: &mut dyn Addressable, reg: IndexRegister) -> Result<Instruction, Error> {
+        let ins = self.read_instruction_byte(memory)?;
+        match get_ins_x(ins) {
+            0 => {
+                let opt_src = Some((reg, self.read_instruction_byte(memory)? as i8));
+                Ok(get_rot_instruction(get_ins_y(ins), get_register(get_ins_z(ins)), opt_src))
+            },
+            1 => {
+                let offset = self.read_instruction_byte(memory)? as i8;
+                Ok(Instruction::BIT(get_ins_y(ins), Target::IndirectOffset(reg, offset)))
+            },
+            2 => {
+                let opt_src = Some((reg, self.read_instruction_byte(memory)? as i8));
+                Ok(Instruction::RES(get_ins_y(ins), get_register(get_ins_z(ins)), opt_src))
+            },
+            3 => {
+                let opt_src = Some((reg, self.read_instruction_byte(memory)? as i8));
+                Ok(Instruction::SET(get_ins_y(ins), get_register(get_ins_z(ins)), opt_src))
+            },
+            _ => panic!("InternalError: impossible value"),
+        }
     }
 
     pub fn decode_prefix_ed(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
@@ -396,9 +429,9 @@ impl Z80Decoder {
                     },
                     2 => {
                         if get_ins_q(ins) == 0 {
-                            Ok(Instruction::SBChl(get_register_pair(get_ins_p(ins))))
+                            Ok(Instruction::SBC16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
                         } else {
-                            Ok(Instruction::ADChl(get_register_pair(get_ins_p(ins))))
+                            Ok(Instruction::ADC16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
                         }
                     },
                     3 => {
@@ -462,8 +495,94 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_prefix_fd(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
-        panic!("FD instructions unimplemented")
+    pub fn decode_prefix_dd_fd(&mut self, memory: &mut dyn Addressable, index_reg: IndexRegister) -> Result<Instruction, Error> {
+        let ins = self.read_instruction_byte(memory)?;
+
+        if ins == 0xCB {
+            return self.decode_sub_prefix_cb(memory, index_reg);
+        }
+
+        match get_ins_x(ins) {
+            0 => {
+                if (ins & 0x0F) == 9 {
+                    return Ok(Instruction::ADD16(RegisterPair::IX, get_register_pair_index(get_ins_p(ins), index_reg)));
+                }
+
+                match get_ins_p(ins) {
+                    2 => {
+                        match get_ins_z(ins) {
+                            1 => {
+                                let data = self.read_instruction_word(memory)?;
+                                Ok(Instruction::LD(LoadTarget::DirectRegWord(get_register_pair_from_index(index_reg)), LoadTarget::ImmediateWord(data)))
+                            },
+                            2 => {
+                                let addr = self.read_instruction_word(memory)?;
+                                let regpair = get_register_pair_from_index(index_reg);
+                                match get_ins_q(ins) != 0 {
+                                    false => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(regpair))),
+                                    true => Ok(Instruction::LD(LoadTarget::DirectRegWord(regpair), LoadTarget::IndirectWord(addr))),
+                                }
+                            },
+                            3 => {
+                                match get_ins_q(ins) != 0 {
+                                    false => Ok(Instruction::INC16(get_register_pair_from_index(index_reg))),
+                                    true => Ok(Instruction::DEC16(get_register_pair_from_index(index_reg))),
+                                }
+                            },
+                            4 => {
+                                let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
+                                Ok(Instruction::INC8(half_target))
+                            },
+                            5 => {
+                                let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
+                                Ok(Instruction::DEC8(half_target))
+                            },
+                            6 => {
+                                let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
+                                let data = self.read_instruction_byte(memory)?;
+                                Ok(Instruction::LD(to_load_target(half_target), LoadTarget::ImmediateByte(data)))
+                            },
+                            _ => Ok(Instruction::NOP),
+                        }
+                    },
+                    3 => {
+                        let offset = self.read_instruction_byte(memory)? as i8;
+                        match ins {
+                            0x34 => Ok(Instruction::INC8(Target::IndirectOffset(index_reg, offset))),
+                            0x35 => Ok(Instruction::DEC8(Target::IndirectOffset(index_reg, offset))),
+                            0x36 => Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), LoadTarget::ImmediateByte(self.read_instruction_byte(memory)?))),
+                            _ => Ok(Instruction::NOP),
+                        }
+                    },
+                    _ => Ok(Instruction::NOP),
+                }
+            },
+            1 => {
+                match get_ins_y(ins) {
+                    4 => {
+                        /*
+                        match get_ins_z(ins) {
+                            6 => {
+                                let offset = self.read_instruction_byte(memory)?;
+                                Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::H), LoadTarget::IndirectIndexByte(offset)))
+                            },
+                            _ => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::IXH), to_load_target(get_register(get_ins_z(ins)))))
+                        }
+                        */
+                        panic!("");
+                    },
+                    _ => panic!("InternalError: impossible value"),
+                }
+            },
+            2 => {
+panic!("");
+            },
+            3 => {
+
+panic!("");
+            },
+            _ => panic!("InternalError: impossible value"),
+        }
     }
 
 
@@ -507,16 +626,16 @@ fn get_alu_instruction(alu: u8, target: Target) -> Instruction {
     }
 }
 
-fn get_rot_instruction(rot: u8, target: Target) -> Instruction {
+fn get_rot_instruction(rot: u8, target: Target, opt_src: OptionalSource) -> Instruction {
     match rot {
-        0 => Instruction::RLC(target),
-        1 => Instruction::RRC(target),
-        2 => Instruction::RL(target),
-        3 => Instruction::RR(target),
-        4 => Instruction::SLA(target),
-        5 => Instruction::SRA(target),
-        6 => Instruction::SLL(target),
-        7 => Instruction::SRL(target),
+        0 => Instruction::RLC(target, opt_src),
+        1 => Instruction::RRC(target, opt_src),
+        2 => Instruction::RL(target, opt_src),
+        3 => Instruction::RR(target, opt_src),
+        4 => Instruction::SLA(target, opt_src),
+        5 => Instruction::SRA(target, opt_src),
+        6 => Instruction::SLL(target, opt_src),
+        7 => Instruction::SRL(target, opt_src),
         _ => panic!("InternalError: impossible value"),
     }
 }
@@ -538,7 +657,9 @@ fn get_register(reg: u8) -> Target {
 fn to_load_target(target: Target) -> LoadTarget {
     match target {
         Target::DirectReg(reg) => LoadTarget::DirectRegByte(reg),
+        Target::DirectRegHalf(reg) => LoadTarget::DirectRegHalfByte(reg),
         Target::IndirectReg(reg) => LoadTarget::IndirectRegByte(reg),
+        Target::IndirectOffset(reg, offset) => LoadTarget::IndirectOffsetByte(reg, offset),
         Target::Immediate(data) => LoadTarget::ImmediateByte(data),
     }
 }
@@ -553,6 +674,16 @@ fn get_register_pair(reg: u8) -> RegisterPair {
     }
 }
 
+fn get_register_pair_index(reg: u8, index_reg: IndexRegister) -> RegisterPair {
+    match reg {
+        0 => RegisterPair::BC,
+        1 => RegisterPair::DE,
+        2 => get_register_pair_from_index(index_reg),
+        3 => RegisterPair::SP,
+        _ => panic!("InternalError: impossible value"),
+    }
+}
+
 fn get_register_pair_alt(reg: u8) -> RegisterPair {
     match reg {
         0 => RegisterPair::BC,
@@ -560,6 +691,20 @@ fn get_register_pair_alt(reg: u8) -> RegisterPair {
         2 => RegisterPair::HL,
         3 => RegisterPair::AF,
         _ => panic!("InternalError: impossible value"),
+    }
+}
+
+fn get_register_pair_from_index(reg: IndexRegister) -> RegisterPair {
+    match reg {
+        IndexRegister::IX => RegisterPair::IX,
+        IndexRegister::IY => RegisterPair::IY,
+    }
+}
+
+fn get_index_register_half(reg: IndexRegister, q: u8) -> IndexRegisterHalf {
+    match reg {
+        IndexRegister::IX => if q == 0 { IndexRegisterHalf::IXH } else { IndexRegisterHalf::IXL },
+        IndexRegister::IY => if q == 0 { IndexRegisterHalf::IYH } else { IndexRegisterHalf::IYL },
     }
 }
 

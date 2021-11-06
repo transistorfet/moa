@@ -121,7 +121,7 @@ impl Z80 {
 
         println!("A: {:#04x}        F:  {:#04x}", self.state.reg[Register::A as usize], self.state.reg[Register::F as usize]);
         println!("B: {:#04x}        C:  {:#04x}", self.state.reg[Register::B as usize], self.state.reg[Register::C as usize]);
-        println!("D: {:#04x}        E:  {:#04x}", self.state.reg[Register::D as usize], self.state.reg[Register::B as usize]);
+        println!("D: {:#04x}        E:  {:#04x}", self.state.reg[Register::D as usize], self.state.reg[Register::E as usize]);
         println!("H: {:#04x}        L:  {:#04x}", self.state.reg[Register::H as usize], self.state.reg[Register::L as usize]);
 
         println!("Current Instruction: {} {:?}", self.decoder.format_instruction_bytes(&mut self.port), self.decoder.instruction);

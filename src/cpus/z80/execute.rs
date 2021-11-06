@@ -3,8 +3,14 @@ use crate::system::System;
 use crate::error::{ErrorType, Error};
 use crate::devices::{ClockElapsed, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
-use super::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, Size};
+use super::decode::{Condition, Instruction, LoadTarget, Target, OptionalSource, RegisterPair, IndexRegister, IndexRegisterHalf, Size};
 use super::state::{Z80, Status, Flags, Register};
+
+
+enum RotateType {
+    Bit8,
+    Bit9,
+}
 
 
 impl Steppable for Z80 {
@@ -113,7 +119,7 @@ impl Z80 {
         //self.timer.decode.end();
 
         //if self.debugger.use_tracing {
-            self.dump_state(system);
+            //self.dump_state(system);
         //}
 
         self.state.pc = self.decoder.end;
@@ -122,10 +128,22 @@ impl Z80 {
 
     pub fn execute_current(&mut self, system: &System) -> Result<(), Error> {
         match self.decoder.instruction {
-            //Instruction::ADCa(target) => {
-            //},
-            //Instruction::ADChl(regpair) => {
-            //},
+            Instruction::ADCa(target) => {
+                let src = self.get_target_value(target)?;
+                let acc = self.get_register_value(Register::A);
+                let (result, carry) = acc.overflowing_add(src);
+                let (result, carry) = result.overflowing_add((carry as u8) + (self.get_flag(Flags::Carry) as u8));
+                self.set_add_flags(result as u16, Size::Byte, carry);
+                self.set_register_value(Register::A, result);
+            },
+            Instruction::ADC16(dest_pair, src_pair) => {
+                let src = self.get_register_pair_value(src_pair);
+                let hl = self.get_register_pair_value(dest_pair);
+                let (result, carry) = hl.overflowing_add(src);
+                let (result, carry) = result.overflowing_add((carry as u16) + (self.get_flag(Flags::Carry) as u16));
+                self.set_add_flags(result, Size::Word, carry);
+                self.set_register_pair_value(dest_pair, result);
+            },
             Instruction::ADDa(target) => {
                 let src = self.get_target_value(target)?;
                 let acc = self.get_register_value(Register::A);
@@ -133,12 +151,12 @@ impl Z80 {
                 self.set_add_flags(result as u16, Size::Byte, carry);
                 self.set_register_value(Register::A, result);
             },
-            Instruction::ADDhl(regpair) => {
-                let src = self.get_register_pair_value(regpair);
-                let hl = self.get_register_pair_value(RegisterPair::HL);
+            Instruction::ADD16(dest_pair, src_pair) => {
+                let src = self.get_register_pair_value(src_pair);
+                let hl = self.get_register_pair_value(dest_pair);
                 let (result, carry) = hl.overflowing_add(src);
                 self.set_add_flags(result as u16, Size::Word, carry);
-                self.set_register_pair_value(RegisterPair::HL, result);
+                self.set_register_pair_value(dest_pair, result);
             },
             Instruction::AND(target) => {
                 let acc = self.get_register_value(Register::A);
@@ -147,94 +165,74 @@ impl Z80 {
                 self.set_register_value(Register::A, result);
                 self.set_logic_op_flags(result as u16, Size::Byte, true);
             },
+            Instruction::BIT(bit, target) => {
+                let value = self.get_target_value(target)?;
+                self.set_flag(Flags::Zero, (value & (1 << bit)) == 0);
+                self.set_flag(Flags::AddSubtract, false);
+                self.set_flag(Flags::HalfCarry, true);
+            },
+            Instruction::CALL(addr) => {
+                self.push_word(self.decoder.end)?;
+                self.state.pc = addr;
+            },
+            Instruction::CALLcc(cond, addr) => {
+                if self.get_current_condition(cond) {
+                    self.push_word(self.decoder.end)?;
+                    self.state.pc = addr;
+                }
+            },
+            Instruction::CCF => {
+                self.set_flag(Flags::Carry, false);
+            },
             Instruction::CP(target) => {
                 let src = self.get_target_value(target)?;
                 let acc = self.get_register_value(Register::A);
                 let (result, carry) = acc.overflowing_sub(src);
                 self.set_sub_flags(result as u16, Size::Byte, carry);
             },
+            //Instruction::CPD => {
+            //},
+            //Instruction::CPDR => {
+            //},
+            //Instruction::CPI => {
+            //},
+            //Instruction::CPIR => {
+            //},
             Instruction::CPL => {
                 let value = self.get_register_value(Register::A);
                 self.set_register_value(Register::A, !value);
                 self.set_flag(Flags::HalfCarry, true);
                 self.set_flag(Flags::AddSubtract, true);
             },
-            //Instruction::NEG => {
+            //Instruction::DAA => {
             //},
-            Instruction::OR(target) => {
-                let acc = self.get_register_value(Register::A);
-                let value = self.get_target_value(target)?;
-                let result = acc | value;
-                self.set_register_value(Register::A, result);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
-            },
-            //Instruction::SBCa(target) => {
-            //},
-            //Instruction::SBChl(regpair) => {
-            //},
-            Instruction::SUB(target) => {
-                let src = self.get_target_value(target)?;
-                let acc = self.get_register_value(Register::A);
-                let (result, carry) = acc.overflowing_sub(src);
-                self.set_sub_flags(result as u16, Size::Byte, carry);
-                self.set_register_value(Register::A, result);
-            },
-            Instruction::XOR(target) => {
-                let acc = self.get_register_value(Register::A);
-                let value = self.get_target_value(target)?;
-                let result = acc ^ value;
-                self.set_register_value(Register::A, result);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
-            },
-
-            //Instruction::BIT(u8, target) => {
-            //},
-            //Instruction::RES(u8, target) => {
-            //},
-            //Instruction::RL(target) => {
-            //},
-            //Instruction::RLC(target) => {
-            //},
-            //Instruction::RR(target) => {
-            //},
-            //Instruction::RRC(target) => {
-            //},
-            //Instruction::SET(u8, target) => {
-            //},
-            //Instruction::SLA(target) => {
-            //},
-            //Instruction::SLL(target) => {
-            //},
-            //Instruction::SRA(target) => {
-            //},
-            //Instruction::SRL(target) => {
-            //},
-
-            Instruction::DEC8(target) => {
-                let value = self.get_target_value(target)?;
-                let (result, carry) = value.overflowing_sub(1);
-                self.set_sub_flags(result as u16, Size::Byte, carry);
-                self.set_target_value(target, result)?;
-            },
             Instruction::DEC16(regpair) => {
                 let value = self.get_register_pair_value(regpair);
                 let (result, carry) = value.overflowing_sub(1);
                 self.set_sub_flags(result, Size::Word, carry);
                 self.set_register_pair_value(regpair, result);
             },
-            Instruction::INC8(target) => {
+            Instruction::DEC8(target) => {
                 let value = self.get_target_value(target)?;
-                let (result, carry) = value.overflowing_add(1);
-                self.set_add_flags(result as u16, Size::Byte, carry);
+                let (result, carry) = value.overflowing_sub(1);
+                self.set_sub_flags(result as u16, Size::Byte, carry);
                 self.set_target_value(target, result)?;
             },
-            Instruction::INC16(regpair) => {
-                let value = self.get_register_pair_value(regpair);
-                let (result, carry) = value.overflowing_add(1);
-                self.set_add_flags(result, Size::Word, carry);
-                self.set_register_pair_value(regpair, result);
+            Instruction::DI => {
+                self.state.interrupts_enabled = false;
             },
+            Instruction::DJNZ(offset) => {
+                let value = self.get_register_value(Register::B);
+                let result = value.wrapping_sub(1);
+                self.set_register_value(Register::B, result);
 
+                if result != 0 {
+                    self.state.pc = ((self.state.pc as i16) + (offset as i16)) as u16;
+                }
+            },
+            Instruction::EI => {
+                self.state.interrupts_enabled = true;
+            },
             Instruction::EXX => {
                 for i in 0..6 {
                     let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
@@ -260,49 +258,35 @@ impl Z80 {
                 self.set_register_pair_value(RegisterPair::DE, hl);
                 self.set_register_pair_value(RegisterPair::HL, de);
             },
-            Instruction::LD(dest, src) => {
-                let src_value = self.get_load_target_value(src)?;
-                self.set_load_target_value(dest, src_value)?;
+            Instruction::HALT => {
+                self.state.status = Status::Halted;
             },
-            Instruction::POP(regpair) => {
-                let value = self.pop_word()?;
-                self.set_register_pair_value(regpair, value);
-            },
-            Instruction::PUSH(regpair) => {
+            //Instruction::IM(u8) => {
+            //},
+            Instruction::INC16(regpair) => {
                 let value = self.get_register_pair_value(regpair);
-                self.push_word(value)?;
+                let (result, carry) = value.overflowing_add(1);
+                self.set_add_flags(result, Size::Word, carry);
+                self.set_register_pair_value(regpair, result);
             },
-
-            //Instruction::INx(u8) => {
+            Instruction::INC8(target) => {
+                let value = self.get_target_value(target)?;
+                let (result, carry) = value.overflowing_add(1);
+                self.set_add_flags(result as u16, Size::Byte, carry);
+                self.set_target_value(target, result)?;
+            },
+            //Instruction::IND => {
+            //},
+            //Instruction::INDR => {
+            //},
+            //Instruction::INI => {
+            //},
+            //Instruction::INIR => {
             //},
             //Instruction::INic(reg) => {
             //},
-            Instruction::OUTx(port) => {
-                // TODO this needs to be fixed
-                println!("OUT: {:x}", self.state.reg[Register::A as usize]);
-            },
-            //Instruction::OUTic(reg) => {
+            //Instruction::INx(u8) => {
             //},
-
-            Instruction::CALL(addr) => {
-                self.push_word(self.decoder.end)?;
-                self.state.pc = addr;
-            },
-            Instruction::CALLcc(cond, addr) => {
-                if self.get_current_condition(cond) {
-                    self.push_word(self.decoder.end)?;
-                    self.state.pc = addr;
-                }
-            },
-            Instruction::DJNZ(offset) => {
-                let value = self.get_register_value(Register::B);
-                let result = value.wrapping_sub(1);
-                self.set_register_value(Register::B, result);
-
-                if result != 0 {
-                    self.state.pc = ((self.state.pc as i16) + (offset as i16)) as u16;
-                }
-            },
             Instruction::JP(addr) => {
                 self.state.pc = addr;
             },
@@ -324,73 +308,10 @@ impl Z80 {
                     self.state.pc = ((self.state.pc as i16) + (offset as i16)) as u16;
                 }
             },
-            Instruction::RET => {
-                self.state.pc = self.pop_word()?;
+            Instruction::LD(dest, src) => {
+                let src_value = self.get_load_target_value(src)?;
+                self.set_load_target_value(dest, src_value)?;
             },
-            //Instruction::RETI => {
-            //},
-            //Instruction::RETN => {
-            //},
-            Instruction::RETcc(cond) => {
-                if self.get_current_condition(cond) {
-                    self.state.pc = self.pop_word()?;
-                }
-            },
-
-            Instruction::DI => {
-                self.state.interrupts_enabled = false;
-            },
-            Instruction::EI => {
-                self.state.interrupts_enabled = true;
-            },
-            //Instruction::IM(u8) => {
-            //},
-            Instruction::NOP => { },
-            Instruction::HALT => {
-                self.state.status = Status::Halted;
-            },
-            Instruction::RST(addr) => {
-                self.push_word(self.decoder.end)?;
-                self.state.pc = addr as u16;
-            },
-
-            Instruction::CCF => {
-                self.set_flag(Flags::Carry, false);
-            },
-            //Instruction::DAA => {
-            //},
-            //Instruction::RLA => {
-            //},
-            //Instruction::RLCA => {
-            //},
-            //Instruction::RRA => {
-            //},
-            //Instruction::RRCA => {
-            //},
-            //Instruction::RRD => {
-            //},
-            //Instruction::RLD => {
-            //},
-            Instruction::SCF => {
-                self.set_flag(Flags::Carry, true);
-            },
-
-            //Instruction::CPD => {
-            //},
-            //Instruction::CPDR => {
-            //},
-            //Instruction::CPI => {
-            //},
-            //Instruction::CPIR => {
-            //},
-            //Instruction::IND => {
-            //},
-            //Instruction::INDR => {
-            //},
-            //Instruction::INI => {
-            //},
-            //Instruction::INIR => {
-            //},
             //Instruction::LDD => {
             //},
             //Instruction::LDDR => {
@@ -407,6 +328,16 @@ impl Z80 {
                     self.state.pc -= 2;
                 }
             },
+            //Instruction::NEG => {
+            //},
+            Instruction::NOP => { },
+            Instruction::OR(target) => {
+                let acc = self.get_register_value(Register::A);
+                let value = self.get_target_value(target)?;
+                let result = acc | value;
+                self.set_register_value(Register::A, result);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+            },
             //Instruction::OTDR => {
             //},
             //Instruction::OTIR => {
@@ -415,13 +346,173 @@ impl Z80 {
             //},
             //Instruction::OUTI => {
             //},
-
+            //Instruction::OUTic(reg) => {
+            //},
+            Instruction::OUTx(port) => {
+                // TODO this needs to be fixed
+                println!("OUT: {:x}", self.state.reg[Register::A as usize]);
+            },
+            Instruction::POP(regpair) => {
+                let value = self.pop_word()?;
+                self.set_register_pair_value(regpair, value);
+            },
+            Instruction::PUSH(regpair) => {
+                let value = self.get_register_pair_value(regpair);
+                self.push_word(value)?;
+            },
+            Instruction::RES(bit, target, opt_src) => {
+                let mut value = self.get_opt_src_target_value(opt_src, target)?;
+                value = value & !(1 << bit);
+                self.set_target_value(target, value);
+            },
+            Instruction::RET => {
+                self.state.pc = self.pop_word()?;
+            },
+            //Instruction::RETI => {
+            //},
+            //Instruction::RETN => {
+            //},
+            Instruction::RETcc(cond) => {
+                if self.get_current_condition(cond) {
+                    self.state.pc = self.pop_word()?;
+                }
+            },
+            Instruction::RL(target, opt_src) => {
+                let value = self.get_opt_src_target_value(opt_src, target)?;
+                let result = self.rotate_left(value, RotateType::Bit9);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                self.set_target_value(target, result)?;
+            },
+            Instruction::RLA => {
+                let value = self.get_register_value(Register::A);
+                let result = self.rotate_left(value, RotateType::Bit9);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                self.set_register_value(Register::A, result);
+            },
+            Instruction::RLC(target, opt_src) => {
+                let value = self.get_opt_src_target_value(opt_src, target)?;
+                let result = self.rotate_left(value, RotateType::Bit8);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                self.set_target_value(target, result)?;
+            },
+            Instruction::RLCA => {
+                let value = self.get_register_value(Register::A);
+                let result = self.rotate_left(value, RotateType::Bit8);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                self.set_register_value(Register::A, result);
+            },
+            //Instruction::RLD => {
+            //},
+            Instruction::RR(target, opt_src) => {
+                let value = self.get_opt_src_target_value(opt_src, target)?;
+                let result = self.rotate_right(value, RotateType::Bit9);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                self.set_target_value(target, result)?;
+            },
+            Instruction::RRA => {
+                let value = self.get_register_value(Register::A);
+                let result = self.rotate_right(value, RotateType::Bit9);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                self.set_register_value(Register::A, result);
+            },
+            Instruction::RRC(target, opt_src) => {
+                let value = self.get_opt_src_target_value(opt_src, target)?;
+                let result = self.rotate_right(value, RotateType::Bit8);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                self.set_target_value(target, result)?;
+            },
+            Instruction::RRCA => {
+                let value = self.get_register_value(Register::A);
+                let result = self.rotate_right(value, RotateType::Bit8);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                self.set_register_value(Register::A, result);
+            },
+            //Instruction::RRD => {
+            //},
+            Instruction::RST(addr) => {
+                self.push_word(self.decoder.end)?;
+                self.state.pc = addr as u16;
+            },
+            Instruction::SBCa(target) => {
+                let src = self.get_target_value(target)?;
+                let acc = self.get_register_value(Register::A);
+                let (result, carry) = acc.overflowing_sub(src);
+                let (result, carry) = result.overflowing_sub((carry as u8) + (self.get_flag(Flags::Carry) as u8));
+                self.set_sub_flags(result as u16, Size::Byte, carry);
+                self.set_register_value(Register::A, result);
+            },
+            Instruction::SBC16(dest_pair, src_pair) => {
+                let src = self.get_register_pair_value(src_pair);
+                let hl = self.get_register_pair_value(dest_pair);
+                let (result, carry) = hl.overflowing_sub(src);
+                let (result, carry) = result.overflowing_sub((carry as u16) + (self.get_flag(Flags::Carry) as u16));
+                self.set_sub_flags(result, Size::Word, carry);
+                self.set_register_pair_value(dest_pair, result);
+            },
+            Instruction::SCF => {
+                self.set_flag(Flags::Carry, true);
+            },
+            Instruction::SET(bit, target, opt_src) => {
+                let mut value = self.get_opt_src_target_value(opt_src, target)?;
+                value = value | (1 << bit);
+                self.set_target_value(target, value);
+            },
+            //Instruction::SLA(target, opt_src) => {
+            //},
+            //Instruction::SLL(target, opt_src) => {
+            //},
+            //Instruction::SRA(target, opt_src) => {
+            //},
+            //Instruction::SRL(target, opt_src) => {
+            //},
+            Instruction::SUB(target) => {
+                let src = self.get_target_value(target)?;
+                let acc = self.get_register_value(Register::A);
+                let (result, carry) = acc.overflowing_sub(src);
+                self.set_sub_flags(result as u16, Size::Byte, carry);
+                self.set_register_value(Register::A, result);
+            },
+            Instruction::XOR(target) => {
+                let acc = self.get_register_value(Register::A);
+                let value = self.get_target_value(target)?;
+                let result = acc ^ value;
+                self.set_register_value(Register::A, result);
+                self.set_logic_op_flags(result as u16, Size::Byte, false);
+            },
             _ => {
                 panic!("unimplemented");
             }
         }
 
         Ok(())
+    }
+
+    fn rotate_left(&mut self, mut value: u8, rtype: RotateType) -> u8 {
+        let out_bit = get_msb(value as u16, Size::Byte);
+
+        let in_bit = match rtype {
+            RotateType::Bit9 => self.get_flag(Flags::Carry),
+            RotateType::Bit8 => out_bit,
+        };
+
+        value <<= 1;
+        value |= in_bit as u8;
+        self.set_flag(Flags::Carry, out_bit);
+        value
+    }
+
+    fn rotate_right(&mut self, mut value: u8, rtype: RotateType) -> u8 {
+        let out_bit = (value & 0x01) != 0;
+
+        let in_bit = match rtype {
+            RotateType::Bit9 => self.get_flag(Flags::Carry),
+            RotateType::Bit8 => out_bit,
+        };
+
+        value >>= 1;
+        value |= if in_bit { 0x80 } else { 0 };
+        self.set_flag(Flags::Carry, out_bit);
+        value
     }
 
     fn push_word(&mut self, value: u16) -> Result<(), Error> {
@@ -444,6 +535,7 @@ impl Z80 {
     fn get_load_target_value(&mut self, target: LoadTarget) -> Result<u16, Error> {
         let value = match target {
             LoadTarget::DirectRegByte(reg) => self.get_register_value(reg) as u16,
+            LoadTarget::DirectRegHalfByte(reg) => self.get_index_register_half_value(reg) as u16,
             LoadTarget::DirectRegWord(regpair) => self.get_register_pair_value(regpair),
             LoadTarget::IndirectRegByte(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
@@ -471,6 +563,7 @@ impl Z80 {
     fn set_load_target_value(&mut self, target: LoadTarget, value: u16) -> Result<(), Error> {
         match target {
             LoadTarget::DirectRegByte(reg) => self.set_register_value(reg, value as u8),
+            LoadTarget::DirectRegHalfByte(reg) => self.set_index_register_half_value(reg, value as u8),
             LoadTarget::DirectRegWord(regpair) => self.set_register_pair_value(regpair, value),
             LoadTarget::IndirectRegByte(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
@@ -496,8 +589,13 @@ impl Z80 {
     fn get_target_value(&mut self, target: Target) -> Result<u8, Error> {
         match target {
             Target::DirectReg(reg) => Ok(self.get_register_value(reg)),
+            Target::DirectRegHalf(reg) => Ok(self.get_index_register_half_value(reg)),
             Target::IndirectReg(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
+                Ok(self.port.read_u8(addr as Address)?)
+            },
+            Target::IndirectOffset(reg, offset) => {
+                let addr = (self.get_index_register_value(reg) as i16) + (offset as i16);
                 Ok(self.port.read_u8(addr as Address)?)
             },
             Target::Immediate(data) => Ok(data),
@@ -507,6 +605,7 @@ impl Z80 {
     fn set_target_value(&mut self, target: Target, value: u8) -> Result<(), Error> {
         match target {
             Target::DirectReg(reg) => self.set_register_value(reg, value),
+            Target::DirectRegHalf(reg) => self.set_index_register_half_value(reg, value),
             Target::IndirectReg(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
                 self.port.write_u8(addr as Address, value)?;
@@ -516,14 +615,41 @@ impl Z80 {
         Ok(())
     }
 
+    fn get_opt_src_target_value(&mut self, opt_src: OptionalSource, target: Target) -> Result<u8, Error> {
+        match opt_src {
+            None => self.get_target_value(target),
+            Some((reg, offset)) => {
+                let addr = (self.get_index_register_value(reg) as i16) + (offset as i16);
+                self.port.read_u8(addr as Address)
+            },
+        }
+    }
+
+
     fn get_register_value(&mut self, reg: Register) -> u8 {
-        let i = (reg as u8) as usize;
-        self.state.reg[i]
+        self.state.reg[reg as usize]
     }
 
     fn set_register_value(&mut self, reg: Register, value: u8) {
-        let i = (reg as u8) as usize;
-        self.state.reg[i] = value;
+        self.state.reg[reg as usize] = value;
+    }
+
+    fn get_index_register_half_value(&mut self, reg: IndexRegisterHalf) -> u8 {
+        match reg {
+            IndexRegisterHalf::IXH => (self.state.ix >> 8) as u8,
+            IndexRegisterHalf::IXL => (self.state.ix & 0x00FF) as u8,
+            IndexRegisterHalf::IYH => (self.state.iy >> 8) as u8,
+            IndexRegisterHalf::IYL => (self.state.iy & 0x00FF) as u8,
+        }
+    }
+
+    fn set_index_register_half_value(&mut self, reg: IndexRegisterHalf, value: u8) {
+        match reg {
+            IndexRegisterHalf::IXH => { self.state.ix |= (value as u16) << 8; },
+            IndexRegisterHalf::IXL => { self.state.ix |= value as u16; },
+            IndexRegisterHalf::IYH => { self.state.iy |= (value as u16) << 8; },
+            IndexRegisterHalf::IYL => { self.state.iy |= value as u16; },
+        }
     }
 
     fn get_register_pair_value(&mut self, regpair: RegisterPair) -> u16 {
@@ -533,6 +659,8 @@ impl Z80 {
             RegisterPair::HL => read_beu16(&self.state.reg[4..6]),
             RegisterPair::AF => read_beu16(&self.state.reg[6..8]),
             RegisterPair::SP => self.state.sp,
+            RegisterPair::IX => self.state.ix,
+            RegisterPair::IY => self.state.iy,
         }
     }
 
@@ -543,6 +671,8 @@ impl Z80 {
             RegisterPair::HL => { write_beu16(&mut self.state.reg[4..6], value); },
             RegisterPair::AF => { write_beu16(&mut self.state.reg[6..8], value); },
             RegisterPair::SP => { self.state.sp = value; },
+            RegisterPair::IX => { self.state.ix = value; },
+            RegisterPair::IY => { self.state.iy = value; },
         }
     }
 
@@ -553,11 +683,26 @@ impl Z80 {
             RegisterPair::HL => &mut self.state.reg[4..6],
             RegisterPair::AF => &mut self.state.reg[6..8],
             RegisterPair::SP => panic!("SP is not supported by inc/dec"),
+            RegisterPair::IX => {
+                self.state.ix = (self.state.ix as i16).wrapping_add(value) as u16;
+                return self.state.ix;
+            },
+            RegisterPair::IY => {
+                self.state.iy = (self.state.iy as i16).wrapping_add(value) as u16;
+                return self.state.iy;
+            },
         };
 
         let result = (read_beu16(addr) as i16).wrapping_add(value) as u16;
         write_beu16(addr, result);
         result
+    }
+
+    fn get_index_register_value(&mut self, reg: IndexRegister) -> u16 {
+        match reg {
+            IndexRegister::IX => self.state.ix,
+            IndexRegister::IY => self.state.iy,
+        }
     }
 
     fn get_current_condition(&mut self, cond: Condition) -> bool {
