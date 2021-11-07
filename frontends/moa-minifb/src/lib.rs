@@ -1,4 +1,6 @@
 
+mod keys;
+
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
@@ -6,55 +8,94 @@ use minifb::{self, Key};
 
 use moa::error::Error;
 use moa::system::System;
-use moa::host::traits::{Host, JoystickDevice, JoystickUpdater, WindowUpdater};
+use moa::host::traits::{Host, JoystickDevice, JoystickUpdater, KeyboardUpdater, WindowUpdater};
+
+use crate::keys::map_key;
 
 
 const WIDTH: usize = 320;
 const HEIGHT: usize = 224;
 
-pub struct MiniFrontend {
-    pub buffer: Mutex<Vec<u32>>,
-    pub updater: Mutex<Option<Box<dyn WindowUpdater>>>,
-    pub input: Mutex<Option<Box<dyn JoystickUpdater>>>,
+pub struct MiniFrontendBuilder {
+    pub window: Option<Box<dyn WindowUpdater>>,
+    pub joystick: Option<Box<dyn JoystickUpdater>>,
+    pub keyboard: Option<Box<dyn KeyboardUpdater>>,
+    pub finalized: bool,
 }
 
-impl Host for MiniFrontend {
-    fn add_window(&self, updater: Box<dyn WindowUpdater>) -> Result<(), Error> {
-        let mut unlocked = self.updater.lock().unwrap();
-        if unlocked.is_some() {
+impl MiniFrontendBuilder {
+    pub fn new() -> Self {
+        Self {
+            window: None,
+            joystick: None,
+            keyboard: None,
+            finalized: false,
+        }
+    }
+
+    pub fn finalize(&mut self) {
+        self.finalized = true;
+    }
+
+    pub fn build(&mut self) -> MiniFrontend {
+        let window = std::mem::take(&mut self.window);
+        let joystick = std::mem::take(&mut self.joystick);
+        let keyboard = std::mem::take(&mut self.keyboard);
+        MiniFrontend::new(window, joystick, keyboard)
+    }
+}
+
+impl Host for MiniFrontendBuilder {
+    fn add_window(&mut self, updater: Box<dyn WindowUpdater>) -> Result<(), Error> {
+        if self.window.is_some() {
             return Err(Error::new("A window updater has already been registered with the frontend"));
         }
-        *unlocked = Some(updater);
+        self.window = Some(updater);
         Ok(())
     }
 
-    fn register_joystick(&self, device: JoystickDevice, input: Box<dyn JoystickUpdater>) -> Result<(), Error> {
+    fn register_joystick(&mut self, device: JoystickDevice, input: Box<dyn JoystickUpdater>) -> Result<(), Error> {
         if device != JoystickDevice::A {
             return Ok(())
         }
 
-        let mut unlocked = self.input.lock().unwrap();
-        if unlocked.is_some() {
-            return Err(Error::new("A window updater has already been registered with the frontend"));
+        if self.joystick.is_some() {
+            return Err(Error::new("A joystick updater has already been registered with the frontend"));
         }
-        *unlocked = Some(input);
+        self.joystick = Some(input);
+        Ok(())
+    }
+
+    fn register_keyboard(&mut self, input: Box<dyn KeyboardUpdater>) -> Result<(), Error> {
+        if self.keyboard.is_some() {
+            return Err(Error::new("A keyboard updater has already been registered with the frontend"));
+        }
+        self.keyboard = Some(input);
         Ok(())
     }
 }
 
+
+pub struct MiniFrontend {
+    pub buffer: Vec<u32>,
+    pub window: Option<Box<dyn WindowUpdater>>,
+    pub joystick: Option<Box<dyn JoystickUpdater>>,
+    pub keyboard: Option<Box<dyn KeyboardUpdater>>,
+}
+
 impl MiniFrontend {
-    pub fn init_frontend() -> MiniFrontend {
-        MiniFrontend {
-            buffer: Mutex::new(vec![0; WIDTH * HEIGHT]),
-            updater: Mutex::new(None),
-            input: Mutex::new(None),
+    pub fn new(window: Option<Box<dyn WindowUpdater>>, joystick: Option<Box<dyn JoystickUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>) -> Self {
+        Self {
+            buffer: vec![0; WIDTH * HEIGHT],
+            window,
+            joystick,
+            keyboard,
         }
     }
 
-    //pub fn start(&self) {
-    pub fn start(&self, mut system: System) {
+    pub fn start(&mut self, mut system: Option<System>) {
         let mut options = minifb::WindowOptions::default();
-        options.scale = minifb::Scale::X4;
+        options.scale = minifb::Scale::X2;
 
         let mut window = minifb::Window::new(
             "Test - ESC to exit",
@@ -70,26 +111,37 @@ impl MiniFrontend {
         window.limit_update_rate(Some(Duration::from_micros(16600)));
 
         while window.is_open() && !window.is_key_down(Key::Escape) {
-            system.run_for(16_600_000).unwrap();
+            if let Some(system) = system.as_mut() {
+                system.run_for(16_600_000).unwrap();
+            }
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::Yes) {
                 let mut modifiers: u16 = 0;
                 for key in keys {
+                    if let Some(mut updater) = self.keyboard.as_mut() {
+                        updater.update_keyboard(map_key(key), true);
+                    }
                     match key {
                         Key::Enter => { modifiers |= 0xffff; },
-                        Key::D => { system.enable_debugging(); },
+                        Key::D => { system.as_ref().map(|s| s.enable_debugging()); },
                         _ => { },
                     }
                 }
-                if let Some(updater) = &mut *self.input.lock().unwrap() {
+                if let Some(mut updater) = self.joystick.as_mut() {
                     updater.update_joystick(modifiers);
                 }
             }
+            if let Some(keys) = window.get_keys_released() {
+                for key in keys {
+                    if let Some(mut updater) = self.keyboard.as_mut() {
+                        updater.update_keyboard(map_key(key), false);
+                    }
+                }
+            }
 
-            if let Some(updater) = &mut *self.updater.lock().unwrap() {
-                let mut buffer = self.buffer.lock().unwrap();
-                updater.update_frame(WIDTH as u32, HEIGHT as u32, &mut buffer);
-                window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
+            if let Some(mut updater) = self.window.as_mut() {
+                updater.update_frame(WIDTH as u32, HEIGHT as u32, &mut self.buffer);
+                window.update_with_buffer(&self.buffer, WIDTH, HEIGHT).unwrap();
             }
         }
     }

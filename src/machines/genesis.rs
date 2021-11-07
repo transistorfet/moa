@@ -10,7 +10,7 @@ use crate::peripherals::genesis;
 use crate::host::traits::{Host, WindowUpdater};
 
 
-pub fn build_genesis<H: Host>(host: &H) -> Result<System, Error> {
+pub fn build_genesis<H: Host>(host: &mut H) -> Result<System, Error> {
     let mut system = System::new();
 
     //let mut rom = MemoryBlock::load("binaries/genesis/Sonic The Hedgehog (W) (REV 00) [!].bin").unwrap();
@@ -19,7 +19,7 @@ pub fn build_genesis<H: Host>(host: &H) -> Result<System, Error> {
     //let mut rom = MemoryBlock::load("binaries/genesis/Sonic the Hedgehog 3 (U) [!].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Earthworm Jim (U) [h1].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Home Alone (beta).bin").unwrap();
-    //let mut mut rom = MemoryBlock::load("binaries/genesis/F1 World Championship (JUE) [!].bin").unwrap();
+    //let mut rom = MemoryBlock::load("binaries/genesis/F1 World Championship (JUE) [!].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Ren and Stimpy's Invention (U) [!].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Out of this World (U) [!].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Ghostbusters (REV 00) (JUE).bin").unwrap();
@@ -58,8 +58,11 @@ pub fn build_genesis<H: Host>(host: &H) -> Result<System, Error> {
     //cpu.add_breakpoint(0x16a0e);
     //cpu.add_breakpoint(0x16812);
     //cpu.add_breakpoint(0x166ec);
-    cpu.add_breakpoint(0x13e18);
-    cpu.add_breakpoint(0x16570);
+    //cpu.add_breakpoint(0x13e18);
+    //cpu.add_breakpoint(0x16570);
+    //cpu.add_breakpoint(0x1714);
+
+    //cpu.add_breakpoint(0x43c2);
 
     system.add_interruptable_device("cpu", wrap_transmutable(cpu)).unwrap();
 

@@ -104,7 +104,7 @@ impl GenesisController {
         }
     }
 
-    pub fn create<H: Host>(host: &H) -> Result<Self, Error> {
+    pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
         let controller = GenesisController::new();
 
         let joystick1 = Box::new(GenesisControllerUpdater(controller.port_1.data.clone(), controller.interrupt.clone()));

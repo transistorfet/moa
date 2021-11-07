@@ -29,6 +29,12 @@ impl BlitableSurface for Frame {
             }
         }
     }
+
+    fn clear(&mut self, value: u32) {
+        for i in 0..((self.width as usize) * (self.height as usize)) {
+            self.bitmap[i] = value;
+        }
+    }
 }
 
 
@@ -38,15 +44,15 @@ pub struct FrameSwapper {
 }
 
 impl FrameSwapper {
-    pub fn new() -> FrameSwapper {
+    pub fn new(width: u32, height: u32) -> FrameSwapper {
         FrameSwapper {
-            current: Frame { width: 0, height: 0, bitmap: vec![] },
-            previous: Frame { width: 0, height: 0, bitmap: vec![] },
+            current: Frame { width, height, bitmap: vec![0; (width * height) as usize] },
+            previous: Frame { width, height, bitmap: vec![0; (width * height) as usize] },
         }
     }
 
-    pub fn new_shared() -> Arc<Mutex<FrameSwapper>> {
-        Arc::new(Mutex::new(FrameSwapper::new()))
+    pub fn new_shared(width: u32, height: u32) -> Arc<Mutex<FrameSwapper>> {
+        Arc::new(Mutex::new(FrameSwapper::new(width, height)))
     }
 
     pub fn to_boxed(swapper: Arc<Mutex<FrameSwapper>>) -> Box<dyn WindowUpdater> {

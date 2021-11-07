@@ -5,4 +5,5 @@ pub mod traits;
 pub mod tty;
 
 pub mod gfx;
+pub mod keys;
 

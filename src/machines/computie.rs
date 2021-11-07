@@ -35,7 +35,7 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     let mut cpu = M68k::new(M68kType::MC68010, 10_000_000, BusPort::new(0, 24, 16, system.bus.clone()));
 
     //cpu.enable_tracing();
-    cpu.add_breakpoint(0x10781a);
+    //cpu.add_breakpoint(0x10781a);
     //cpu.add_breakpoint(0x10bc9c);
     //cpu.add_breakpoint(0x106a94);
     //cpu.add_breakpoint(0x1015b2);
