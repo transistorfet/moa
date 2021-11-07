@@ -4,7 +4,7 @@ use crate::devices::Address;
 use crate::memory::BusPort;
 
 use super::decode::Z80Decoder;
-//use super::debugger::M68kDebugger;
+use super::debugger::Z80Debugger;
 
 
 #[allow(dead_code)]
@@ -89,7 +89,7 @@ pub struct Z80 {
     pub frequency: u32,
     pub state: Z80State,
     pub decoder: Z80Decoder,
-    //pub debugger: M68kDebugger,
+    pub debugger: Z80Debugger,
     pub port: BusPort,
 }
 
@@ -100,7 +100,7 @@ impl Z80 {
             frequency,
             state: Z80State::new(),
             decoder: Z80Decoder::new(),
-            //debugger: M68kDebugger::new(),
+            debugger: Z80Debugger::new(),
             port: port,
         }
     }
@@ -108,8 +108,8 @@ impl Z80 {
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.state = Z80State::new();
-        //self.decoder = M68kDecoder::new(self.cputype, 0);
-        //self.debugger = M68kDebugger::new();
+        self.decoder = Z80Decoder::new();
+        self.debugger = Z80Debugger::new();
     }
 
     pub fn dump_state(&mut self, system: &System) {

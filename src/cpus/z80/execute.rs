@@ -7,6 +7,9 @@ use super::decode::{Condition, Instruction, LoadTarget, Target, OptionalSource, 
 use super::state::{Z80, Status, Flags, Register};
 
 
+const DEV_NAME: &'static str = "z80-cpu";
+
+
 enum RotateType {
     Bit8,
     Bit9,
@@ -20,39 +23,11 @@ impl Steppable for Z80 {
     }
 
     fn on_error(&mut self, system: &System) {
-        //self.dump_state(system);
+        self.dump_state(system);
     }
 }
 
 impl Interruptable for Z80 { }
-
-impl Debuggable for Z80 {
-    fn add_breakpoint(&mut self, addr: Address) {
-        //self.debugger.breakpoints.push(addr as u32);
-    }
-
-    fn remove_breakpoint(&mut self, addr: Address) {
-        //if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == addr as u32) {
-        //    self.debugger.breakpoints.remove(index);
-        //}
-    }
-
-    fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
-        //self.decoder.decode_at(&mut self.port, self.state.pc)?;
-        //self.decoder.dump_decoded(&mut self.port);
-        self.dump_state(system);
-        Ok(())
-    }
-
-    fn print_disassembly(&mut self, addr: Address, count: usize) {
-        //let mut decoder = M68kDecoder::new(self.cputype, 0);
-        //decoder.dump_disassembly(&mut self.port, self.state.pc, 0x1000);
-    }
-
-    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
-        Ok(false)
-    }
-}
 
 
 impl Transmutable for Z80 {
@@ -112,13 +87,14 @@ impl Z80 {
     }
 
     pub fn decode_next(&mut self, system: &System) -> Result<(), Error> {
-        //self.check_breakpoints(system);
+        self.check_breakpoints(system);
 
         //self.timer.decode.start();
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
         //self.timer.decode.end();
 
         //if self.debugger.use_tracing {
+            //self.decoder.dump_decoded(&mut self.port);
             //self.dump_state(system);
         //}
 
@@ -350,7 +326,7 @@ impl Z80 {
             //},
             Instruction::OUTx(port) => {
                 // TODO this needs to be fixed
-                println!("OUT: {:x}", self.state.reg[Register::A as usize]);
+                println!("OUT ({:x}), {:x}", port, self.state.reg[Register::A as usize]);
             },
             Instruction::POP(regpair) => {
                 let value = self.pop_word()?;
@@ -379,52 +355,52 @@ impl Z80 {
             },
             Instruction::RL(target, opt_src) => {
                 let value = self.get_opt_src_target_value(opt_src, target)?;
-                let result = self.rotate_left(value, RotateType::Bit9);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
                 self.set_target_value(target, result)?;
             },
             Instruction::RLA => {
                 let value = self.get_register_value(Register::A);
-                let result = self.rotate_left(value, RotateType::Bit9);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
                 self.set_register_value(Register::A, result);
             },
             Instruction::RLC(target, opt_src) => {
                 let value = self.get_opt_src_target_value(opt_src, target)?;
-                let result = self.rotate_left(value, RotateType::Bit8);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
                 self.set_target_value(target, result)?;
             },
             Instruction::RLCA => {
                 let value = self.get_register_value(Register::A);
-                let result = self.rotate_left(value, RotateType::Bit8);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
                 self.set_register_value(Register::A, result);
             },
             //Instruction::RLD => {
             //},
             Instruction::RR(target, opt_src) => {
                 let value = self.get_opt_src_target_value(opt_src, target)?;
-                let result = self.rotate_right(value, RotateType::Bit9);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
                 self.set_target_value(target, result)?;
             },
             Instruction::RRA => {
                 let value = self.get_register_value(Register::A);
-                let result = self.rotate_right(value, RotateType::Bit9);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
                 self.set_register_value(Register::A, result);
             },
             Instruction::RRC(target, opt_src) => {
                 let value = self.get_opt_src_target_value(opt_src, target)?;
-                let result = self.rotate_right(value, RotateType::Bit8);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
                 self.set_target_value(target, result)?;
             },
             Instruction::RRCA => {
                 let value = self.get_register_value(Register::A);
-                let result = self.rotate_right(value, RotateType::Bit8);
-                self.set_logic_op_flags(result as u16, Size::Byte, false);
+                let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
                 self.set_register_value(Register::A, result);
             },
             //Instruction::RRD => {
@@ -457,14 +433,35 @@ impl Z80 {
                 value = value | (1 << bit);
                 self.set_target_value(target, value);
             },
-            //Instruction::SLA(target, opt_src) => {
-            //},
-            //Instruction::SLL(target, opt_src) => {
-            //},
-            //Instruction::SRA(target, opt_src) => {
-            //},
-            //Instruction::SRL(target, opt_src) => {
-            //},
+            Instruction::SLA(target, opt_src) => {
+                let value = self.get_opt_src_target_value(opt_src, target)?;
+                let out_bit = get_msb(value as u16, Size::Byte);
+                let result = (value << 1) | 0x01;
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
+                self.set_target_value(target, result)?;
+            },
+            Instruction::SLL(target, opt_src) => {
+                let value = self.get_opt_src_target_value(opt_src, target)?;
+                let out_bit = get_msb(value as u16, Size::Byte);
+                let result = value << 1;
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
+                self.set_target_value(target, result)?;
+            },
+            Instruction::SRA(target, opt_src) => {
+                let value = self.get_opt_src_target_value(opt_src, target)?;
+                let out_bit = (value & 0x01) != 0;
+                let msb_mask = if get_msb(value as u16, Size::Byte) { 0x80 } else { 0 };
+                let result = (value >> 1) | msb_mask;
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
+                self.set_target_value(target, result)?;
+            },
+            Instruction::SRL(target, opt_src) => {
+                let value = self.get_opt_src_target_value(opt_src, target)?;
+                let out_bit = (value & 0x01) != 0;
+                let result = value >> 1;
+                self.set_logic_op_flags(result as u16, Size::Byte, out_bit);
+                self.set_target_value(target, result)?;
+            },
             Instruction::SUB(target) => {
                 let src = self.get_target_value(target)?;
                 let acc = self.get_register_value(Register::A);
@@ -480,14 +477,14 @@ impl Z80 {
                 self.set_logic_op_flags(result as u16, Size::Byte, false);
             },
             _ => {
-                panic!("unimplemented");
+                return Err(Error::new(&format!("{}: unimplemented instruction: {:?}", DEV_NAME, self.decoder.instruction)));
             }
         }
 
         Ok(())
     }
 
-    fn rotate_left(&mut self, mut value: u8, rtype: RotateType) -> u8 {
+    fn rotate_left(&mut self, mut value: u8, rtype: RotateType) -> (u8, bool) {
         let out_bit = get_msb(value as u16, Size::Byte);
 
         let in_bit = match rtype {
@@ -497,11 +494,10 @@ impl Z80 {
 
         value <<= 1;
         value |= in_bit as u8;
-        self.set_flag(Flags::Carry, out_bit);
-        value
+        (value, out_bit)
     }
 
-    fn rotate_right(&mut self, mut value: u8, rtype: RotateType) -> u8 {
+    fn rotate_right(&mut self, mut value: u8, rtype: RotateType) -> (u8, bool) {
         let out_bit = (value & 0x01) != 0;
 
         let in_bit = match rtype {
@@ -511,8 +507,7 @@ impl Z80 {
 
         value >>= 1;
         value |= if in_bit { 0x80 } else { 0 };
-        self.set_flag(Flags::Carry, out_bit);
-        value
+        (value, out_bit)
     }
 
     fn push_word(&mut self, value: u16) -> Result<(), Error> {
