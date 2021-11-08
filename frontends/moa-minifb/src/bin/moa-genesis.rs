@@ -7,6 +7,7 @@ use moa::machines::genesis::build_genesis;
 use moa_minifb::MiniFrontendBuilder;
 
 fn main() {
+    /*
     let mut frontend = Arc::new(Mutex::new(MiniFrontendBuilder::new()));
 
     {
@@ -24,15 +25,14 @@ fn main() {
         .lock().unwrap()
         .build()
         .start(None);
+    */
 
-    /*
     let mut frontend = MiniFrontendBuilder::new();
     let mut system = build_genesis(&mut frontend).unwrap();
 
     frontend
         .build()
         .start(Some(system));
-    */
 }
 
 fn wait_until_initialized(frontend: Arc<Mutex<MiniFrontendBuilder>>) {
