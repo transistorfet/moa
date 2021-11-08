@@ -158,7 +158,7 @@ impl Z80 {
             Instruction::BIT(bit, target) => {
                 let value = self.get_target_value(target)?;
                 let result = (value & (1 << bit));
-                self.set_numeric_flags(result as u16, Size::Byte);
+                self.set_flag(Flags::Zero, result == 0);
                 self.set_flag(Flags::AddSubtract, false);
                 self.set_flag(Flags::HalfCarry, true);
             },
@@ -173,9 +173,9 @@ impl Z80 {
                 }
             },
             Instruction::CCF => {
-                self.set_flag(Flags::HalfCarry, self.get_flag(Flags::Carry));
                 self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::Carry, false);
+                self.set_flag(Flags::HalfCarry, self.get_flag(Flags::Carry));
+                self.set_flag(Flags::Carry, !self.get_flag(Flags::Carry));
             },
             Instruction::CP(target) => {
                 let src = self.get_target_value(target)?;
@@ -244,16 +244,17 @@ impl Z80 {
                     self.state.shadow_reg[i] = normal;
                 }
             },
-            Instruction::EXhlsp => {
-                let (sp_addr, hl) = (self.get_register_pair_value(RegisterPair::SP), self.get_register_pair_value(RegisterPair::HL));
-                let sp = self.port.read_leu16(sp_addr as Address)?;
-                self.set_register_pair_value(RegisterPair::HL, sp);
-                self.port.write_leu16(sp_addr as Address, hl)?;
-            },
             Instruction::EXhlde => {
                 let (hl, de) = (self.get_register_pair_value(RegisterPair::HL), self.get_register_pair_value(RegisterPair::DE));
                 self.set_register_pair_value(RegisterPair::DE, hl);
                 self.set_register_pair_value(RegisterPair::HL, de);
+            },
+            Instruction::EXsp(regpair) => {
+                let reg_value = self.get_register_pair_value(regpair);
+                let sp = self.get_register_pair_value(RegisterPair::SP);
+                let sp_value = self.port.read_leu16(sp as Address)?;
+                self.set_register_pair_value(regpair, sp_value);
+                self.port.write_leu16(sp as Address, reg_value)?;
             },
             Instruction::HALT => {
                 self.state.status = Status::Halted;
@@ -290,10 +291,10 @@ impl Z80 {
             Instruction::JP(addr) => {
                 self.state.pc = addr;
             },
-            Instruction::JPIndirectHL => {
-                let hl = self.get_register_pair_value(RegisterPair::HL);
-                let addr = self.port.read_leu16(hl as Address)?;
-                self.state.pc = addr;
+            Instruction::JPIndirect(regpair) => {
+                let value = self.get_register_pair_value(regpair);
+                //let addr = self.port.read_leu16(value as Address)?;
+                self.state.pc = value;
             },
             Instruction::JPcc(cond, addr) => {
                 if self.get_current_condition(cond) {

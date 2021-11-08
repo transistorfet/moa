@@ -107,7 +107,7 @@ pub enum Instruction {
     EXX,
     EXafaf,
     EXhlde,
-    EXhlsp,
+    EXsp(RegisterPair),
     HALT,
     IM(u8),
     INC16(RegisterPair),
@@ -119,7 +119,7 @@ pub enum Instruction {
     INic(Register),
     INx(u8),
     JP(u16),
-    JPIndirectHL,
+    JPIndirect(RegisterPair),
     JPcc(Condition, u16),
     JR(i8),
     JRcc(Condition, i8),
@@ -300,7 +300,7 @@ impl Z80Decoder {
                             match get_ins_p(ins) {
                                 0 => Ok(Instruction::RET),
                                 1 => Ok(Instruction::EXX),
-                                2 => Ok(Instruction::JPIndirectHL),
+                                2 => Ok(Instruction::JPIndirect(RegisterPair::HL)),
                                 3 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::SP), LoadTarget::DirectRegWord(RegisterPair::HL))),
                                 _ => panic!("InternalError: impossible value"),
                             }
@@ -327,7 +327,7 @@ impl Z80Decoder {
                                 let port = self.read_instruction_byte(memory)?;
                                 Ok(Instruction::INx(port))
                             },
-                            4 => Ok(Instruction::EXhlsp),
+                            4 => Ok(Instruction::EXsp(RegisterPair::HL)),
                             5 => Ok(Instruction::EXhlde),
                             6 => Ok(Instruction::DI),
                             7 => Ok(Instruction::EI),
@@ -578,8 +578,14 @@ impl Z80Decoder {
 panic!("");
             },
             3 => {
-
-panic!("");
+                match ins {
+                    0xE1 => Ok(Instruction::POP(get_register_pair_from_index(index_reg))),
+                    0xE3 => Ok(Instruction::EXsp(get_register_pair_from_index(index_reg))),
+                    0xE5 => Ok(Instruction::PUSH(get_register_pair_from_index(index_reg))),
+                    0xE9 => Ok(Instruction::JPIndirect(get_register_pair_from_index(index_reg))),
+                    0xF9 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::SP), LoadTarget::DirectRegWord(get_register_pair_from_index(index_reg)))),
+                    _ => Ok(Instruction::NOP),
+                }
             },
             _ => panic!("InternalError: impossible value"),
         }

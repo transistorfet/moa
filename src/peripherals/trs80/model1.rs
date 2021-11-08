@@ -24,7 +24,7 @@ pub struct Model1Peripherals {
 
 impl Model1Peripherals {
     pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let swapper = FrameSwapper::new_shared(320, 128);
+        let swapper = FrameSwapper::new_shared(384, 128);
         let keyboard_mem = Arc::new(Mutex::new([0; 8]));
 
         host.add_window(FrameSwapper::to_boxed(swapper.clone()))?;
@@ -58,7 +58,7 @@ impl Steppable for Model1Peripherals {
                 let ch = self.video_mem[x + (y * 64)];
                 // TODO this is totally a hack for now!!!!!
                 let iter = CharacterGenerator::new((ch - 0x20) % 64);
-                swapper.current.blit((x * 5) as u32, (y * 8) as u32, iter, 5, 8);
+                swapper.current.blit((x * 6) as u32, (y * 8) as u32, iter, 6, 8);
             }
         }
 
@@ -94,7 +94,7 @@ impl Addressable for Model1Peripherals {
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         if addr > 0x420 && addr < 0x820 {
             self.video_mem[addr as usize - 0x420] = data[0];
         } else {
