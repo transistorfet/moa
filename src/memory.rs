@@ -27,12 +27,11 @@ impl MemoryBlock {
         }
     }
 
-    pub fn load_at(&mut self, mut addr: Address, filename: &str) -> Result<(), Error> {
+    pub fn load_at(&mut self, addr: Address, filename: &str) -> Result<(), Error> {
         match fs::read(filename) {
             Ok(contents) => {
-                for byte in contents {
-                    self.contents[addr as usize] = byte;
-                    addr += 1;
+                for i in 0..contents.len() {
+                    self.contents[(addr as usize) + i] = contents[i];
                 }
                 Ok(())
             },
@@ -57,14 +56,13 @@ impl Addressable for MemoryBlock {
         Ok(())
     }
 
-    fn write(&mut self, mut addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         if self.read_only {
             return Err(Error::breakpoint(&format!("Attempt to write to read-only memory at {:x} with data {:?}", addr, data)));
         }
 
-        for byte in data {
-            self.contents[addr as usize] = *byte;
-            addr += 1;
+        for i in 0..data.len() {
+            self.contents[(addr as usize) + i] = data[i];
         }
         Ok(())
     }
@@ -108,7 +106,7 @@ impl Bus {
 
     pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(TransmutableBox, Address), Error> {
         for block in &self.blocks {
-            if addr >= block.base && addr <= (block.base + block.length as Address) {
+            if addr >= block.base && addr < (block.base + block.length as Address) {
                 let relative_addr = addr - block.base;
                 if relative_addr as usize + count <= block.length {
                     return Ok((block.dev.clone(), relative_addr));
@@ -181,7 +179,7 @@ impl BusPort {
         }
     }
 
-    pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
+    pub fn dump_memory(&mut self, addr: Address, count: Address) {
         self.subdevice.borrow_mut().dump_memory(self.offset + (addr & self.address_mask), count)
     }
 }

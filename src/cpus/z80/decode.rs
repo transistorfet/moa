@@ -5,13 +5,13 @@ use crate::devices::{Address, Addressable};
 use super::state::{Z80, Z80Type, Register};
 
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Size {
     Byte,
     Word,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Condition {
     NotZero,
     Zero,
@@ -23,7 +23,7 @@ pub enum Condition {
     Negative,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum RegisterPair {
     BC,
     DE,
@@ -34,13 +34,13 @@ pub enum RegisterPair {
     IY,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum IndexRegister {
     IX,
     IY,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum IndexRegisterHalf {
     IXH,
     IXL,
@@ -48,13 +48,13 @@ pub enum IndexRegisterHalf {
     IYL,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SpecialRegister {
     I,
     R,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Target {
     DirectReg(Register),
     DirectRegHalf(IndexRegisterHalf),
@@ -63,7 +63,7 @@ pub enum Target {
     Immediate(u8),
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum LoadTarget {
     DirectRegByte(Register),
     DirectRegHalfByte(IndexRegisterHalf),
@@ -81,7 +81,7 @@ pub enum LoadTarget {
 
 pub type OptionalSource = Option<(IndexRegister, i8)>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Instruction {
     ADCa(Target),
     ADC16(RegisterPair, RegisterPair),
@@ -383,6 +383,7 @@ impl Z80Decoder {
         let ins = self.read_instruction_byte(memory)?;
         match get_ins_x(ins) {
             0 => {
+// TODO you need to fix the case where (HL) is specified...
                 let opt_src = Some((reg, self.read_instruction_byte(memory)? as i8));
                 Ok(get_rot_instruction(get_ins_y(ins), get_register(get_ins_z(ins)), opt_src))
             },
@@ -558,24 +559,83 @@ impl Z80Decoder {
                 }
             },
             1 => {
-                match get_ins_y(ins) {
-                    4 => {
-                        /*
-                        match get_ins_z(ins) {
-                            6 => {
-                                let offset = self.read_instruction_byte(memory)?;
-                                Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::H), LoadTarget::IndirectIndexByte(offset)))
-                            },
-                            _ => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::IXH), to_load_target(get_register(get_ins_z(ins)))))
+                match get_ins_p(ins) {
+                    0 | 1 => {
+                        let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
+                            Some(target) => target,
+                            None => return Ok(Instruction::NOP),
+                        };
+
+                        match (ins & 0x18) >> 3 {
+                            0 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::B), to_load_target(target))),
+                            1 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::C), to_load_target(target))),
+                            2 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::D), to_load_target(target))),
+                            3 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::E), to_load_target(target))),
+                            _ => panic!("InternalError: impossible value"),
                         }
-                        */
-                        panic!("");
+                    },
+                    2 => {
+                        let src = match get_ins_z(ins) {
+                            0 => Target::DirectReg(Register::B),
+                            1 => Target::DirectReg(Register::C),
+                            2 => Target::DirectReg(Register::D),
+                            3 => Target::DirectReg(Register::E),
+                            4 => Target::DirectRegHalf(get_index_register_half(index_reg, 0)),
+                            5 => Target::DirectRegHalf(get_index_register_half(index_reg, 1)),
+                            6 => {
+                                let offset = self.read_instruction_byte(memory)? as i8;
+                                let src = to_load_target(Target::IndirectOffset(index_reg, offset));
+                                if get_ins_q(ins) == 0 {
+                                    return Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::H), src));
+                                } else {
+                                    return Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::L), src));
+                                }
+                            },
+                            7 => Target::DirectReg(Register::A),
+                            _ => panic!("InternalError: impossible value"),
+                        };
+
+                        let dest = get_index_register_half(index_reg, get_ins_q(ins));
+                        Ok(Instruction::LD(LoadTarget::DirectRegHalfByte(dest), to_load_target(src)))
+                    },
+                    3 => {
+                        if get_ins_q(ins) == 0 {
+                            if get_ins_z(ins) == 6 {
+                                return Ok(Instruction::NOP);
+                            }
+                            let src = get_register(get_ins_z(ins));
+                            let offset = self.read_instruction_byte(memory)? as i8;
+                            Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), to_load_target(src)))
+                        } else {
+                            let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
+                                Some(target) => target,
+                                None => return Ok(Instruction::NOP),
+                            };
+
+                            Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), to_load_target(target)))
+                        }
                     },
                     _ => panic!("InternalError: impossible value"),
                 }
             },
             2 => {
-panic!("");
+                let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
+                    Some(target) => target,
+                    None => return Ok(Instruction::NOP),
+                };
+
+
+                match get_ins_y(ins) {
+                    0 => Ok(Instruction::ADDa(target)),
+                    1 => Ok(Instruction::ADCa(target)),
+                    2 => Ok(Instruction::SUB(target)),
+                    3 => Ok(Instruction::SBCa(target)),
+                    4 => Ok(Instruction::AND(target)),
+                    5 => Ok(Instruction::XOR(target)),
+                    6 => Ok(Instruction::OR(target)),
+                    7 => Ok(Instruction::CP(target)),
+                    _ => panic!("InternalError: impossible value"),
+                }
             },
             3 => {
                 match ins {
@@ -590,6 +650,20 @@ panic!("");
             _ => panic!("InternalError: impossible value"),
         }
     }
+
+    fn decode_index_target(&mut self, memory: &mut dyn Addressable, index_reg: IndexRegister, z: u8) -> Result<Option<Target>, Error> {
+        let result = match z {
+            4 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 0))),
+            5 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 1))),
+            6 => {
+                let offset = self.read_instruction_byte(memory)? as i8;
+                Some(Target::IndirectOffset(index_reg, offset))
+            },
+            _ => None,
+        };
+        Ok(result)
+    }
+
 
 
     fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Error> {
@@ -727,6 +801,19 @@ fn get_condition(cond: u8) -> Condition {
         _ => panic!("InternalError: impossible value"),
     }
 }
+
+
+/// Z80 Decode
+///
+/// Based on an algorithm described in a Romanian book called "Ghidul Programatorului ZX Spectrum"
+/// ("The ZX Spectrum Programmer's Guide") via http://www.z80.info/decoding.htm
+///
+/// Instructions are broken up into x, y, and z parts, or alternatively into x, p, q, and z parts
+/// +----------------------+
+/// Bits : 7 6 5 4 3 2 1 0
+///       | X |  Y  |  X  |
+///             P  Q
+/// +----------------------+
 
 fn get_ins_x(ins: u8) -> u8 {
     (ins >> 6) & 0x03

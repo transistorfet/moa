@@ -34,7 +34,7 @@ pub enum Flags {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Register {
     B = 0,
     C = 1,
@@ -81,6 +81,14 @@ impl Z80State {
             i: 0,
             r: 0,
         }
+    }
+
+    pub fn get_register(&mut self, reg: Register) -> u8 {
+        self.reg[reg as usize]
+    }
+
+    pub fn set_register(&mut self, reg: Register, value: u8) {
+        self.reg[reg as usize] = value;
     }
 }
 

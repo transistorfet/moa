@@ -157,7 +157,7 @@ impl Z80 {
             },
             Instruction::BIT(bit, target) => {
                 let value = self.get_target_value(target)?;
-                let result = (value & (1 << bit));
+                let result = value & (1 << bit);
                 self.set_flag(Flags::Zero, result == 0);
                 self.set_flag(Flags::AddSubtract, false);
                 self.set_flag(Flags::HalfCarry, true);
@@ -211,6 +211,7 @@ impl Z80 {
                 let value = self.get_target_value(target)?;
 
                 let (result, carry, overflow) = sub_bytes(value, 1);
+                let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
                 self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, (result & 0x10) != 0);
 
                 self.set_target_value(target, result)?;
@@ -335,8 +336,14 @@ impl Z80 {
                 let parity = if count != 0 { Flags::Parity as u8 } else { 0 };
                 self.set_flags(mask, parity);
             },
-            //Instruction::NEG => {
-            //},
+            Instruction::NEG => {
+                let acc = self.get_register_value(Register::A);
+
+                let (result, carry, overflow) = sub_bytes(0, acc);
+                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, (result & 0x10) != 0);
+
+                self.set_register_value(Register::A, result);
+            },
             Instruction::NOP => { },
             Instruction::OR(target) => {
                 let acc = self.get_register_value(Register::A);
@@ -468,7 +475,7 @@ impl Z80 {
             Instruction::SET(bit, target, opt_src) => {
                 let mut value = self.get_opt_src_target_value(opt_src, target)?;
                 value = value | (1 << bit);
-                self.set_target_value(target, value);
+                self.set_target_value(target, value)?;
             },
             Instruction::SLA(target, opt_src) => {
                 let value = self.get_opt_src_target_value(opt_src, target)?;
@@ -566,9 +573,9 @@ impl Z80 {
 
 
     fn push_word(&mut self, value: u16) -> Result<(), Error> {
-        self.state.sp -= 1;
+        self.state.sp = self.state.sp.wrapping_sub(1);
         self.port.write_u8(self.state.sp as Address, (value >> 8) as u8)?;
-        self.state.sp -= 1;
+        self.state.sp = self.state.sp.wrapping_sub(1);
         self.port.write_u8(self.state.sp as Address, (value & 0x00FF) as u8)?;
         Ok(())
     }
@@ -576,9 +583,9 @@ impl Z80 {
     fn pop_word(&mut self) -> Result<u16, Error> {
         let mut value = 0;
         value = self.port.read_u8(self.state.sp as Address)? as u16;
-        self.state.sp += 1;
+        self.state.sp = self.state.sp.wrapping_add(1);
         value |= (self.port.read_u8(self.state.sp as Address)? as u16) << 8;
-        self.state.sp += 1;
+        self.state.sp = self.state.sp.wrapping_add(1);
         Ok(value)
     }
 
@@ -590,6 +597,10 @@ impl Z80 {
             LoadTarget::IndirectRegByte(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
                 self.port.read_u8(addr as Address)? as u16
+            },
+            LoadTarget::IndirectOffsetByte(index_reg, offset) => {
+                let addr = self.get_index_register_value(index_reg);
+                self.port.read_u8(((addr as i16).wrapping_add(offset as i16)) as Address)? as u16
             },
             LoadTarget::IndirectRegWord(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
@@ -619,6 +630,10 @@ impl Z80 {
                 let addr = self.get_register_pair_value(regpair);
                 self.port.write_u8(addr as Address, value as u8)?;
             },
+            LoadTarget::IndirectOffsetByte(index_reg, offset) => {
+                let addr = self.get_index_register_value(index_reg);
+                self.port.write_u8(((addr as i16).wrapping_add(offset as i16)) as Address, value as u8)?;
+            },
             LoadTarget::IndirectRegWord(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
                 self.port.write_leu16(addr as Address, value)?;
@@ -631,7 +646,7 @@ impl Z80 {
             LoadTarget::IndirectWord(addr) => {
                 self.port.write_leu16(addr as Address, value)?;
             },
-            _ => panic!("Unsupported LoadTarget for set"),
+            _ => panic!("Unsupported LoadTarget for set: {:?}", target),
         }
         Ok(())
     }
