@@ -39,10 +39,17 @@ impl Debuggable for Z80 {
 
     fn print_disassembly(&mut self, addr: Address, count: usize) {
         let mut decoder = Z80Decoder::new();
-        //decoder.dump_disassembly(&mut self.port, self.state.pc, 0x1000);
+        decoder.dump_disassembly(&mut self.port, addr as u16, count as u16);
     }
 
     fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
+        match args[0] {
+            "l" => {
+                use super::state::Register;
+                self.state.reg[Register::L as usize] = 0x05
+            },
+            _ => { return Ok(true); },
+        }
         Ok(false)
     }
 }

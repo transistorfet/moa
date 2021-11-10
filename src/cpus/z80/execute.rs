@@ -3,7 +3,7 @@ use crate::system::System;
 use crate::error::{ErrorType, Error};
 use crate::devices::{ClockElapsed, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
-use super::decode::{Condition, Instruction, LoadTarget, Target, OptionalSource, RegisterPair, IndexRegister, IndexRegisterHalf, Size};
+use super::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, IndexRegister, IndexRegisterHalf, Size, Direction, UndocumentedCopy};
 use super::state::{Z80, Status, Flags, Register};
 
 
@@ -273,6 +273,7 @@ impl Z80 {
                 let value = self.get_target_value(target)?;
 
                 let (result, carry, overflow) = add_bytes(value, 1);
+                let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
                 self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, (result & 0x10) != 0);
 
                 self.set_target_value(target, result)?;
@@ -312,11 +313,10 @@ impl Z80 {
             },
             Instruction::LD(dest, src) => {
                 let src_value = self.get_load_target_value(src)?;
-                if let LoadTarget::DirectSpecialRegByte(_) = src {
-                    self.set_logic_op_flags(src_value as u8, self.get_flag(Flags::Carry), false);
-                }
                 self.set_load_target_value(dest, src_value)?;
             },
+            //Instruction::LDsr(special_reg, dir) => {
+            //}
             //Instruction::LDD => {
             //},
             //Instruction::LDDR => {
@@ -364,7 +364,7 @@ impl Z80 {
             //},
             Instruction::OUTx(port) => {
                 // TODO this needs to be fixed
-                println!("OUT ({:x}), {:x}", port, self.state.reg[Register::A as usize]);
+                println!("OUT ({:x}), {:x} {}", port, self.state.reg[Register::A as usize], self.state.reg[Register::A as usize] as char);
             },
             Instruction::POP(regpair) => {
                 let value = self.pop_word()?;
@@ -374,10 +374,13 @@ impl Z80 {
                 let value = self.get_register_pair_value(regpair);
                 self.push_word(value)?;
             },
-            Instruction::RES(bit, target, opt_src) => {
-                let mut value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::RES(bit, target, opt_copy) => {
+                let mut value = self.get_target_value(target)?;
                 value = value & !(1 << bit);
-                self.set_target_value(target, value);
+                self.set_target_value(target, value)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
             Instruction::RET => {
                 self.state.pc = self.pop_word()?;
@@ -391,11 +394,14 @@ impl Z80 {
                     self.state.pc = self.pop_word()?;
                 }
             },
-            Instruction::RL(target, opt_src) => {
-                let value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::RL(target, opt_copy) => {
+                let value = self.get_target_value(target)?;
                 let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_target_value(target, result)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
             Instruction::RLA => {
                 let value = self.get_register_value(Register::A);
@@ -403,11 +409,14 @@ impl Z80 {
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_register_value(Register::A, result);
             },
-            Instruction::RLC(target, opt_src) => {
-                let value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::RLC(target, opt_copy) => {
+                let value = self.get_target_value(target)?;
                 let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_target_value(target, result)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
             Instruction::RLCA => {
                 let value = self.get_register_value(Register::A);
@@ -417,11 +426,14 @@ impl Z80 {
             },
             //Instruction::RLD => {
             //},
-            Instruction::RR(target, opt_src) => {
-                let value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::RR(target, opt_copy) => {
+                let value = self.get_target_value(target)?;
                 let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_target_value(target, result)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
             Instruction::RRA => {
                 let value = self.get_register_value(Register::A);
@@ -429,11 +441,14 @@ impl Z80 {
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_register_value(Register::A, result);
             },
-            Instruction::RRC(target, opt_src) => {
-                let value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::RRC(target, opt_copy) => {
+                let value = self.get_target_value(target)?;
                 let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_target_value(target, result)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
             Instruction::RRCA => {
                 let value = self.get_register_value(Register::A);
@@ -472,39 +487,54 @@ impl Z80 {
                 self.set_flag(Flags::HalfCarry, false);
                 self.set_flag(Flags::Carry, true);
             },
-            Instruction::SET(bit, target, opt_src) => {
-                let mut value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::SET(bit, target, opt_copy) => {
+                let mut value = self.get_target_value(target)?;
                 value = value | (1 << bit);
                 self.set_target_value(target, value)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
-            Instruction::SLA(target, opt_src) => {
-                let value = self.get_opt_src_target_value(opt_src, target)?;
-                let out_bit = get_msb(value as u16, Size::Byte);
-                let result = (value << 1) | 0x01;
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-            },
-            Instruction::SLL(target, opt_src) => {
-                let value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::SLA(target, opt_copy) => {
+                let value = self.get_target_value(target)?;
                 let out_bit = get_msb(value as u16, Size::Byte);
                 let result = value << 1;
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_target_value(target, result)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
-            Instruction::SRA(target, opt_src) => {
-                let value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::SLL(target, opt_copy) => {
+                let value = self.get_target_value(target)?;
+                let out_bit = get_msb(value as u16, Size::Byte);
+                let result = value << 1;
+                self.set_logic_op_flags(result, out_bit, false);
+                self.set_target_value(target, result)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
+            },
+            Instruction::SRA(target, opt_copy) => {
+                let value = self.get_target_value(target)?;
                 let out_bit = (value & 0x01) != 0;
                 let msb_mask = if get_msb(value as u16, Size::Byte) { 0x80 } else { 0 };
                 let result = (value >> 1) | msb_mask;
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_target_value(target, result)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
-            Instruction::SRL(target, opt_src) => {
-                let value = self.get_opt_src_target_value(opt_src, target)?;
+            Instruction::SRL(target, opt_copy) => {
+                let value = self.get_target_value(target)?;
                 let out_bit = (value & 0x01) != 0;
                 let result = value >> 1;
                 self.set_logic_op_flags(result, out_bit, false);
                 self.set_target_value(target, result)?;
+                if let Some(target) = opt_copy {
+                    self.set_target_value(target, value)?;
+                }
             },
             Instruction::SUB(target) => {
                 let src = self.get_target_value(target)?;
@@ -675,19 +705,13 @@ impl Z80 {
                 let addr = self.get_register_pair_value(regpair);
                 self.port.write_u8(addr as Address, value)?;
             },
+            Target::IndirectOffset(reg, offset) => {
+                let addr = (self.get_index_register_value(reg) as i16) + (offset as i16);
+                self.port.write_u8(addr as Address, value)?;
+            },
             _ => panic!("Unsupported LoadTarget for set"),
         }
         Ok(())
-    }
-
-    fn get_opt_src_target_value(&mut self, opt_src: OptionalSource, target: Target) -> Result<u8, Error> {
-        match opt_src {
-            None => self.get_target_value(target),
-            Some((reg, offset)) => {
-                let addr = (self.get_index_register_value(reg) as i16) + (offset as i16);
-                self.port.read_u8(addr as Address)
-            },
-        }
     }
 
 

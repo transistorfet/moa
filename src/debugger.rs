@@ -115,7 +115,19 @@ impl Debugger {
                 }
             },
             "dis" | "disassemble" => {
-                debug_obj.print_disassembly(0, 0);
+                let addr = if args.len() > 1 {
+                    Address::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?
+                } else {
+                    0
+                };
+
+                let count = if args.len() > 2 {
+                    usize::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse address"))?
+                } else {
+                    0x1000
+                };
+
+                debug_obj.print_disassembly(addr, count);
             },
             "c" | "continue" => {
                 self.check_repeat_arg(args)?;

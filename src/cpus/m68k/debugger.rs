@@ -65,7 +65,7 @@ impl Debuggable for M68k {
 
     fn print_disassembly(&mut self, addr: Address, count: usize) {
         let mut decoder = M68kDecoder::new(self.cputype, 0);
-        decoder.dump_disassembly(&mut self.port, self.state.pc, 0x1000);
+        decoder.dump_disassembly(&mut self.port, addr as u32, count as u32);
     }
 
     fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {

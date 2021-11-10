@@ -6,6 +6,12 @@ use super::state::{Z80, Z80Type, Register};
 
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Direction {
+    ToAcc,
+    FromAcc,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Size {
     Byte,
     Word,
@@ -72,14 +78,13 @@ pub enum LoadTarget {
     IndirectRegWord(RegisterPair),
     IndirectOffsetByte(IndexRegister, i8),
     DirectAltRegByte(Register),
-    DirectSpecialRegByte(SpecialRegister),
     IndirectByte(u16),
     IndirectWord(u16),
     ImmediateByte(u8),
     ImmediateWord(u16),
 }
 
-pub type OptionalSource = Option<(IndexRegister, i8)>;
+pub type UndocumentedCopy = Option<Target>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Instruction {
@@ -124,6 +129,7 @@ pub enum Instruction {
     JR(i8),
     JRcc(Condition, i8),
     LD(LoadTarget, LoadTarget),
+    LDsr(SpecialRegister, Direction),
     LDD,
     LDDR,
     LDI,
@@ -139,30 +145,30 @@ pub enum Instruction {
     OUTx(u8),
     POP(RegisterPair),
     PUSH(RegisterPair),
-    RES(u8, Target, OptionalSource),
+    RES(u8, Target, UndocumentedCopy),
     RET,
     RETI,
     RETN,
     RETcc(Condition),
-    RL(Target, OptionalSource),
+    RL(Target, UndocumentedCopy),
     RLA,
-    RLC(Target, OptionalSource),
+    RLC(Target, UndocumentedCopy),
     RLCA,
     RLD,
-    RR(Target, OptionalSource),
+    RR(Target, UndocumentedCopy),
     RRA,
-    RRC(Target, OptionalSource),
+    RRC(Target, UndocumentedCopy),
     RRCA,
     RRD,
     RST(u8),
     SBCa(Target),
     SBC16(RegisterPair, RegisterPair),
     SCF,
-    SET(u8, Target, OptionalSource),
-    SLA(Target, OptionalSource),
-    SLL(Target, OptionalSource),
-    SRA(Target, OptionalSource),
-    SRL(Target, OptionalSource),
+    SET(u8, Target, UndocumentedCopy),
+    SLA(Target, UndocumentedCopy),
+    SLL(Target, UndocumentedCopy),
+    SRA(Target, UndocumentedCopy),
+    SRL(Target, UndocumentedCopy),
     SUB(Target),
     XOR(Target),
 }
@@ -380,25 +386,18 @@ impl Z80Decoder {
     }
 
     pub fn decode_sub_prefix_cb(&mut self, memory: &mut dyn Addressable, reg: IndexRegister) -> Result<Instruction, Error> {
+        let offset = self.read_instruction_byte(memory)? as i8;
         let ins = self.read_instruction_byte(memory)?;
+        let opt_copy = match get_ins_z(ins) {
+            6 => None, //Some(Target::DirectReg(Register::F)),
+            z => Some(get_register(z)),
+        };
+
         match get_ins_x(ins) {
-            0 => {
-// TODO you need to fix the case where (HL) is specified...
-                let opt_src = Some((reg, self.read_instruction_byte(memory)? as i8));
-                Ok(get_rot_instruction(get_ins_y(ins), get_register(get_ins_z(ins)), opt_src))
-            },
-            1 => {
-                let offset = self.read_instruction_byte(memory)? as i8;
-                Ok(Instruction::BIT(get_ins_y(ins), Target::IndirectOffset(reg, offset)))
-            },
-            2 => {
-                let opt_src = Some((reg, self.read_instruction_byte(memory)? as i8));
-                Ok(Instruction::RES(get_ins_y(ins), get_register(get_ins_z(ins)), opt_src))
-            },
-            3 => {
-                let opt_src = Some((reg, self.read_instruction_byte(memory)? as i8));
-                Ok(Instruction::SET(get_ins_y(ins), get_register(get_ins_z(ins)), opt_src))
-            },
+            0 => Ok(get_rot_instruction(get_ins_y(ins), Target::IndirectOffset(reg, offset), opt_copy)),
+            1 => Ok(Instruction::BIT(get_ins_y(ins), Target::IndirectOffset(reg, offset))),
+            2 => Ok(Instruction::RES(get_ins_y(ins), Target::IndirectOffset(reg, offset), opt_copy)),
+            3 => Ok(Instruction::SET(get_ins_y(ins), Target::IndirectOffset(reg, offset), opt_copy)),
             _ => panic!("InternalError: impossible value"),
         }
     }
@@ -458,10 +457,10 @@ impl Z80Decoder {
                     },
                     7 => {
                         match get_ins_y(ins) {
-                            0 => Ok(Instruction::LD(LoadTarget::DirectSpecialRegByte(SpecialRegister::I), LoadTarget::DirectRegByte(Register::A))),
-                            1 => Ok(Instruction::LD(LoadTarget::DirectSpecialRegByte(SpecialRegister::R), LoadTarget::DirectRegByte(Register::A))),
-                            2 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), LoadTarget::DirectSpecialRegByte(SpecialRegister::I))),
-                            3 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), LoadTarget::DirectSpecialRegByte(SpecialRegister::R))),
+                            0 => Ok(Instruction::LDsr(SpecialRegister::I, Direction::FromAcc)),
+                            1 => Ok(Instruction::LDsr(SpecialRegister::R, Direction::FromAcc)),
+                            2 => Ok(Instruction::LDsr(SpecialRegister::I, Direction::ToAcc)),
+                            3 => Ok(Instruction::LDsr(SpecialRegister::R, Direction::ToAcc)),
                             4 => Ok(Instruction::RRD),
                             5 => Ok(Instruction::RLD),
                             _ => Ok(Instruction::NOP),
@@ -690,6 +689,22 @@ impl Z80Decoder {
         let ins_data = self.format_instruction_bytes(memory);
         println!("{:#06x}: {}\n\t{:?}\n", self.start, ins_data, self.instruction);
     }
+
+    pub fn dump_disassembly(&mut self, memory: &mut dyn Addressable, start: u16, length: u16) {
+        let mut next = start;
+        while next < (start + length) {
+            match self.decode_at(memory, next) {
+                Ok(()) => {
+                    self.dump_decoded(memory);
+                    next = self.end;
+                },
+                Err(err) => {
+                    println!("{:?}", err);
+                    return;
+                },
+            }
+        }
+    }
 }
 
 fn get_alu_instruction(alu: u8, target: Target) -> Instruction {
@@ -706,16 +721,16 @@ fn get_alu_instruction(alu: u8, target: Target) -> Instruction {
     }
 }
 
-fn get_rot_instruction(rot: u8, target: Target, opt_src: OptionalSource) -> Instruction {
+fn get_rot_instruction(rot: u8, target: Target, opt_copy: UndocumentedCopy) -> Instruction {
     match rot {
-        0 => Instruction::RLC(target, opt_src),
-        1 => Instruction::RRC(target, opt_src),
-        2 => Instruction::RL(target, opt_src),
-        3 => Instruction::RR(target, opt_src),
-        4 => Instruction::SLA(target, opt_src),
-        5 => Instruction::SRA(target, opt_src),
-        6 => Instruction::SLL(target, opt_src),
-        7 => Instruction::SRL(target, opt_src),
+        0 => Instruction::RLC(target, opt_copy),
+        1 => Instruction::RRC(target, opt_copy),
+        2 => Instruction::RL(target, opt_copy),
+        3 => Instruction::RR(target, opt_copy),
+        4 => Instruction::SLA(target, opt_copy),
+        5 => Instruction::SRA(target, opt_copy),
+        6 => Instruction::SLL(target, opt_copy),
+        7 => Instruction::SRL(target, opt_copy),
         _ => panic!("InternalError: impossible value"),
     }
 }
