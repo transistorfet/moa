@@ -26,6 +26,7 @@ pub trait Tty {
 }
 
 pub trait WindowUpdater: Send {
+    fn get_size(&mut self) -> (u32, u32);
     fn update_frame(&mut self, width: u32, height: u32, bitmap: &mut [u32]);
 }
 

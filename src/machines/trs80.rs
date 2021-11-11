@@ -9,23 +9,40 @@ use crate::peripherals::trs80;
 
 use crate::host::traits::Host;
 
+pub struct Trs80Options {
+    pub rom: String,
+    pub memory: u16,
+    pub frequency: u32,
+}
 
-pub fn build_trs80<H: Host>(host: &mut H) -> Result<System, Error> {
+impl Trs80Options {
+    pub fn new() -> Self {
+        Self {
+            rom: "binaries/trs80/level2.rom".to_string(),
+            memory: 0xC000,
+            frequency: 1_774_000,
+        }
+    }
+}
+
+
+pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<System, Error> {
     let mut system = System::new();
 
     let mut rom = MemoryBlock::new(vec![0; 0x4000]);
-    rom.load_at(0x0000, "binaries/trs80/level1.rom")?;
+    //rom.load_at(0x0000, "binaries/trs80/level1.rom")?;
     //rom.load_at(0x0000, "binaries/trs80/level2.rom")?;
+    rom.load_at(0x0000, &options.rom)?;
     rom.read_only();
     system.add_addressable_device(0x0000, wrap_transmutable(rom))?;
 
-    let ram = MemoryBlock::new(vec![0; 0xC000]);
+    let ram = MemoryBlock::new(vec![0; options.memory as usize]);
     system.add_addressable_device(0x4000, wrap_transmutable(ram))?;
 
     let model1 = trs80::model1::Model1Peripherals::create(host)?;
     system.add_addressable_device(0x37E0, wrap_transmutable(model1)).unwrap();
 
-    let mut cpu = Z80::new(Z80Type::Z80, 4_000_000, BusPort::new(0, 16, 8, system.bus.clone()));
+    let mut cpu = Z80::new(Z80Type::Z80, options.frequency, BusPort::new(0, 16, 8, system.bus.clone()));
     //cpu.add_breakpoint(0x0);
     //cpu.add_breakpoint(0xb55);
     //cpu.add_breakpoint(0xb76);
@@ -46,9 +63,9 @@ pub fn build_trs80<H: Host>(host: &mut H) -> Result<System, Error> {
     //cpu.add_breakpoint(0xc77); 
     //cpu.add_breakpoint(0xc83);
     //cpu.add_breakpoint(0x96d);
-    cpu.add_breakpoint(0x970);
-    cpu.add_breakpoint(0x9e2);
-    cpu.add_breakpoint(0x9f9);
+    //cpu.add_breakpoint(0x970);
+    //cpu.add_breakpoint(0x9e2);
+    //cpu.add_breakpoint(0x9f9);
 
     system.add_interruptable_device("cpu", wrap_transmutable(cpu))?;
 

@@ -1,24 +1,72 @@
 
-mod keys;
-
 use std::thread;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
 use minifb::{self, Key};
+use clap::{App, ArgMatches};
 
 use moa::error::Error;
 use moa::system::System;
 use moa::host::traits::{Host, JoystickDevice, JoystickUpdater, KeyboardUpdater, WindowUpdater};
 
+mod keys;
 use crate::keys::map_key;
 
 
-//const WIDTH: usize = 320;
-//const HEIGHT: usize = 224;
+const WIDTH: u32 = 320;
+const HEIGHT: u32 = 224;
 
-const WIDTH: usize = 384;
-const HEIGHT: usize = 128;
+
+pub fn new(name: &str) -> App {
+    App::new(name)
+        .arg("-s, --scale=[1,2,4]    'Scale the screen'")
+        .arg("-t, --threaded         'Run the simulation in a separate thread'")
+}
+
+pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
+    if matches.value_of("threaded").is_some() {
+        run_inline(matches, init);
+    } else {
+        run_threaded(matches, init);
+    }
+}
+
+pub fn run_inline<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> {
+    let mut frontend = MiniFrontendBuilder::new();
+    let system = init(&mut frontend).unwrap();
+
+    frontend
+        .build()
+        .start(matches, Some(system));
+}
+
+pub fn run_threaded<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
+    let frontend = Arc::new(Mutex::new(MiniFrontendBuilder::new()));
+
+    {
+        let frontend = frontend.clone();
+        thread::spawn(move || {
+            let mut system = init(&mut *(frontend.lock().unwrap())).unwrap();
+            frontend.lock().unwrap().finalize();
+            system.run_loop();
+        });
+    }
+
+    wait_until_initialized(frontend.clone());
+
+    frontend
+        .lock().unwrap()
+        .build()
+        .start(matches, None);
+}
+
+fn wait_until_initialized(frontend: Arc<Mutex<MiniFrontendBuilder>>) {
+    while frontend.lock().unwrap().finalized == false {
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
 
 pub struct MiniFrontendBuilder {
     pub window: Option<Box<dyn WindowUpdater>>,
@@ -90,21 +138,32 @@ pub struct MiniFrontend {
 impl MiniFrontend {
     pub fn new(window: Option<Box<dyn WindowUpdater>>, joystick: Option<Box<dyn JoystickUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>) -> Self {
         Self {
-            buffer: vec![0; WIDTH * HEIGHT],
+            buffer: vec![0; (WIDTH * HEIGHT) as usize],
             window,
             joystick,
             keyboard,
         }
     }
 
-    pub fn start(&mut self, mut system: Option<System>) {
+    pub fn start(&mut self, matches: ArgMatches, mut system: Option<System>) {
         let mut options = minifb::WindowOptions::default();
-        options.scale = minifb::Scale::X2;
+        options.scale = match matches.value_of("scale").map(|s| u8::from_str_radix(s, 10).unwrap()) {
+            Some(1) => minifb::Scale::X1,
+            Some(2) => minifb::Scale::X2,
+            Some(4) => minifb::Scale::X4,
+            _ => minifb::Scale::X2,
+        };
+
+        let mut size = (WIDTH, HEIGHT);
+        if let Some(updater) = self.window.as_mut() {
+            size = updater.get_size();
+            self.buffer = vec![0; (size.0 * size.1) as usize];
+        }
 
         let mut window = minifb::Window::new(
             "Test - ESC to exit",
-            WIDTH,
-            HEIGHT,
+            size.0 as usize,
+            size.1 as usize,
             options,
         )
         .unwrap_or_else(|e| {
@@ -144,47 +203,10 @@ impl MiniFrontend {
             }
 
             if let Some(updater) = self.window.as_mut() {
-                updater.update_frame(WIDTH as u32, HEIGHT as u32, &mut self.buffer);
-                window.update_with_buffer(&self.buffer, WIDTH, HEIGHT).unwrap();
+                updater.update_frame(size.0, size.1, &mut self.buffer);
+                window.update_with_buffer(&self.buffer, size.0 as usize, size.1 as usize).unwrap();
             }
         }
     }
 }
-
-
-pub fn run_inline<I>(init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> {
-    let mut frontend = MiniFrontendBuilder::new();
-    let system = init(&mut frontend).unwrap();
-
-    frontend
-        .build()
-        .start(Some(system));
-}
-
-pub fn run_threaded<I>(init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
-    let frontend = Arc::new(Mutex::new(MiniFrontendBuilder::new()));
-
-    {
-        let frontend = frontend.clone();
-        thread::spawn(move || {
-            let mut system = init(&mut *(frontend.lock().unwrap())).unwrap();
-            frontend.lock().unwrap().finalize();
-            system.run_loop();
-        });
-    }
-
-    wait_until_initialized(frontend.clone());
-
-    frontend
-        .lock().unwrap()
-        .build()
-        .start(None);
-}
-
-fn wait_until_initialized(frontend: Arc<Mutex<MiniFrontendBuilder>>) {
-    while frontend.lock().unwrap().finalized == false {
-        thread::sleep(Duration::from_millis(10));
-    }
-}
-
 

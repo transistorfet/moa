@@ -9,4 +9,5 @@ default-run = "moa-genesis"
 [dependencies]
 moa = { path = "../../" }
 minifb = "0.19"
+clap = "3.0.0-beta.5"
 

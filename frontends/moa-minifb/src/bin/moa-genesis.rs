@@ -1,9 +1,14 @@
 
+
+use moa_minifb;
 use moa::machines::genesis::build_genesis;
-use moa_minifb::{run_inline, run_threaded};
 
 fn main() {
-    //run_inline(build_genesis);
-    run_threaded(build_genesis);
+    let matches = moa_minifb::new("Sega Genesis/Mega Drive Emulator")
+        .get_matches();
+
+    moa_minifb::run(matches, |frontends| {
+        build_genesis(frontend)
+    });
 }
 

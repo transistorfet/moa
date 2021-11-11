@@ -1,27 +1,7 @@
 
-* there is a problem where something writes to the rom area which causes a crash
-At 0x16cde, a move writes an invalid value to 0 via an indirect %a2 reg.  The value of the reg might have changed during an interrupt, but it definitely breaks when the next interrupt occurs
-Before the loop is 0x16a0e which then calculates the count and such
-0x16584 is where the memory address 0xffd11a is updated, which is then used for the bad 0x0000 address which causes the improper write.  0x16570 is a better start
-On broken cycle: %a1 = 1df40, moves that location + 1 to %d0
-
-
-* 0x1650e is where 0xffac08 is changed to 0xd100
-* 0x16572 is where 0xffd100 is changed to 0
-* what if it's a problem when turning the 0 into a full address (which should be ff0000 or ffff00 but instead ends up being 000000)
-
-
-
-
 * the overflow bit is only correct for addition but not subtraction... in subtraction, two positives can result in a negative and vice versa
 
 
-
-
-
-
-
-* fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
 
 * could have a remapper device, which takes a big swath of addresses in and maps them to another set of addresses (for Mac VIA generic to bus-hookup-in-mac adapter)
 * how can you do devices that change their address map during operation, like mac which puts rom at 0 and ram at 600000 temporarily 
@@ -32,36 +12,44 @@ On broken cycle: %a1 = 1df40, moves that location + 1 to %d0
   So both could share the same Signal, one setting it and the other reading it, but how would you actually configure/build that?
 
 
+* make it possible to specify the rom on the command line.  Would this be machine specific?
+* make the frontend resize its window based on the frame swapper
 * make it possible to set the frame sizes when creating the frame swapper
 * should you rename devices.rs traits.rs?
 
 
 
-* implement a Z80
 * maybe see about a Mac 128k or something
-
-* add instruction timing to M68k
-* YM7101 timing is causing it to be very slow... speeding this up increasing rendering speed a lot, even though the frame shouldn't be drawn that often... not sure what's wrong with the timing
-* make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
 
 
 * you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
 * should you simulate bus arbitration?
 
 
-
-* make tests for each instruction
-* check all instructions in the docs
-
-* unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SBCD, SUBX
-* >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
-
-* add support for MMU
-* add support for FPU
-* Coprocessor instructions: cpBcc, cpDBcc, cpGEN, cpScc, cpTRAPcc
+Genesis/Mega Drive:
+    * fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
+    * YM7101 timing is causing it to be very slow... speeding this up increasing rendering speed a lot, even though the frame shouldn't be drawn that often... not sure what's wrong with the timing
+    * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
 
 
-* how can you have multple CPUs
+68000:
+    * add instruction timing to M68k
+    * make tests for each instruction
+    * check all instructions in the docs
+
+    * unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SBCD, SUBX
+    * >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
+
+    * add support for MMU
+    * add support for FPU
+    * Coprocessor instructions: cpBcc, cpDBcc, cpGEN, cpScc, cpTRAPcc
+
+Z80:
+    * add instruction timings to Z80
+
+
+
+* how can you have multiple CPUs
 * each device that can make a bus request should have a BusPort which is used to access the bus
 * can you eventually make the system connections all configurable via a config file?
 
