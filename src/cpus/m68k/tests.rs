@@ -4,7 +4,7 @@ mod decode_tests {
     use crate::error::{Error, ErrorType};
     use crate::system::System;
     use crate::memory::{MemoryBlock, BusPort};
-    use crate::devices::{Address, Addressable, Steppable, TransmutableBox, wrap_transmutable, MAX_READ};
+    use crate::devices::{Address, Addressable, wrap_transmutable};
 
     use crate::cpus::m68k::{M68k, M68kType};
     use crate::cpus::m68k::state::Exceptions;
@@ -12,6 +12,46 @@ mod decode_tests {
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
+
+    struct TestCase {
+        cpu: M68kType,
+        data: &'static [u16],
+        ins: Option<Instruction>,
+    }
+
+    const DECODE_TESTS: &'static [TestCase] = &[
+        // MC68000
+        TestCase { cpu: M68kType::MC68000, data: &[0x4e71],                             ins: Some(Instruction::NOP) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0008, 0x00FF],                     ins: Some(Instruction::OR(Target::Immediate(0xFF), Target::DirectAReg(0), Size::Byte)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x003C, 0x00FF],                     ins: Some(Instruction::ORtoCCR(0xFF)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x007C, 0x1234],                     ins: Some(Instruction::ORtoSR(0x1234)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0263, 0x1234],                     ins: Some(Instruction::AND(Target::Immediate(0x1234), Target::IndirectARegDec(3), Size::Word)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x023C, 0x1234],                     ins: Some(Instruction::ANDtoCCR(0x34)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x027C, 0xF8FF],                     ins: Some(Instruction::ANDtoSR(0xF8FF)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0487, 0x1234, 0x5678],             ins: Some(Instruction::SUB(Target::Immediate(0x12345678), Target::DirectDReg(7), Size::Long)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x063A, 0x1234, 0x0055],             ins: Some(Instruction::ADD(Target::Immediate(0x34), Target::IndirectRegOffset(BaseRegister::PC, None, 0x55), Size::Byte)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0A23, 0x1234],                     ins: Some(Instruction::EOR(Target::Immediate(0x34), Target::IndirectARegDec(3), Size::Byte)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0A3C, 0x1234],                     ins: Some(Instruction::EORtoCCR(0x34)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0A7C, 0xF8FF],                     ins: Some(Instruction::EORtoSR(0xF8FF)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0C00, 0x0020],                     ins: Some(Instruction::CMP(Target::Immediate(0x20), Target::DirectDReg(0), Size::Byte)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0C00, 0x0030],                     ins: Some(Instruction::CMP(Target::Immediate(0x30), Target::DirectDReg(0), Size::Byte)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0C00, 0x0010],                     ins: Some(Instruction::CMP(Target::Immediate(0x10), Target::DirectDReg(0), Size::Byte)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x81FC, 0x0003],                     ins: Some(Instruction::DIVW(Target::Immediate(3), 0, Sign::Signed)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0xC1FC, 0x0276],                     ins: Some(Instruction::MULW(Target::Immediate(0x276), 0, Sign::Signed)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0xE300],                             ins: Some(Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0xE200],                             ins: Some(Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0xE318],                             ins: Some(Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0xE218],                             ins: Some(Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right)) },
+
+        // MC68030
+        TestCase { cpu: M68kType::MC68030, data: &[0x4C3C, 0x0800, 0x0000, 0x0097],                     ins: Some(Instruction::MULL(Target::Immediate(0x97), None, 0, Sign::Signed)) },
+        TestCase { cpu: M68kType::MC68030, data: &[0x21BC, 0x0010, 0x14C4, 0x09B0, 0x0010, 0xDF40],     ins: Some(Instruction::MOVE(Target::Immediate(1053892), Target::IndirectRegOffset(BaseRegister::None, Some(IndexRegister { xreg: XRegister::DReg(0), scale: 0, size: Size::Long }), 0x10df40), Size::Long)) },
+
+        // Should Fail
+        TestCase { cpu: M68kType::MC68000, data: &[0x21BC, 0x0010, 0x14C4, 0x09B0, 0x0010, 0xDF40],     ins: None },
+        TestCase { cpu: M68kType::MC68000, data: &[0xA000],                                             ins: None },
+    ];
+
 
     fn init_decode_test(cputype: M68kType) -> (M68k, System) {
         let mut system = System::new();
@@ -45,6 +85,28 @@ mod decode_tests {
         for word in data {
             system.get_bus().write_beu16(addr, *word).unwrap();
             addr += 2;
+        }
+    }
+
+    fn run_decode_test(case: &TestCase) {
+        let (mut cpu, system) = init_decode_test(case.cpu);
+        load_memory(&system, case.data);
+        match &case.ins {
+            Some(ins) => {
+                cpu.decode_next(&system).unwrap();
+                assert_eq!(cpu.decoder.instruction, ins.clone());
+            },
+            None => {
+                assert_eq!(cpu.decode_next(&system).is_err(), true);
+            },
+        }
+    }
+
+    #[test]
+    pub fn run_decode_tests() {
+        for case in DECODE_TESTS {
+            println!("Testing for {:?}", case.ins);
+            run_decode_test(case);
         }
     }
 
@@ -286,241 +348,6 @@ mod decode_tests {
             result => panic!("Expected illegal instruction but found: {:?}", result),
         }
     }
-
-    //
-    // Instruction Decode Tests
-    //
-
-    #[test]
-    fn instruction_nop() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x4e71]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::NOP);
-    }
-
-    #[test]
-    fn instruction_ori_byte() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0008, 0x00FF]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::OR(Target::Immediate(0xFF), Target::DirectAReg(0), Size::Byte));
-    }
-
-    #[test]
-    fn instruction_ori_to_ccr() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x003C, 0x00FF]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ORtoCCR(0xFF));
-    }
-
-    #[test]
-    fn instruction_ori_to_sr() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x007C, 0x1234]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ORtoSR(0x1234));
-    }
-
-    #[test]
-    fn instruction_andi_word() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0263, 0x1234]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::AND(Target::Immediate(0x1234), Target::IndirectARegDec(3), Size::Word));
-    }
-
-    #[test]
-    fn instruction_andi_to_ccr() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x023C, 0x1234]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ANDtoCCR(0x34));
-    }
-
-    #[test]
-    fn instruction_andi_to_sr() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x027C, 0xF8FF]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ANDtoSR(0xF8FF));
-    }
-
-    #[test]
-    fn instruction_subi() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0487, 0x1234, 0x5678]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::SUB(Target::Immediate(0x12345678), Target::DirectDReg(7), Size::Long));
-    }
-
-    #[test]
-    fn instruction_addi() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x063A, 0x1234, 0x0055]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ADD(Target::Immediate(0x34), Target::IndirectRegOffset(BaseRegister::PC, None, 0x55), Size::Byte));
-    }
-
-    #[test]
-    fn instruction_eori_byte() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0A23, 0x1234]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::EOR(Target::Immediate(0x34), Target::IndirectARegDec(3), Size::Byte));
-    }
-
-    #[test]
-    fn instruction_eori_to_ccr() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0A3C, 0x1234]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::EORtoCCR(0x34));
-    }
-
-    #[test]
-    fn instruction_eori_to_sr() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0A7C, 0xF8FF]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::EORtoSR(0xF8FF));
-    }
-
-
-    #[test]
-    fn instruction_cmpi_equal() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0C00, 0x0020]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::CMP(Target::Immediate(0x20), Target::DirectDReg(0), Size::Byte));
-    }
-
-    #[test]
-    fn instruction_cmpi_greater() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0C00, 0x0030]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::CMP(Target::Immediate(0x30), Target::DirectDReg(0), Size::Byte));
-    }
-
-    #[test]
-    fn instruction_cmpi_less() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x0C00, 0x0010]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::CMP(Target::Immediate(0x10), Target::DirectDReg(0), Size::Byte));
-    }
-
-    #[test]
-    fn instruction_movel_full_extension() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68030);
-
-        load_memory(&system, &[0x21bc, 0x0010, 0x14c4, 0x09b0, 0x0010, 0xdf40]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::MOVE(Target::Immediate(1053892), Target::IndirectRegOffset(BaseRegister::None, Some(IndexRegister { xreg: XRegister::DReg(0), scale: 0, size: Size::Long }), 0x10df40), Size::Long));
-    }
-
-    #[test]
-    fn instruction_mulsl() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68030);
-
-        load_memory(&system, &[0x4c3c, 0x0800, 0x0000, 0x0097]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::MULL(Target::Immediate(0x97), None, 0, Sign::Signed));
-    }
-
-    #[test]
-    fn instruction_divs() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0x81FC, 0x0003]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::DIVW(Target::Immediate(3), 0, Sign::Signed));
-    }
-
-    #[test]
-    fn instruction_muls() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0xC1FC, 0x0276]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::MULW(Target::Immediate(0x276), 0, Sign::Signed));
-    }
-
-    #[test]
-    fn instruction_asli() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0xE300]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left));
-    }
-
-    #[test]
-    fn instruction_asri() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0xE200]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right));
-    }
-
-    #[test]
-    fn instruction_roli() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0xE318]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left));
-    }
-
-    #[test]
-    fn instruction_rori() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
-
-        load_memory(&system, &[0xE218]);
-        cpu.decode_next(&system).unwrap();
-
-        assert_eq!(cpu.decoder.instruction, Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right));
-    }
 }
 
 
@@ -531,12 +358,35 @@ mod execute_tests {
     use crate::devices::{Address, Addressable, Steppable, wrap_transmutable};
 
     use crate::cpus::m68k::{M68k, M68kType};
+    use crate::cpus::m68k::state::{M68kState};
     use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, ShiftDirection, Condition};
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
 
-    fn init_test(cputype: M68kType) -> (M68k, System) {
+
+    struct TestState {
+        pc: u32,
+        msp: u32,
+        usp: u32,
+        d0: u32,
+        d1: u32,
+        a0: u32,
+        a1: u32,
+        sr: u16,
+    }
+
+    struct TestCase {
+        name: &'static str,
+        ins: Instruction,
+        data: &'static [u16],
+        cputype: M68kType,
+        init: TestState,
+        fini: TestState,
+    }
+
+
+    fn init_execute_test(cputype: M68kType) -> (M68k, System) {
         let mut system = System::new();
 
         // Insert basic initialization
@@ -560,462 +410,306 @@ mod execute_tests {
         (cpu, system)
     }
 
-
-    #[test]
-    fn instruction_nop() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.decoder.instruction = Instruction::NOP;
-
-        let expected_state = cpu.state.clone();
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
+    fn build_state(state: &TestState) -> M68kState {
+        let mut new_state = M68kState::new();
+        new_state.pc = state.pc;
+        new_state.msp = state.msp;
+        new_state.usp = state.usp;
+        new_state.d_reg[0] = state.d0;
+        new_state.d_reg[1] = state.d1;
+        new_state.a_reg[0] = state.a0;
+        new_state.a_reg[1] = state.a1;
+        new_state.sr = state.sr;
+        new_state
     }
 
-
-    #[test]
-    fn instruction_ori() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.decoder.instruction = Instruction::OR(Target::Immediate(0xFF), Target::DirectAReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2708;
-        expected_state.a_reg[0] = 0x000000FF;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
+    fn load_memory(system: &System, data: &[u16]) {
+        for i in 0..data.len() {
+            system.get_bus().write_beu16((i << 1) as Address, data[i]).unwrap();
+        } 
     }
 
-    #[test]
-    fn instruction_add_no_overflow() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
+    fn run_test(case: &TestCase) {
+        let (mut cpu, system) = init_execute_test(case.cputype);
 
-        cpu.state.d_reg[0] = 0x00;
-        cpu.decoder.instruction = Instruction::ADD(Target::Immediate(0x7f), Target::DirectDReg(0), Size::Byte);
+        let init_state = build_state(&case.init);
+        let mut expected_state = build_state(&case.fini);
 
-        let mut expected_state = cpu.state.clone();
-        expected_state.d_reg[0] = 0x7f;
-        expected_state.sr = 0x2700;
+        load_memory(&system, case.data);
+        cpu.state = init_state;
+
+        cpu.decode_next(&system).unwrap();
+        assert_eq!(cpu.decoder.instruction, case.ins);
 
         cpu.execute_current(&system).unwrap();
         assert_eq!(cpu.state, expected_state);
     }
 
     #[test]
-    fn instruction_add_no_overflow_negative() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x01;
-        cpu.decoder.instruction = Instruction::ADD(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.d_reg[0] = 0x81;
-        expected_state.sr = 0x2708;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_add_overflow() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x01;
-        cpu.decoder.instruction = Instruction::ADD(Target::Immediate(0x7f), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.d_reg[0] = 0x80;
-        expected_state.sr = 0x270A;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_add_carry() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x80;
-        cpu.decoder.instruction = Instruction::ADD(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.d_reg[0] = 0x00;
-        expected_state.sr = 0x2717;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
+    pub fn run_execute_tests() {
+        for case in TEST_CASES {
+            println!("Running test {}", case.name);
+            run_test(case);
+        }
     }
 
 
-    #[test]
-    fn instruction_cmp_equal() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        let value = 0x20;
-        cpu.state.d_reg[0] = value;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(value), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2704;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_cmp_greater_than() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x20;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x30), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2709;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_cmp_less_than() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x20;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x10), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2700;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_cmp_no_overflow() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x00;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x7f), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2709;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_cmp_no_overflow_2() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x00;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x8001), Target::DirectDReg(0), Size::Word);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2701;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-
-    #[test]
-    fn instruction_cmp_overflow() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x00;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x270B;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_cmp_overflow_2() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x01;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x8001), Target::DirectDReg(0), Size::Word);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x270B;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-
-    #[test]
-    fn instruction_cmp_no_carry() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0xFF;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x01), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2708;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_cmp_carry() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x01;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0xFF), Target::DirectDReg(0), Size::Byte);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2701;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-
-
-    #[test]
-    fn instruction_blt() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x20;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x30), Target::DirectDReg(0), Size::Byte);
-        cpu.execute_current(&system).unwrap();
-        cpu.decoder.instruction = Instruction::Bcc(Condition::LessThan, 8);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.pc = expected_state.pc + 8 + 2;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_blt_not() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x30;
-        cpu.decoder.instruction = Instruction::CMP(Target::Immediate(0x20), Target::DirectDReg(0), Size::Byte);
-        cpu.execute_current(&system).unwrap();
-        cpu.decoder.instruction = Instruction::Bcc(Condition::LessThan, 8);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.pc = expected_state.pc + 8 + 2;
-
-        cpu.execute_current(&system).unwrap();
-        assert_ne!(cpu.state, expected_state);
-    }
-
-
-    #[test]
-    fn instruction_andi_sr() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.sr = 0xA7AA;
-        cpu.decoder.instruction = Instruction::ANDtoSR(0xF8FF);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0xA0AA;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_ori_sr() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.sr = 0xA755;
-        cpu.decoder.instruction = Instruction::ORtoSR(0x00AA);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0xA7FF;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_muls() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        let value = 0x0276;
-        cpu.state.d_reg[0] = 0x0200;
-        cpu.decoder.instruction = Instruction::MULW(Target::Immediate(value), 0, Sign::Signed);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.d_reg[0] = 0x4ec00;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_divu() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        let value = 0x0245;
-        cpu.state.d_reg[0] = 0x40000;
-        cpu.decoder.instruction = Instruction::DIVW(Target::Immediate(value), 0, Sign::Unsigned);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.d_reg[0] = 0x007101C3;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_asli() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x01;
-        cpu.decoder.instruction = Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2700;
-        expected_state.d_reg[0] = 0x00000002;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_asri() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x81;
-        cpu.decoder.instruction = Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2719;
-        expected_state.d_reg[0] = 0x000000C0;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_roli() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x80;
-        cpu.decoder.instruction = Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2701;
-        expected_state.d_reg[0] = 0x00000001;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_rori() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x01;
-        cpu.decoder.instruction = Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2709;
-        expected_state.d_reg[0] = 0x00000080;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_roxl() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x80;
-        cpu.state.sr = 0x2700;
-        cpu.decoder.instruction = Instruction::ROXd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2715;
-        expected_state.d_reg[0] = 0x00000000;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_roxr() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x01;
-        cpu.state.sr = 0x2700;
-        cpu.decoder.instruction = Instruction::ROXd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2715;
-        expected_state.d_reg[0] = 0x00000000;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_roxl_2() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x80;
-        cpu.state.sr = 0x2700;
-        cpu.decoder.instruction = Instruction::ROXd(Target::Immediate(2), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2700;
-        expected_state.d_reg[0] = 0x00000001;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_roxr_2() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x01;
-        cpu.state.sr = 0x2700;
-        cpu.decoder.instruction = Instruction::ROXd(Target::Immediate(2), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2708;
-        expected_state.d_reg[0] = 0x00000080;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-    #[test]
-    fn instruction_neg_word() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
-
-        cpu.state.d_reg[0] = 0x80;
-        cpu.state.sr = 0x2700;
-        cpu.decoder.instruction = Instruction::NEG(Target::DirectDReg(0), Size::Word);
-
-        let mut expected_state = cpu.state.clone();
-        expected_state.sr = 0x2719;
-        expected_state.d_reg[0] = 0x0000FF80;
-
-        cpu.execute_current(&system).unwrap();
-        assert_eq!(cpu.state, expected_state);
-    }
-
-
+    const TEST_CASES: &'static [TestCase] = &[
+        TestCase {
+            name: "nop",
+            ins: Instruction::NOP,
+            data: &[ 0x4e71 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+        },
+        TestCase {
+            name: "addi with no overflow or carry",
+            ins: Instruction::ADD(Target::Immediate(0x7f), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0600, 0x007F ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x0000007f, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+        },
+        TestCase {
+            name: "addi with no overflow but negative",
+            ins: Instruction::ADD(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0600, 0x0080 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000081, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2708 },
+        },
+        TestCase {
+            name: "addi with overflow",
+            ins: Instruction::ADD(Target::Immediate(0x7f), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0600, 0x007F ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x270A },
+        },
+        TestCase {
+            name: "addi with carry",
+            ins: Instruction::ADD(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0600, 0x0080 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2717 },
+        },
+        TestCase {
+            name: "andi with sr",
+            ins: Instruction::ANDtoSR(0xF8FF),
+            data: &[ 0x027C, 0xF8FF ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA7AA },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA0AA },
+        },
+        TestCase {
+            name: "asl",
+            ins: Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+            data: &[ 0xE300 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000002, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+        },
+        TestCase {
+            name: "asr",
+            ins: Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+            data: &[ 0xE200 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000081, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x000000C0, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2719 },
+        },
+        TestCase {
+            name: "blt with jump",
+            ins: Instruction::Bcc(Condition::LessThan, 8),
+            data: &[ 0x6D08 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2709 },
+            fini: TestState { pc: 0x0000000A, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2709 },
+        },
+        TestCase {
+            name: "blt with jump",
+            ins: Instruction::Bcc(Condition::LessThan, 8),
+            data: &[ 0x6D08 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+        },
+        TestCase {
+            name: "cmpi equal",
+            ins: Instruction::CMP(Target::Immediate(0x20), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0C00, 0x0020 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000020, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000020, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2704 },
+        },
+        TestCase {
+            name: "cmpi greater than",
+            ins: Instruction::CMP(Target::Immediate(0x30), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0C00, 0x0030 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000020, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000020, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2709 },
+        },
+        TestCase {
+            name: "cmpi less than",
+            ins: Instruction::CMP(Target::Immediate(0x10), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0C00, 0x0010 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000020, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000020, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+        },
+        TestCase {
+            name: "cmpi no overflow",
+            ins: Instruction::CMP(Target::Immediate(0x7F), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0C00, 0x007F ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2709 },
+        },
+        TestCase {
+            name: "cmpi no overflow, already negative",
+            ins: Instruction::CMP(Target::Immediate(0x8001), Target::DirectDReg(0), Size::Word),
+            data: &[ 0x0C40, 0x8001 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2701 },
+        },
+        TestCase {
+            name: "cmpi with overflow",
+            ins: Instruction::CMP(Target::Immediate(0x80), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0C00, 0x0080 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x270B },
+        },
+        TestCase {
+            name: "cmpi with overflow 2",
+            ins: Instruction::CMP(Target::Immediate(0x8001), Target::DirectDReg(0), Size::Word),
+            data: &[ 0x0C40, 0x8001 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x270B },
+        },
+        TestCase {
+            name: "cmpi no carry",
+            ins: Instruction::CMP(Target::Immediate(0x01), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0C00, 0x0001 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2708 },
+        },
+        TestCase {
+            name: "cmpi with carry",
+            ins: Instruction::CMP(Target::Immediate(0xFF), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x0C00, 0x00FF ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2701 },
+        },
+        TestCase {
+            name: "divu",
+            ins: Instruction::DIVW(Target::Immediate(0x0245), 0, Sign::Unsigned),
+            data: &[ 0x80FC, 0x0245 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00040000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x007101C3, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+        },
+        TestCase {
+            name: "muls",
+            ins: Instruction::MULW(Target::Immediate(0x0276), 0, Sign::Signed),
+            data: &[ 0xC1FC, 0x0276 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000200, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x0004ec00, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+        },
+        TestCase {
+            name: "neg",
+            ins: Instruction::NEG(Target::DirectDReg(0), Size::Word),
+            data: &[ 0x4440 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x0000FF80, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2719 },
+        },
+
+
+        TestCase {
+            name: "ori",
+            ins: Instruction::OR(Target::Immediate(0xFF), Target::DirectAReg(0), Size::Byte),
+            data: &[ 0x0008, 0x00FF ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x000000FF, a1: 0x00000000, sr: 0x2708 },
+        },
+        TestCase {
+            name: "ori with sr",
+            ins: Instruction::ORtoSR(0x00AA),
+            data: &[ 0x007C, 0x00AA ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA755 },
+            fini: TestState { pc: 0x00000004, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA7FF },
+        },
+
+
+
+        TestCase {
+            name: "rol",
+            ins: Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+            data: &[ 0xE318 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2701 },
+        },
+        TestCase {
+            name: "ror",
+            ins: Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+            data: &[ 0xE218 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2709 },
+        },
+        TestCase {
+            name: "roxl",
+            ins: Instruction::ROXd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+            data: &[ 0xE310 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2715 },
+        },
+        TestCase {
+            name: "roxr",
+            ins: Instruction::ROXd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+            data: &[ 0xE210 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2715 },
+        },
+        TestCase {
+            name: "roxl two bits",
+            ins: Instruction::ROXd(Target::Immediate(2), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+            data: &[ 0xE510 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+        },
+        TestCase {
+            name: "roxr two bits",
+            ins: Instruction::ROXd(Target::Immediate(2), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+            data: &[ 0xE410 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2708 },
+        },
+    ];
+
+
+    //
+    // Addressing Mode Target Tests
+    //
 
     #[test]
     fn target_value_direct_d() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
+        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
@@ -1028,7 +722,7 @@ mod execute_tests {
 
     #[test]
     fn target_value_direct_a() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
+        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
@@ -1041,7 +735,7 @@ mod execute_tests {
 
     #[test]
     fn target_value_indirect_a() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
+        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Long;
         let expected_addr = INIT_ADDR;
@@ -1056,7 +750,7 @@ mod execute_tests {
 
     #[test]
     fn target_value_indirect_a_inc() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
+        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Long;
         let expected_addr = INIT_ADDR;
@@ -1072,7 +766,7 @@ mod execute_tests {
 
     #[test]
     fn target_value_indirect_a_dec() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
+        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Long;
         let expected_addr = INIT_ADDR + 4;
@@ -1089,7 +783,7 @@ mod execute_tests {
 
     #[test]
     fn target_value_immediate() {
-        let (mut cpu, system) = init_test(M68kType::MC68010);
+        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;

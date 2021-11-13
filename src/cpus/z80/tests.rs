@@ -612,9 +612,11 @@ mod execute_tests {
         assert_eq!(cpu.decoder.instruction, case.ins);
 
         cpu.execute_current(&system).unwrap();
+
         // TODO this is a hack to ignore the functioning of the F5, F3 flags for now
         cpu.state.reg[Register::F as usize] &= 0xD7;
         expected_state.reg[Register::F as usize] &= 0xD7;
+
         assert_eq!(cpu.state, expected_state);
     }
 
