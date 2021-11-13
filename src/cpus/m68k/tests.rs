@@ -70,7 +70,7 @@ mod decode_tests {
             BusPort::new(0, 24, 16, system.bus.clone())
         };
         let mut cpu = M68k::new(cputype, 10_000_000, port);
-        cpu.init(&system).unwrap();
+        cpu.init().unwrap();
         assert_eq!(cpu.state.pc, INIT_ADDR as u32);
         assert_eq!(cpu.state.msp, INIT_STACK as u32);
 
@@ -93,11 +93,11 @@ mod decode_tests {
         load_memory(&system, case.data);
         match &case.ins {
             Some(ins) => {
-                cpu.decode_next(&system).unwrap();
+                cpu.decode_next().unwrap();
                 assert_eq!(cpu.decoder.instruction, ins.clone());
             },
             None => {
-                assert_eq!(cpu.decode_next(&system).is_err(), true);
+                assert_eq!(cpu.decode_next().is_err(), true);
             },
         }
     }
@@ -119,7 +119,6 @@ mod decode_tests {
         let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
-        let expected = 0x1234;
 
         let target = cpu.decoder.get_mode_as_target(&mut cpu.port, 0b000, 0b001, Some(size)).unwrap();
         assert_eq!(target, Target::DirectDReg(1));
@@ -130,7 +129,6 @@ mod decode_tests {
         let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
-        let expected = 0x1234;
 
         let target = cpu.decoder.get_mode_as_target(&mut cpu.port, 0b001, 0b010, Some(size)).unwrap();
         assert_eq!(target, Target::DirectAReg(2));
@@ -141,7 +139,6 @@ mod decode_tests {
         let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Long;
-        let expected_addr = INIT_ADDR;
         let expected = 0x12345678;
 
         system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
@@ -155,7 +152,6 @@ mod decode_tests {
         let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Long;
-        let expected_addr = INIT_ADDR;
         let expected = 0x12345678;
 
         system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
@@ -169,7 +165,6 @@ mod decode_tests {
         let (mut cpu, system) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Long;
-        let expected_addr = INIT_ADDR + 4;
         let expected = 0x12345678;
 
         system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
@@ -433,15 +428,15 @@ mod execute_tests {
         let (mut cpu, system) = init_execute_test(case.cputype);
 
         let init_state = build_state(&case.init);
-        let mut expected_state = build_state(&case.fini);
+        let expected_state = build_state(&case.fini);
 
         load_memory(&system, case.data);
         cpu.state = init_state;
 
-        cpu.decode_next(&system).unwrap();
+        cpu.decode_next().unwrap();
         assert_eq!(cpu.decoder.instruction, case.ins);
 
-        cpu.execute_current(&system).unwrap();
+        cpu.execute_current().unwrap();
         assert_eq!(cpu.state, expected_state);
     }
 
@@ -709,73 +704,70 @@ mod execute_tests {
 
     #[test]
     fn target_value_direct_d() {
-        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
+        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
         let target = Target::DirectDReg(1);
 
         cpu.state.d_reg[1] = expected;
-        let result = cpu.get_target_value(&system, target, size).unwrap();
+        let result = cpu.get_target_value(target, size).unwrap();
         assert_eq!(result, expected);
     }
 
     #[test]
     fn target_value_direct_a() {
-        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
+        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
         let target = Target::DirectAReg(2);
 
         cpu.state.a_reg[2] = expected;
-        let result = cpu.get_target_value(&system, target, size).unwrap();
+        let result = cpu.get_target_value(target, size).unwrap();
         assert_eq!(result, expected);
     }
 
     #[test]
     fn target_value_indirect_a() {
-        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
+        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Long;
-        let expected_addr = INIT_ADDR;
         let expected = 0x12345678;
         let target = Target::IndirectAReg(2);
-        system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
+        cpu.port.write_beu32(INIT_ADDR, expected).unwrap();
 
         cpu.state.a_reg[2] = INIT_ADDR as u32;
-        let result = cpu.get_target_value(&system, target, size).unwrap();
+        let result = cpu.get_target_value(target, size).unwrap();
         assert_eq!(result, expected);
     }
 
     #[test]
     fn target_value_indirect_a_inc() {
-        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
+        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Long;
-        let expected_addr = INIT_ADDR;
         let expected = 0x12345678;
         let target = Target::IndirectARegInc(2);
-        system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
+        cpu.port.write_beu32(INIT_ADDR, expected).unwrap();
 
         cpu.state.a_reg[2] = INIT_ADDR as u32;
-        let result = cpu.get_target_value(&system, target, size).unwrap();
+        let result = cpu.get_target_value(target, size).unwrap();
         assert_eq!(result, expected);
         assert_eq!(cpu.state.a_reg[2], (INIT_ADDR as u32) + 4);
     }
 
     #[test]
     fn target_value_indirect_a_dec() {
-        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
+        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Long;
-        let expected_addr = INIT_ADDR + 4;
         let expected = 0x12345678;
         let target = Target::IndirectARegDec(2);
-        system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
+        cpu.port.write_beu32(INIT_ADDR, expected).unwrap();
 
         cpu.state.a_reg[2] = (INIT_ADDR as u32) + 4;
-        let result = cpu.get_target_value(&system, target, size).unwrap();
+        let result = cpu.get_target_value(target, size).unwrap();
         assert_eq!(result, expected);
         assert_eq!(cpu.state.a_reg[2], INIT_ADDR as u32);
     }
@@ -783,14 +775,14 @@ mod execute_tests {
 
     #[test]
     fn target_value_immediate() {
-        let (mut cpu, system) = init_execute_test(M68kType::MC68010);
+        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
 
         let size = Size::Word;
         let expected = 0x1234;
 
         let target = Target::Immediate(expected);
 
-        let result = cpu.get_target_value(&system, target, size).unwrap();
+        let result = cpu.get_target_value(target, size).unwrap();
         assert_eq!(result, expected);
     }
 }

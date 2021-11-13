@@ -2,7 +2,7 @@
 use crate::error::Error;
 use crate::devices::{Address, Addressable};
 
-use super::state::{Z80, Z80Type, Register};
+use super::state::Register;
 
 
 #[derive(Copy, Clone, Debug, PartialEq)]

@@ -1,9 +1,7 @@
 
-use std::sync::{Arc, Mutex};
-
 use crate::error::Error;
-use crate::signals::{Signal, SyncSignal};
-use crate::devices::{Address, Addressable, Transmutable, MAX_READ};
+use crate::signals::SyncSignal;
+use crate::devices::{Address, Addressable, Transmutable};
 use crate::host::traits::{Host, JoystickDevice, JoystickUpdater};
 
 

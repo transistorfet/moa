@@ -68,7 +68,7 @@ impl Debuggable for M68k {
         decoder.dump_disassembly(&mut self.port, addr as u32, count as u32);
     }
 
-    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
+    fn execute_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
         match args[0] {
             "ds" | "stack" | "dumpstack" => {
                 println!("Stack:");

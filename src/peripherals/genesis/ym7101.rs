@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use crate::error::Error;
 use crate::system::System;
 use crate::signals::SyncSignal;
-use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, MAX_READ, read_beu16, read_beu32, write_beu16};
+use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, read_beu16, read_beu32, write_beu16};
 use crate::host::traits::{Host, BlitableSurface};
 use crate::host::gfx::{Frame, FrameSwapper};
 
@@ -251,15 +251,18 @@ impl Ym7101State {
     }
 
     pub fn draw_frame(&mut self, frame: &mut Frame) {
-        let bg_colour = self.get_palette_colour((self.regs[REG_BACKGROUND] & 0x30) >> 4, self.regs[REG_BACKGROUND] & 0x0f);
-        for i in 0..(frame.width as usize * frame.height as usize) {
-            frame.bitmap[i] = bg_colour;
-        }
-
+        self.draw_background(frame);
         self.draw_cell_table(frame, self.get_vram_scroll_b_addr());
         self.draw_cell_table(frame, self.get_vram_scroll_a_addr());
         //self.draw_window(frame);
         self.draw_sprites(frame);
+    }
+
+    pub fn draw_background(&mut self, frame: &mut Frame) {
+        let bg_colour = self.get_palette_colour((self.regs[REG_BACKGROUND] & 0x30) >> 4, self.regs[REG_BACKGROUND] & 0x0f);
+        for i in 0..(frame.width as usize * frame.height as usize) {
+            frame.bitmap[i] = bg_colour;
+        }
     }
 
     pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: u32) {
@@ -411,14 +414,10 @@ pub struct Ym7101 {
 }
 
 impl Ym7101 {
-    pub fn new<H: Host>(host: &H, external_interrupt: SyncSignal<bool>) -> Ym7101 {
-        let swapper = FrameSwapper::new_shared();
-        swapper.lock().map(|mut swapper| {
-            swapper.current.set_size(320, 224);
-            swapper.previous.set_size(320, 224);
-        });
+    pub fn new<H: Host>(host: &mut H, external_interrupt: SyncSignal<bool>) -> Ym7101 {
+        let swapper = FrameSwapper::new_shared(320, 224);
 
-        host.add_window(FrameSwapper::to_boxed(swapper.clone()));
+        host.add_window(FrameSwapper::to_boxed(swapper.clone())).unwrap();
 
         Ym7101 {
             swapper,
@@ -490,16 +489,48 @@ impl Steppable for Ym7101 {
             /*
             // Print Pattern Table
             let mut swapper = self.swapper.lock().unwrap();
-            let coords = self.state.get_window_coords();
-            for cell_y in coords.0.1..coords.1.1 {
-                for cell_x in coords.0.0..coords.1.0 {
-                    let pattern_addr = (cell_x + (cell_y * 40)) * 32;
-                    let iter = PatternIterator::new(&self.state, pattern_addr as u32, 0);
+            let (cells_h, cells_v) = self.state.get_screen_size();
+            for cell_y in 0..cells_v {
+                for cell_x in 0..cells_h {
+                    let pattern_addr = (cell_x + (cell_y * cells_h)) * 32;
+                    let iter = PatternIterator::new(&self.state, pattern_addr as u32, 0, false, false);
                     swapper.current.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
                 }
             }
             */
 
+
+            /*
+            // Print Sprite
+            let mut swapper = self.swapper.lock().unwrap();
+            self.state.draw_background(&mut swapper.current);
+            let sprite_table = (self.state.regs[REG_SPRITES_ADDR] as usize) << 9;
+            let (cells_h, cells_v) = self.state.get_screen_size();
+            let sprite = 0;
+            println!("{:?}", &self.state.vram[(sprite_table + (sprite * 8))..(sprite_table + (sprite * 8) + 8)].iter().map(|byte| format!("{:02x}", byte)).collect::<Vec<String>>());
+            let size = self.state.vram[sprite_table + (sprite * 8) + 2];
+            let (size_h, size_v) = (((size >> 2) & 0x03) as u16 + 1, (size & 0x03) as u16 + 1);
+            let pattern_name = ((self.state.vram[sprite_table + (sprite * 8) + 4] as u16) << 8) | (self.state.vram[sprite_table + (sprite * 8) + 5] as u16);
+            let pattern_gen = pattern_name & 0x7FF;
+            println!("{:x}", pattern_name);
+
+            for cell_y in 0..size_v {
+                for cell_x in 0..size_h {
+                    let pattern_addr = (pattern_gen + (cell_y * size_h) + cell_x) as u32;
+                    println!("pattern: ({}, {}) {:x}", cell_x, cell_y, pattern_addr);
+                    let iter = PatternIterator::new(&self.state, pattern_addr * 32, 3, true, true);
+                    swapper.current.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
+                }
+            }
+            */
+
+            //let mut swapper = self.swapper.lock().unwrap();
+            //swapper.current.blit(0, 0, PatternIterator::new(&self.state, 0x408 * 32, 3, false, false), 8, 8);
+            //swapper.current.blit(0, 8, PatternIterator::new(&self.state, 0x409 * 32, 3, false, false), 8, 8);
+            //swapper.current.blit(8, 0, PatternIterator::new(&self.state, 0x402 * 32, 3, false, false), 8, 8);
+            //swapper.current.blit(8, 8, PatternIterator::new(&self.state, 0x403 * 32, 3, false, false), 8, 8);
+            //swapper.current.blit(16, 0, PatternIterator::new(&self.state, 0x404 * 32, 3, false, false), 8, 8);
+            //swapper.current.blit(16, 8, PatternIterator::new(&self.state, 0x405 * 32, 3, false, false), 8, 8);
         }
 
         if self.state.transfer_run != DmaType::None {
@@ -525,7 +556,7 @@ impl Steppable for Ym7101 {
 
                         {
                             let addr = self.state.transfer_addr;
-                            let mut target = self.state.get_transfer_target_mut();
+                            let target = self.state.get_transfer_target_mut();
                             target[addr as usize] = data[0];
                             target[addr as usize + 1] = data[1];
                         }

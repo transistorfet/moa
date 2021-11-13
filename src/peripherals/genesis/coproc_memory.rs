@@ -1,6 +1,6 @@
 
 use crate::error::Error;
-use crate::devices::{Address, Addressable, Transmutable, MAX_READ};
+use crate::devices::{Address, Addressable, Transmutable};
 
 
 const DEV_NAME: &'static str = "coprocessor";

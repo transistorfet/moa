@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{ClockElapsed, Address, Steppable, Addressable, Transmutable, MAX_READ};
+use crate::devices::{ClockElapsed, Address, Steppable, Addressable, Transmutable};
 
 use crate::host::traits::Tty;
 

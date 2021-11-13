@@ -6,8 +6,6 @@ use crate::error::Error;
 use crate::system::System;
 
 
-pub const MAX_READ: usize = 4;
-
 /// The time in nanoseconds that have elapsed since the start of the simulation
 pub type Clock = u64;
 

@@ -1,25 +1,19 @@
 
 * the overflow bit is only correct for addition but not subtraction... in subtraction, two positives can result in a negative and vice versa
+* we need better m68k tests.  Can we do what we did for Z80, with maybe a reduced test state and/or different states for different types of tests
+* maybe see about a Mac 128k or something
 
-
-
-* could have a remapper device, which takes a big swath of addresses in and maps them to another set of addresses (for Mac VIA generic to bus-hookup-in-mac adapter)
-* how can you do devices that change their address map during operation, like mac which puts rom at 0 and ram at 600000 temporarily 
-* i need a better way of handling disperate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
-* should you modify Addressable to also take the absolute address as input?  I'm thinking of how the same device could be mapped to multiple addresses in memory instead
-  of taking up a whole range of addresses
-* could you use a generic sharable signal thing for sharing data, such as the VIA in mac128 where a single output bit determines the video mode (which would be a separate device)
-  So both could share the same Signal, one setting it and the other reading it, but how would you actually configure/build that?
-
-
-* make it possible to specify the rom on the command line.  Would this be machine specific?
-* make the frontend resize its window based on the frame swapper
-* make it possible to set the frame sizes when creating the frame swapper
 * should you rename devices.rs traits.rs?
 
 
 
-* maybe see about a Mac 128k or something
+* how can you do devices that change their address map during operation, like mac which puts rom at 0 and ram at 600000 temporarily 
+* i need a better way of handling disperate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
+* should you modify Addressable to also take the absolute address as input?  I'm thinking of how the same device could be mapped to multiple addresses in memory instead
+  of taking up a whole range of addresses
+* could have a remapper device, which takes a big swath of addresses in and maps them to another set of addresses (for Mac VIA generic to bus-hookup-in-mac adapter)
+* could you use a generic sharable signal thing for sharing data, such as the VIA in mac128 where a single output bit determines the video mode (which would be a separate device)
+  So both could share the same Signal, one setting it and the other reading it, but how would you actually configure/build that?
 
 
 * you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
@@ -50,6 +44,5 @@ Z80:
 
 
 * how can you have multiple CPUs
-* each device that can make a bus request should have a BusPort which is used to access the bus
 * can you eventually make the system connections all configurable via a config file?
 

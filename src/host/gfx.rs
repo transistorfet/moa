@@ -65,7 +65,7 @@ impl WindowUpdater for FrameSwapper {
         (self.current.width, self.current.height)
     }
 
-    fn update_frame(&mut self, width: u32, height: u32, bitmap: &mut [u32]) {
+    fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
         std::mem::swap(&mut self.current, &mut self.previous);
 
         for y in 0..self.current.height {
@@ -84,7 +84,9 @@ impl WindowUpdater for FrameSwapperWrapper {
     }
 
     fn update_frame(&mut self, width: u32, height: u32, bitmap: &mut [u32]) {
-        self.0.lock().map(|mut swapper| swapper.update_frame(width, height, bitmap));
+        if let Ok(mut swapper) = self.0.lock() {
+            swapper.update_frame(width, height, bitmap);
+        }
     }
 }
 

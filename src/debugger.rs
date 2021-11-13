@@ -67,7 +67,7 @@ impl Debugger {
 
         loop {
             let mut buffer = String::new();
-            std::io::stdout().write_all(b"> ");
+            std::io::stdout().write_all(b"> ").unwrap();
             std::io::stdin().read_line(&mut buffer).unwrap();
             let args: Vec<&str> = buffer.split_whitespace().collect();
             match self.run_debugger_command(system, debug_obj, &args) {

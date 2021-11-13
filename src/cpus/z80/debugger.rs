@@ -30,10 +30,10 @@ impl Debuggable for Z80 {
         }
     }
 
-    fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
+    fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
         self.decoder.dump_decoded(&mut self.port);
-        self.dump_state(system);
+        self.dump_state();
         Ok(())
     }
 
@@ -42,7 +42,7 @@ impl Debuggable for Z80 {
         decoder.dump_disassembly(&mut self.port, addr as u16, count as u16);
     }
 
-    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
+    fn execute_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
         match args[0] {
             "l" => {
                 use super::state::Register;

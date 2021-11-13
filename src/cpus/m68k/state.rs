@@ -148,7 +148,7 @@ impl M68k {
         self.debugger = M68kDebugger::new();
     }
 
-    pub fn dump_state(&mut self, system: &System) {
+    pub fn dump_state(&mut self, _system: &System) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#010x}", self.state.pc);
         println!("SR: {:#06x}", self.state.sr);

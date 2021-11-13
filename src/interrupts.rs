@@ -1,6 +1,4 @@
 
-use std::iter;
-
 use crate::error::Error;
 use crate::devices::TransmutableBox;
 

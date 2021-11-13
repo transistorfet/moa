@@ -19,7 +19,7 @@ mod decode_tests {
 
         // Initialize the CPU and make sure it's in the expected state
         let mut cpu = Z80::new(Z80Type::Z80, 4_000_000, BusPort::new(0, 16, 8, system.bus.clone()));
-        cpu.init(&system).unwrap();
+        cpu.init().unwrap();
 
         (cpu, system)
     }
@@ -33,7 +33,7 @@ mod decode_tests {
     fn run_decode_test(data: &[u8]) -> Instruction {
         let (mut cpu, system) = init_decode_test();
         load_memory(&system, data);
-        cpu.decode_next(&system).unwrap();
+        cpu.decode_next().unwrap();
         cpu.decoder.instruction
     }
 
@@ -84,7 +84,7 @@ mod execute_tests {
 
     use super::super::{Z80, Z80Type};
     use super::super::state::{Z80State, Register};
-    use super::super::decode::{Instruction, LoadTarget, Target, RegisterPair, IndexRegister, IndexRegisterHalf, Condition};
+    use super::super::decode::{Instruction, LoadTarget, Target, RegisterPair, Condition};
 
     struct TestState {
         pc: u16,
@@ -571,7 +571,7 @@ mod execute_tests {
 
         // Initialize the CPU and make sure it's in the expected state
         let mut cpu = Z80::new(Z80Type::Z80, 4_000_000, BusPort::new(0, 16, 8, system.bus.clone()));
-        cpu.init(&system).unwrap();
+        cpu.init().unwrap();
 
         (cpu, system)
     }
@@ -608,10 +608,10 @@ mod execute_tests {
         load_memory(&system, case.data);
         cpu.state = init_state;
 
-        cpu.decode_next(&system).unwrap();
+        cpu.decode_next().unwrap();
         assert_eq!(cpu.decoder.instruction, case.ins);
 
-        cpu.execute_current(&system).unwrap();
+        cpu.execute_current().unwrap();
 
         // TODO this is a hack to ignore the functioning of the F5, F3 flags for now
         cpu.state.reg[Register::F as usize] &= 0xD7;

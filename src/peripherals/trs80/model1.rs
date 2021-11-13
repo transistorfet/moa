@@ -1,5 +1,4 @@
 
-use std::slice::Iter;
 use std::sync::{Arc, Mutex};
 
 use crate::error::Error;
@@ -7,7 +6,7 @@ use crate::system::System;
 use crate::devices::{ClockElapsed, Address, Addressable, Steppable, Transmutable};
 
 use crate::host::keys::Key;
-use crate::host::gfx::{Frame, FrameSwapper};
+use crate::host::gfx::{FrameSwapper};
 use crate::host::traits::{Host, BlitableSurface, KeyboardUpdater};
 
 use super::keymap;
@@ -48,7 +47,7 @@ impl KeyboardUpdater for Model1KeyboardUpdater {
 }
 
 impl Steppable for Model1Peripherals {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
         let mut swapper = self.swapper.lock().unwrap();
         swapper.current.clear(0);
         for y in 0..16 {

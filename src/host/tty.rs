@@ -3,7 +3,6 @@ use std::thread;
 use std::sync::mpsc;
 use std::time::Duration;
 use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
 use std::os::unix::io::AsRawFd;
 
 use nix::fcntl::OFlag;
@@ -55,7 +54,7 @@ impl SimplePty {
             loop {
                 match pty.read(&mut buf) {
                     Ok(_) => {
-                        input_tx.send(buf[0]);
+                        input_tx.send(buf[0]).unwrap();
                     },
                     Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => { },
                     Err(err) => { println!("ERROR: {:?}", err); }
@@ -84,7 +83,7 @@ impl Tty for SimplePty {
     }
 
     fn write(&mut self, output: u8) -> bool {
-        self.output.send(output);
+        self.output.send(output).unwrap();
         true
     }
 }

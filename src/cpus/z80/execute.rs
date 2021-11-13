@@ -3,14 +3,12 @@ use crate::system::System;
 use crate::error::{ErrorType, Error};
 use crate::devices::{ClockElapsed, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
-use super::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, IndexRegister, IndexRegisterHalf, Size, Direction, UndocumentedCopy};
+use super::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, IndexRegister, IndexRegisterHalf, Size};
 use super::state::{Z80, Status, Flags, Register};
 
 
 const DEV_NAME: &'static str = "z80-cpu";
 
-const FLAGS_ALL: u8                     = 0xFF;
-const FLAGS_ALL_BUT_CARRY: u8           = 0xFE;
 const FLAGS_NUMERIC: u8                 = 0xC0;
 const FLAGS_ARITHMETIC: u8              = 0x17;
 const FLAGS_CARRY_HALF_CARRY: u8        = 0x11;
@@ -28,8 +26,8 @@ impl Steppable for Z80 {
         Ok((1_000_000_000 / self.frequency as u64) * 4)
     }
 
-    fn on_error(&mut self, system: &System) {
-        self.dump_state(system);
+    fn on_error(&mut self, _system: &System) {
+        self.dump_state();
     }
 }
 
@@ -55,13 +53,13 @@ impl Transmutable for Z80 {
 impl Z80 {
     pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
         match self.state.status {
-            Status::Init => self.init(system),
+            Status::Init => self.init(),
             Status::Halted => Err(Error::new("CPU stopped")),
             Status::Running => {
                 match self.cycle_one(system) {
                     Ok(()) => Ok(()),
                     //Err(Error { err: ErrorType::Processor, native, .. }) => {
-                    Err(Error { err: ErrorType::Processor, native, .. }) => {
+                    Err(Error { err: ErrorType::Processor, .. }) => {
                         //self.exception(system, native as u8, false)?;
                         Ok(())
                     },
@@ -71,17 +69,16 @@ impl Z80 {
         }
     }
 
-    pub fn init(&mut self, system: &System) -> Result<(), Error> {
-        //self.state.msp = self.port.read_beu32(0)?;
-        //self.state.pc = self.port.read_beu32(4)?;
+    pub fn init(&mut self) -> Result<(), Error> {
+        self.state.pc = 0;
         self.state.status = Status::Running;
         Ok(())
     }
 
     pub fn cycle_one(&mut self, system: &System) -> Result<(), Error> {
         //self.timer.cycle.start();
-        self.decode_next(system)?;
-        self.execute_current(system)?;
+        self.decode_next()?;
+        self.execute_current()?;
         //self.timer.cycle.end();
 
         //if (self.timer.cycle.events % 500) == 0 {
@@ -93,21 +90,21 @@ impl Z80 {
         Ok(())
     }
 
-    pub fn decode_next(&mut self, system: &System) -> Result<(), Error> {
+    pub fn decode_next(&mut self) -> Result<(), Error> {
         //self.timer.decode.start();
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
         //self.timer.decode.end();
 
         //if self.debugger.use_tracing {
             //self.decoder.dump_decoded(&mut self.port);
-            //self.dump_state(system);
+            //self.dump_state();
         //}
 
         self.state.pc = self.decoder.end;
         Ok(())
     }
 
-    pub fn execute_current(&mut self, system: &System) -> Result<(), Error> {
+    pub fn execute_current(&mut self) -> Result<(), Error> {
         match self.decoder.instruction {
             Instruction::ADCa(target) => {
                 let src = self.get_target_value(target)?;
@@ -204,14 +201,14 @@ impl Z80 {
             Instruction::DEC16(regpair) => {
                 let value = self.get_register_pair_value(regpair);
 
-                let (result, carry, overflow) = sub_words(value, 1);
+                let (result, _, _) = sub_words(value, 1);
 
                 self.set_register_pair_value(regpair, result);
             },
             Instruction::DEC8(target) => {
                 let value = self.get_target_value(target)?;
 
-                let (result, carry, overflow) = sub_bytes(value, 1);
+                let (result, _, overflow) = sub_bytes(value, 1);
                 let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
                 self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, (result & 0x10) != 0);
 
@@ -620,7 +617,7 @@ impl Z80 {
     }
 
     fn pop_word(&mut self) -> Result<u16, Error> {
-        let mut value = 0;
+        let mut value;
         value = self.port.read_u8(self.state.sp as Address)? as u16;
         self.state.sp = self.state.sp.wrapping_add(1);
         value |= (self.port.read_u8(self.state.sp as Address)? as u16) << 8;

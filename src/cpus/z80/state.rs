@@ -1,5 +1,4 @@
 
-use crate::system::System;
 use crate::devices::Address;
 use crate::memory::BusPort;
 
@@ -122,7 +121,7 @@ impl Z80 {
         self.debugger = Z80Debugger::new();
     }
 
-    pub fn dump_state(&mut self, system: &System) {
+    pub fn dump_state(&mut self) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#06x}", self.state.pc);
         println!("SP: {:#06x}", self.state.sp);

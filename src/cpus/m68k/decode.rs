@@ -1,6 +1,5 @@
 
 use crate::error::Error;
-use crate::system::System;
 use crate::devices::{Address, Addressable};
 
 use super::state::{M68kType, Exceptions};

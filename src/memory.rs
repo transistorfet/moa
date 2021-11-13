@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::error::Error;
-use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, MAX_READ};
+use crate::devices::{Address, Addressable, Transmutable, TransmutableBox};
 
 
 pub struct MemoryBlock {
@@ -74,6 +74,41 @@ impl Transmutable for MemoryBlock {
     }
 }
 
+
+pub struct MemoryAdapter {
+    pub subdevice: TransmutableBox,
+    pub shift: u8,
+}
+
+impl MemoryAdapter {
+    pub fn new(subdevice: TransmutableBox, shift: u8) -> Self {
+        Self {
+            subdevice,
+            shift,
+        }
+    }
+}
+
+impl Addressable for MemoryAdapter {
+    fn len(&self) -> usize {
+        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len();
+        len << self.shift
+    }
+
+    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        self.subdevice.borrow_mut().as_addressable().unwrap().read(addr >> self.shift, data)
+    }
+
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+        self.subdevice.borrow_mut().as_addressable().unwrap().write(addr >> self.shift, data)
+    }
+}
+
+impl Transmutable for MemoryAdapter {
+    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        Some(self)
+    }
+}
 
 
 pub struct Block {

@@ -7,7 +7,7 @@ use crate::memory::Bus;
 use crate::debugger::Debugger;
 use crate::error::{Error, ErrorType};
 use crate::interrupts::InterruptController;
-use crate::devices::{Clock, ClockElapsed, Address, TransmutableBox};
+use crate::devices::{Clock, Address, TransmutableBox};
 
 
 pub struct System {
@@ -45,11 +45,17 @@ impl System {
         self.interrupt_controller.borrow_mut()
     }
 
+    pub fn add_device(&mut self, name: &str, device: TransmutableBox) -> Result<(), Error> {
+        self.try_queue_device(device.clone());
+        self.devices.insert(name.to_string(), device);
+        Ok(())
+    }
+
     pub fn add_addressable_device(&mut self, addr: Address, device: TransmutableBox) -> Result<(), Error> {
         let length = device.borrow_mut().as_addressable().unwrap().len();
         self.bus.borrow_mut().insert(addr, length, device.clone());
         self.try_queue_device(device.clone());
-        self.devices.insert(format!("ram{:x}", addr), device);
+        self.devices.insert(format!("mem{:x}", addr), device);
         Ok(())
     }
 
@@ -108,7 +114,7 @@ impl System {
     }
 
     pub fn run_loop(&mut self) {
-        self.run_for(u64::MAX);
+        self.run_for(u64::MAX).unwrap();
     }
 
     pub fn exit_error(&mut self) {

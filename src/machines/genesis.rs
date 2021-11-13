@@ -1,13 +1,17 @@
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use crate::error::Error;
 use crate::system::System;
-use crate::memory::{MemoryBlock, BusPort};
+use crate::memory::{MemoryBlock, Bus, BusPort};
 use crate::devices::{wrap_transmutable, Debuggable};
 
 use crate::cpus::m68k::{M68k, M68kType};
+use crate::cpus::z80::{Z80, Z80Type};
 use crate::peripherals::genesis;
 
-use crate::host::traits::{Host, WindowUpdater};
+use crate::host::traits::{Host};
 
 
 pub fn build_genesis<H: Host>(host: &mut H) -> Result<System, Error> {
@@ -28,12 +32,17 @@ pub fn build_genesis<H: Host>(host: &mut H) -> Result<System, Error> {
     system.add_addressable_device(0x00000000, wrap_transmutable(rom)).unwrap();
 
     let ram = MemoryBlock::new(vec![0; 0x00010000]);
-    system.add_addressable_device(0x00FF0000, wrap_transmutable(ram)).unwrap();
+    system.add_addressable_device(0x00ff0000, wrap_transmutable(ram)).unwrap();
 
 
+    let coproc_bus = Rc::new(RefCell::new(Bus::new()));
+    let coproc_shared_mem = wrap_transmutable(MemoryBlock::new(vec![0; 0x00010000]));
+    coproc_bus.borrow_mut().insert(0x0000, coproc_shared_mem.borrow_mut().as_addressable().unwrap().len(), coproc_shared_mem.clone());
+    let mut coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus.clone()));
 
-    let coproc_shared_mem = MemoryBlock::new(vec![0; 0x00010000]);
-    system.add_addressable_device(0x00A00000, wrap_transmutable(coproc_shared_mem)).unwrap();
+    system.add_addressable_device(0x00a00000, coproc_shared_mem)?;
+    //system.add_device("coproc", wrap_transmutable(coproc))?;
+
 
 
     let controllers = genesis::controllers::GenesisController::create(host)?;
