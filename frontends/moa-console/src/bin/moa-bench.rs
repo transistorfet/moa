@@ -43,7 +43,7 @@ fn main() {
         //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
         //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
-        system.add_interruptable_device(wrap_transmutable(cpu)).unwrap();
+        system.add_interruptable_device("cpu", wrap_transmutable(cpu)).unwrap();
 
         system.run_loop();
     });
