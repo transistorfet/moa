@@ -1,6 +1,5 @@
 
-* the overflow bit is only correct for addition but not subtraction... in subtraction, two positives can result in a negative and vice versa
-* we need better m68k tests.  Can we do what we did for Z80, with maybe a reduced test state and/or different states for different types of tests
+* add more m68k tests and try to test against a working impl
 * maybe see about a Mac 128k or something
 
 * should you rename devices.rs traits.rs?

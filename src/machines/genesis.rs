@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use crate::error::Error;
 use crate::system::System;
 use crate::memory::{MemoryBlock, Bus, BusPort};
-use crate::devices::{wrap_transmutable, Debuggable};
+use crate::devices::{wrap_transmutable, Address, Addressable, Debuggable};
 
 use crate::cpus::m68k::{M68k, M68kType};
 use crate::cpus::z80::{Z80, Z80Type};
@@ -29,19 +29,25 @@ pub fn build_genesis<H: Host>(host: &mut H) -> Result<System, Error> {
     //let mut rom = MemoryBlock::load("binaries/genesis/Ghostbusters (REV 00) (JUE).bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Teenage Mutant Ninja Turtles - The Hyperstone Heist (U) [!].bin").unwrap();
     rom.read_only();
+    let rom_end = rom.len();
     system.add_addressable_device(0x00000000, wrap_transmutable(rom)).unwrap();
+
+    let nvram = MemoryBlock::new(vec![0; 0x00010000]);
+    system.add_addressable_device(rom_end as Address, wrap_transmutable(nvram)).unwrap();
 
     let ram = MemoryBlock::new(vec![0; 0x00010000]);
     system.add_addressable_device(0x00ff0000, wrap_transmutable(ram)).unwrap();
 
 
     let coproc_bus = Rc::new(RefCell::new(Bus::new()));
-    let coproc_shared_mem = wrap_transmutable(MemoryBlock::new(vec![0; 0x00010000]));
-    coproc_bus.borrow_mut().insert(0x0000, coproc_shared_mem.borrow_mut().as_addressable().unwrap().len(), coproc_shared_mem.clone());
+    let coproc_mem = wrap_transmutable(MemoryBlock::new(vec![0; 0x00010000]));
+    coproc_bus.borrow_mut().insert(0x0000, coproc_mem.borrow_mut().as_addressable().unwrap().len(), coproc_mem.clone());
     let mut coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus.clone()));
+    let reset = coproc.reset.clone();
+    let bus_request = coproc.bus_request.clone();
 
-    system.add_addressable_device(0x00a00000, coproc_shared_mem)?;
-    //system.add_device("coproc", wrap_transmutable(coproc))?;
+    system.add_addressable_device(0x00a00000, coproc_mem)?;
+    system.add_device("coproc", wrap_transmutable(coproc))?;
 
 
 
@@ -49,7 +55,7 @@ pub fn build_genesis<H: Host>(host: &mut H) -> Result<System, Error> {
     let interrupt = controllers.get_interrupt_signal();
     system.add_addressable_device(0x00a10000, wrap_transmutable(controllers)).unwrap();
 
-    let coproc = genesis::coproc_memory::CoprocessorMemory::new();
+    let coproc = genesis::coprocessor::CoprocessorCoordinator::new(reset, bus_request);
     system.add_addressable_device(0x00a11000, wrap_transmutable(coproc)).unwrap();
 
     let vdp = genesis::ym7101::Ym7101::new(host, interrupt);

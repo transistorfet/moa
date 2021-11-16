@@ -1,26 +1,27 @@
 
 use crate::error::Error;
+use crate::signals::Signal;
 use crate::devices::{Address, Addressable, Transmutable};
 
 
 const DEV_NAME: &'static str = "coprocessor";
 
-pub struct CoprocessorMemory {
-    pub bus_request: bool,
-    pub reset: bool,
+pub struct CoprocessorCoordinator {
+    pub bus_request: Signal<bool>,
+    pub reset: Signal<bool>,
 }
 
 
-impl CoprocessorMemory {
-    pub fn new() -> Self {
-        CoprocessorMemory {
-            bus_request: false,
-            reset: false,
+impl CoprocessorCoordinator {
+    pub fn new(reset: Signal<bool>, bus_request: Signal<bool>) -> Self {
+        Self {
+            bus_request,
+            reset,
         }
     }
 }
 
-impl Addressable for CoprocessorMemory {
+impl Addressable for CoprocessorCoordinator {
     fn len(&self) -> usize {
         0x4000
     }
@@ -28,7 +29,7 @@ impl Addressable for CoprocessorMemory {
     fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             0x100 => {
-                data[0] = if self.bus_request && self.reset { 0x01 } else { 0x00 };
+                data[0] = if self.bus_request.get() && self.reset.get() { 0x01 } else { 0x00 };
             },
             _ => { warning!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr); },
         }
@@ -42,16 +43,16 @@ impl Addressable for CoprocessorMemory {
             0x000 => { /* ROM vs DRAM mode */ },
             0x100 => {
                 if data[0] != 0 {
-                    self.bus_request = true;
+                    self.bus_request.set(true);
                 } else {
-                    self.bus_request = false;
+                    self.bus_request.set(false);
                 }
             },
             0x200 => {
                 if data[0] == 0 {
-                    self.reset = true;
+                    self.reset.set(true);
                 } else {
-                    self.reset = false;
+                    self.reset.set(false);
                 }
             },
             _ => { warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr); },
@@ -60,7 +61,7 @@ impl Addressable for CoprocessorMemory {
     }
 }
 
-impl Transmutable for CoprocessorMemory {
+impl Transmutable for CoprocessorCoordinator {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         Some(self)
     }

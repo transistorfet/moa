@@ -26,9 +26,9 @@ pub fn new(name: &str) -> App {
 
 pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
     if matches.value_of("threaded").is_some() {
-        run_inline(matches, init);
-    } else {
         run_threaded(matches, init);
+    } else {
+        run_inline(matches, init);
     }
 }
 
