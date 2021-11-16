@@ -154,7 +154,7 @@ pub enum Instruction {
     MOVEtoCCR(Target),
     MOVEC(Target, ControlRegister, Direction),
     MOVEM(Target, Size, Direction, u16),
-    MOVEP(Register, Target, Size, Direction),
+    MOVEP(Register, Register, i16, Size, Direction),
     MOVEQ(u8, Register),
     MOVEUSP(Target, Direction),
     MULW(Target, Register, Sign),
@@ -406,9 +406,9 @@ impl fmt::Display for Instruction {
                 Direction::ToTarget => write!(f, "movem{}\t{}, {}", size, fmt_movem_mask(*mask), target),
                 Direction::FromTarget => write!(f, "movem{}\t{}, {}", size, target, fmt_movem_mask(*mask)),
             },
-            Instruction::MOVEP(reg, target, size, dir) => match dir {
-                Direction::ToTarget => write!(f, "movep{}\t%d{}, {}", size, reg, target),
-                Direction::FromTarget => write!(f, "movep{}\t{}, %d{}", size, target, reg),
+            Instruction::MOVEP(dreg, areg, offset, size, dir) => match dir {
+                Direction::ToTarget => write!(f, "movep{}\t%d{}, ({}, %a{})", size, dreg, areg, offset),
+                Direction::FromTarget => write!(f, "movep{}\t({}, %a{}), %d{}", size, areg, offset, dreg),
             },
             Instruction::MOVEQ(value, reg) => write!(f, "moveq\t#{:02x}, %d{}", value, reg),
             Instruction::MOVEUSP(target, dir) => match dir {

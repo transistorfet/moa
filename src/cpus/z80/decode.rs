@@ -2,7 +2,7 @@
 use crate::error::Error;
 use crate::devices::{Address, Addressable};
 
-use super::state::Register;
+use super::state::{Register, InterruptMode};
 
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -114,7 +114,7 @@ pub enum Instruction {
     EXhlde,
     EXsp(RegisterPair),
     HALT,
-    IM(u8),
+    IM(InterruptMode),
     INC16(RegisterPair),
     INC8(Target),
     IND,
@@ -453,7 +453,13 @@ impl Z80Decoder {
                         }
                     },
                     6 => {
-                        Ok(Instruction::IM(get_ins_y(ins)))
+                        match get_ins_y(ins) & 0x03 {
+                            0 => Ok(Instruction::IM(InterruptMode::Mode0)),
+                            1 => Ok(Instruction::IM(InterruptMode::Mode01)),
+                            2 => Ok(Instruction::IM(InterruptMode::Mode1)),
+                            3 => Ok(Instruction::IM(InterruptMode::Mode2)),
+                            _ => panic!("InternalError: impossible value"),
+                        }
                     },
                     7 => {
                         match get_ins_y(ins) {

@@ -104,8 +104,8 @@ impl M68kDecoder {
                     let areg = get_low_reg(ins);
                     let dir = if (ins & 0x0800) == 0 { Direction::FromTarget } else { Direction::ToTarget };
                     let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
-                    let offset = sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word);
-                    Ok(Instruction::MOVEP(dreg, Target::IndirectRegOffset(BaseRegister::AReg(areg), None, offset), size, dir))
+                    let offset = self.read_instruction_word(memory)? as i16;
+                    Ok(Instruction::MOVEP(dreg, areg, offset, size, dir))
                 } else if (ins & 0x0100) == 0x0100 || (ins & 0x0F00) == 0x0800 {
                     let bitnum = if (ins & 0x0100) == 0x0100 {
                         Target::DirectDReg(get_high_reg(ins))

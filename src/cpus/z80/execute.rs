@@ -3,7 +3,7 @@ use crate::system::System;
 use crate::error::{ErrorType, Error};
 use crate::devices::{ClockElapsed, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
-use super::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, IndexRegister, IndexRegisterHalf, Size};
+use super::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, IndexRegister, SpecialRegister, IndexRegisterHalf, Size, Direction};
 use super::state::{Z80, Status, Flags, Register};
 
 
@@ -22,7 +22,11 @@ enum RotateType {
 
 impl Steppable for Z80 {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        self.step_internal(system)?;
+        if self.reset.get() {
+            self.reset();
+        } else if !self.bus_request.get() {
+            self.step_internal(system)?;
+        }
         Ok((1_000_000_000 / self.frequency as u64) * 4)
     }
 
@@ -258,8 +262,9 @@ impl Z80 {
             Instruction::HALT => {
                 self.state.status = Status::Halted;
             },
-            //Instruction::IM(u8) => {
-            //},
+            Instruction::IM(mode) => {
+                self.state.interrupt_mode = mode;
+            },
             Instruction::INC16(regpair) => {
                 let value = self.get_register_pair_value(regpair);
 
@@ -313,8 +318,17 @@ impl Z80 {
                 let src_value = self.get_load_target_value(src)?;
                 self.set_load_target_value(dest, src_value)?;
             },
-            //Instruction::LDsr(special_reg, dir) => {
-            //}
+            Instruction::LDsr(special_reg, dir) => {
+                let addr = match special_reg {
+                    SpecialRegister::I => &mut self.state.i,
+                    SpecialRegister::R => &mut self.state.r,
+                };
+
+                match dir {
+                    Direction::FromAcc => { *addr = self.state.reg[Register::A as usize]; },
+                    Direction::ToAcc => { self.state.reg[Register::A as usize] = *addr; },
+                }
+            }
             //Instruction::LDD => {
             //},
             //Instruction::LDDR => {
@@ -642,8 +656,6 @@ impl Z80 {
                 let addr = self.get_register_pair_value(regpair);
                 self.port.read_leu16(addr as Address)?
             },
-            //LoadTarget::DirectAltRegByte(reg),
-            //LoadTarget::DirectSpecialRegByte(reg),
             LoadTarget::IndirectByte(addr) => {
                 self.port.read_u8(addr as Address)? as u16
             },
@@ -674,8 +686,6 @@ impl Z80 {
                 let addr = self.get_register_pair_value(regpair);
                 self.port.write_leu16(addr as Address, value)?;
             },
-            //LoadTarget::DirectAltRegByte(reg),
-            //LoadTarget::DirectSpecialRegByte(reg),
             LoadTarget::IndirectByte(addr) => {
                 self.port.write_u8(addr as Address, value as u8)?;
             },

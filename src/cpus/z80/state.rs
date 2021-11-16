@@ -1,6 +1,7 @@
 
 use crate::devices::Address;
 use crate::memory::BusPort;
+use crate::signals::Signal;
 
 use super::decode::Z80Decoder;
 use super::debugger::Z80Debugger;
@@ -19,6 +20,14 @@ pub enum Status {
     Halted,
 }
 
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum InterruptMode {
+    Mode0,
+    Mode01,
+    Mode1,
+    Mode2,
+}
 
 #[repr(u8)]
 #[allow(dead_code)]
@@ -52,6 +61,7 @@ pub enum Register {
 pub struct Z80State {
     pub status: Status,
     pub interrupts_enabled: bool,
+    pub interrupt_mode: InterruptMode,
 
     pub pc: u16,
     pub sp: u16,
@@ -70,6 +80,7 @@ impl Z80State {
         Self {
             status: Status::Init,
             interrupts_enabled: false,
+            interrupt_mode: InterruptMode::Mode0,
 
             pc: 0,
             sp: 0,
@@ -100,6 +111,8 @@ pub struct Z80 {
     pub decoder: Z80Decoder,
     pub debugger: Z80Debugger,
     pub port: BusPort,
+    pub reset: Signal<bool>,
+    pub bus_request: Signal<bool>,
 }
 
 impl Z80 {
@@ -111,6 +124,8 @@ impl Z80 {
             decoder: Z80Decoder::new(),
             debugger: Z80Debugger::new(),
             port: port,
+            reset: Signal::new(false),
+            bus_request: Signal::new(false),
         }
     }
 

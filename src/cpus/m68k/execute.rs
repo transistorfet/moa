@@ -507,8 +507,32 @@ impl M68k {
             Instruction::MOVEM(target, size, dir, mask) => {
                 self.execute_movem(target, size, dir, mask)?;
             },
-            //Instruction::MOVEP(reg, target, size, dir) => {
-            //},
+            Instruction::MOVEP(dreg, areg, offset, size, dir) => {
+                match dir {
+                    Direction::ToTarget => {
+                        let mut shift = (size.in_bytes() as i32 * 8) - 8;
+                        let mut addr = ((*self.get_a_reg_mut(areg) as i32) + (offset as i32)) as Address;
+                        while shift >= 0 {
+                            let byte = (self.state.d_reg[dreg as usize] >> shift) as u8;
+                            let data = if (addr & 0x1) == 0 { (byte as u16) << 8 } else { byte as u16 };
+                            self.port.write_beu16(addr, data)?;
+                            addr += 2;
+                            shift -= 8;
+                        }
+                    },
+                    Direction::FromTarget => {
+                        let mut shift = (size.in_bytes() as i32 * 8) - 8;
+                        let mut addr = ((*self.get_a_reg_mut(areg) as i32) + (offset as i32)) as Address;
+                        while shift >= 0 {
+                            let data = self.port.read_beu16(addr)?;
+                            let byte = if (addr & 0x1) == 0 { (data >> 8) as u8 } else { data as u8 };
+                            self.state.d_reg[dreg as usize] |= (byte as u32) << shift;
+                            addr += 2;
+                            shift -= 8;
+                        }
+                    },
+                }
+            },
             Instruction::MOVEQ(data, reg) => {
                 let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
                 self.state.d_reg[reg as usize] = value;
