@@ -80,7 +80,7 @@ impl M68k {
     }
 
     pub fn init(&mut self) -> Result<(), Error> {
-        self.state.msp = self.port.read_beu32(0)?;
+        self.state.ssp = self.port.read_beu32(0)?;
         self.state.pc = self.port.read_beu32(4)?;
         self.state.status = Status::Running;
         Ok(())
@@ -964,7 +964,7 @@ impl M68k {
         match base_reg {
             BaseRegister::None => 0,
             BaseRegister::PC => self.decoder.start + 2,
-            BaseRegister::AReg(reg) if reg == 7 => if self.is_supervisor() { self.state.msp } else { self.state.usp },
+            BaseRegister::AReg(reg) if reg == 7 => if self.is_supervisor() { self.state.ssp } else { self.state.usp },
             BaseRegister::AReg(reg) => self.state.a_reg[reg as usize],
         }
     }
@@ -986,13 +986,13 @@ impl M68k {
 
     #[inline(always)]
     fn get_stack_pointer_mut(&mut self) -> &mut u32 {
-        if self.is_supervisor() { &mut self.state.msp } else { &mut self.state.usp }
+        if self.is_supervisor() { &mut self.state.ssp } else { &mut self.state.usp }
     }
 
     #[inline(always)]
     fn get_a_reg_mut(&mut self, reg: Register) -> &mut u32 {
         if reg == 7 {
-            if self.is_supervisor() { &mut self.state.msp } else { &mut self.state.usp }
+            if self.is_supervisor() { &mut self.state.ssp } else { &mut self.state.usp }
         } else {
             &mut self.state.a_reg[reg as usize]
         }

@@ -93,7 +93,7 @@ pub struct M68kState {
     pub sr: u16,
     pub d_reg: [u32; 8],
     pub a_reg: [u32; 7],
-    pub msp: u32,
+    pub ssp: u32,
     pub usp: u32,
 
     pub vbr: u32,
@@ -110,7 +110,7 @@ impl M68kState {
             sr: FLAGS_ON_RESET,
             d_reg: [0; 8],
             a_reg: [0; 7],
-            msp: 0,
+            ssp: 0,
             usp: 0,
 
             vbr: 0,
@@ -156,12 +156,12 @@ impl M68k {
             println!("D{}: {:#010x}        A{}:  {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
         }
         println!("D7: {:#010x}", self.state.d_reg[7]);
-        println!("MSP: {:#010x}", self.state.msp);
+        println!("SSP: {:#010x}", self.state.ssp);
         println!("USP: {:#010x}", self.state.usp);
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
         println!("");
-        self.port.dump_memory(self.state.msp as Address, 0x40);
+        self.port.dump_memory(self.state.ssp as Address, 0x40);
         println!("");
     }
 }

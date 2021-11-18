@@ -111,7 +111,7 @@ impl Debugger {
                     let len = if args.len() > 2 { u32::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse length"))? } else { 0x20 };
                     system.get_bus().dump_memory(addr as Address, len as Address);
                 } else {
-                    //self.port.dump_memory(self.state.msp as Address, 0x40 as Address);
+                    //self.port.dump_memory(self.state.ssp as Address, 0x40 as Address);
                 }
             },
             "dis" | "disassemble" => {

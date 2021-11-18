@@ -22,10 +22,11 @@ pub fn new(name: &str) -> App {
     App::new(name)
         .arg("-s, --scale=[1,2,4]    'Scale the screen'")
         .arg("-t, --threaded         'Run the simulation in a separate thread'")
+        .arg("-d, --debugger         'Start the debugger before running machine'")
 }
 
 pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
-    if matches.value_of("threaded").is_some() {
+    if matches.occurrences_of("threaded") > 0 {
         run_threaded(matches, init);
     } else {
         run_inline(matches, init);
@@ -146,6 +147,10 @@ impl MiniFrontend {
     }
 
     pub fn start(&mut self, matches: ArgMatches, mut system: Option<System>) {
+        if matches.occurrences_of("debugger") > 0 {
+            system.as_mut().map(|system| system.enable_debugging());
+        }
+
         let mut options = minifb::WindowOptions::default();
         options.scale = match matches.value_of("scale").map(|s| u8::from_str_radix(s, 10).unwrap()) {
             Some(1) => minifb::Scale::X1,
