@@ -703,8 +703,8 @@ mod execute_tests {
             ins: Instruction::MOVEA(Target::DirectDReg(0), 0, Size::Long),
             data: &[ 0x2040 ],
             cputype: M68kType::MC68010,
-            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0xFEDCBA98, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700 },
-            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0xFEDCBA98, d1: 0x00000000, a0: 0xFEDCBA98, a1: 0x00000000, sr: 0x2700 },
+            init: TestState { pc: 0x00000000, msp: 0x00000000, usp: 0x00000000, d0: 0xFEDCBA98, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x27FF },
+            fini: TestState { pc: 0x00000002, msp: 0x00000000, usp: 0x00000000, d0: 0xFEDCBA98, d1: 0x00000000, a0: 0xFEDCBA98, a1: 0x00000000, sr: 0x27FF },
         },
         TestCase {
             name: "neg",

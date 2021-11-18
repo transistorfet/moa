@@ -4,9 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::error::Error;
 use crate::system::System;
-use crate::signals::SyncSignal;
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, read_beu16, read_beu32, write_beu16};
-use crate::host::traits::{Host, BlitableSurface};
+use crate::host::traits::{Host, BlitableSurface, SharedData};
 use crate::host::gfx::{Frame, FrameSwapper};
 
 
@@ -410,11 +409,11 @@ impl<'a> Iterator for PatternIterator<'a> {
 pub struct Ym7101 {
     pub swapper: Arc<Mutex<FrameSwapper>>,
     pub state: Ym7101State,
-    pub external_interrupt: SyncSignal<bool>,
+    pub external_interrupt: SharedData<bool>,
 }
 
 impl Ym7101 {
-    pub fn new<H: Host>(host: &mut H, external_interrupt: SyncSignal<bool>) -> Ym7101 {
+    pub fn new<H: Host>(host: &mut H, external_interrupt: SharedData<bool>) -> Ym7101 {
         let swapper = FrameSwapper::new_shared(320, 224);
 
         host.add_window(FrameSwapper::to_boxed(swapper.clone())).unwrap();

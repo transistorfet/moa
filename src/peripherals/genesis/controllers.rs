@@ -1,8 +1,7 @@
 
 use crate::error::Error;
-use crate::signals::SyncSignal;
 use crate::devices::{Address, Addressable, Transmutable};
-use crate::host::traits::{Host, JoystickDevice, JoystickUpdater};
+use crate::host::traits::{Host, JoystickDevice, JoystickUpdater, SharedData};
 
 
 const REG_VERSION: Address      = 0x01;
@@ -23,7 +22,7 @@ pub struct GenesisControllerPort {
     /// Data contains bits:
     /// 11 | 10 | 9 |    8 |     7 | 6 | 5 | 4 |     3 |    2 |    1 |  0
     ///  X |  Y | Z | MODE | START | A | B | C | RIGHT | LEFT | DOWN | UP
-    pub data: SyncSignal<u16>,
+    pub data: SharedData<u16>,
 
     pub ctrl: u8,
     pub th_count: u8,
@@ -35,7 +34,7 @@ pub struct GenesisControllerPort {
 impl GenesisControllerPort {
     pub fn new() -> Self {
         Self {
-            data: SyncSignal::new(0),
+            data: SharedData::new(0),
             ctrl: 0,
             th_count: 0,
             next_read: 0,
@@ -72,7 +71,7 @@ impl GenesisControllerPort {
     }
 }
 
-pub struct GenesisControllerUpdater(SyncSignal<u16>, SyncSignal<bool>);
+pub struct GenesisControllerUpdater(SharedData<u16>, SharedData<bool>);
 
 impl JoystickUpdater for GenesisControllerUpdater {
     fn update_joystick(&mut self, modifiers: u16) {
@@ -89,7 +88,7 @@ pub struct GenesisController {
     pub port_1: GenesisControllerPort,
     pub port_2: GenesisControllerPort,
     pub expansion: GenesisControllerPort,
-    pub interrupt: SyncSignal<bool>,
+    pub interrupt: SharedData<bool>,
 }
 
 impl GenesisController {
@@ -98,7 +97,7 @@ impl GenesisController {
             port_1: GenesisControllerPort::new(),
             port_2: GenesisControllerPort::new(),
             expansion: GenesisControllerPort::new(),
-            interrupt: SyncSignal::new(false),
+            interrupt: SharedData::new(false),
         }
     }
 
@@ -113,7 +112,7 @@ impl GenesisController {
         Ok(controller)
     }
 
-    pub fn get_interrupt_signal(&self) -> SyncSignal<bool> {
+    pub fn get_interrupt_signal(&self) -> SharedData<bool> {
         self.interrupt.clone()
     }
 }

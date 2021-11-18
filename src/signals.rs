@@ -1,7 +1,6 @@
 
 use std::rc::Rc;
-use std::cell::Cell;
-use std::sync::{Arc, Mutex};
+use std::cell::{Cell, RefCell, RefMut};
 
 #[derive(Clone, Debug)]
 pub struct Signal<T: Copy>(Rc<Cell<T>>);
@@ -20,22 +19,16 @@ impl<T: Copy> Signal<T> {
     }
 }
 
-
 #[derive(Clone, Debug)]
-pub struct SyncSignal<T: Copy>(Arc<Mutex<T>>);
+pub struct Latch<T>(Rc<RefCell<T>>);
 
-impl<T: Copy> SyncSignal<T> {
-    pub fn new(init: T) -> SyncSignal<T> {
-        SyncSignal(Arc::new(Mutex::new(init)))
+impl<T> Latch<T> {
+    pub fn new(init: T) -> Latch<T> {
+        Latch(Rc::new(RefCell::new(init)))
     }
 
-    pub fn set(&mut self, value: T) {
-        *(self.0.lock().unwrap()) = value;
-    }
-
-    pub fn get(&mut self) -> T {
-        *(self.0.lock().unwrap())
+    pub fn borrow_mut(&self) -> RefMut<'_, T> {
+        self.0.borrow_mut()
     }
 }
-
 

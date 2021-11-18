@@ -1,4 +1,6 @@
 
+use std::sync::{Arc, Mutex, MutexGuard};
+
 use crate::error::Error;
 use crate::host::keys::Key;
 
@@ -42,4 +44,27 @@ pub trait BlitableSurface {
     fn clear(&mut self, value: u32);
 }
 
+
+#[derive(Clone, Debug)]
+pub struct SharedData<T>(Arc<Mutex<T>>);
+
+impl<T> SharedData<T> {
+    pub fn new(init: T) -> SharedData<T> {
+        SharedData(Arc::new(Mutex::new(init)))
+    }
+
+    pub fn lock(&self) -> MutexGuard<'_, T> {
+        self.0.lock().unwrap()
+    }
+}
+
+impl<T: Copy> SharedData<T> {
+    pub fn set(&mut self, value: T) {
+        *(self.0.lock().unwrap()) = value;
+    }
+
+    pub fn get(&mut self) -> T {
+        *(self.0.lock().unwrap())
+    }
+}
 

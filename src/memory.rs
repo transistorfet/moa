@@ -130,13 +130,8 @@ impl Bus {
 
     pub fn insert(&mut self, base: Address, length: usize, dev: TransmutableBox) {
         let block = Block { base, length, dev };
-        for i in 0..self.blocks.len() {
-            if self.blocks[i].base > block.base {
-                self.blocks.insert(i, block);
-                return;
-            }
-        }
-        self.blocks.insert(0, block);
+        let i = self.blocks.iter().position(|cur| cur.base > block.base).unwrap_or(0);
+        self.blocks.insert(i, block);
     }
 
     pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(TransmutableBox, Address), Error> {

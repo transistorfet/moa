@@ -30,7 +30,7 @@ Genesis/Mega Drive:
     * make tests for each instruction
     * check all instructions in the docs
 
-    * unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, EXG, ILLEGAL, MOVEfromCCR, MOVEP, RTR, RTD, SBCD, SUBX
+    * unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, ILLEGAL, MOVEfromCCR,, RTR, RTD, SBCD, SUBX
     * >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
 
     * add support for MMU

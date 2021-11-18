@@ -252,7 +252,7 @@ impl Steppable for MC68681 {
             self.set_interrupt_flag(ISR_CH_B_TX_READY, true);
         }
 
-        Ok(1_000_000_000 / 3_646_800)
+        Ok(1_000_000_000 / 3_686_400)
     }
 }
 
