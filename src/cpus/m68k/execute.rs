@@ -514,8 +514,7 @@ impl M68k {
                         let mut addr = ((*self.get_a_reg_mut(areg) as i32) + (offset as i32)) as Address;
                         while shift >= 0 {
                             let byte = (self.state.d_reg[dreg as usize] >> shift) as u8;
-                            let data = if (addr & 0x1) == 0 { (byte as u16) << 8 } else { byte as u16 };
-                            self.port.write_beu16(addr, data)?;
+                            self.port.write_u8(addr, byte)?;
                             addr += 2;
                             shift -= 8;
                         }
@@ -524,8 +523,7 @@ impl M68k {
                         let mut shift = (size.in_bytes() as i32 * 8) - 8;
                         let mut addr = ((*self.get_a_reg_mut(areg) as i32) + (offset as i32)) as Address;
                         while shift >= 0 {
-                            let data = self.port.read_beu16(addr)?;
-                            let byte = if (addr & 0x1) == 0 { (data >> 8) as u8 } else { data as u8 };
+                            let byte = self.port.read_u8(addr)?;
                             self.state.d_reg[dreg as usize] |= (byte as u32) << shift;
                             addr += 2;
                             shift -= 8;
@@ -718,6 +716,7 @@ impl M68k {
     fn execute_movem(&mut self, target: Target, size: Size, dir: Direction, mut mask: u16) -> Result<(), Error> {
         let mut addr = self.get_target_address(target)?;
 
+
         // If we're using a MC68020 or higher, and it was Post-Inc/Pre-Dec target, then update the value before it's stored
         if self.cputype >= M68kType::MC68020 {
             match target {
@@ -729,50 +728,93 @@ impl M68k {
             }
         }
 
-        if dir == Direction::ToTarget {
-            for i in (0..8).rev() {
-                if (mask & 0x01) != 0 {
-                    let value = *self.get_a_reg_mut(i);
-                    addr -= size.in_bytes();
-                    self.set_address_sized(addr as Address, value, size)?;
+        let post_addr = match target {
+            Target::IndirectARegInc(reg) => {
+                if dir != Direction::FromTarget {
+                    return Err(Error::new(&format!("Cannot use {:?} with {:?}", target, dir)));
                 }
-                mask >>= 1;
-            }
-            for i in (0..8).rev() {
-                if (mask & 0x01) != 0 {
-                    addr -= size.in_bytes();
-                    self.set_address_sized(addr as Address, self.state.d_reg[i], size)?;
+                self.move_memory_to_registers(addr, size, mask)?
+            },
+            Target::IndirectARegDec(reg) => {
+                if dir != Direction::ToTarget {
+                    return Err(Error::new(&format!("Cannot use {:?} with {:?}", target, dir)));
                 }
-                mask >>= 1;
-            }
-        } else {
-            let mut mask = mask;
-            for i in 0..8 {
-                if (mask & 0x01) != 0 {
-                    self.state.d_reg[i] = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
-                    addr += size.in_bytes();
+                self.move_registers_to_memory_reverse(addr, size, mask)?
+            },
+            _ => {
+                match dir {
+                    Direction::ToTarget => self.move_registers_to_memory(addr, size, mask)?,
+                    Direction::FromTarget => self.move_memory_to_registers(addr, size, mask)?,
                 }
-                mask >>= 1;
-            }
-            for i in 0..8 {
-                if (mask & 0x01) != 0 {
-                    *self.get_a_reg_mut(i) = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
-                    addr += size.in_bytes();
-                }
-                mask >>= 1;
-            }
-        }
+            },
+        };
 
         // If it was Post-Inc/Pre-Dec target, then update the value
         match target {
             Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
                 let a_reg_mut = self.get_a_reg_mut(reg);
-                *a_reg_mut = addr;
+                *a_reg_mut = post_addr;
             }
             _ => { },
         }
 
         Ok(())
+    }
+
+    pub fn move_memory_to_registers(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, Error> {
+        for i in 0..8 {
+            if (mask & 0x01) != 0 {
+                self.state.d_reg[i] = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
+                addr += size.in_bytes();
+            }
+            mask >>= 1;
+        }
+        for i in 0..8 {
+            if (mask & 0x01) != 0 {
+                *self.get_a_reg_mut(i) = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
+                addr += size.in_bytes();
+            }
+            mask >>= 1;
+        }
+        Ok(addr)
+    }
+
+    pub fn move_registers_to_memory(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, Error> {
+        for i in 0..8 {
+            if (mask & 0x01) != 0 {
+                self.set_address_sized(addr as Address, self.state.d_reg[i], size)?;
+                addr += size.in_bytes();
+            }
+            mask >>= 1;
+        }
+        for i in 0..8 {
+            if (mask & 0x01) != 0 {
+                let value = *self.get_a_reg_mut(i);
+                self.set_address_sized(addr as Address, value, size)?;
+                addr += size.in_bytes();
+            }
+            mask >>= 1;
+        }
+        Ok(addr)
+    }
+
+    pub fn move_registers_to_memory_reverse(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, Error> {
+        for i in (0..8).rev() {
+            if (mask & 0x01) != 0 {
+                let value = *self.get_a_reg_mut(i);
+                addr -= size.in_bytes();
+                self.set_address_sized(addr as Address, value, size)?;
+            }
+            mask >>= 1;
+        }
+        for i in (0..8).rev() {
+            if (mask & 0x01) != 0 {
+                addr -= size.in_bytes();
+                self.set_address_sized(addr as Address, self.state.d_reg[i], size)?;
+            }
+            mask >>= 1;
+        }
+        Ok(addr)
     }
 
     fn push_word(&mut self, value: u16) -> Result<(), Error> {

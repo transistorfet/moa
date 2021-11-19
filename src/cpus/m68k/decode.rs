@@ -102,7 +102,7 @@ impl M68kDecoder {
                 } else if (ins & 0x138) == 0x108 {
                     let dreg = get_high_reg(ins);
                     let areg = get_low_reg(ins);
-                    let dir = if (ins & 0x0800) == 0 { Direction::FromTarget } else { Direction::ToTarget };
+                    let dir = if (ins & 0x0080) == 0 { Direction::FromTarget } else { Direction::ToTarget };
                     let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
                     let offset = self.read_instruction_word(memory)? as i16;
                     Ok(Instruction::MOVEP(dreg, areg, offset, size, dir))
