@@ -30,15 +30,12 @@ const OPCG_BRANCH: u8 = 0x6;
 const OPCG_MOVEQ: u8 = 0x7;
 const OPCG_DIV_OR: u8 = 0x8;
 const OPCG_SUB: u8 = 0x9;
+const OPCG_ALINE: u8 = 0xA;
 const OPCG_CMP_EOR: u8 = 0xB;
 const OPCG_MUL_AND: u8 = 0xC;
 const OPCG_ADD: u8 = 0xD;
 const OPCG_SHIFT: u8 = 0xE;
-
-#[allow(dead_code)]
-const OPCG_RESERVED1: u8 = 0xA;
-#[allow(dead_code)]
-const OPCG_RESERVED2: u8 = 0xF;
+const OPCG_FLINE: u8 = 0xF;
 
 
 pub struct M68kDecoder {
@@ -596,6 +593,12 @@ impl M68kDecoder {
                         }
                     },
                 }
+            },
+            OPCG_ALINE => {
+                Ok(Instruction::UnimplementedA(ins))
+            },
+            OPCG_FLINE => {
+                Ok(Instruction::UnimplementedF(ins))
             },
             _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
         }

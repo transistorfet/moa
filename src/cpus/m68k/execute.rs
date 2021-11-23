@@ -706,6 +706,14 @@ impl M68k {
                 let addr = self.get_a_reg_mut(reg);
                 *addr = new_value;
             },
+            Instruction::UnimplementedA(ins) => {
+                self.state.pc -= 2;
+                self.exception(Exceptions::LineAEmulator as u8, false)?;
+            },
+            Instruction::UnimplementedF(ins) => {
+                self.state.pc -= 2;
+                self.exception(Exceptions::LineFEmulator as u8, false)?;
+            },
             _ => { return Err(Error::new("Unsupported instruction")); },
         }
 
@@ -715,7 +723,6 @@ impl M68k {
 
     fn execute_movem(&mut self, target: Target, size: Size, dir: Direction, mut mask: u16) -> Result<(), Error> {
         let mut addr = self.get_target_address(target)?;
-
 
         // If we're using a MC68020 or higher, and it was Post-Inc/Pre-Dec target, then update the value before it's stored
         if self.cputype >= M68kType::MC68020 {

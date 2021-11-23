@@ -130,7 +130,7 @@ impl Bus {
 
     pub fn insert(&mut self, base: Address, length: usize, dev: TransmutableBox) {
         let block = Block { base, length, dev };
-        let i = self.blocks.iter().position(|cur| cur.base > block.base).unwrap_or(0);
+        let i = self.blocks.iter().position(|cur| cur.base > block.base).unwrap_or(self.blocks.len());
         self.blocks.insert(i, block);
     }
 
@@ -145,7 +145,7 @@ impl Bus {
                 }
             }
         }
-        return Err(Error::new(&format!("No segment found at {:#08x}", addr)));
+        return Err(Error::new(&format!("No segment found at {:#010x}", addr)));
     }
 
     pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {

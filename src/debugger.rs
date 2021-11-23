@@ -3,30 +3,8 @@ use std::io::Write;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Address, Debuggable, TransmutableBox};
+use crate::devices::{Address, Addressable, Debuggable, TransmutableBox};
 
-
-/*
-pub struct StackTracer {
-    pub calls: Vec<u32>,
-}
-
-impl StackTracer {
-    pub fn new() -> StackTracer {
-        StackTracer {
-            calls: vec![],
-        }
-    }
-
-    pub fn push_return(&mut self, addr: u32) {
-        self.calls.push(addr);
-    }
-
-    pub fn pop_return(&mut self) {
-        self.calls.pop();
-    }
-}
-*/
 
 pub struct Debugger {
     pub last_command: Option<String>,
@@ -98,7 +76,7 @@ impl Debugger {
             },
             "r" | "remove" => {
                 if args.len() != 2 {
-                    println!("Usage: breakpoint <addr>");
+                    println!("Usage: remove <addr>");
                 } else {
                     let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse breakpoint address"))?;
                     debug_obj.remove_breakpoint(addr as Address);
@@ -142,6 +120,20 @@ impl Debugger {
                 self.trace_only = true;
                 return Ok(true);
             }
+            "setb" | "setw" | "setl" => {
+                if args.len() != 3 {
+                    println!("Usage: set[b|w|l] <addr> <data>");
+                } else {
+                    let addr = u64::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse set address"))?;
+                    let data = u32::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse data"))?;
+                    match args[0] {
+                        "setb" => system.get_bus().write_u8(addr, data as u8)?,
+                        "setw" => system.get_bus().write_beu16(addr, data as u16)?,
+                        "setl" => system.get_bus().write_beu32(addr, data)?,
+                        _ => panic!("Unimplemented: {:?}", args[0]),
+                    }
+                }
+            },
             //"ds" | "stack" | "dumpstack" => {
             //    println!("Stack:");
             //    for addr in &self.debugger.stack_tracer.calls {

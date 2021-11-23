@@ -7,13 +7,13 @@ use crate::memory::Bus;
 use crate::debugger::Debugger;
 use crate::error::{Error, ErrorType};
 use crate::interrupts::InterruptController;
-use crate::devices::{Clock, Address, TransmutableBox};
+use crate::devices::{Clock, ClockElapsed, Address, TransmutableBox};
 
 
 pub struct System {
     pub clock: Clock,
     pub devices: HashMap<String, TransmutableBox>,
-    pub event_queue: Vec<DeviceStep>,
+    pub event_queue: Vec<NextStep>,
 
     pub debug_enabled: Cell<bool>,
     pub debugger: RefCell<Debugger>,
@@ -89,12 +89,12 @@ impl System {
         result
     }
 
-    pub fn run_for(&mut self, clocks: Clock) -> Result<(), Error> {
-        let target = self.clock + clocks;
+    pub fn run_for(&mut self, elapsed: ClockElapsed) -> Result<(), Error> {
+        let target = self.clock + elapsed;
 
         while self.clock < target {
             if self.debug_enabled.get() && self.event_queue[self.event_queue.len() - 1].device.borrow_mut().as_debuggable().is_some() {
-                self.debugger.borrow_mut().run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone()).unwrap();
+                self.debugger.borrow_mut().run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone());
             }
 
             match self.step() {
@@ -129,11 +129,11 @@ impl System {
 
     fn try_queue_device(&mut self, device: TransmutableBox) {
         if device.borrow_mut().as_steppable().is_some() {
-            self.queue_device(DeviceStep::new(device));
+            self.queue_device(NextStep::new(device));
         }
     }
 
-    fn queue_device(&mut self, device_step: DeviceStep) {
+    fn queue_device(&mut self, device_step: NextStep) {
         for i in (0..self.event_queue.len()).rev() {
             if self.event_queue[i].next_clock > device_step.next_clock {
                 self.event_queue.insert(i + 1, device_step);
@@ -145,12 +145,12 @@ impl System {
 }
 
 
-pub struct DeviceStep {
+pub struct NextStep {
     pub next_clock: Clock,
     pub device: TransmutableBox,
 }
 
-impl DeviceStep {
+impl NextStep {
     pub fn new(device: TransmutableBox) -> Self {
         Self {
             next_clock: 0,

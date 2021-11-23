@@ -195,6 +195,8 @@ pub enum Instruction {
     TRAPV,
 
     UNLK(Register),
+    UnimplementedA(u16),
+    UnimplementedF(u16),
 }
 
 pub fn sign_extend_to_long(value: u32, from: Size) -> i32 {

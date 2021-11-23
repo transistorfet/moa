@@ -46,6 +46,8 @@ mod decode_tests {
         TestCase { cpu: M68kType::MC68000, data: &[0xE200],                             ins: Some(Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right)) },
         TestCase { cpu: M68kType::MC68000, data: &[0xE318],                             ins: Some(Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left)) },
         TestCase { cpu: M68kType::MC68000, data: &[0xE218],                             ins: Some(Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0xA000],                             ins: Some(Instruction::UnimplementedA(0xA000)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0xFFFF],                             ins: Some(Instruction::UnimplementedF(0xFFFF)) },
 
         // MC68030
         TestCase { cpu: M68kType::MC68030, data: &[0x4C3C, 0x0800, 0x0000, 0x0097],                     ins: Some(Instruction::MULL(Target::Immediate(0x97), None, 0, Sign::Signed)) },
@@ -53,7 +55,6 @@ mod decode_tests {
 
         // Should Fail
         TestCase { cpu: M68kType::MC68000, data: &[0x21BC, 0x0010, 0x14C4, 0x09B0, 0x0010, 0xDF40],     ins: None },
-        TestCase { cpu: M68kType::MC68000, data: &[0xA000],                                             ins: None },
     ];
 
 
@@ -373,8 +374,8 @@ mod execute_tests {
         d1: u32,
         a0: u32,
         a1: u32,
-        mem: u32,
         sr: u16,
+        mem: u32,
     }
 
     struct TestCase {

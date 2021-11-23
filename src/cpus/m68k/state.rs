@@ -45,6 +45,9 @@ pub enum Exceptions {
     ChkInstruction      = 6,
     TrapvInstruction    = 7,
     PrivilegeViolation  = 8,
+    Trace               = 9,
+    LineAEmulator       = 10,
+    LineFEmulator       = 11,
 }
 
 
