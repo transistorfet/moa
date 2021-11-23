@@ -209,7 +209,7 @@ impl Ym7101State {
 
     pub fn get_palette_colour(&self, palette: u8, colour: u8) -> u32 {
         if colour == 0 {
-            return 0;
+            return 0xFFFFFFFF;
         }
         let rgb = read_beu16(&self.cram[(((palette * 16) + colour) * 2) as usize..]);
         (((rgb & 0xF00) as u32) >> 4) | (((rgb & 0x0F0) as u32) << 8) | (((rgb & 0x00F) as u32) << 20)
@@ -259,9 +259,7 @@ impl Ym7101State {
 
     pub fn draw_background(&mut self, frame: &mut Frame) {
         let bg_colour = self.get_palette_colour((self.regs[REG_BACKGROUND] & 0x30) >> 4, self.regs[REG_BACKGROUND] & 0x0f);
-        for i in 0..(frame.width as usize * frame.height as usize) {
-            frame.bitmap[i] = bg_colour;
-        }
+        frame.clear(bg_colour);
     }
 
     pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: u32) {

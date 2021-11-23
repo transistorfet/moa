@@ -22,7 +22,7 @@ impl BlitableSurface for Frame {
         for y in pos_y..(pos_y + height) {
             for x in pos_x..(pos_x + width) {
                 match bitmap.next().unwrap() {
-                    0 => { },
+                    0xFFFFFFFF => { },
                     value if x < self.width && y < self.height => { self.bitmap[(x + (y * self.width)) as usize] = value; },
                     _ => { },
                 }
@@ -31,6 +31,7 @@ impl BlitableSurface for Frame {
     }
 
     fn clear(&mut self, value: u32) {
+        let value = if value == 0xFFFFFFFF { 0 } else { value };
         for i in 0..((self.width as usize) * (self.height as usize)) {
             self.bitmap[i] = value;
         }
@@ -40,14 +41,14 @@ impl BlitableSurface for Frame {
 
 pub struct FrameSwapper {
     pub current: Frame,
-    pub previous: Frame,
+    //pub previous: Frame,
 }
 
 impl FrameSwapper {
     pub fn new(width: u32, height: u32) -> FrameSwapper {
         FrameSwapper {
             current: Frame { width, height, bitmap: vec![0; (width * height) as usize] },
-            previous: Frame { width, height, bitmap: vec![0; (width * height) as usize] },
+            //previous: Frame { width, height, bitmap: vec![0; (width * height) as usize] },
         }
     }
 
@@ -66,7 +67,7 @@ impl WindowUpdater for FrameSwapper {
     }
 
     fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
-        std::mem::swap(&mut self.current, &mut self.previous);
+        //std::mem::swap(&mut self.current, &mut self.previous);
 
         for y in 0..self.current.height {
             for x in 0..self.current.width {
