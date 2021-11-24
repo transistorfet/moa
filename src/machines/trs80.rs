@@ -29,7 +29,7 @@ impl Trs80Options {
 pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<System, Error> {
     let mut system = System::new();
 
-    let mut rom = MemoryBlock::new(vec![0; 0x4000]);
+    let mut rom = MemoryBlock::new(vec![0; 0x3000]);
     //rom.load_at(0x0000, "binaries/trs80/level1.rom")?;
     //rom.load_at(0x0000, "binaries/trs80/level2.rom")?;
     rom.load_at(0x0000, &options.rom)?;
