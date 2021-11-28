@@ -6,10 +6,17 @@ Moa
 
 Moa is an emulator/simulator for computers using various 68000 and Z80 CPUs and
 peripherals.  The original idea was to emulate the computer I had built as part
-of the [Computie project](https://transistorfet.github.io/projects/computie).
+of the [Computie project](https://jabberwocky.ca/projects/computie/).
 
 Currently it can simulate Computie (68000) and the TRS-80 Model I (Z80), and I'm
 working on supporting the Macintosh 512k and Sega Genesis.
+
+For more detail, check out this post about how I started the project:
+[Making a 68000 Emulator in Rust](https://jabberwocky.ca/posts/2021-11-making_an_emulator.html)
+
+
+Running
+-------
 
 For Computie, it can do everything the 68k-SMT board can do, including run the
 monitor program and load the Computie OS kernel and boot it from the
