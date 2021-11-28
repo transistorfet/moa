@@ -2,7 +2,7 @@
 Making a 68000 Emulator in Rust
 ===============================
 
-###### *Written November 2021*
+###### *Written November 2021 by transistor_fet*
 
 
 A few months ago, I was looking for a project to do while recovering from a bout of illness.  I
