@@ -10,7 +10,7 @@ needed something that was straight-forward enough to work on without getting stu
 decisions or the need to learn a lot before diving in, which was the case with all the other
 projects on my plate at the time.  My girlfriend suggested writing an
 [emulator](https://jabberwocky.ca/projects/moa/), and my first thought was to try emulating the
-computer I made last year, [computie](https://jabberwocky.ca/projects/Computie/), since I already
+computer I made last year, [Computie](https://jabberwocky.ca/projects/Computie/), since I already
 had a fair amount of code for it that I knew well, and the 68000 architecture and assembly language
 was still fresh in my mind.  Naturally I chose to write it in Rust.
 
