@@ -38,6 +38,7 @@ mod decode_tests {
         TestCase { cpu: M68kType::MC68000, data: &[0x0C00, 0x0010],                     ins: Some(Instruction::CMP(Target::Immediate(0x10), Target::DirectDReg(0), Size::Byte)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x81FC, 0x0003],                     ins: Some(Instruction::DIVW(Target::Immediate(3), 0, Sign::Signed)) },
         TestCase { cpu: M68kType::MC68000, data: &[0xC1FC, 0x0276],                     ins: Some(Instruction::MULW(Target::Immediate(0x276), 0, Sign::Signed)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0xCDC5],                             ins: Some(Instruction::MULW(Target::DirectDReg(5), 6, Sign::Signed)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x0108, 0x1234],                     ins: Some(Instruction::MOVEP(0, 0, 0x1234, Size::Word, Direction::FromTarget)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x0148, 0x1234],                     ins: Some(Instruction::MOVEP(0, 0, 0x1234, Size::Long, Direction::FromTarget)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x0188, 0x1234],                     ins: Some(Instruction::MOVEP(0, 0, 0x1234, Size::Word, Direction::ToTarget)) },

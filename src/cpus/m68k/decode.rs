@@ -473,7 +473,7 @@ impl M68kDecoder {
             OPCG_MUL_AND => {
                 let size = get_size(ins);
 
-                if (ins & 0b000111110000) == 0b000100000000 {
+                if (ins & 0b0001_1111_0000) == 0b0001_0000_0000 {
                     let regx = get_high_reg(ins);
                     let regy = get_low_reg(ins);
 
@@ -481,7 +481,7 @@ impl M68kDecoder {
                         false => Ok(Instruction::ABCD(Target::DirectDReg(regy), Target::DirectDReg(regx))),
                         true => Ok(Instruction::ABCD(Target::IndirectARegDec(regy), Target::IndirectARegDec(regx))),
                     }
-                } else if (ins & 0b000100110000) == 0b000100000000 {
+                } else if (ins & 0b0001_0011_0000) == 0b0001_0000_0000 && !size.is_none() {
                     let regx = get_high_reg(ins);
                     let regy = get_low_reg(ins);
                     match (ins & 0x00F8) >> 3 {
