@@ -52,10 +52,14 @@ impl System {
     }
 
     pub fn add_addressable_device(&mut self, addr: Address, device: TransmutableBox) -> Result<(), Error> {
+        self.add_peripheral(&format!("mem{:x}", addr), addr, device)
+    }
+
+    pub fn add_peripheral(&mut self, name: &str, addr: Address, device: TransmutableBox) -> Result<(), Error> {
         let length = device.borrow_mut().as_addressable().unwrap().len();
         self.bus.borrow_mut().insert(addr, length, device.clone());
         self.try_queue_device(device.clone());
-        self.devices.insert(format!("mem{:x}", addr), device);
+        self.devices.insert(name.to_string(), device);
         Ok(())
     }
 

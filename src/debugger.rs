@@ -92,6 +92,16 @@ impl Debugger {
                     //self.port.dump_memory(self.state.ssp as Address, 0x40 as Address);
                 }
             },
+            "dp" | "dump_peripheral" => {
+                if args.len() < 2 {
+                    println!("Usage: dp <device_name> [<device specific arguments>]");
+                } else {
+                    let device = system.devices.get(args[1]).ok_or_else(|| Error::new(&format!("No device named {}", args[1])))?;
+                    device.borrow_mut().as_inspectable()
+                        .ok_or_else(|| Error::new("That device is not inspectable"))?
+                        .inspect(system, &args[2..])?;
+                }
+            },
             "dis" | "disassemble" => {
                 let addr = if args.len() > 1 {
                     Address::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?
@@ -156,7 +166,7 @@ impl Debugger {
     fn check_repeat_arg(&mut self, args: &[&str]) -> Result<(), Error> {
         if args.len() > 1 {
             self.repeat = u32::from_str_radix(args[1], 10).map_err(|_| Error::new("Unable to parse repeat number"))?;
-            self.last_command = Some("c".to_string());
+            self.last_command = Some(args[0].to_string());
         }
         Ok(())
     }

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, read_beu16, read_beu32, write_beu16};
+use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, read_beu16, read_beu32, write_beu16};
 use crate::host::traits::{Host, BlitableSurface, SharedData};
 use crate::host::gfx::{Frame, FrameSwapper};
 
@@ -50,6 +50,7 @@ const MODE1_BF_ENABLE_HV_COUNTER: u8    = 0x02;
 const MODE1_BF_HSYNC_INTERRUPT: u8      = 0x10;
 
 const MODE2_BF_V_CELL_MODE: u8          = 0x08;
+const MODE2_BF_DMA_ENABLED: u8          = 0x10;
 const MODE2_BF_VSYNC_INTERRUPT: u8      = 0x20;
 
 const MODE3_BF_EXTERNAL_INTERRUPT: u8   = 0x08;
@@ -172,11 +173,11 @@ impl Ym7101State {
         }
     }
 
-    pub fn get_transfer_target_mut(&mut self) -> &mut [u8] {
+    pub fn get_transfer_target_mut(&mut self) -> (&mut [u8], usize) {
         match self.transfer_target {
-            TargetType::Vram => &mut self.vram,
-            TargetType::Cram => &mut self.cram,
-            TargetType::Vsram => &mut self.vsram,
+            TargetType::Vram => (&mut self.vram, 0x10000),
+            TargetType::Cram => (&mut self.cram, 128),
+            TargetType::Vsram => (&mut self.vsram, 80),
         }
     }
 
@@ -205,6 +206,14 @@ impl Ym7101State {
 
     pub fn get_vram_window_addr(&self) -> u32 {
         ((self.regs[REG_WINDOW_ADDR] as u16) << 10) as u32
+    }
+
+    pub fn get_vram_sprites_addr(&self) -> u32 {
+        ((self.regs[REG_SPRITES_ADDR] as u16) << 9) as u32
+    }
+
+    pub fn get_vram_hscroll_addr(&self) -> u32 {
+        ((self.regs[REG_HSCROLL_ADDR] as u16) << 10) as u32
     }
 
     pub fn get_palette_colour(&self, palette: u8, colour: u8) -> u32 {
@@ -305,7 +314,7 @@ impl Ym7101State {
     }
 
     pub fn draw_sprites(&mut self, frame: &mut Frame) {
-        let sprite_table = (self.regs[REG_SPRITES_ADDR] as usize) << 9;
+        let sprite_table = self.get_vram_sprites_addr() as usize;
         let (cells_h, cells_v) = self.get_screen_size();
         let (pos_limit_h, pos_limit_v) = (if cells_h == 32 { 383 } else { 447 }, if cells_v == 28 { 351 } else { 367 });
 
@@ -323,7 +332,7 @@ impl Ym7101State {
             let (size_h, size_v) = (((size >> 2) & 0x03) as u16 + 1, (size & 0x03) as u16 + 1);
             let h_rev = (pattern_name & 0x0800) != 0;
             let v_rev = (pattern_name & 0x1000) != 0;
-println!("i: {} ({} {}) {:x} ({}, {}) {:x}", i, h_pos, v_pos, size, size_h, size_v, pattern_name);
+//println!("i: {} ({} {}) {:x} ({}, {}) {:x}", i, h_pos, v_pos, size, size_h, size_v, pattern_name);
 
             for ih in 0..size_h {
                 for iv in 0..size_v {
@@ -432,6 +441,10 @@ impl Transmutable for Ym7101 {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
         Some(self)
     }
+
+    fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
+        Some(self)
+    }
 }
 
 impl Steppable for Ym7101 {
@@ -501,7 +514,7 @@ impl Steppable for Ym7101 {
             // Print Sprite
             let mut swapper = self.swapper.lock().unwrap();
             self.state.draw_background(&mut swapper.current);
-            let sprite_table = (self.state.regs[REG_SPRITES_ADDR] as usize) << 9;
+            let sprite_table = self.get_vram_sprites_addr();
             let (cells_h, cells_v) = self.state.get_screen_size();
             let sprite = 0;
             println!("{:?}", &self.state.vram[(sprite_table + (sprite * 8))..(sprite_table + (sprite * 8) + 8)].iter().map(|byte| format!("{:02x}", byte)).collect::<Vec<String>>());
@@ -530,7 +543,7 @@ impl Steppable for Ym7101 {
             //swapper.current.blit(16, 8, PatternIterator::new(&self.state, 0x405 * 32, 3, false, false), 8, 8);
         }
 
-        if self.state.transfer_run != DmaType::None {
+        if self.state.transfer_run != DmaType::None && (self.state.regs[REG_MODE_SET_2] & MODE2_BF_DMA_ENABLED) != 0 {
             // TODO we will just do the full dma transfer here, but it really should be stepped
 
             match self.state.transfer_run {
@@ -553,9 +566,9 @@ impl Steppable for Ym7101 {
 
                         {
                             let addr = self.state.transfer_addr;
-                            let target = self.state.get_transfer_target_mut();
-                            target[addr as usize] = data[0];
-                            target[addr as usize + 1] = data[1];
+                            let (target, length) = self.state.get_transfer_target_mut();
+                            target[(addr as usize) % length] = data[0];
+                            target[(addr as usize + 1) % length] = data[1];
                         }
 
                         self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
@@ -606,9 +619,9 @@ impl Addressable for Ym7101 {
             0x00 | 0x02 => {
                 {
                     let addr = self.state.transfer_addr;
-                    let target = self.state.get_transfer_target_mut();
+                    let (target, length) = self.state.get_transfer_target_mut();
                     for i in 0..data.len() {
-                        data[i] = target[addr as usize + i];
+                        data[i] = target[(addr as usize + i) % length];
                     }
                 }
                 self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
@@ -636,13 +649,13 @@ impl Addressable for Ym7101 {
                     self.state.transfer_fill = if data.len() >= 2 { read_beu16(data) } else { data[0] as u16 };
                     self.state.set_dma_mode(DmaType::Fill);
                 } else {
-                    debug!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.state.transfer_target, self.state.transfer_addr, data);
+                    info!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.state.transfer_target, self.state.transfer_addr, data);
 
                     {
                         let addr = self.state.transfer_addr as usize;
-                        let target = self.state.get_transfer_target_mut();
+                        let (target, length) = self.state.get_transfer_target_mut();
                         for i in 0..data.len() {
-                            target[addr + i] = data[i];
+                            target[(addr + i) % length] = data[i];
                         }
                     }
                     self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
@@ -651,7 +664,7 @@ impl Addressable for Ym7101 {
 
             // Write to Control Port
             0x04 | 0x06 => {
-                debug!("{}: write {} bytes to port {:x} with data {:?}", DEV_NAME, data.len(), addr, data);
+                info!("{}: write {} bytes to port {:x} with data {:?}", DEV_NAME, data.len(), addr, data);
 
                 let value = read_beu16(data);
                 if (value & 0xC000) == 0x8000 {
@@ -676,6 +689,58 @@ impl Addressable for Ym7101 {
             _ => { warning!("{}: !!! unhandled write to {:x} with {:?}", DEV_NAME, addr, data); },
         }
         Ok(())
+    }
+}
+
+
+impl Inspectable for Ym7101 {
+    fn inspect(&mut self, system: &System, args: &[&str]) -> Result<(), Error> {
+        let cmd = if args.len() > 0 { args[0] } else { "state" };
+
+        match cmd {
+            "" | "state" => {
+                self.state.dump_state();
+            },
+            "vram" => {
+                self.state.dump_vram();
+            },
+            _ => { },
+        }
+        Ok(())
+    }
+}
+
+
+impl Ym7101State {
+    pub fn dump_state(&self) {
+        println!("");
+        println!("Mode1: {:#04x}", self.regs[REG_MODE_SET_1]);
+        println!("Mode2: {:#04x}", self.regs[REG_MODE_SET_2]);
+        println!("Mode3: {:#04x}", self.regs[REG_MODE_SET_3]);
+        println!("Mode4: {:#04x}", self.regs[REG_MODE_SET_4]);
+        println!("");
+        println!("Scroll A : {:#06x}", self.get_vram_scroll_a_addr());
+        println!("Window   : {:#06x}", self.get_vram_window_addr());
+        println!("Scroll B : {:#06x}", self.get_vram_scroll_b_addr());
+        println!("HScroll  : {:#06x}", self.get_vram_hscroll_addr());
+        println!("Sprites  : {:#06x}", self.get_vram_sprites_addr());
+    }
+
+    pub fn dump_vram(&self) {
+        let mut count = 65536;
+        let mut addr = 0;
+        while count > 0 {
+            let mut line = format!("{:#010x}: ", addr);
+
+            let to = if count < 16 { count / 2 } else { 8 };
+            for _ in 0..to {
+                let word = ((self.vram[addr] as u16) << 8) | self.vram[addr + 1] as u16;
+                line += &format!("{:#06x} ", word);
+                addr += 2;
+                count -= 2;
+            }
+            println!("{}", line);
+        }
     }
 }
 

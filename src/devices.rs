@@ -31,16 +31,6 @@ pub trait Interruptable {
     //fn interrupt_state_change(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error>;
 }
 
-/// A device that can debugged using the built-in debugger
-pub trait Debuggable {
-    fn add_breakpoint(&mut self, addr: Address);
-    fn remove_breakpoint(&mut self, addr: Address);
-
-    fn print_current_step(&mut self, system: &System) -> Result<(), Error>;
-    fn print_disassembly(&mut self, addr: Address, count: usize);
-    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error>;
-}
-
 /// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
     fn len(&self) -> usize;
@@ -170,6 +160,22 @@ pub fn write_leu32(data: &mut [u8], value: u32) -> &mut [u8] {
 }
 
 
+/// A device (cpu) that can debugged using the built-in debugger
+pub trait Debuggable {
+    fn add_breakpoint(&mut self, addr: Address);
+    fn remove_breakpoint(&mut self, addr: Address);
+
+    fn print_current_step(&mut self, system: &System) -> Result<(), Error>;
+    fn print_disassembly(&mut self, addr: Address, count: usize);
+    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error>;
+}
+
+/// A device (peripheral) that can inspected using the built-in debugger
+pub trait Inspectable {
+    fn inspect(&mut self, system: &System, args: &[&str]) -> Result<(), Error>;
+}
+
+
 pub trait Transmutable {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
         None
@@ -184,6 +190,10 @@ pub trait Transmutable {
     }
 
     fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
+        None
+    }
+
+    fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
         None
     }
 }
