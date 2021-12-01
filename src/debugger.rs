@@ -92,14 +92,15 @@ impl Debugger {
                     //self.port.dump_memory(self.state.ssp as Address, 0x40 as Address);
                 }
             },
-            "dp" | "dump_peripheral" => {
+            "i" | "inspect" => {
                 if args.len() < 2 {
-                    println!("Usage: dp <device_name> [<device specific arguments>]");
+                    println!("Usage: inspect <device_name> [<device specific arguments>]");
                 } else {
                     let device = system.devices.get(args[1]).ok_or_else(|| Error::new(&format!("No device named {}", args[1])))?;
+                    let subargs = if args.len() > 2 { &args[2..] } else { &[""] };
                     device.borrow_mut().as_inspectable()
                         .ok_or_else(|| Error::new("That device is not inspectable"))?
-                        .inspect(system, &args[2..])?;
+                        .inspect(system, subargs)?;
                 }
             },
             "dis" | "disassemble" => {

@@ -207,6 +207,10 @@ impl M68k {
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, true);
                 }
+                self.set_target_value(target, pair.0, size)?;
+
+                // Adjust flags
+                self.set_flag(Flags::Extend, false);
                 self.set_logic_flags(pair.0, size);
                 if pair.1 {
                     self.set_flag(Flags::Carry, true);
@@ -215,7 +219,6 @@ impl M68k {
                 if get_msb(pair.0, size) != get_msb(original, size) {
                     self.set_flag(Flags::Overflow, true);
                 }
-                self.set_target_value(target, pair.0, size)?;
             },
             Instruction::Bcc(cond, offset) => {
                 let should_branch = self.get_current_condition(cond);
@@ -459,12 +462,15 @@ impl M68k {
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, false);
                 }
+                self.set_target_value(target, pair.0, size)?;
+
+                // Adjust flags
+                self.set_flag(Flags::Extend, false);
                 self.set_logic_flags(pair.0, size);
                 if pair.1 {
                     self.set_flag(Flags::Carry, true);
                     self.set_flag(Flags::Extend, true);
                 }
-                self.set_target_value(target, pair.0, size)?;
             },
             Instruction::MOVE(src, dest, size) => {
                 let value = self.get_target_value(src, size)?;
@@ -614,11 +620,13 @@ impl M68k {
                 for _ in 0..count {
                     pair = rotate_operation(pair.0, size, shift_dir, None);
                 }
+                self.set_target_value(target, pair.0, size)?;
+
+                // Adjust flags
                 self.set_logic_flags(pair.0, size);
                 if pair.1 {
                     self.set_flag(Flags::Carry, true);
                 }
-                self.set_target_value(target, pair.0, size)?;
             },
             Instruction::ROXd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(count, size)? % 64;
@@ -627,11 +635,13 @@ impl M68k {
                     pair = rotate_operation(pair.0, size, shift_dir, Some(self.get_flag(Flags::Extend)));
                     self.set_flag(Flags::Extend, pair.1);
                 }
+                self.set_target_value(target, pair.0, size)?;
+
+                // Adjust flags
                 self.set_logic_flags(pair.0, size);
                 if pair.1 {
                     self.set_flag(Flags::Carry, true);
                 }
-                self.set_target_value(target, pair.0, size)?;
             },
             Instruction::RTE => {
                 self.require_supervisor()?;

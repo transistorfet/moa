@@ -649,7 +649,7 @@ impl Addressable for Ym7101 {
                     self.state.transfer_fill = if data.len() >= 2 { read_beu16(data) } else { data[0] as u16 };
                     self.state.set_dma_mode(DmaType::Fill);
                 } else {
-                    info!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.state.transfer_target, self.state.transfer_addr, data);
+                    debug!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.state.transfer_target, self.state.transfer_addr, data);
 
                     {
                         let addr = self.state.transfer_addr as usize;
@@ -664,7 +664,7 @@ impl Addressable for Ym7101 {
 
             // Write to Control Port
             0x04 | 0x06 => {
-                info!("{}: write {} bytes to port {:x} with data {:?}", DEV_NAME, data.len(), addr, data);
+                debug!("{}: write {} bytes to port {:x} with data {:?}", DEV_NAME, data.len(), addr, data);
 
                 let value = read_beu16(data);
                 if (value & 0xC000) == 0x8000 {
@@ -695,9 +695,7 @@ impl Addressable for Ym7101 {
 
 impl Inspectable for Ym7101 {
     fn inspect(&mut self, system: &System, args: &[&str]) -> Result<(), Error> {
-        let cmd = if args.len() > 0 { args[0] } else { "state" };
-
-        match cmd {
+        match args[0] {
             "" | "state" => {
                 self.state.dump_state();
             },

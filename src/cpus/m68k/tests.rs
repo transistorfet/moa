@@ -694,6 +694,32 @@ mod execute_tests {
             init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000CB, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x27FF, mem: 0x00000000 },
             fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000CB, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x27F0, mem: 0x00000000 },
         },
+
+        TestCase {
+            name: "lsl",
+            ins: Instruction::LSd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+            data: &[ 0xE308 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x271F, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000002, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
+        },
+        TestCase {
+            name: "lsl with bit out",
+            ins: Instruction::LSd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+            data: &[ 0xE308 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000081, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000002, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2711, mem: 0x00000000 },
+        },
+        TestCase {
+            name: "lsr",
+            ins: Instruction::LSd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+            data: &[ 0xE208 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000081, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000040, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2711, mem: 0x00000000 },
+        },
+
         TestCase {
             name: "muls",
             ins: Instruction::MULW(Target::Immediate(0x0276), 0, Sign::Signed),
