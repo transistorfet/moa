@@ -184,8 +184,17 @@ impl M68k {
                 let (result, _) = overflowing_add_sized(existing, value, Size::Long);
                 *self.get_a_reg_mut(dest) = result;
             },
-            //Instruction::ADDX(Target) => {
-            //},
+            Instruction::ADDX(src, dest, size) => {
+                let value = self.get_target_value(src, size)?;
+                let existing = self.get_target_value(dest, size)?;
+                let extend = self.get_flag(Flags::Extend) as u32;
+                let (result1, carry1) = overflowing_add_sized(existing, value, size);
+                let (result2, carry2) = overflowing_add_sized(result1, extend, size);
+                let overflow = get_add_overflow(existing, value, result2, size);
+                self.set_compare_flags(result2, size, carry1 || carry2, overflow);
+                self.set_flag(Flags::Extend, carry1 || carry2);
+                self.set_target_value(dest, result2, size)?;
+            },
             Instruction::AND(src, dest, size) => {
                 let value = self.get_target_value(src, size)?;
                 let existing = self.get_target_value(dest, size)?;
@@ -689,8 +698,17 @@ impl M68k {
                 let (result, _) = overflowing_sub_sized(existing, value, Size::Long);
                 *self.get_a_reg_mut(dest) = result;
             },
-            //Instruction::SUBX(Target) => {
-            //},
+            Instruction::SUBX(src, dest, size) => {
+                let value = self.get_target_value(src, size)?;
+                let existing = self.get_target_value(dest, size)?;
+                let extend = self.get_flag(Flags::Extend) as u32;
+                let (result1, carry1) = overflowing_sub_sized(existing, value, size);
+                let (result2, carry2) = overflowing_sub_sized(result1, extend, size);
+                let overflow = get_sub_overflow(existing, value, result2, size);
+                self.set_compare_flags(result2, size, carry1 || carry2, overflow);
+                self.set_flag(Flags::Extend, carry1 || carry2);
+                self.set_target_value(dest, result2, size)?;
+            },
             Instruction::SWAP(reg) => {
                 let value = self.state.d_reg[reg as usize];
                 self.state.d_reg[reg as usize] = ((value & 0x0000FFFF) << 16) | ((value & 0xFFFF0000) >> 16);

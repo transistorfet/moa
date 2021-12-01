@@ -519,6 +519,30 @@ mod execute_tests {
             fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000F800, d1: 0x00000000, a0: 0xFFFFF800, a1: 0x00000000, sr: 0x27FF, mem: 0x00000000 },
         },
         TestCase {
+            name: "addx",
+            ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0xD101 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000007F, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FE, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x270A, mem: 0x00000000 },
+        },
+        TestCase {
+            name: "addx with extend",
+            ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0xD101 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000007F, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2710, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x270A, mem: 0x00000000 },
+        },
+        TestCase {
+            name: "addx with extend and carry",
+            ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0xD101 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2710, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2715, mem: 0x00000000 },
+        },
+        TestCase {
             name: "andi with sr",
             ins: Instruction::ANDtoSR(0xF8FF),
             data: &[ 0x027C, 0xF8FF ],
@@ -932,6 +956,31 @@ mod execute_tests {
             cputype: M68kType::MC68010,
             init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
             fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2708, mem: 0x00000000 },
+        },
+
+        TestCase {
+            name: "subx",
+            ins: Instruction::SUBX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x9101 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2708, mem: 0x00000000 },
+        },
+        TestCase {
+            name: "subx with extend",
+            ins: Instruction::SUBX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x9101 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2710, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000007F, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2702, mem: 0x00000000 },
+        },
+        TestCase {
+            name: "subx with extend and carry",
+            ins: Instruction::SUBX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+            data: &[ 0x9101 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2710, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2719, mem: 0x00000000 },
         },
     ];
 
