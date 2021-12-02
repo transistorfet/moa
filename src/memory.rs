@@ -75,12 +75,12 @@ impl Transmutable for MemoryBlock {
 }
 
 
-pub struct MemoryAdapter {
+pub struct AddressAdapter {
     pub subdevice: TransmutableBox,
     pub shift: u8,
 }
 
-impl MemoryAdapter {
+impl AddressAdapter {
     pub fn new(subdevice: TransmutableBox, shift: u8) -> Self {
         Self {
             subdevice,
@@ -89,7 +89,7 @@ impl MemoryAdapter {
     }
 }
 
-impl Addressable for MemoryAdapter {
+impl Addressable for AddressAdapter {
     fn len(&self) -> usize {
         let len = self.subdevice.borrow_mut().as_addressable().unwrap().len();
         len << self.shift
@@ -104,7 +104,7 @@ impl Addressable for MemoryAdapter {
     }
 }
 
-impl Transmutable for MemoryAdapter {
+impl Transmutable for AddressAdapter {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         Some(self)
     }

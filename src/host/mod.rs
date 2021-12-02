@@ -6,4 +6,5 @@ pub mod tty;
 
 pub mod gfx;
 pub mod keys;
+pub mod controller;
 

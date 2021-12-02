@@ -1,4 +1,8 @@
 
+* should SharedData be HostData, or something else?  I don't think the name is very informative
+* can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
+  like specifying that address pins 10-7 should be ignored/unconnected, pin 11 will connect to "chip select", etc
+
 * movem still isn't working (for genesis)
 * fix movem tests
 

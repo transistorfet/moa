@@ -702,6 +702,9 @@ impl Inspectable for Ym7101 {
             "vram" => {
                 self.state.dump_vram();
             },
+            "vsram" => {
+                self.state.dump_vsram();
+            },
             _ => { },
         }
         Ok(())
@@ -733,6 +736,23 @@ impl Ym7101State {
             let to = if count < 16 { count / 2 } else { 8 };
             for _ in 0..to {
                 let word = ((self.vram[addr] as u16) << 8) | self.vram[addr + 1] as u16;
+                line += &format!("{:#06x} ", word);
+                addr += 2;
+                count -= 2;
+            }
+            println!("{}", line);
+        }
+    }
+
+    pub fn dump_vsram(&self) {
+        let mut count = 80;
+        let mut addr = 0;
+        while count > 0 {
+            let mut line = format!("{:#010x}: ", addr);
+
+            let to = if count < 16 { count / 2 } else { 8 };
+            for _ in 0..to {
+                let word = ((self.vsram[addr] as u16) << 8) | self.vsram[addr + 1] as u16;
                 line += &format!("{:#06x} ", word);
                 addr += 2;
                 count -= 2;

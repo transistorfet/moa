@@ -1,7 +1,8 @@
 
 use crate::error::Error;
 use crate::devices::{Address, Addressable, Transmutable};
-use crate::host::traits::{Host, JoystickDevice, JoystickUpdater, SharedData};
+use crate::host::controller::{ControllerDevice, Controller};
+use crate::host::traits::{Host, ControllerUpdater, SharedData};
 
 
 const REG_VERSION: Address      = 0x01;
@@ -21,7 +22,7 @@ const DEV_NAME: &'static str = "genesis_controller";
 pub struct GenesisControllerPort {
     /// Data contains bits:
     /// 11 | 10 | 9 |    8 |     7 | 6 | 5 | 4 |     3 |    2 |    1 |  0
-    ///  X |  Y | Z | MODE | START | A | B | C | RIGHT | LEFT | DOWN | UP
+    ///  X |  Y | Z | MODE | START | A | C | B | RIGHT | LEFT | DOWN | UP
     pub data: SharedData<u16>,
 
     pub ctrl: u8,
@@ -34,7 +35,7 @@ pub struct GenesisControllerPort {
 impl GenesisControllerPort {
     pub fn new() -> Self {
         Self {
-            data: SharedData::new(0),
+            data: SharedData::new(0xffff),
             ctrl: 0,
             th_count: 0,
             next_read: 0,
@@ -73,10 +74,12 @@ impl GenesisControllerPort {
 
 pub struct GenesisControllerUpdater(SharedData<u16>, SharedData<bool>);
 
-impl JoystickUpdater for GenesisControllerUpdater {
-    fn update_joystick(&mut self, modifiers: u16) {
+impl ControllerUpdater for GenesisControllerUpdater {
+    fn update_controller(&mut self, data: Controller) {
+        //let modifiers = if data.bits == 0 { 0xFFFF } else { data.bits };
+        let modifiers = !data.bits;
         self.0.set(modifiers);
-        if modifiers != 0 {
+        if data.bits != 0 {
             self.1.set(true);
         }
     }
@@ -104,10 +107,10 @@ impl GenesisController {
     pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
         let controller = GenesisController::new();
 
-        let joystick1 = Box::new(GenesisControllerUpdater(controller.port_1.data.clone(), controller.interrupt.clone()));
-        host.register_joystick(JoystickDevice::A, joystick1)?;
-        let joystick2 = Box::new(GenesisControllerUpdater(controller.port_2.data.clone(), controller.interrupt.clone()));
-        host.register_joystick(JoystickDevice::B, joystick2)?;
+        let controller1 = Box::new(GenesisControllerUpdater(controller.port_1.data.clone(), controller.interrupt.clone()));
+        host.register_controller(ControllerDevice::A, controller1)?;
+        let controller2 = Box::new(GenesisControllerUpdater(controller.port_2.data.clone(), controller.interrupt.clone()));
+        host.register_controller(ControllerDevice::B, controller2)?;
 
         Ok(controller)
     }

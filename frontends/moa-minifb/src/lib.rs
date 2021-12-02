@@ -8,7 +8,8 @@ use clap::{App, ArgMatches};
 
 use moa::error::Error;
 use moa::system::System;
-use moa::host::traits::{Host, JoystickDevice, JoystickUpdater, KeyboardUpdater, WindowUpdater};
+use moa::host::traits::{Host, ControllerUpdater, KeyboardUpdater, WindowUpdater};
+use moa::host::controller::{ControllerDevice, Controller};
 
 mod keys;
 use crate::keys::map_key;
@@ -71,7 +72,7 @@ fn wait_until_initialized(frontend: Arc<Mutex<MiniFrontendBuilder>>) {
 
 pub struct MiniFrontendBuilder {
     pub window: Option<Box<dyn WindowUpdater>>,
-    pub joystick: Option<Box<dyn JoystickUpdater>>,
+    pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
     pub finalized: bool,
 }
@@ -80,7 +81,7 @@ impl MiniFrontendBuilder {
     pub fn new() -> Self {
         Self {
             window: None,
-            joystick: None,
+            controller: None,
             keyboard: None,
             finalized: false,
         }
@@ -92,9 +93,9 @@ impl MiniFrontendBuilder {
 
     pub fn build(&mut self) -> MiniFrontend {
         let window = std::mem::take(&mut self.window);
-        let joystick = std::mem::take(&mut self.joystick);
+        let controller = std::mem::take(&mut self.controller);
         let keyboard = std::mem::take(&mut self.keyboard);
-        MiniFrontend::new(window, joystick, keyboard)
+        MiniFrontend::new(window, controller, keyboard)
     }
 }
 
@@ -107,15 +108,15 @@ impl Host for MiniFrontendBuilder {
         Ok(())
     }
 
-    fn register_joystick(&mut self, device: JoystickDevice, input: Box<dyn JoystickUpdater>) -> Result<(), Error> {
-        if device != JoystickDevice::A {
+    fn register_controller(&mut self, device: ControllerDevice, input: Box<dyn ControllerUpdater>) -> Result<(), Error> {
+        if device != ControllerDevice::A {
             return Ok(())
         }
 
-        if self.joystick.is_some() {
-            return Err(Error::new("A joystick updater has already been registered with the frontend"));
+        if self.controller.is_some() {
+            return Err(Error::new("A controller updater has already been registered with the frontend"));
         }
-        self.joystick = Some(input);
+        self.controller = Some(input);
         Ok(())
     }
 
@@ -132,16 +133,16 @@ impl Host for MiniFrontendBuilder {
 pub struct MiniFrontend {
     pub buffer: Vec<u32>,
     pub window: Option<Box<dyn WindowUpdater>>,
-    pub joystick: Option<Box<dyn JoystickUpdater>>,
+    pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
 }
 
 impl MiniFrontend {
-    pub fn new(window: Option<Box<dyn WindowUpdater>>, joystick: Option<Box<dyn JoystickUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>) -> Self {
+    pub fn new(window: Option<Box<dyn WindowUpdater>>, controller: Option<Box<dyn ControllerUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>) -> Self {
         Self {
             buffer: vec![0; (WIDTH * HEIGHT) as usize],
             window,
-            joystick,
+            controller,
             keyboard,
         }
     }
@@ -184,19 +185,22 @@ impl MiniFrontend {
             }
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::Yes) {
-                let mut modifiers: u16 = 0;
+                let mut modifiers: u16 = 0x0000;
                 for key in keys {
                     if let Some(updater) = self.keyboard.as_mut() {
                         updater.update_keyboard(map_key(key), true);
                     }
                     match key {
-                        Key::Enter => { modifiers |= 0xffff; },
+                        Key::A => { modifiers |= 0x0040; },
+                        Key::B => { modifiers |= 0x0010; },
+                        Key::Enter => { modifiers |= 0x0080; },
                         Key::D => { system.as_ref().map(|s| s.enable_debugging()); },
                         _ => { },
                     }
                 }
-                if let Some(updater) = self.joystick.as_mut() {
-                    updater.update_joystick(modifiers);
+                if let Some(updater) = self.controller.as_mut() {
+                    let data = Controller { bits: modifiers };
+                    updater.update_controller(data);
                 }
             }
             if let Some(keys) = window.get_keys_released() {

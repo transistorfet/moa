@@ -3,19 +3,12 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::error::Error;
 use crate::host::keys::Key;
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum JoystickDevice {
-    A,
-    B,
-    C,
-    D,
-}
+use crate::host::controller::{ControllerDevice, Controller};
 
 pub trait Host {
     //fn create_pty(&self) -> Result<Box<dyn Tty>, Error>;
     fn add_window(&mut self, updater: Box<dyn WindowUpdater>) -> Result<(), Error>;
-    fn register_joystick(&mut self, _device: JoystickDevice, _input: Box<dyn JoystickUpdater>) -> Result<(), Error> { Err(Error::new("Not supported")) }
+    fn register_controller(&mut self, _device: ControllerDevice, _input: Box<dyn ControllerUpdater>) -> Result<(), Error> { Err(Error::new("Not supported")) }
     fn register_keyboard(&mut self, _input: Box<dyn KeyboardUpdater>) -> Result<(), Error> { Err(Error::new("Not supported")) }
 }
 
@@ -30,8 +23,8 @@ pub trait WindowUpdater: Send {
     fn update_frame(&mut self, width: u32, height: u32, bitmap: &mut [u32]);
 }
 
-pub trait JoystickUpdater: Send {
-    fn update_joystick(&mut self, modifiers: u16);
+pub trait ControllerUpdater: Send {
+    fn update_controller(&mut self, data: Controller);
 }
 
 pub trait KeyboardUpdater: Send {
