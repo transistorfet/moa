@@ -193,7 +193,13 @@ impl MiniFrontend {
                     match key {
                         Key::A => { modifiers |= 0x0040; },
                         Key::B => { modifiers |= 0x0010; },
+                        Key::C => { modifiers |= 0x0020; },
+                        Key::Up => { modifiers |= 0x0001; },
+                        Key::Down => { modifiers |= 0x0002; },
+                        Key::Left => { modifiers |= 0x0004; },
+                        Key::Right => { modifiers |= 0x0008; },
                         Key::Enter => { modifiers |= 0x0080; },
+                        Key::M => { modifiers |= 0x0100; },
                         Key::D => { system.as_ref().map(|s| s.enable_debugging()); },
                         _ => { },
                     }

@@ -336,12 +336,12 @@ impl Ym7101State {
 
             for ih in 0..size_h {
                 for iv in 0..size_v {
-                    let (h, v) = (if !h_rev { ih } else { size_h - ih }, if !v_rev { iv } else { size_v - iv });
-                    let (x, y) = (h_pos + h * 8, v_pos + v * 8);
+                    let (h, v) = (if !h_rev { ih } else { size_h - 1 - ih }, if !v_rev { iv } else { size_v - 1 - iv });
+                    let (x, y) = (h_pos + ih * 8, v_pos + iv * 8);
                     if x > 128 && x < pos_limit_h && y > 128 && y < pos_limit_v {
                         let iter = self.get_pattern_iter(((pattern_name & 0x07FF) + (h * size_v) + v) | (pattern_name & 0xF800));
 
-                        println!("{}: ({} {}), {:x}", i, x, y, ((pattern_name & 0x07FF) + (h * size_v) + v));
+//println!("{}: ({} {}), {:x}", i, x, y, ((pattern_name & 0x07FF) + (h * size_v) + v));
                         frame.blit(x as u32 - 128, y as u32 - 128, iter, 8, 8);
                     }
                 }

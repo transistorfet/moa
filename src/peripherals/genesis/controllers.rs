@@ -43,32 +43,35 @@ impl GenesisControllerPort {
         }
     }
 
-    pub fn set_data(&mut self, data: u8) {
+    pub fn set_data(&mut self, outputs: u8) {
         let prev_th = self.next_read & 0x40;
-        self.next_read = data & self.ctrl;
+        self.next_read = outputs & self.ctrl;
 
-        if (self.next_read ^ prev_th) != 0 {
+        if ((self.next_read & 0x40) ^ prev_th) != 0 {
             // TH bit was toggled
-            self.th_count += 1;
-            let data = self.data.get();
+            let inputs = self.data.get();
             self.next_read = match self.th_count {
-                0 => self.next_read | ((data & 0x003F) as u8),
-                1 => self.next_read | (((data & 0x00C0) >> 2) as u8) | ((data & 0x0003) as u8),
-                2 => self.next_read | ((data & 0x003F) as u8),
-                3 => self.next_read | (((data & 0x00C0) >> 2) as u8),
-                4 => self.next_read | ((data & 0x0030) as u8) | (((data & 0x0F00) >> 8) as u8),
-                5 => self.next_read | (((data & 0x00C0) >> 2) as u8) | 0x0F,
-                6 => self.next_read | ((data & 0x003F) as u8),
-                7 => {
-                    self.th_count = 0;
-                    self.next_read | (((data & 0x00C0) >> 2) as u8) | ((data & 0x0003) as u8)
-                },
-                _ => {
-                    self.th_count = 0;
-                    0
-                },
+                0 => self.next_read | ((inputs & 0x003F) as u8),
+                1 => self.next_read | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
+                2 => self.next_read | ((inputs & 0x003F) as u8),
+                3 => self.next_read | (((inputs & 0x00C0) >> 2) as u8),
+                4 => self.next_read | ((inputs & 0x0030) as u8) | (((inputs & 0x0F00) >> 8) as u8),
+                5 => self.next_read | (((inputs & 0x00C0) >> 2) as u8) | 0x0F,
+                6 => self.next_read | ((inputs & 0x003F) as u8),
+                7 => self.next_read | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
+                _ => 0,
             };
+
+            self.th_count += 1;
+            if self.th_count > 7 {
+                self.th_count = 0;
+            }
         }
+    }
+
+    pub fn set_ctrl(&mut self, ctrl: u8) {
+        self.ctrl = ctrl;
+        self.th_count = 0;
     }
 }
 
@@ -146,19 +149,19 @@ impl Addressable for GenesisController {
             REG_S_CTRL3 => { data[i] = self.expansion.s_ctrl | 0x02; },
             _ => { warning!("{}: !!! unhandled reading from {:0x}", DEV_NAME, addr); },
         }
-        info!("{}: read from register {:x} the value {:x}", DEV_NAME, addr, data[0]);
+        debug!("{}: read from register {:x} the value {:x}", DEV_NAME, addr, data[0]);
         Ok(())
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             REG_DATA1 => { self.port_1.set_data(data[0]); }
             REG_DATA2 => { self.port_2.set_data(data[0]); },
             REG_DATA3 => { self.expansion.set_data(data[0]); },
-            REG_CTRL1 => { self.port_1.ctrl = data[0]; },
-            REG_CTRL2 => { self.port_2.ctrl = data[0]; },
-            REG_CTRL3 => { self.expansion.ctrl = data[0]; },
+            REG_CTRL1 => { self.port_1.set_ctrl(data[0]); },
+            REG_CTRL2 => { self.port_2.set_ctrl(data[0]); },
+            REG_CTRL3 => { self.expansion.set_ctrl(data[0]); },
             REG_S_CTRL1 => { self.port_1.s_ctrl = data[0] & 0xF8; },
             REG_S_CTRL2 => { self.port_2.s_ctrl = data[0] & 0xF8; },
             REG_S_CTRL3 => { self.expansion.s_ctrl = data[0] & 0xF8; },
