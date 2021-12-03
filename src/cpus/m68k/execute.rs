@@ -167,8 +167,16 @@ impl M68k {
     pub fn execute_current(&mut self) -> Result<(), Error> {
         self.timer.execute.start();
         match self.decoder.instruction {
-            //Instruction::ABCD(Target) => {
-            //},
+            Instruction::ABCD(src, dest) => {
+                let value = convert_from_bcd(self.get_target_value(src, Size::Byte)? as u8);
+                let existing = convert_from_bcd(self.get_target_value(dest, Size::Byte)? as u8);
+                let result = existing.wrapping_add(value).wrapping_add(self.get_flag(Flags::Extend) as u8);
+                let carry = result > 99;
+                self.set_target_value(dest, convert_to_bcd(result) as u32, Size::Byte)?;
+                self.set_flag(Flags::Zero, result == 0);
+                self.set_flag(Flags::Carry, carry);
+                self.set_flag(Flags::Extend, carry);
+            },
             Instruction::ADD(src, dest, size) => {
                 let value = self.get_target_value(src, size)?;
                 let existing = self.get_target_value(dest, size)?;
@@ -681,8 +689,16 @@ impl M68k {
                 self.state.sr = flags;
                 self.state.status = Status::Stopped;
             },
-            //Instruction::SBCD(Target) => {
-            //},
+            Instruction::SBCD(src, dest) => {
+                let value = convert_from_bcd(self.get_target_value(src, Size::Byte)? as u8);
+                let existing = convert_from_bcd(self.get_target_value(dest, Size::Byte)? as u8);
+                let result = existing.wrapping_sub(value).wrapping_sub(self.get_flag(Flags::Extend) as u8);
+                let borrow = existing < value;
+                self.set_target_value(dest, convert_to_bcd(result) as u32, Size::Byte)?;
+                self.set_flag(Flags::Zero, result == 0);
+                self.set_flag(Flags::Carry, borrow);
+                self.set_flag(Flags::Extend, borrow);
+            },
             Instruction::SUB(src, dest, size) => {
                 let value = self.get_target_value(src, size)?;
                 let existing = self.get_target_value(dest, size)?;
@@ -713,8 +729,14 @@ impl M68k {
                 let value = self.state.d_reg[reg as usize];
                 self.state.d_reg[reg as usize] = ((value & 0x0000FFFF) << 16) | ((value & 0xFFFF0000) >> 16);
             },
-            //Instruction::TAS(Target) => {
-            //},
+            Instruction::TAS(target) => {
+                let value = self.get_target_value(target, Size::Byte)?;
+                self.set_flag(Flags::Negative, (value & 0x80) != 0);
+                self.set_flag(Flags::Zero, value == 0);
+                self.set_flag(Flags::Overflow, false);
+                self.set_flag(Flags::Carry, false);
+                self.set_target_value(target, value | 0x80, Size::Byte)?;
+            },
             Instruction::TST(target, size) => {
                 let value = self.get_target_value(target, size)?;
                 self.set_logic_flags(value, size);
@@ -1255,6 +1277,13 @@ fn rotate_operation(value: u32, size: Size, dir: ShiftDirection, use_extend: Opt
     }
 }
 
+fn convert_from_bcd(value: u8) -> u8 {
+    (value >> 4) * 10 + (value & 0x0F)
+}
+
+fn convert_to_bcd(value: u8) -> u8 {
+    (((value / 10) & 0x0F) << 4) | ((value % 10) & 0x0F)
+}
 
 fn get_value_sized(value: u32, size: Size) -> u32 {
     match size {

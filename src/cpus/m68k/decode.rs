@@ -405,7 +405,7 @@ impl M68kDecoder {
                     let regx = get_high_reg(ins);
                     let regy = get_low_reg(ins);
 
-                    match (ins & 0x08) == 0 {
+                    match (ins & 0x08) != 0 {
                         false => Ok(Instruction::SBCD(Target::DirectDReg(regy), Target::DirectDReg(regx))),
                         true => Ok(Instruction::SBCD(Target::IndirectARegDec(regy), Target::IndirectARegDec(regx))),
                     }
@@ -477,7 +477,7 @@ impl M68kDecoder {
                     let regx = get_high_reg(ins);
                     let regy = get_low_reg(ins);
 
-                    match (ins & 0x08) == 0 {
+                    match (ins & 0x08) != 0 {
                         false => Ok(Instruction::ABCD(Target::DirectDReg(regy), Target::DirectDReg(regx))),
                         true => Ok(Instruction::ABCD(Target::IndirectARegDec(regy), Target::IndirectARegDec(regx))),
                     }
