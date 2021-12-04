@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::devices::{Address, Addressable, Transmutable};
-use crate::host::controller::{ControllerDevice, Controller};
+use crate::host::controllers::{ControllerDevice, ControllerEvent};
 use crate::host::traits::{Host, ControllerUpdater, SharedData};
 
 
@@ -78,11 +78,23 @@ impl GenesisControllerPort {
 pub struct GenesisControllerUpdater(SharedData<u16>, SharedData<bool>);
 
 impl ControllerUpdater for GenesisControllerUpdater {
-    fn update_controller(&mut self, data: Controller) {
-        //let modifiers = if data.bits == 0 { 0xFFFF } else { data.bits };
-        let modifiers = !data.bits;
-        self.0.set(modifiers);
-        if data.bits != 0 {
+    fn update_controller(&mut self, event: ControllerEvent) {
+        let (mask, state) = match event {
+            ControllerEvent::ButtonA(state) => (0x0040, state),
+            ControllerEvent::ButtonB(state) => (0x0010, state),
+            ControllerEvent::ButtonC(state) => (0x0020, state),
+            ControllerEvent::DpadUp(state) => (0x0001, state),
+            ControllerEvent::DpadDown(state) => (0x0002, state),
+            ControllerEvent::DpadLeft(state) => (0x0004, state),
+            ControllerEvent::DpadRight(state) => (0x0008, state),
+            ControllerEvent::Start(state) => (0x0080, state),
+            ControllerEvent::Mode(state) => (0x0100, state),
+            _ => (0x0000, false),
+        };
+
+        let buttons = (self.0.get() & !mask) | (if !state { mask } else { 0 });
+        self.0.set(buttons);
+        if buttons != 0 {
             self.1.set(true);
         }
     }

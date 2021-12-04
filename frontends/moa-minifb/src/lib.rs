@@ -9,10 +9,13 @@ use clap::{App, ArgMatches};
 use moa::error::Error;
 use moa::system::System;
 use moa::host::traits::{Host, ControllerUpdater, KeyboardUpdater, WindowUpdater};
-use moa::host::controller::{ControllerDevice, Controller};
+use moa::host::controllers::{ControllerDevice, ControllerEvent};
 
 mod keys;
+mod controllers;
+
 use crate::keys::map_key;
+use crate::controllers::map_controller_a;
 
 
 const WIDTH: u32 = 320;
@@ -132,6 +135,7 @@ impl Host for MiniFrontendBuilder {
 
 pub struct MiniFrontend {
     pub buffer: Vec<u32>,
+    pub modifiers: u16,
     pub window: Option<Box<dyn WindowUpdater>>,
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
@@ -141,6 +145,7 @@ impl MiniFrontend {
     pub fn new(window: Option<Box<dyn WindowUpdater>>, controller: Option<Box<dyn ControllerUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>) -> Self {
         Self {
             buffer: vec![0; (WIDTH * HEIGHT) as usize],
+            modifiers: 0,
             window,
             controller,
             keyboard,
@@ -185,41 +190,37 @@ impl MiniFrontend {
             }
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::Yes) {
-                let mut modifiers: u16 = 0x0000;
                 for key in keys {
-                    if let Some(updater) = self.keyboard.as_mut() {
-                        updater.update_keyboard(map_key(key), true);
-                    }
+                    self.check_key(key, true);
+
+                    // Process special keys
                     match key {
-                        Key::A => { modifiers |= 0x0040; },
-                        Key::B => { modifiers |= 0x0010; },
-                        Key::C => { modifiers |= 0x0020; },
-                        Key::Up => { modifiers |= 0x0001; },
-                        Key::Down => { modifiers |= 0x0002; },
-                        Key::Left => { modifiers |= 0x0004; },
-                        Key::Right => { modifiers |= 0x0008; },
-                        Key::Enter => { modifiers |= 0x0080; },
-                        Key::M => { modifiers |= 0x0100; },
                         Key::D => { system.as_ref().map(|s| s.enable_debugging()); },
                         _ => { },
                     }
                 }
-                if let Some(updater) = self.controller.as_mut() {
-                    let data = Controller { bits: modifiers };
-                    updater.update_controller(data);
-                }
             }
             if let Some(keys) = window.get_keys_released() {
                 for key in keys {
-                    if let Some(updater) = self.keyboard.as_mut() {
-                        updater.update_keyboard(map_key(key), false);
-                    }
+                    self.check_key(key, false);
                 }
             }
 
             if let Some(updater) = self.window.as_mut() {
                 updater.update_frame(size.0, size.1, &mut self.buffer);
                 window.update_with_buffer(&self.buffer, size.0 as usize, size.1 as usize).unwrap();
+            }
+        }
+    }
+
+    fn check_key(&mut self, key: Key, state: bool) {
+        if let Some(updater) = self.keyboard.as_mut() {
+            updater.update_keyboard(map_key(key), state);
+        }
+
+        if let Some(updater) = self.controller.as_mut() {
+            if let Some(event) = map_controller_a(key, state) {
+                updater.update_controller(event);
             }
         }
     }

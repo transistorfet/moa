@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::error::Error;
 use crate::host::keys::Key;
-use crate::host::controller::{ControllerDevice, Controller};
+use crate::host::controllers::{ControllerDevice, ControllerEvent};
 
 pub trait Host {
     //fn create_pty(&self) -> Result<Box<dyn Tty>, Error>;
@@ -24,7 +24,7 @@ pub trait WindowUpdater: Send {
 }
 
 pub trait ControllerUpdater: Send {
-    fn update_controller(&mut self, data: Controller);
+    fn update_controller(&mut self, event: ControllerEvent);
 }
 
 pub trait KeyboardUpdater: Send {
