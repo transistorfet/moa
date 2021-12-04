@@ -16,15 +16,15 @@ const REG_SCROLL_A_ADDR: usize          = 0x02;
 const REG_WINDOW_ADDR: usize            = 0x03;
 const REG_SCROLL_B_ADDR: usize          = 0x04;
 const REG_SPRITES_ADDR: usize           = 0x05;
-// Register 0x06 Unused             
+// Register 0x06 Unused
 const REG_BACKGROUND: usize             = 0x07;
-// Register 0x08 Unused             
-// Register 0x09 Unused             
+// Register 0x08 Unused
+// Register 0x09 Unused
 const REG_H_INTERRUPT: usize            = 0x0A;
 const REG_MODE_SET_3: usize             = 0x0B;
 const REG_MODE_SET_4: usize             = 0x0C;
 const REG_HSCROLL_ADDR: usize           = 0x0D;
-// Register 0x0E Unused             
+// Register 0x0E Unused
 const REG_AUTO_INCREMENT: usize         = 0x0F;
 const REG_SCROLL_SIZE: usize            = 0x10;
 const REG_WINDOW_H_POS: usize           = 0x11;
@@ -617,7 +617,7 @@ impl Steppable for Ym7101 {
 
                         self.state.transfer_dest_addr += self.state.transfer_auto_inc;
                         src_addr += 2;
-                        count -= 2;
+                        count -= 1;
                     }
                 },
                 DmaType::Copy => {
@@ -769,6 +769,11 @@ impl Ym7101State {
         println!("Scroll B : {:#06x}", self.scroll_b_addr);
         println!("HScroll  : {:#06x}", self.hscroll_addr);
         println!("Sprites  : {:#06x}", self.sprites_addr);
+        println!("");
+        println!("DMA type  : {:?}", self.transfer_type);
+        println!("DMA Source: {:#06x}", self.transfer_src_addr);
+        println!("DMA Dest  : {:#06x}", self.transfer_dest_addr);
+        println!("DMA Count : {:#06x}", self.transfer_count);
     }
 
     pub fn dump_vram(&self) {
