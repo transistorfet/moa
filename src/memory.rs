@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::error::Error;
-use crate::devices::{Address, Addressable, Transmutable, TransmutableBox};
+use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, read_beu16};
 
 
 pub struct MemoryBlock {
@@ -237,6 +237,22 @@ impl Addressable for BusPort {
             subdevice.write(addr + i as Address, &data[i..end])?;
         }
         Ok(())
+    }
+}
+
+pub fn dump_slice(data: &[u8], mut count: usize) {
+    let mut addr = 0;
+    while count > 0 {
+        let mut line = format!("{:#010x}: ", addr);
+
+        let to = if count < 16 { count / 2 } else { 8 };
+        for _ in 0..to {
+            let word = read_beu16(&data[addr..]);
+            line += &format!("{:#06x} ", word);
+            addr += 2;
+            count -= 2;
+        }
+        println!("{}", line);
     }
 }
 

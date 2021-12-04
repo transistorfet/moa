@@ -31,7 +31,7 @@ pub fn build_genesis<H: Host>(host: &mut H) -> Result<System, Error> {
     //let mut rom = MemoryBlock::load("binaries/genesis/Out of this World (U) [!].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Ghostbusters (REV 00) (JUE).bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Teenage Mutant Ninja Turtles - The Hyperstone Heist (U) [!].bin").unwrap();
-    rom.read_only();
+    //rom.read_only();
     let rom_end = rom.len();
     system.add_addressable_device(0x00000000, wrap_transmutable(rom)).unwrap();
 
@@ -65,7 +65,9 @@ pub fn build_genesis<H: Host>(host: &mut H) -> Result<System, Error> {
     system.add_peripheral("vdp", 0x00c00000, wrap_transmutable(vdp)).unwrap();
 
 
-    let mut cpu = M68k::new(M68kType::MC68000, 7_670_454, BusPort::new(0, 24, 16, system.bus.clone()));
+    // TODO this is temporarily a 68010 because GenTest tests the CPU type by relying on the illegal instruction
+    // exception which is bypassed to Error and I don't want to un-bypass yet while testing
+    let mut cpu = M68k::new(M68kType::MC68010, 7_670_454, BusPort::new(0, 24, 16, system.bus.clone()));
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x206);

@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::error::Error;
 use crate::system::System;
+use crate::memory::dump_slice;
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, read_beu16, read_beu32, write_beu16};
 use crate::host::traits::{Host, BlitableSurface, SharedData};
 use crate::host::gfx::{Frame, FrameSwapper};
@@ -15,15 +16,15 @@ const REG_SCROLL_A_ADDR: usize          = 0x02;
 const REG_WINDOW_ADDR: usize            = 0x03;
 const REG_SCROLL_B_ADDR: usize          = 0x04;
 const REG_SPRITES_ADDR: usize           = 0x05;
-// Register 0x06 Unused
+// Register 0x06 Unused             
 const REG_BACKGROUND: usize             = 0x07;
-// Register 0x08 Unused
-// Register 0x09 Unused
+// Register 0x08 Unused             
+// Register 0x09 Unused             
 const REG_H_INTERRUPT: usize            = 0x0A;
 const REG_MODE_SET_3: usize             = 0x0B;
 const REG_MODE_SET_4: usize             = 0x0C;
 const REG_HSCROLL_ADDR: usize           = 0x0D;
-// Register 0x0E Unused
+// Register 0x0E Unused             
 const REG_AUTO_INCREMENT: usize         = 0x0F;
 const REG_SCROLL_SIZE: usize            = 0x10;
 const REG_WINDOW_H_POS: usize           = 0x11;
@@ -80,16 +81,36 @@ pub enum TargetType {
 
 pub struct Ym7101State {
     pub status: u16,
-    pub regs: [u8; 24],
     pub vram: [u8; 0x10000],
     pub cram: [u8; 128],
     pub vsram: [u8; 80],
+
+    pub regs: [u8; 24],
+    pub mode_1: u8,
+    pub mode_2: u8,
+    pub mode_3: u8,
+    pub mode_4: u8,
+    pub h_int_lines: u8,
+    pub scroll_size: (u16, u16),
+    pub window_pos: (u8, u8),
+    pub background: u8,
+    pub scroll_a_addr: u16,
+    pub scroll_b_addr: u16,
+    pub window_addr: u16,
+    pub sprites_addr: u16,
+    pub hscroll_addr: u16,
+
     pub transfer_type: u8,
-    pub transfer_addr: u32,
-    pub transfer_fill: u16,
+    pub transfer_bits: u8,
+    pub transfer_count: u32,
+    pub transfer_src_addr: u32,
+    pub transfer_dest_addr: u32,
+    pub transfer_auto_inc: u32,
+    pub transfer_fill_word: u16,
     pub transfer_run: DmaType,
     pub transfer_target: TargetType,
-    pub transfer_upper: Option<u16>,
+
+    pub ctrl_port_buffer: Option<u16>,
 
     pub last_clock: Clock,
     pub h_clock: u32,
@@ -101,16 +122,36 @@ impl Ym7101State {
     pub fn new() -> Self {
         Self {
             status: 0x3400 | STATUS_FIFO_EMPTY,
-            regs: [0; 24],
             vram: [0; 0x10000],
             cram: [0; 128],
             vsram: [0; 80],
+
+            regs: [0; 24],
+            mode_1: 0,
+            mode_2: 0,
+            mode_3: 0,
+            mode_4: 0,
+            h_int_lines: 0,
+            scroll_size: (0, 0),
+            window_pos: (0, 0),
+            background: 0,
+            scroll_a_addr: 0,
+            scroll_b_addr: 0,
+            window_addr: 0,
+            sprites_addr: 0,
+            hscroll_addr: 0,
+
             transfer_type: 0,
-            transfer_addr: 0,
-            transfer_fill: 0,
+            transfer_bits: 0,
+            transfer_count: 0,
+            transfer_src_addr: 0,
+            transfer_dest_addr: 0,
+            transfer_auto_inc: 0,
+            transfer_fill_word: 0,
             transfer_run: DmaType::None,
             transfer_target: TargetType::Vram,
-            transfer_upper: None,
+
+            ctrl_port_buffer: None,
 
             last_clock: 0,
             h_clock: 0,
@@ -119,10 +160,55 @@ impl Ym7101State {
         }
     }
 
-    fn set_register(&mut self, data: u16) {
-        let reg = (data & 0x1F00) >> 8;
-        self.regs[reg as usize] = (data & 0x00FF) as u8;
+    fn set_register(&mut self, word: u16) {
+        let reg = ((word & 0x1F00) >> 8) as usize;
+        let data = (word & 0x00FF) as u8;
+        self.regs[reg] = data;
         info!("{}: register {:x} set to {:x}", DEV_NAME, reg, self.regs[reg as usize]);
+        self.update_register_value(reg, data);
+    }
+
+    fn update_register_value(&mut self, reg: usize, data: u8) {
+        match reg {
+            REG_MODE_SET_1 => { self.mode_1 = data; },
+            REG_MODE_SET_2 => { self.mode_2 = data; },
+            REG_SCROLL_A_ADDR => { self.scroll_a_addr = (data as u16) << 10; },
+            REG_WINDOW_ADDR => { self.window_addr = (data as u16) << 10; },
+            REG_SCROLL_B_ADDR => { self.scroll_b_addr = (data as u16) << 13; },
+            REG_SPRITES_ADDR => { self.sprites_addr = (data as u16) << 9; },
+            REG_BACKGROUND => { self.background = data; },
+            REG_H_INTERRUPT => { self.h_int_lines = data; },
+            REG_MODE_SET_3 => { self.mode_3 = data; },
+            REG_MODE_SET_4 => { self.mode_4 = data; },
+            REG_HSCROLL_ADDR => { self.hscroll_addr = (data as u16) << 10; },
+            REG_AUTO_INCREMENT => { self.transfer_auto_inc = data as u32; },
+            REG_SCROLL_SIZE => {
+                let h = decode_scroll_size(data & 0x03);
+                let v = decode_scroll_size((data >> 4) & 0x03);
+                self.scroll_size = (h, v);
+            },
+            REG_WINDOW_H_POS => { self.window_pos.0 = data; },
+            REG_WINDOW_V_POS => { self.window_pos.1 = data; },
+            REG_DMA_COUNTER_LOW => {
+                self.transfer_count = (self.transfer_count & 0xFF00) | data as u32;
+            },
+            REG_DMA_COUNTER_HIGH => {
+                self.transfer_count = (self.transfer_count & 0x00FF) | ((data as u32) << 8);
+            },
+            REG_DMA_ADDR_LOW => {
+                self.transfer_src_addr = (self.transfer_src_addr & 0xFFFE00) | ((data as u32) << 1);
+            },
+            REG_DMA_ADDR_MID => {
+                self.transfer_src_addr = (self.transfer_src_addr & 0xFE01FF) | ((data as u32) << 9);
+            },
+            REG_DMA_ADDR_HIGH => {
+                let mask = if (data & 0x80) == 0 { 0x7F } else { 0x3F };
+                self.transfer_bits = (data & 0xC0) >> 6;
+                self.transfer_src_addr = (self.transfer_src_addr & 0x01FFFF) | (((data & mask) as u32) << 17);
+            },
+            0x6 | 0x8 | 0x9 | 0xE => { /* Reserved */ },
+            _ => { panic!("{}: unknown register: {:?}", DEV_NAME, reg); },
+        }
     }
 
     pub fn set_dma_mode(&mut self, mode: DmaType) {
@@ -138,32 +224,16 @@ impl Ym7101State {
         }
     }
 
-    pub fn get_dma_src_addr(&mut self) -> u32 {
-        let src_addr = (((self.regs[REG_DMA_ADDR_HIGH] & 0x7F) as u32) << 17)
-                       | ((self.regs[REG_DMA_ADDR_MID] as u32) << 9)
-                       | ((self.regs[REG_DMA_ADDR_LOW] as u32) << 1);
-
-        if (self.regs[REG_DMA_ADDR_HIGH] & 0x80) == 0 {
-            src_addr
-        } else {
-            src_addr & !0x00800000
-        }
-    }
-
-    pub fn get_dma_count(&mut self) -> i32 {
-        (((self.regs[REG_DMA_COUNTER_HIGH] as u32) << 8) | (self.regs[REG_DMA_COUNTER_LOW] as u32)) as i32
-    }
-
     pub fn setup_transfer(&mut self, upper: u16, lower: u16) {
-        self.transfer_upper = None;
+        self.ctrl_port_buffer = None;
         self.transfer_type = ((((upper & 0xC000) >> 14) | ((lower & 0x00F0) >> 2))) as u8;
-        self.transfer_addr = ((upper & 0x3FFF) | ((lower & 0x0003) << 14)) as u32;
+        self.transfer_dest_addr = ((upper & 0x3FFF) | ((lower & 0x0003) << 14)) as u32;
         self.transfer_target = match self.transfer_type & 0x0E {
             0 => TargetType::Vram,
             4 => TargetType::Vsram,
             _ => TargetType::Cram,
         };
-        info!("{}: transfer requested of type {:x} ({:?}) to address {:x}", DEV_NAME, self.transfer_type, self.transfer_target, self.transfer_addr);
+        info!("{}: transfer requested of type {:x} ({:?}) to address {:x}", DEV_NAME, self.transfer_type, self.transfer_target, self.transfer_dest_addr);
         if (self.transfer_type & 0x20) != 0 {
             if (self.transfer_type & 0x10) != 0 {
                 self.set_dma_mode(DmaType::Copy);
@@ -183,37 +253,17 @@ impl Ym7101State {
 
     #[inline(always)]
     fn hsync_int_enabled(&self) -> bool {
-        (self.regs[REG_MODE_SET_1] & MODE1_BF_HSYNC_INTERRUPT) != 0
+        (self.mode_1 & MODE1_BF_HSYNC_INTERRUPT) != 0
     }
 
     #[inline(always)]
     fn vsync_int_enabled(&self) -> bool {
-        (self.regs[REG_MODE_SET_2] & MODE2_BF_VSYNC_INTERRUPT) != 0
+        (self.mode_2 & MODE2_BF_VSYNC_INTERRUPT) != 0
     }
 
     #[inline(always)]
     fn external_int_enabled(&self) -> bool {
-        (self.regs[REG_MODE_SET_3] & MODE3_BF_EXTERNAL_INTERRUPT) != 0
-    }
-
-    pub fn get_vram_scroll_a_addr(&self) -> u32 {
-        ((self.regs[REG_SCROLL_A_ADDR] as u16) << 10) as u32
-    }
-
-    pub fn get_vram_scroll_b_addr(&self) -> u32 {
-        ((self.regs[REG_SCROLL_B_ADDR] as u16) << 13) as u32
-    }
-
-    pub fn get_vram_window_addr(&self) -> u32 {
-        ((self.regs[REG_WINDOW_ADDR] as u16) << 10) as u32
-    }
-
-    pub fn get_vram_sprites_addr(&self) -> u32 {
-        ((self.regs[REG_SPRITES_ADDR] as u16) << 9) as u32
-    }
-
-    pub fn get_vram_hscroll_addr(&self) -> u32 {
-        ((self.regs[REG_HSCROLL_ADDR] as u16) << 10) as u32
+        (self.mode_3 & MODE3_BF_EXTERNAL_INTERRUPT) != 0
     }
 
     pub fn get_palette_colour(&self, palette: u8, colour: u8) -> u32 {
@@ -232,23 +282,17 @@ impl Ym7101State {
         PatternIterator::new(&self, pattern_addr as u32, pattern_palette, h_rev, v_rev)
     }
 
-    pub fn get_scroll_size(&self) -> (u16, u16) {
-        let h = scroll_size(self.regs[REG_SCROLL_SIZE] & 0x03);
-        let v = scroll_size((self.regs[REG_SCROLL_SIZE] >> 4) & 0x03);
-        (h, v)
-    }
-
     pub fn get_screen_size(&self) -> (u16, u16) {
-        let h_cells = if (self.regs[REG_MODE_SET_4] & MODE4_BF_H_CELL_MODE) == 0 { 32 } else { 40 };
-        let v_cells = if (self.regs[REG_MODE_SET_2] & MODE2_BF_V_CELL_MODE) == 0 { 28 } else { 30 };
+        let h_cells = if (self.mode_4 & MODE4_BF_H_CELL_MODE) == 0 { 32 } else { 40 };
+        let v_cells = if (self.mode_2 & MODE2_BF_V_CELL_MODE) == 0 { 28 } else { 30 };
         (h_cells, v_cells)
     }
 
     pub fn get_window_coords(&self, screen_size: (u16, u16)) -> (u16, u16) {
-        let win_h = ((self.regs[REG_WINDOW_H_POS] & 0x1F) << 1) as u16;
-        let win_v = (self.regs[REG_WINDOW_V_POS] & 0x1F) as u16;
-        let right = (self.regs[REG_WINDOW_H_POS] & 0x80) != 0;
-        let down = (self.regs[REG_WINDOW_V_POS] & 0x80) != 0;
+        let win_h = ((self.window_pos.0 & 0x1F) << 1) as u16;
+        let win_v = (self.window_pos.1 & 0x1F) as u16;
+        let right = (self.window_pos.0 & 0x80) != 0;
+        let down = (self.window_pos.1 & 0x80) != 0;
 
         match (right, down) {
             (false, false) => (win_h, win_v),
@@ -260,19 +304,19 @@ impl Ym7101State {
 
     pub fn draw_frame(&mut self, frame: &mut Frame) {
         self.draw_background(frame);
-        self.draw_cell_table(frame, self.get_vram_scroll_b_addr());
-        self.draw_cell_table(frame, self.get_vram_scroll_a_addr());
+        self.draw_cell_table(frame, self.scroll_b_addr as u32);
+        self.draw_cell_table(frame, self.scroll_a_addr as u32);
         //self.draw_window(frame);
         self.draw_sprites(frame);
     }
 
     pub fn draw_background(&mut self, frame: &mut Frame) {
-        let bg_colour = self.get_palette_colour((self.regs[REG_BACKGROUND] & 0x30) >> 4, self.regs[REG_BACKGROUND] & 0x0f);
+        let bg_colour = self.get_palette_colour((self.background & 0x30) >> 4, self.background & 0x0f);
         frame.clear(bg_colour);
     }
 
     pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: u32) {
-        let (scroll_h, scroll_v) = self.get_scroll_size();
+        let (scroll_h, scroll_v) = self.scroll_size;
         let (cells_h, cells_v) = self.get_screen_size();
         let (offset_x, offset_y) = self.get_window_coords((cells_h, cells_v));
 
@@ -286,8 +330,8 @@ impl Ym7101State {
     }
 
     pub fn draw_window(&mut self, frame: &mut Frame) {
-        let cell_table = self.get_vram_window_addr();
-        let (scroll_h, scroll_v) = self.get_scroll_size();
+        let cell_table = self.window_addr as u32;
+        let (scroll_h, scroll_v) = self.scroll_size;
         let (cells_h, cells_v) = self.get_screen_size();
 
         for cell_y in 0..cells_v {
@@ -314,7 +358,7 @@ impl Ym7101State {
     }
 
     pub fn draw_sprites(&mut self, frame: &mut Frame) {
-        let sprite_table = self.get_vram_sprites_addr() as usize;
+        let sprite_table = self.sprites_addr as usize;
         let (cells_h, cells_v) = self.get_screen_size();
         let (pos_limit_h, pos_limit_v) = (if cells_h == 32 { 383 } else { 447 }, if cells_v == 28 { 351 } else { 367 });
 
@@ -350,7 +394,7 @@ impl Ym7101State {
     }
 }
 
-fn scroll_size(size: u8) -> u16 {
+fn decode_scroll_size(size: u8) -> u16 {
     match size {
         0b00 => 32,
         0b01 => 64,
@@ -466,7 +510,7 @@ impl Steppable for Ym7101 {
             self.state.h_clock = 0;
             self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
             if self.state.hsync_int_enabled() && self.state.h_scanlines == 0  {
-                self.state.h_scanlines = self.state.regs[REG_H_INTERRUPT];
+                self.state.h_scanlines = self.state.h_int_lines;
                 system.get_interrupt_controller().set(true, 4, 28)?;
             }
         }
@@ -543,19 +587,19 @@ impl Steppable for Ym7101 {
             //swapper.current.blit(16, 8, PatternIterator::new(&self.state, 0x405 * 32, 3, false, false), 8, 8);
         }
 
-        if self.state.transfer_run != DmaType::None && (self.state.regs[REG_MODE_SET_2] & MODE2_BF_DMA_ENABLED) != 0 {
+        if self.state.transfer_run != DmaType::None && (self.state.mode_2 & MODE2_BF_DMA_ENABLED) != 0 {
             // TODO we will just do the full dma transfer here, but it really should be stepped
 
             match self.state.transfer_run {
                 DmaType::Memory => {
-                    let mut src_addr = self.state.get_dma_src_addr();
-                    let mut count = self.state.get_dma_count();
+                    let mut src_addr = self.state.transfer_src_addr;
+                    let mut count = self.state.transfer_count;
 
-                    info!("{}: starting dma transfer {:x} from Mem:{:x} to {:?}:{:x} ({} bytes)", DEV_NAME, self.state.transfer_type, src_addr, self.state.transfer_target, self.state.transfer_addr, count);
+                    info!("{}: starting dma transfer {:x} from Mem:{:x} to {:?}:{:x} ({} bytes)", DEV_NAME, self.state.transfer_type, src_addr, self.state.transfer_target, self.state.transfer_dest_addr, count);
                     let mut bus = system.get_bus();
 
                     // TODO temporary for debugging, will break at the first cram transfer after the display is on
-                    //if (self.state.regs[REG_MODE_SET_2] & 0x40) != 0 && self.state.transfer_target == TargetType::Cram {
+                    //if (self.state.mode_2 & 0x40) != 0 && self.state.transfer_target == TargetType::Cram {
                     //   system.get_interrupt_controller().target.as_ref().map(|cpu| cpu.borrow_mut().as_debuggable().unwrap().enable_debugging());
                     //}
 
@@ -565,36 +609,36 @@ impl Steppable for Ym7101 {
                         bus.read(src_addr as Address, &mut data)?;
 
                         {
-                            let addr = self.state.transfer_addr;
+                            let addr = self.state.transfer_dest_addr;
                             let (target, length) = self.state.get_transfer_target_mut();
                             target[(addr as usize) % length] = data[0];
                             target[(addr as usize + 1) % length] = data[1];
                         }
 
-                        self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                        self.state.transfer_dest_addr += self.state.transfer_auto_inc;
                         src_addr += 2;
                         count -= 2;
                     }
                 },
                 DmaType::Copy => {
-                    let mut src_addr = self.state.get_dma_src_addr();
-                    let mut count = self.state.get_dma_count();
+                    let mut src_addr = self.state.transfer_src_addr;
+                    let mut count = self.state.transfer_count;
 
-                    info!("{}: starting dma copy from VRAM:{:x} to VRAM:{:x} ({} bytes)", DEV_NAME, src_addr, self.state.transfer_addr, count);
+                    info!("{}: starting dma copy from VRAM:{:x} to VRAM:{:x} ({} bytes)", DEV_NAME, src_addr, self.state.transfer_dest_addr, count);
                     while count > 0 {
-                        self.state.vram[self.state.transfer_addr as usize] = self.state.vram[src_addr as usize];
-                        self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                        self.state.vram[self.state.transfer_dest_addr as usize] = self.state.vram[src_addr as usize];
+                        self.state.transfer_dest_addr += self.state.transfer_auto_inc;
                         src_addr += 1;
                         count -= 1;
                     }
                 },
                 DmaType::Fill => {
-                    let mut count = self.state.get_dma_count();
+                    let mut count = self.state.transfer_count;
 
-                    info!("{}: starting dma fill to VRAM:{:x} ({} bytes) with {:x}", DEV_NAME, self.state.transfer_addr, count, self.state.transfer_fill);
+                    info!("{}: starting dma fill to VRAM:{:x} ({} bytes) with {:x}", DEV_NAME, self.state.transfer_dest_addr, count, self.state.transfer_fill_word);
                     while count > 0 {
-                        self.state.vram[self.state.transfer_addr as usize] = self.state.transfer_fill as u8;
-                        self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                        self.state.vram[self.state.transfer_dest_addr as usize] = self.state.transfer_fill_word as u8;
+                        self.state.transfer_dest_addr += self.state.transfer_auto_inc;
                         count -= 1;
                     }
                 },
@@ -618,13 +662,13 @@ impl Addressable for Ym7101 {
             // Read from Data Port
             0x00 | 0x02 => {
                 {
-                    let addr = self.state.transfer_addr;
+                    let addr = self.state.transfer_dest_addr;
                     let (target, length) = self.state.get_transfer_target_mut();
                     for i in 0..data.len() {
                         data[i] = target[(addr as usize + i) % length];
                     }
                 }
-                self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                self.state.transfer_dest_addr += self.state.transfer_auto_inc;
                 debug!("{}: data port read {} bytes from {:?}:{:x} returning {:x},{:x}", DEV_NAME, data.len(), self.state.transfer_target, addr, data[0], data[1]);
             },
 
@@ -645,20 +689,20 @@ impl Addressable for Ym7101 {
             // Write to Data Port
             0x00 | 0x02 => {
                 if (self.state.transfer_type & 0x30) == 0x20 {
-                    self.state.transfer_upper = None;
-                    self.state.transfer_fill = if data.len() >= 2 { read_beu16(data) } else { data[0] as u16 };
+                    self.state.ctrl_port_buffer = None;
+                    self.state.transfer_fill_word = if data.len() >= 2 { read_beu16(data) } else { data[0] as u16 };
                     self.state.set_dma_mode(DmaType::Fill);
                 } else {
-                    debug!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.state.transfer_target, self.state.transfer_addr, data);
+                    debug!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.state.transfer_target, self.state.transfer_dest_addr, data);
 
                     {
-                        let addr = self.state.transfer_addr as usize;
+                        let addr = self.state.transfer_dest_addr as usize;
                         let (target, length) = self.state.get_transfer_target_mut();
                         for i in 0..data.len() {
                             target[(addr + i) % length] = data[i];
                         }
                     }
-                    self.state.transfer_addr += self.state.regs[REG_AUTO_INCREMENT] as u32;
+                    self.state.transfer_dest_addr += self.state.transfer_auto_inc;
                 }
             },
 
@@ -677,8 +721,8 @@ impl Addressable for Ym7101 {
                         self.state.set_register(value);
                     }
                 } else {
-                    match (data.len(), self.state.transfer_upper) {
-                        (2, None) => { self.state.transfer_upper = Some(value) },
+                    match (data.len(), self.state.ctrl_port_buffer) {
+                        (2, None) => { self.state.ctrl_port_buffer = Some(value) },
                         (2, Some(upper)) => self.state.setup_transfer(upper, read_beu16(data)),
                         (4, None) => self.state.setup_transfer(value, read_beu16(&data[2..])),
                         _ => { error!("{}: !!! error when writing to control port with {} bytes of {:?}", DEV_NAME, data.len(), data); },
@@ -715,50 +759,24 @@ impl Inspectable for Ym7101 {
 impl Ym7101State {
     pub fn dump_state(&self) {
         println!("");
-        println!("Mode1: {:#04x}", self.regs[REG_MODE_SET_1]);
-        println!("Mode2: {:#04x}", self.regs[REG_MODE_SET_2]);
-        println!("Mode3: {:#04x}", self.regs[REG_MODE_SET_3]);
-        println!("Mode4: {:#04x}", self.regs[REG_MODE_SET_4]);
+        println!("Mode1: {:#04x}", self.mode_1);
+        println!("Mode2: {:#04x}", self.mode_2);
+        println!("Mode3: {:#04x}", self.mode_3);
+        println!("Mode4: {:#04x}", self.mode_4);
         println!("");
-        println!("Scroll A : {:#06x}", self.get_vram_scroll_a_addr());
-        println!("Window   : {:#06x}", self.get_vram_window_addr());
-        println!("Scroll B : {:#06x}", self.get_vram_scroll_b_addr());
-        println!("HScroll  : {:#06x}", self.get_vram_hscroll_addr());
-        println!("Sprites  : {:#06x}", self.get_vram_sprites_addr());
+        println!("Scroll A : {:#06x}", self.scroll_a_addr);
+        println!("Window   : {:#06x}", self.window_addr);
+        println!("Scroll B : {:#06x}", self.scroll_b_addr);
+        println!("HScroll  : {:#06x}", self.hscroll_addr);
+        println!("Sprites  : {:#06x}", self.sprites_addr);
     }
 
     pub fn dump_vram(&self) {
-        let mut count = 65536;
-        let mut addr = 0;
-        while count > 0 {
-            let mut line = format!("{:#010x}: ", addr);
-
-            let to = if count < 16 { count / 2 } else { 8 };
-            for _ in 0..to {
-                let word = ((self.vram[addr] as u16) << 8) | self.vram[addr + 1] as u16;
-                line += &format!("{:#06x} ", word);
-                addr += 2;
-                count -= 2;
-            }
-            println!("{}", line);
-        }
+        dump_slice(&self.vram, 65536);
     }
 
     pub fn dump_vsram(&self) {
-        let mut count = 80;
-        let mut addr = 0;
-        while count > 0 {
-            let mut line = format!("{:#010x}: ", addr);
-
-            let to = if count < 16 { count / 2 } else { 8 };
-            for _ in 0..to {
-                let word = ((self.vsram[addr] as u16) << 8) | self.vsram[addr + 1] as u16;
-                line += &format!("{:#06x} ", word);
-                addr += 2;
-                count -= 2;
-            }
-            println!("{}", line);
-        }
+        dump_slice(&self.vsram, 80);
     }
 }
 
