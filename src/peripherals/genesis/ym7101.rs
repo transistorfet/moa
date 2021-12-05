@@ -301,29 +301,34 @@ impl Ym7101State {
         }
     }
 
-    pub fn get_hscroll(&self, hcell: usize, odd: usize) -> usize {
-        let value = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
-            0 => read_beu16(&self.vram[(self.hscroll_addr + odd)..]) as usize,
-            2 => read_beu16(&self.vram[(self.hscroll_addr + (hcell << 3) + odd)..]) as usize,
-            3 => read_beu16(&self.vram[(self.hscroll_addr + (hcell << 3) + odd)..]) as usize,
+    pub fn get_hscroll(&self, hcell: usize) -> (u32, u32) {
+        let base_addr = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
+            0 => self.hscroll_addr,
+            2 => self.hscroll_addr + (hcell << 4),
+            3 => self.hscroll_addr + (hcell << 4),
             _ => panic!("Unsupported horizontal scroll mode"),
         };
-        value & 0x3F
+
+        let scroll_a = read_beu16(&self.vram[base_addr..]) as u32 & 0x3FF;
+        let scroll_b = read_beu16(&self.vram[base_addr + 1..]) as u32 & 0x3FF;
+        (scroll_a, scroll_b)
     }
 
-    pub fn get_vscroll(&self, vcell: usize, odd: usize) -> usize {
-        let value = if (self.mode_3 & MODE3_BF_V_SCROLL_MODE) == 0 {
-            read_beu16(&self.vsram[odd..]) as usize
+    pub fn get_vscroll(&self, vcell: usize) -> (u32, u32) {
+        let base_addr = if (self.mode_3 & MODE3_BF_V_SCROLL_MODE) == 0 {
+            0
         } else {
-            read_beu16(&self.vsram[(vcell >> 1) + odd..]) as usize
+            vcell >> 1
         };
-        value & 0x3F
+
+        let scroll_a = read_beu16(&self.vsram[base_addr..]) as u32 & 0x3FF;
+        let scroll_b = read_beu16(&self.vsram[base_addr + 1..]) as u32 & 0x3FF;
+        (scroll_a, scroll_b)
     }
 
     pub fn draw_frame(&mut self, frame: &mut Frame) {
         self.draw_background(frame);
-        self.draw_cell_table(frame, self.scroll_b_addr, 1);
-        self.draw_cell_table(frame, self.scroll_a_addr, 0);
+        self.draw_scrolls(frame);
         //self.draw_window(frame);
         self.draw_sprites(frame);
     }
@@ -333,28 +338,46 @@ impl Ym7101State {
         frame.clear(bg_colour);
     }
 
-    pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: usize, odd: usize) {
+    #[inline(always)]
+    pub fn get_cell_addr(&self, cell_table: usize, cell_x: usize, cell_y: usize) -> usize {
+        cell_table + ((cell_x + (cell_y * self.scroll_size.0 as usize)) << 1)
+    }
+
+    pub fn draw_pattern(&mut self, frame: &mut Frame, cell_addr: usize, pixel_x: u32, pixel_y: u32) {
+        let pattern_name = read_beu16(&self.vram[cell_addr..]);
+        let iter = self.get_pattern_iter(pattern_name);
+        frame.blit(pixel_x, pixel_y, iter, 8, 8);
+    }
+
+    pub fn draw_scrolls(&mut self, frame: &mut Frame) {
         let (scroll_h, scroll_v) = self.scroll_size;
         let (cells_h, cells_v) = self.get_screen_size();
         let (offset_x, offset_y) = self.get_window_coords((cells_h, cells_v));
 
-        for cell_y in 0..cells_v {
-            let vscrolling = self.get_vscroll(cell_y as usize, odd);
-            for cell_x in 0..cells_h {
-                let hscrolling = self.get_hscroll(cell_x as usize, odd);
+        if scroll_h == 0 || scroll_v == 0 {
+            return;
+        }
 
-                let pattern_x = ((cell_x + offset_x) as usize - (hscrolling / 8)) % scroll_h as usize;
-                let pattern_y = ((cell_y + offset_y) as usize + (vscrolling / 8)) % scroll_v as usize;
-                let pattern_name = read_beu16(&self.vram[(cell_table + ((pattern_x + (pattern_y * scroll_h as usize)) << 1))..]);
-                let iter = self.get_pattern_iter(pattern_name);
-                frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
+        for cell_y in 0..cells_v {
+            let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_y as usize);
+            for cell_x in 0..cells_h {
+                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_x as usize);
+
+                let pattern_x_b = ((cell_x + offset_x) as usize - (hscrolling_b / 8) as usize) % scroll_h as usize;
+                let pattern_y_b = ((cell_y + offset_y) as usize + (vscrolling_b / 8) as usize) % scroll_v as usize;
+                let pattern_addr_b = self.get_cell_addr(self.scroll_b_addr, pattern_x_b, pattern_y_b);
+                self.draw_pattern(frame, pattern_addr_b, (cell_x << 3) as u32, (cell_y << 3) as u32);
+
+                let pattern_x_a = ((cell_x + offset_x) as usize - (hscrolling_a / 8) as usize) % scroll_h as usize;
+                let pattern_y_a = ((cell_y + offset_y) as usize + (vscrolling_a / 8) as usize) % scroll_v as usize;
+                let pattern_addr_a = self.get_cell_addr(self.scroll_a_addr, pattern_x_a, pattern_y_a);
+                self.draw_pattern(frame, pattern_addr_a, (cell_x << 3) as u32, (cell_y << 3) as u32);
             }
         }
     }
 
     pub fn draw_window(&mut self, frame: &mut Frame) {
         let cell_table = self.window_addr;
-        let (scroll_h, scroll_v) = self.scroll_size;
         let (cells_h, cells_v) = self.get_screen_size();
 
         // A window address of 0 disables the window
@@ -364,9 +387,7 @@ impl Ym7101State {
 
         for cell_y in 0..cells_v {
             for cell_x in 0..cells_h {
-                let pattern_name = read_beu16(&self.vram[(cell_table + ((cell_x + (cell_y * scroll_h)) << 1) as usize)..]);
-                let iter = self.get_pattern_iter(pattern_name);
-                frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
+                self.draw_pattern(frame, self.get_cell_addr(cell_table, cell_x as usize, cell_y as usize), (cell_x << 3) as u32, (cell_y << 3) as u32);
             }
         }
     }

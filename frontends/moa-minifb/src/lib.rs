@@ -189,7 +189,7 @@ impl MiniFrontend {
                 system.run_for(16_600_000).unwrap();
             }
 
-            if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::Yes) {
+            if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::No) {
                 for key in keys {
                     self.check_key(key, true);
 
