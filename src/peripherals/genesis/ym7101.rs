@@ -55,6 +55,8 @@ const MODE2_BF_DMA_ENABLED: u8          = 0x10;
 const MODE2_BF_VSYNC_INTERRUPT: u8      = 0x20;
 
 const MODE3_BF_EXTERNAL_INTERRUPT: u8   = 0x08;
+const MODE3_BF_V_SCROLL_MODE: u8        = 0x04;
+const MODE3_BF_H_SCROLL_MODE: u8        = 0x03;
 
 const MODE4_BF_H_CELL_MODE: u8          = 0x01;
 const MODE4_BF_SHADOW_HIGHLIGHT: u8     = 0x08;
@@ -85,7 +87,6 @@ pub struct Ym7101State {
     pub cram: [u8; 128],
     pub vsram: [u8; 80],
 
-    pub regs: [u8; 24],
     pub mode_1: u8,
     pub mode_2: u8,
     pub mode_3: u8,
@@ -94,11 +95,11 @@ pub struct Ym7101State {
     pub scroll_size: (u16, u16),
     pub window_pos: (u8, u8),
     pub background: u8,
-    pub scroll_a_addr: u16,
-    pub scroll_b_addr: u16,
-    pub window_addr: u16,
-    pub sprites_addr: u16,
-    pub hscroll_addr: u16,
+    pub scroll_a_addr: usize,
+    pub scroll_b_addr: usize,
+    pub window_addr: usize,
+    pub sprites_addr: usize,
+    pub hscroll_addr: usize,
 
     pub transfer_type: u8,
     pub transfer_bits: u8,
@@ -126,7 +127,6 @@ impl Ym7101State {
             cram: [0; 128],
             vsram: [0; 80],
 
-            regs: [0; 24],
             mode_1: 0,
             mode_2: 0,
             mode_3: 0,
@@ -163,8 +163,7 @@ impl Ym7101State {
     fn set_register(&mut self, word: u16) {
         let reg = ((word & 0x1F00) >> 8) as usize;
         let data = (word & 0x00FF) as u8;
-        self.regs[reg] = data;
-        info!("{}: register {:x} set to {:x}", DEV_NAME, reg, self.regs[reg as usize]);
+        info!("{}: register {:x} set to {:x}", DEV_NAME, reg, data);
         self.update_register_value(reg, data);
     }
 
@@ -172,15 +171,15 @@ impl Ym7101State {
         match reg {
             REG_MODE_SET_1 => { self.mode_1 = data; },
             REG_MODE_SET_2 => { self.mode_2 = data; },
-            REG_SCROLL_A_ADDR => { self.scroll_a_addr = (data as u16) << 10; },
-            REG_WINDOW_ADDR => { self.window_addr = (data as u16) << 10; },
-            REG_SCROLL_B_ADDR => { self.scroll_b_addr = (data as u16) << 13; },
-            REG_SPRITES_ADDR => { self.sprites_addr = (data as u16) << 9; },
+            REG_SCROLL_A_ADDR => { self.scroll_a_addr = (data as usize) << 10; },
+            REG_WINDOW_ADDR => { self.window_addr = (data as usize) << 10; },
+            REG_SCROLL_B_ADDR => { self.scroll_b_addr = (data as usize) << 13; },
+            REG_SPRITES_ADDR => { self.sprites_addr = (data as usize) << 9; },
             REG_BACKGROUND => { self.background = data; },
             REG_H_INTERRUPT => { self.h_int_lines = data; },
             REG_MODE_SET_3 => { self.mode_3 = data; },
             REG_MODE_SET_4 => { self.mode_4 = data; },
-            REG_HSCROLL_ADDR => { self.hscroll_addr = (data as u16) << 10; },
+            REG_HSCROLL_ADDR => { self.hscroll_addr = (data as usize) << 10; },
             REG_AUTO_INCREMENT => { self.transfer_auto_inc = data as u32; },
             REG_SCROLL_SIZE => {
                 let h = decode_scroll_size(data & 0x03);
@@ -203,7 +202,7 @@ impl Ym7101State {
             },
             REG_DMA_ADDR_HIGH => {
                 let mask = if (data & 0x80) == 0 { 0x7F } else { 0x3F };
-                self.transfer_bits = (data & 0xC0) >> 6;
+                self.transfer_bits = data & 0xC0;
                 self.transfer_src_addr = (self.transfer_src_addr & 0x01FFFF) | (((data & mask) as u32) << 17);
             },
             0x6 | 0x8 | 0x9 | 0xE => { /* Reserved */ },
@@ -237,7 +236,7 @@ impl Ym7101State {
         if (self.transfer_type & 0x20) != 0 {
             if (self.transfer_type & 0x10) != 0 {
                 self.set_dma_mode(DmaType::Copy);
-            } else if (self.regs[REG_DMA_ADDR_HIGH] & 0x80) == 0 {
+            } else if (self.transfer_bits & 0x80) == 0 {
                 self.set_dma_mode(DmaType::Memory);
             }
         }
@@ -302,10 +301,29 @@ impl Ym7101State {
         }
     }
 
+    pub fn get_hscroll(&self, hcell: usize, odd: usize) -> usize {
+        let value = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
+            0 => read_beu16(&self.vram[(self.hscroll_addr + odd)..]) as usize,
+            2 => read_beu16(&self.vram[(self.hscroll_addr + (hcell << 3) + odd)..]) as usize,
+            3 => read_beu16(&self.vram[(self.hscroll_addr + (hcell << 3) + odd)..]) as usize,
+            _ => panic!("Unsupported horizontal scroll mode"),
+        };
+        value & 0x3F
+    }
+
+    pub fn get_vscroll(&self, vcell: usize, odd: usize) -> usize {
+        let value = if (self.mode_3 & MODE3_BF_V_SCROLL_MODE) == 0 {
+            read_beu16(&self.vsram[odd..]) as usize
+        } else {
+            read_beu16(&self.vsram[(vcell >> 1) + odd..]) as usize
+        };
+        value & 0x3F
+    }
+
     pub fn draw_frame(&mut self, frame: &mut Frame) {
         self.draw_background(frame);
-        self.draw_cell_table(frame, self.scroll_b_addr as u32);
-        self.draw_cell_table(frame, self.scroll_a_addr as u32);
+        self.draw_cell_table(frame, self.scroll_b_addr, 1);
+        self.draw_cell_table(frame, self.scroll_a_addr, 0);
         //self.draw_window(frame);
         self.draw_sprites(frame);
     }
@@ -315,14 +333,19 @@ impl Ym7101State {
         frame.clear(bg_colour);
     }
 
-    pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: u32) {
+    pub fn draw_cell_table(&mut self, frame: &mut Frame, cell_table: usize, odd: usize) {
         let (scroll_h, scroll_v) = self.scroll_size;
         let (cells_h, cells_v) = self.get_screen_size();
         let (offset_x, offset_y) = self.get_window_coords((cells_h, cells_v));
 
         for cell_y in 0..cells_v {
+            let vscrolling = self.get_vscroll(cell_y as usize, odd);
             for cell_x in 0..cells_h {
-                let pattern_name = read_beu16(&self.vram[(cell_table + (((cell_x + offset_x) + ((cell_y + offset_y) * scroll_h)) << 1) as u32) as usize..]);
+                let hscrolling = self.get_hscroll(cell_x as usize, odd);
+
+                let pattern_x = ((cell_x + offset_x) as usize - (hscrolling / 8)) % scroll_h as usize;
+                let pattern_y = ((cell_y + offset_y) as usize + (vscrolling / 8)) % scroll_v as usize;
+                let pattern_name = read_beu16(&self.vram[(cell_table + ((pattern_x + (pattern_y * scroll_h as usize)) << 1))..]);
                 let iter = self.get_pattern_iter(pattern_name);
                 frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
             }
@@ -330,13 +353,18 @@ impl Ym7101State {
     }
 
     pub fn draw_window(&mut self, frame: &mut Frame) {
-        let cell_table = self.window_addr as u32;
+        let cell_table = self.window_addr;
         let (scroll_h, scroll_v) = self.scroll_size;
         let (cells_h, cells_v) = self.get_screen_size();
 
+        // A window address of 0 disables the window
+        if cell_table == 0 {
+            return;
+        }
+
         for cell_y in 0..cells_v {
             for cell_x in 0..cells_h {
-                let pattern_name = read_beu16(&self.vram[(cell_table + ((cell_x + (cell_y * scroll_h)) << 1) as u32) as usize..]);
+                let pattern_name = read_beu16(&self.vram[(cell_table + ((cell_x + (cell_y * scroll_h)) << 1) as usize)..]);
                 let iter = self.get_pattern_iter(pattern_name);
                 frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
             }
@@ -358,7 +386,7 @@ impl Ym7101State {
     }
 
     pub fn draw_sprites(&mut self, frame: &mut Frame) {
-        let sprite_table = self.sprites_addr as usize;
+        let sprite_table = self.sprites_addr;
         let (cells_h, cells_v) = self.get_screen_size();
         let (pos_limit_h, pos_limit_v) = (if cells_h == 32 { 383 } else { 447 }, if cells_v == 28 { 351 } else { 367 });
 
