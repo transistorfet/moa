@@ -1,6 +1,7 @@
 
 use crate::error::Error;
-use crate::devices::{Address, Addressable, Transmutable};
+use crate::system::System;
+use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable};
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
 use crate::host::traits::{Host, ControllerUpdater, SharedData};
 
@@ -23,11 +24,11 @@ pub struct GenesisControllerPort {
     /// Data contains bits:
     /// 11 | 10 | 9 |    8 |     7 | 6 | 5 | 4 |     3 |    2 |    1 |  0
     ///  X |  Y | Z | MODE | START | A | C | B | RIGHT | LEFT | DOWN | UP
-    pub data: SharedData<u16>,
+    pub buttons: SharedData<u16>,
 
     pub ctrl: u8,
+    pub outputs: u8,
     pub th_count: u8,
-    pub next_read: u8,
 
     pub s_ctrl: u8,
 }
@@ -35,35 +36,40 @@ pub struct GenesisControllerPort {
 impl GenesisControllerPort {
     pub fn new() -> Self {
         Self {
-            data: SharedData::new(0xffff),
+            buttons: SharedData::new(0xffff),
             ctrl: 0,
+            outputs: 0,
             th_count: 0,
-            next_read: 0,
             s_ctrl: 0,
         }
     }
 
-    pub fn set_data(&mut self, outputs: u8) {
-        let prev_th = self.next_read & 0x40;
-        self.next_read = outputs & self.ctrl;
+    pub fn get_data(&mut self) -> u8 {
+        let inputs = self.buttons.get();
+        let th_state = (self.outputs & 0x40) != 0;
 
-        if ((self.next_read & 0x40) ^ prev_th) != 0 {
+        match (th_state, self.th_count) {
+            (true,  0) => self.outputs | ((inputs & 0x003F) as u8),
+            (false, 0) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
+            (true,  1) => self.outputs | ((inputs & 0x003F) as u8),
+            (false, 1) => self.outputs | (((inputs & 0x00C0) >> 2) as u8),
+            (true,  2) => self.outputs | ((inputs & 0x0030) as u8) | (((inputs & 0x0F00) >> 8) as u8),
+            (false, 2) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | 0x0F,
+            (true,  3) => self.outputs | ((inputs & 0x003F) as u8),
+            (false, 3) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
+            _ => 0,
+        }
+    }
+
+    pub fn set_data(&mut self, outputs: u8) {
+        let prev_th = self.outputs & 0x40;
+        self.outputs = outputs;
+
+        if ((outputs & 0x40) ^ prev_th) != 0 {
             // TH bit was toggled
-            let inputs = self.data.get();
-            self.next_read = match self.th_count {
-                0 => self.next_read | ((inputs & 0x003F) as u8),
-                1 => self.next_read | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
-                2 => self.next_read | ((inputs & 0x003F) as u8),
-                3 => self.next_read | (((inputs & 0x00C0) >> 2) as u8),
-                4 => self.next_read | ((inputs & 0x0030) as u8) | (((inputs & 0x0F00) >> 8) as u8),
-                5 => self.next_read | (((inputs & 0x00C0) >> 2) as u8) | 0x0F,
-                6 => self.next_read | ((inputs & 0x003F) as u8),
-                7 => self.next_read | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
-                _ => 0,
-            };
 
             self.th_count += 1;
-            if self.th_count > 7 {
+            if self.th_count > 3 {
                 self.th_count = 0;
             }
         }
@@ -71,6 +77,10 @@ impl GenesisControllerPort {
 
     pub fn set_ctrl(&mut self, ctrl: u8) {
         self.ctrl = ctrl;
+        self.th_count = 0;
+    }
+
+    pub fn reset_count(&mut self) {
         self.th_count = 0;
     }
 }
@@ -107,6 +117,8 @@ pub struct GenesisController {
     pub port_2: GenesisControllerPort,
     pub expansion: GenesisControllerPort,
     pub interrupt: SharedData<bool>,
+    pub last_clock: Clock,
+    pub last_write: Clock,
 }
 
 impl GenesisController {
@@ -116,15 +128,17 @@ impl GenesisController {
             port_2: GenesisControllerPort::new(),
             expansion: GenesisControllerPort::new(),
             interrupt: SharedData::new(false),
+            last_clock: 0,
+            last_write: 0,
         }
     }
 
     pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
         let controller = GenesisController::new();
 
-        let controller1 = Box::new(GenesisControllerUpdater(controller.port_1.data.clone(), controller.interrupt.clone()));
+        let controller1 = Box::new(GenesisControllerUpdater(controller.port_1.buttons.clone(), controller.interrupt.clone()));
         host.register_controller(ControllerDevice::A, controller1)?;
-        let controller2 = Box::new(GenesisControllerUpdater(controller.port_2.data.clone(), controller.interrupt.clone()));
+        let controller2 = Box::new(GenesisControllerUpdater(controller.port_2.buttons.clone(), controller.interrupt.clone()));
         host.register_controller(ControllerDevice::B, controller2)?;
 
         Ok(controller)
@@ -150,9 +164,9 @@ impl Addressable for GenesisController {
 
         match addr {
             REG_VERSION => { data[i] = 0xA0; } // Overseas Version, NTSC, No Expansion
-            REG_DATA1 => { data[i] = self.port_1.next_read; },
-            REG_DATA2 => { data[i] = self.port_2.next_read; },
-            REG_DATA3 => { data[i] = self.expansion.next_read; },
+            REG_DATA1 => { data[i] = self.port_1.get_data(); },
+            REG_DATA2 => { data[i] = self.port_2.get_data(); },
+            REG_DATA3 => { data[i] = self.expansion.get_data(); },
             REG_CTRL1 => { data[i] = self.port_1.ctrl; },
             REG_CTRL2 => { data[i] = self.port_2.ctrl; },
             REG_CTRL3 => { data[i] = self.expansion.ctrl; },
@@ -166,6 +180,14 @@ impl Addressable for GenesisController {
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+        // TODO this causes sonic2 to read incorrect inputs, but works without the reset
+        //if self.last_clock - self.last_write >= 1_500_000 {
+        //    self.port_1.reset_count();
+        //    self.port_2.reset_count();
+        //    self.expansion.reset_count();
+        //}
+        //self.last_write = self.last_clock; 
+
         debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             REG_DATA1 => { self.port_1.set_data(data[0]); }
@@ -183,10 +205,19 @@ impl Addressable for GenesisController {
     }
 }
 
-// TODO make a step function to reset the TH count after 1.5ms
+impl Steppable for GenesisController {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+        self.last_clock = system.clock;
+        Ok(100_000)     // Update every 100us
+    }
+}
 
 impl Transmutable for GenesisController {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        Some(self)
+    }
+
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
         Some(self)
     }
 }
