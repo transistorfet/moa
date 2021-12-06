@@ -205,21 +205,21 @@ impl Addressable for GenesisController {
     }
 }
 
-impl Steppable for GenesisController {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        self.last_clock = system.clock;
-        Ok(100_000)     // Update every 100us
-    }
-}
+//impl Steppable for GenesisController {
+//    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+//        self.last_clock = system.clock;
+//        Ok(100_000)     // Update every 100us
+//    }
+//}
 
 impl Transmutable for GenesisController {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         Some(self)
     }
 
-    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
-        Some(self)
-    }
+    //fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+    //    Some(self)
+    //}
 }
 
 

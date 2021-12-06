@@ -17,12 +17,12 @@ use crate::host::traits::{Host};
 pub fn build_genesis<H: Host>(host: &mut H) -> Result<System, Error> {
     let mut system = System::new();
 
-    let mut rom = MemoryBlock::load("binaries/genesis/GenTestV3.0.bin").unwrap();
+    //let mut rom = MemoryBlock::load("binaries/genesis/GenTestV3.0.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/HDRV_Genesis_Test_v1_4.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/ComradeOj's tiny demo.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Sonic The Hedgehog (W) (REV 00) [!].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Sonic The Hedgehog (W) (REV 01) [!].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Sonic the Hedgehog 2 (JUE) [!].bin").unwrap();
+    let mut rom = MemoryBlock::load("binaries/genesis/Sonic the Hedgehog 2 (JUE) [!].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Sonic the Hedgehog 3 (U) [!].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Earthworm Jim (U) [h1].bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Home Alone (beta).bin").unwrap();
