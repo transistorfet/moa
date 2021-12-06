@@ -128,7 +128,8 @@ impl Bus {
         }
     }
 
-    pub fn insert(&mut self, base: Address, length: usize, dev: TransmutableBox) {
+    pub fn insert(&mut self, base: Address, dev: TransmutableBox) {
+        let length = dev.borrow_mut().as_addressable().unwrap().len();
         let block = Block { base, length, dev };
         let i = self.blocks.iter().position(|cur| cur.base > block.base).unwrap_or(self.blocks.len());
         self.blocks.insert(i, block);

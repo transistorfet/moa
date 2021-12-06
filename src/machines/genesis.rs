@@ -4,12 +4,16 @@ use std::cell::RefCell;
 
 use crate::error::Error;
 use crate::system::System;
+use crate::signals::Signal;
 use crate::memory::{MemoryBlock, Bus, BusPort};
 use crate::devices::{wrap_transmutable, Address, Addressable, Debuggable};
 
 use crate::cpus::m68k::{M68k, M68kType};
 use crate::cpus::z80::{Z80, Z80Type};
+use crate::peripherals::ym2612::YM2612;
+use crate::peripherals::sn76489::SN76489;
 use crate::peripherals::genesis;
+use crate::peripherals::genesis::coprocessor::{CoprocessorBankRegister, CoprocessorBankArea};
 
 use crate::host::traits::{Host};
 
@@ -56,14 +60,28 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     system.add_addressable_device(0x00ff0000, wrap_transmutable(ram)).unwrap();
 
 
+    // Build the Coprocessor's Bus
+    let bank_register = Signal::new(0);
     let coproc_bus = Rc::new(RefCell::new(Bus::new()));
-    let coproc_mem = wrap_transmutable(MemoryBlock::new(vec![0; 0x00010000]));
-    coproc_bus.borrow_mut().insert(0x0000, coproc_mem.borrow_mut().as_addressable().unwrap().len(), coproc_mem.clone());
+    let coproc_ram = wrap_transmutable(MemoryBlock::new(vec![0; 0x00002000]));
+    let coproc_ym_sound = wrap_transmutable(YM2612::new());
+    let coproc_sn_sound = wrap_transmutable(SN76489::new());
+    let coproc_register = wrap_transmutable(CoprocessorBankRegister::new(bank_register.clone()));
+    let coproc_area = wrap_transmutable(CoprocessorBankArea::new(bank_register, system.bus.clone()));
+    coproc_bus.borrow_mut().insert(0x0000, coproc_ram.clone());
+    coproc_bus.borrow_mut().insert(0x4000, coproc_ym_sound.clone());
+    coproc_bus.borrow_mut().insert(0x6000, coproc_register.clone());
+    coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
+    coproc_bus.borrow_mut().insert(0x8000, coproc_area);
     let mut coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus.clone()));
     let reset = coproc.reset.clone();
     let bus_request = coproc.bus_request.clone();
 
-    system.add_addressable_device(0x00a00000, coproc_mem)?;
+    // Add coprocessor devices to the system bus so the 68000 can access them too
+    system.add_addressable_device(0x00a00000, coproc_ram)?;
+    system.add_addressable_device(0x00a04000, coproc_ym_sound)?;
+    system.add_addressable_device(0x00a06000, coproc_register)?;
+    system.add_addressable_device(0x00c00010, coproc_sn_sound)?;
     system.add_device("coproc", wrap_transmutable(coproc))?;
 
 
