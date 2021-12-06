@@ -49,6 +49,7 @@ By default it will start Level I Basic.  To use the other rom, add the option
 `--rom binaries/trs80/level2.rom`
 
 ![alt text](images/trs-80-level-ii-basic.png)
+
 The characters are being drawn pixel by pixel (6x8) using characters I drew
 using [this handy website](https://maxpromer.github.io/LCD-Character-Creator/).
 They aren't a perfect match of the characters used by the TRS-80
@@ -73,19 +74,23 @@ On the Sonic 2 title screen, the colours for Tails are wonky, probably because
 there's some trickery going on to get more than 16 colours per line, but the
 emulator currently renders the whole frame at once instead of line by line, so
 changes that should be made while the screen is updating don't show up
+
 ![alt text](images/sega-genesis-sonic2-title.png)
 
 The game play is mostly working but the bottom of the clouds should be a
 different colour, probably because highlight/shadow colours are not yet
 supported.  The time in the upper left corner also doesn't seem to progress
+
 ![alt text](images/sega-genesis-sonic2-start.png)
 
 I'm not yet sure why the clouds in the background are cut off suddenly.  They
 change in a glitchy way when you move around
+
 ![alt text](images/sega-genesis-sonic2-bridge.png)
 
 There are some graphics glitches in Earthworm Jim, but it's almost playable if it
 wasn't for the 'jump' button, which only makes him jump a few pixels
+
 ![alt text](images/sega-genesis-earthworm-jim.png)
 
 
