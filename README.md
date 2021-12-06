@@ -74,14 +74,14 @@ changes that should be made while the screen is updating don't show up
 
 In the first one, it's mostly working but the bottom of the clouds should be a
 different colour.  Highlight/Shadow colours are not yet supported
-![alt text](sega-genesis-sonic2-start.png)
+![alt text](images/sega-genesis-sonic2-start.png)
 
 I'm not yet sure why the clouds in the background are cut off suddenly
-![alt text](sega-genesis-sonic2-bridge.png)
+![alt text](images/sega-genesis-sonic2-bridge.png)
 
 There are some graphics glitches in Earthworm Jim, but it's almost playable if it
 wasn't for the 'jump' button, which only makes him jump a few pixels
-![alt text](sega-genesis-earthworm-jim.png)
+![alt text](images/sega-genesis-earthworm-jim.png)
 
 
 General Options
