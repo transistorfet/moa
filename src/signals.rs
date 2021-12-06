@@ -19,16 +19,28 @@ impl<T: Copy> Signal<T> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Latch<T>(Rc<RefCell<T>>);
+#[derive(Clone)]
+//pub struct Register<T>(Rc<RefCell<T>>);
+pub struct Register<T>(Rc<RefCell<(T, Option<Box<dyn Fn(&T)>>)>>);
 
-impl<T> Latch<T> {
-    pub fn new(init: T) -> Latch<T> {
-        Latch(Rc::new(RefCell::new(init)))
+impl<T> Register<T> {
+    pub fn new(init: T) -> Register<T> {
+        Register(Rc::new(RefCell::new((init, None))))
     }
 
     pub fn borrow_mut(&self) -> RefMut<'_, T> {
-        self.0.borrow_mut()
+        RefMut::map(self.0.borrow_mut(), |v| &mut v.0)
+    }
+
+    pub fn set_observer<F>(&self, f: F) where F: Fn(&T) + 'static {
+        self.0.borrow_mut().1 = Some(Box::new(f));
+    }
+
+    pub fn notify(&self) {
+        let data = self.0.borrow();
+        if let Some(closure) = &data.1 {
+            closure(&data.0);
+        }
     }
 }
 
