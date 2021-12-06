@@ -418,9 +418,8 @@ impl Ym7101State {
 
         for cell_y in 0..cells_v {
             for cell_x in 0..cells_h {
-                let pattern_addr = self.get_pattern_addr(cell_table, cell_x as usize, cell_y as usize);
-                let pattern = read_beu16(&self.vram[pattern_addr..]);
-                self.draw_pattern(frame, pattern, (cell_x << 3) as u32, (cell_y << 3) as u32);
+                let pattern_w = read_beu16(&self.vram[self.get_pattern_addr(cell_table, cell_x as usize, cell_y as usize)..]);
+                self.draw_pattern(frame, pattern_w, (cell_x << 3) as u32, (cell_y << 3) as u32);
             }
         }
     }

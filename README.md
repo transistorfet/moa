@@ -15,8 +15,8 @@ For more detail, check out this post about how I started the project:
 [Making a 68000 Emulator in Rust](https://jabberwocky.ca/posts/2021-11-making_an_emulator.html)
 
 
-Running
--------
+Computie
+--------
 
 For Computie, it can do everything the 68k-SMT board can do, including run the
 monitor program and load the Computie OS kernel and boot it from the
@@ -32,6 +32,9 @@ host, and set up host routing.  The exact commands in
 `src/machines/computie.rs` might need to be adjusted to work on different
 hosts.
 
+TRS-80
+------
+
 For the TRS-80, it can run Level I or Level II Basic, but it doesn't yet
 support a cassette tape drive or floppy drive.  I haven't tested it that
 thoroughly either, so any help with it would be welcome.  I mostly made it to
@@ -40,15 +43,49 @@ Genesis emulator.  The frontend uses the
 [`minifb`](https://github.com/emoon/rust_minifb) rust crate to open a window
 and render the characters to screen, as well as accept input from the keyboard.
 ```
-cargo run -p moa-minifb --release --bin moa-trs-80 --
+cargo run -p moa-minifb --release --bin moa-trs-80
 ```
 By default it will start Level I Basic.  To use the other rom, add the option
 `--rom binaries/trs80/level2.rom`
 
-The Genesis emulator is a work in progress but can be run with:
+![alt text](images/trs-80-level-ii-basic.png)
+
+Sega Genesis/MegaDrive
+----------------------
+
+It can be run with:
 ```
-cargo run -p moa-minifb --release --bin moa-genesis
+cargo run -p moa-minifb --release --bin moa-genesis -- <ROM FILE>
 ```
+
+The Genesis emulator is a work in progress.  It can play a few games but some
+games won't run because the bank switching for the Z80 coprocessor is not
+working yet, and some games will hang waiting for the Z80 to respond.  For the
+video processor, the window layer is not drawn and the layer priority is not
+handled.  The horizontal scroll also doesn't work on a line-by-line basis so it
+tends to be quite jerky as you move, with the sprites and cells misaligned
+until you've moved one complete cell over (8x8 pixels).
+
+On the Sonic 2 title screen, the colours for Tails are wonky, probably because
+there's some trickery going on to get more than 16 colours per line, but the
+emulator currently renders the whole frame at once instead of line by line, so
+changes that should be made while the screen is updating don't show up
+![alt text](images/sega-genesis-sonic2-title.png)
+
+In the first one, it's mostly working but the bottom of the clouds should be a
+different colour.  Highlight/Shadow colours are not yet supported
+![alt text](sega-genesis-sonic2-start.png)
+
+I'm not yet sure why the clouds in the background are cut off suddenly
+![alt text](sega-genesis-sonic2-bridge.png)
+
+There are some graphics glitches in Earthworm Jim, but it's almost playable if it
+wasn't for the 'jump' button, which only makes him jump a few pixels
+![alt text](sega-genesis-earthworm-jim.png)
+
+
+General Options
+---------------
 
 By default, the minifb frontend will scale the window by 2.  This can be
 changed with the `--scale [1,2,4]` option.
