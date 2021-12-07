@@ -53,7 +53,6 @@ impl Transmutable for Z80 {
 }
 
 
-
 impl Z80 {
     pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
         match self.state.status {
@@ -62,7 +61,6 @@ impl Z80 {
             Status::Running => {
                 match self.cycle_one(system) {
                     Ok(()) => Ok(()),
-                    //Err(Error { err: ErrorType::Processor, native, .. }) => {
                     Err(Error { err: ErrorType::Processor, .. }) => {
                         //self.exception(system, native as u8, false)?;
                         Ok(())
@@ -80,30 +78,15 @@ impl Z80 {
     }
 
     pub fn cycle_one(&mut self, system: &System) -> Result<(), Error> {
-        //self.timer.cycle.start();
         self.decode_next()?;
         self.execute_current()?;
-        //self.timer.cycle.end();
-
-        //if (self.timer.cycle.events % 500) == 0 {
-        //    println!("{}", self.timer);
-        //}
-
         //self.check_pending_interrupts(system)?;
         self.check_breakpoints(system);
         Ok(())
     }
 
     pub fn decode_next(&mut self) -> Result<(), Error> {
-        //self.timer.decode.start();
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
-        //self.timer.decode.end();
-
-        //if self.debugger.use_tracing {
-            //self.decoder.dump_decoded(&mut self.port);
-            //self.dump_state();
-        //}
-
         self.state.pc = self.decoder.end;
         Ok(())
     }
@@ -329,24 +312,27 @@ impl Z80 {
                     Direction::ToAcc => { self.state.reg[Register::A as usize] = *addr; },
                 }
             }
-            //Instruction::LDD => {
-            //},
-            //Instruction::LDDR => {
-            //},
-            //Instruction::LDI => {
-            //},
-            Instruction::LDIR => {
+            Instruction::LDD | Instruction::LDDR | Instruction::LDI | Instruction::LDIR => {
+                let diff = if self.decoder.instruction == Instruction::LDI || self.decoder.instruction == Instruction::LDIR {
+                    1
+                } else {
+                    -1
+                };
+
                 let src_value = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))?;
                 self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::DE), src_value)?;
-                self.add_to_regpair(RegisterPair::DE, 1);
-                self.add_to_regpair(RegisterPair::HL, 1);
+                self.add_to_regpair(RegisterPair::DE, diff);
+                self.add_to_regpair(RegisterPair::HL, diff);
                 let count = self.add_to_regpair(RegisterPair::BC, -1);
-                if count != 0 {
-                    self.state.pc -= 2;
-                }
                 let mask = (Flags::AddSubtract as u8) | (Flags::HalfCarry as u8) | (Flags::Parity as u8);
                 let parity = if count != 0 { Flags::Parity as u8 } else { 0 };
                 self.set_flags(mask, parity);
+
+                if self.decoder.instruction == Instruction::LDIR || self.decoder.instruction == Instruction::LDDR {
+                    if count != 0 {
+                        self.state.pc -= 2;
+                    }
+                }
             },
             Instruction::NEG => {
                 let acc = self.get_register_value(Register::A);

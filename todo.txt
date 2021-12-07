@@ -1,4 +1,5 @@
 
+* add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
 * currently you need to implement the 1.5ms reset in the genesis controllers
 * should SharedData be HostData, or something else?  I don't think the name is very informative
 * can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
@@ -41,7 +42,7 @@ Genesis/Mega Drive:
     * make tests for each instruction
     * check all instructions in the docs
 
-    * unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, ILLEGAL, MOVEfromCCR,, RTR, RTD, SBCD, SUBX
+    * unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, ILLEGAL, RTR, RTD, SBCD, SUBX
     * >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
 
     * add support for MMU

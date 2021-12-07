@@ -100,6 +100,13 @@ General Options
 By default, the minifb frontend will scale the window by 2.  This can be
 changed with the `--scale [1,2,4]` option.
 
+The `-t` or `--threaded` options will run the simulated hardware in a separate
+thread from the frontend, which will run as fast as possible, faster than
+real-time.   By default, the simulated hardware is run inline with the frontend's
+update cycle, which is limited to 60Hz. The simulation will be run for 16.6ms of
+simulated time for each frame the frontend draws.  But the simulated time is not
+accurate and Sega Genesis games will run slower than they should.
+
 The `-d` or `--debugger` option will make the emulator start the debugger
 before running.  There is a simple built-in debugger for stepping through
 the rom instructions being emulated.  The state of the CPU registers will
