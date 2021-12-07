@@ -5,5 +5,6 @@ edition = "2018"
 default-run = "moa-computie"
 
 [dependencies]
-moa = { path = "../../", features = ["tty"] }
+moa = { path = "../../" }
+moa-common = { path = "../moa-common", features = ["tty"] }
 

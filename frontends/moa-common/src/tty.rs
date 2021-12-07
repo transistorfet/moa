@@ -3,14 +3,13 @@ use std::thread;
 use std::sync::mpsc;
 use std::time::Duration;
 use std::io::{Read, Write};
-use std::os::unix::io::AsRawFd;
 
 use nix::fcntl::OFlag;
 use nix::pty::{self, PtyMaster};
 use nix::fcntl::{fcntl, FcntlArg};
 
-use crate::error::Error;
-use crate::host::traits::Tty;
+use moa::error::Error;
+use moa::host::traits::Tty;
 
 
 pub struct SimplePty {

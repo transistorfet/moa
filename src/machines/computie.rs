@@ -9,7 +9,6 @@ use crate::peripherals::ata::AtaDevice;
 use crate::peripherals::mc68681::MC68681;
 
 use crate::host::traits::Host;
-use crate::host::tty::SimplePty;
 
 
 pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
@@ -27,8 +26,8 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
     let mut serial = MC68681::new();
-    launch_terminal_emulator(serial.port_a.connect(Box::new(SimplePty::open()?))?);
-    launch_slip_connection(serial.port_b.connect(Box::new(SimplePty::open()?))?);
+    launch_terminal_emulator(serial.port_a.connect(host.create_pty()?)?);
+    launch_slip_connection(serial.port_b.connect(host.create_pty()?)?);
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
@@ -65,8 +64,8 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
     let mut serial = MC68681::new();
-    launch_terminal_emulator(serial.port_a.connect(Box::new(SimplePty::open()?))?);
-    //launch_slip_connection(serial.port_b.connect(Box::new(SimplePty::open()?))?);
+    launch_terminal_emulator(serial.port_a.connect(host.create_pty()?)?);
+    //launch_slip_connection(serial.port_b.connect(host.create_pty()?)?);
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 

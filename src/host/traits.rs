@@ -6,10 +6,21 @@ use crate::host::keys::Key;
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
 
 pub trait Host {
-    //fn create_pty(&self) -> Result<Box<dyn Tty>, Error>;
-    fn add_window(&mut self, updater: Box<dyn WindowUpdater>) -> Result<(), Error>;
-    fn register_controller(&mut self, _device: ControllerDevice, _input: Box<dyn ControllerUpdater>) -> Result<(), Error> { Err(Error::new("Not supported")) }
-    fn register_keyboard(&mut self, _input: Box<dyn KeyboardUpdater>) -> Result<(), Error> { Err(Error::new("Not supported")) }
+    fn create_pty(&self) -> Result<Box<dyn Tty>, Error> {
+        Err(Error::new("This frontend doesn't support PTYs"))
+    }
+
+    fn add_window(&mut self, updater: Box<dyn WindowUpdater>) -> Result<(), Error> {
+        Err(Error::new("This frontend doesn't support windows"))
+    }
+
+    fn register_controller(&mut self, _device: ControllerDevice, _input: Box<dyn ControllerUpdater>) -> Result<(), Error> {
+        Err(Error::new("This frontend doesn't support game controllers"))
+    }
+
+    fn register_keyboard(&mut self, _input: Box<dyn KeyboardUpdater>) -> Result<(), Error> {
+        Err(Error::new("This frontend doesn't support the keyboard"))
+    }
 }
 
 pub trait Tty {
