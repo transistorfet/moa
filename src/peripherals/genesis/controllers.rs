@@ -3,7 +3,7 @@ use crate::error::Error;
 use crate::system::System;
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable};
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
-use crate::host::traits::{Host, ControllerUpdater, SharedData};
+use crate::host::traits::{Host, ControllerUpdater, HostData};
 
 
 const REG_VERSION: Address      = 0x01;
@@ -24,7 +24,7 @@ pub struct GenesisControllerPort {
     /// Data contains bits:
     /// 11 | 10 | 9 |    8 |     7 | 6 | 5 | 4 |     3 |    2 |    1 |  0
     ///  X |  Y | Z | MODE | START | A | C | B | RIGHT | LEFT | DOWN | UP
-    pub buttons: SharedData<u16>,
+    pub buttons: HostData<u16>,
 
     pub ctrl: u8,
     pub outputs: u8,
@@ -36,7 +36,7 @@ pub struct GenesisControllerPort {
 impl GenesisControllerPort {
     pub fn new() -> Self {
         Self {
-            buttons: SharedData::new(0xffff),
+            buttons: HostData::new(0xffff),
             ctrl: 0,
             outputs: 0,
             th_count: 0,
@@ -85,7 +85,7 @@ impl GenesisControllerPort {
     }
 }
 
-pub struct GenesisControllerUpdater(SharedData<u16>, SharedData<bool>);
+pub struct GenesisControllerUpdater(HostData<u16>, HostData<bool>);
 
 impl ControllerUpdater for GenesisControllerUpdater {
     fn update_controller(&mut self, event: ControllerEvent) {
@@ -116,7 +116,7 @@ pub struct GenesisController {
     pub port_1: GenesisControllerPort,
     pub port_2: GenesisControllerPort,
     pub expansion: GenesisControllerPort,
-    pub interrupt: SharedData<bool>,
+    pub interrupt: HostData<bool>,
     pub last_clock: Clock,
     pub last_write: Clock,
 }
@@ -127,7 +127,7 @@ impl GenesisController {
             port_1: GenesisControllerPort::new(),
             port_2: GenesisControllerPort::new(),
             expansion: GenesisControllerPort::new(),
-            interrupt: SharedData::new(false),
+            interrupt: HostData::new(false),
             last_clock: 0,
             last_write: 0,
         }
@@ -144,7 +144,7 @@ impl GenesisController {
         Ok(controller)
     }
 
-    pub fn get_interrupt_signal(&self) -> SharedData<bool> {
+    pub fn get_interrupt_signal(&self) -> HostData<bool> {
         self.interrupt.clone()
     }
 }

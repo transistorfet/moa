@@ -1,20 +1,22 @@
 
-* add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
-* currently you need to implement the 1.5ms reset in the genesis controllers
+* should you rename devices.rs traits.rs?
 * should SharedData be HostData, or something else?  I don't think the name is very informative
+* rewrite the frame swapper thing to either not use the swapper or somethnig... it's just very sloppy and needs improving
+
 * can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
   like specifying that address pins 10-7 should be ignored/unconnected, pin 11 will connect to "chip select", etc
+* can you make the address bus/repeating thing in the mac with the rom and ram, can you make it work for both the 128 and 512
 
-* movem still isn't working (for genesis)
-* fix movem tests
+* add sound
+* should you simulate bus arbitration?
+* interrupts could be done in a better way
+
 
 * modify the frame swapper and frontend to avoid the extra buffer copy
-* I had to remove the mask colour from blit because it doesn't work with the mac... need a new solution
+* add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
+* need to implement the 1.5ms reset in the genesis controllers
 
-* add more m68k tests and try to test against a working impl
-* maybe see about a Mac 128k or something
 
-* should you rename devices.rs traits.rs?
 
 
 
@@ -27,8 +29,8 @@
   So both could share the same Signal, one setting it and the other reading it, but how would you actually configure/build that?
 
 
+* add more m68k tests and try to test against a working impl
 * you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
-* should you simulate bus arbitration?
 
 
 Genesis/Mega Drive:
@@ -37,13 +39,14 @@ Genesis/Mega Drive:
     * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
 
 
+
 68000:
     * add instruction timing to M68k
     * make tests for each instruction
     * check all instructions in the docs
 
-    * unimplemented: ABCD, ADDX, BFFFO, BFINS, BKPT, CHK, ILLEGAL, RTR, RTD, SBCD, SUBX
-    * >=MC68020 undecoded & unimplemented: CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
+    * unimplemented:  BFFFO, BFINS, CHK, ILLEGAL, NBCD, NEGX, RTR, RTD
+    * >=MC68020 undecoded & unimplemented: BKPT, CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
 
     * add support for MMU
     * add support for FPU
@@ -53,6 +56,8 @@ Z80:
     * add instruction timings to Z80
 
 
+* work on mac128/512
+* work on sega genesis
 
 * how can you have multiple CPUs
 * can you eventually make the system connections all configurable via a config file?

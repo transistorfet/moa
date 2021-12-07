@@ -50,11 +50,11 @@ pub trait BlitableSurface {
 
 
 #[derive(Clone, Debug)]
-pub struct SharedData<T>(Arc<Mutex<T>>);
+pub struct HostData<T>(Arc<Mutex<T>>);
 
-impl<T> SharedData<T> {
-    pub fn new(init: T) -> SharedData<T> {
-        SharedData(Arc::new(Mutex::new(init)))
+impl<T> HostData<T> {
+    pub fn new(init: T) -> HostData<T> {
+        HostData(Arc::new(Mutex::new(init)))
     }
 
     pub fn lock(&self) -> MutexGuard<'_, T> {
@@ -62,7 +62,7 @@ impl<T> SharedData<T> {
     }
 }
 
-impl<T: Copy> SharedData<T> {
+impl<T: Copy> HostData<T> {
     pub fn set(&mut self, value: T) {
         *(self.0.lock().unwrap()) = value;
     }
