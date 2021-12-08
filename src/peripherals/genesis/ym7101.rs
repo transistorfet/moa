@@ -539,14 +539,14 @@ impl<'a> Iterator for PatternIterator<'a> {
 
 
 pub struct Ym7101 {
-    pub swapper: Arc<Mutex<FrameSwapper>>,
+    pub swapper: FrameSwapper,
     pub state: Ym7101State,
     pub external_interrupt: HostData<bool>,
 }
 
 impl Ym7101 {
     pub fn new<H: Host>(host: &mut H, external_interrupt: HostData<bool>) -> Ym7101 {
-        let swapper = FrameSwapper::new_shared(320, 224);
+        let swapper = FrameSwapper::new(320, 224);
 
         host.add_window(FrameSwapper::to_boxed(swapper.clone())).unwrap();
 
@@ -607,12 +607,12 @@ impl Steppable for Ym7101 {
                 system.get_interrupt_controller().set(true, 6, 30)?;
             }
 
-            let mut swapper = self.swapper.lock().unwrap();
-            self.state.draw_frame(&mut swapper.current);
+            let mut frame = self.swapper.current.lock().unwrap();
+            self.state.draw_frame(&mut frame);
 
-            //let mut swapper = self.swapper.lock().unwrap();
+            //let mut frame = self.swapper.current.lock().unwrap();
             //let iter = PatternIterator::new(&self.state, 0x260, 0, true, true);
-            //swapper.current.blit(0, 0, iter, 8, 8);
+            //frame.blit(0, 0, iter, 8, 8);
 
             /*
             // Print Palette
@@ -623,13 +623,13 @@ impl Steppable for Ym7101 {
 
             /*
             // Print Pattern Table
-            let mut swapper = self.swapper.lock().unwrap();
+            let mut frame = self.swapper.current.lock().unwrap();
             let (cells_h, cells_v) = self.state.get_screen_size();
             for cell_y in 0..cells_v {
                 for cell_x in 0..cells_h {
                     let pattern_addr = (cell_x + (cell_y * cells_h)) * 32;
                     let iter = PatternIterator::new(&self.state, pattern_addr as u32, 0, false, false);
-                    swapper.current.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
+                    frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
                 }
             }
             */
@@ -637,8 +637,8 @@ impl Steppable for Ym7101 {
 
             /*
             // Print Sprite
-            let mut swapper = self.swapper.lock().unwrap();
-            self.state.draw_background(&mut swapper.current);
+            let mut frame = self.swapper.current.lock().unwrap();
+            self.state.draw_background(&mut frame);
             let sprite_table = self.get_vram_sprites_addr();
             let (cells_h, cells_v) = self.state.get_screen_size();
             let sprite = 0;
@@ -654,18 +654,18 @@ impl Steppable for Ym7101 {
                     let pattern_addr = (pattern_gen + (cell_y * size_h) + cell_x) as u32;
                     println!("pattern: ({}, {}) {:x}", cell_x, cell_y, pattern_addr);
                     let iter = PatternIterator::new(&self.state, pattern_addr * 32, 3, true, true);
-                    swapper.current.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
+                    frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
                 }
             }
             */
 
-            //let mut swapper = self.swapper.lock().unwrap();
-            //swapper.current.blit(0, 0, PatternIterator::new(&self.state, 0x408 * 32, 3, false, false), 8, 8);
-            //swapper.current.blit(0, 8, PatternIterator::new(&self.state, 0x409 * 32, 3, false, false), 8, 8);
-            //swapper.current.blit(8, 0, PatternIterator::new(&self.state, 0x402 * 32, 3, false, false), 8, 8);
-            //swapper.current.blit(8, 8, PatternIterator::new(&self.state, 0x403 * 32, 3, false, false), 8, 8);
-            //swapper.current.blit(16, 0, PatternIterator::new(&self.state, 0x404 * 32, 3, false, false), 8, 8);
-            //swapper.current.blit(16, 8, PatternIterator::new(&self.state, 0x405 * 32, 3, false, false), 8, 8);
+            //let mut frame = self.swapper.current.lock().unwrap();
+            //frame.blit(0, 0, PatternIterator::new(&self.state, 0x408 * 32, 3, false, false), 8, 8);
+            //frame.blit(0, 8, PatternIterator::new(&self.state, 0x409 * 32, 3, false, false), 8, 8);
+            //frame.blit(8, 0, PatternIterator::new(&self.state, 0x402 * 32, 3, false, false), 8, 8);
+            //frame.blit(8, 8, PatternIterator::new(&self.state, 0x403 * 32, 3, false, false), 8, 8);
+            //frame.blit(16, 0, PatternIterator::new(&self.state, 0x404 * 32, 3, false, false), 8, 8);
+            //frame.blit(16, 8, PatternIterator::new(&self.state, 0x405 * 32, 3, false, false), 8, 8);
         }
 
         if self.state.transfer_run != DmaType::None && (self.state.mode_2 & MODE2_BF_DMA_ENABLED) != 0 {

@@ -6,7 +6,7 @@ use crate::system::System;
 use crate::devices::{ClockElapsed, Address, Addressable, Steppable, Transmutable};
 
 use crate::host::keys::Key;
-use crate::host::gfx::{FrameSwapper};
+use crate::host::gfx::{Frame};
 use crate::host::traits::{Host, BlitableSurface, KeyboardUpdater};
 
 use super::keymap;
@@ -16,21 +16,21 @@ use super::charset::CharacterGenerator;
 const DEV_NAME: &'static str = "model1";
 
 pub struct Model1Peripherals {
-    pub swapper: Arc<Mutex<FrameSwapper>>,
+    pub frame: Arc<Mutex<Frame>>,
     pub keyboard_mem: Arc<Mutex<[u8; 8]>>,
     pub video_mem: [u8; 1024],
 }
 
 impl Model1Peripherals {
     pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let swapper = FrameSwapper::new_shared(384, 128);
+        let frame = Frame::new_shared(384, 128);
         let keyboard_mem = Arc::new(Mutex::new([0; 8]));
 
-        host.add_window(FrameSwapper::to_boxed(swapper.clone()))?;
+        host.add_window(Frame::new_updater(frame.clone()))?;
         host.register_keyboard(Box::new(Model1KeyboardUpdater(keyboard_mem.clone())))?;
 
         Ok(Self {
-            swapper,
+            frame,
             keyboard_mem,
             video_mem: [0; 1024],
         })
@@ -48,13 +48,13 @@ impl KeyboardUpdater for Model1KeyboardUpdater {
 
 impl Steppable for Model1Peripherals {
     fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
-        let mut swapper = self.swapper.lock().unwrap();
-        swapper.current.clear(0);
+        let mut frame = self.frame.lock().unwrap();
+        frame.clear(0);
         for y in 0..16 {
             for x in 0..64 {
                 let ch = self.video_mem[x + (y * 64)];
                 let iter = CharacterGenerator::new((ch - 0x20) % 64);
-                swapper.current.blit((x * 6) as u32, (y * 8) as u32, iter, 6, 8);
+                frame.blit((x * 6) as u32, (y * 8) as u32, iter, 6, 8);
             }
         }
 

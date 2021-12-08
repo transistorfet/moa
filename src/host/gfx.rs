@@ -11,6 +11,21 @@ pub struct Frame {
     pub bitmap: Vec<u32>,
 }
 
+impl Frame {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self { width, height, bitmap: vec![0; (width * height) as usize] }
+    }
+
+    pub fn new_shared(width: u32, height: u32) -> Arc<Mutex<Frame>> {
+        Arc::new(Mutex::new(Frame::new(width, height)))
+    }
+
+    pub fn new_updater(frame: Arc<Mutex<Frame>>) -> Box<dyn WindowUpdater> {
+        Box::new(FrameUpdateWrapper(frame))
+    }
+}
+
+
 impl BlitableSurface for Frame {
     fn set_size(&mut self, width: u32, height: u32) {
         self.width = width;
@@ -38,55 +53,65 @@ impl BlitableSurface for Frame {
     }
 }
 
+pub struct FrameUpdateWrapper(Arc<Mutex<Frame>>);
 
-pub struct FrameSwapper {
-    pub current: Frame,
-    //pub previous: Frame,
-}
-
-impl FrameSwapper {
-    pub fn new(width: u32, height: u32) -> FrameSwapper {
-        FrameSwapper {
-            current: Frame { width, height, bitmap: vec![0; (width * height) as usize] },
-            //previous: Frame { width, height, bitmap: vec![0; (width * height) as usize] },
+impl WindowUpdater for FrameUpdateWrapper {
+    fn get_size(&mut self) -> (u32, u32) {
+        match  self.0.lock() {
+            Ok(frame) => (frame.width, frame.height),
+            _ => (0, 0),
         }
     }
 
-    pub fn new_shared(width: u32, height: u32) -> Arc<Mutex<FrameSwapper>> {
-        Arc::new(Mutex::new(FrameSwapper::new(width, height)))
-    }
-
-    pub fn to_boxed(swapper: Arc<Mutex<FrameSwapper>>) -> Box<dyn WindowUpdater> {
-        Box::new(FrameSwapperWrapper(swapper))
-    }
-}
-
-impl WindowUpdater for FrameSwapper {
-    fn get_size(&mut self) -> (u32, u32) {
-        (self.current.width, self.current.height)
-    }
-
     fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
-        //std::mem::swap(&mut self.current, &mut self.previous);
-
-        for y in 0..self.current.height {
-            for x in 0..self.current.width {
-                bitmap[(x + (y * width)) as usize] = self.current.bitmap[(x + (y * self.current.width)) as usize];
+        if let Ok(frame) = self.0.lock() {
+            for y in 0..frame.height {
+                for x in 0..frame.width {
+                    bitmap[(x + (y * width)) as usize] = frame.bitmap[(x + (y * frame.width)) as usize];
+                }
             }
         }
     }
 }
 
-pub struct FrameSwapperWrapper(Arc<Mutex<FrameSwapper>>);
 
-impl WindowUpdater for FrameSwapperWrapper {
-    fn get_size(&mut self) -> (u32, u32) {
-        self.0.lock().map(|mut swapper| swapper.get_size()).unwrap_or((0, 0))
+#[derive(Clone)]
+pub struct FrameSwapper {
+    pub current: Arc<Mutex<Frame>>,
+    pub previous: Arc<Mutex<Frame>>,
+}
+
+impl FrameSwapper {
+    pub fn new(width: u32, height: u32) -> FrameSwapper {
+        FrameSwapper {
+            current: Arc::new(Mutex::new(Frame::new(width, height))),
+            previous: Arc::new(Mutex::new(Frame::new(width, height))),
+        }
     }
 
-    fn update_frame(&mut self, width: u32, height: u32, bitmap: &mut [u32]) {
-        if let Ok(mut swapper) = self.0.lock() {
-            swapper.update_frame(width, height, bitmap);
+    pub fn to_boxed(swapper: FrameSwapper) -> Box<dyn WindowUpdater> {
+        Box::new(swapper)
+    }
+}
+
+impl WindowUpdater for FrameSwapper {
+    fn get_size(&mut self) -> (u32, u32) {
+        if let Ok(frame) = self.current.lock() {
+            (frame.width, frame.height)
+        } else {
+            (0, 0)
+        }
+    }
+
+    fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
+        std::mem::swap(&mut self.current.lock().unwrap().bitmap, &mut self.previous.lock().unwrap().bitmap);
+
+        if let Ok(frame) = self.previous.lock() {
+            for y in 0..frame.height {
+                for x in 0..frame.width {
+                    bitmap[(x + (y * width)) as usize] = frame.bitmap[(x + (y * frame.width)) as usize];
+                }
+            }
         }
     }
 }

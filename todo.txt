@@ -1,48 +1,66 @@
 
+* I'm trying to explore the alternative of having the frontend call a function and pass a closure that takes a frame (or buffer) and then draws
+  calls the update function from there...
+* you can't put a closure into the WindowUpdate trait because you pass it in as Box<dyn WindowUpdater> which is a trait object, and you
+  can't mix generics and trait objects...
+* you could maybe pass a closure in if you pass the updater as a generic WindowUpdater, although then you can only have one per application
+* you could have a shared buffer that you submit to the frontend, and you both update it whenever (less synchronized which might not be good)
+* you could make the sound device be an object that is passed back to the simulation section like SimplePty.  You need to either register
+  a callback with the frontend sound system that is called when it needs data, or you write to a shared buffer which is passed back to the
+  frontend when it needs it, or it has a copy it can use directly
+
+* can you make some kind of signal that goes high when a frame has been drawn, and also all the system to pause execution at that point
+
+* for Signal/Register, you could possibly unify them, or you could distinguish them even more
+* should you rename Register to AsyncSignal or something
+* copy the callback over to Signal, or even make a trait that implements it for both?  Or should you make a special object that is observable
+  which should always use the callback, and Signal would always be used when the callback wasn't used
+* think more about what kinds of signals are used:
+    - one setter with multiple passive listeners
+    - one one-shot setter (no reset) with one active listener that resets the signal
+    - 
+
+* add sound
 * should you rename devices.rs traits.rs?
-* should SharedData be HostData, or something else?  I don't think the name is very informative
 * rewrite the frame swapper thing to either not use the swapper or somethnig... it's just very sloppy and needs improving
+* modify the frame swapper and frontend to avoid the extra buffer copy
+* add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
 
 * can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
   like specifying that address pins 10-7 should be ignored/unconnected, pin 11 will connect to "chip select", etc
-* can you make the address bus/repeating thing in the mac with the rom and ram, can you make it work for both the 128 and 512
 
-* add sound
+
 * should you simulate bus arbitration?
 * interrupts could be done in a better way
-
-
-* modify the frame swapper and frontend to avoid the extra buffer copy
-* add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
-* need to implement the 1.5ms reset in the genesis controllers
-
-
-
-
-
-* how can you do devices that change their address map during operation, like mac which puts rom at 0 and ram at 600000 temporarily 
-* i need a better way of handling disperate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
+* need a better way of handling disparate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
 * should you modify Addressable to also take the absolute address as input?  I'm thinking of how the same device could be mapped to multiple addresses in memory instead
   of taking up a whole range of addresses
-* could have a remapper device, which takes a big swath of addresses in and maps them to another set of addresses (for Mac VIA generic to bus-hookup-in-mac adapter)
-* could you use a generic sharable signal thing for sharing data, such as the VIA in mac128 where a single output bit determines the video mode (which would be a separate device)
-  So both could share the same Signal, one setting it and the other reading it, but how would you actually configure/build that?
-
-
-* add more m68k tests and try to test against a working impl
 * you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
 
 
+Debugger:
+
+    * how can you improve the debugger?
+    * the command line definitely needs to be fixed so it prints the prompt correctly
+    * debugger could maybe even allows arrows left/right for editing, and up/down for history
+
+
 Genesis/Mega Drive:
+
+    * need to implement the 1.5ms reset in the genesis controllers
     * fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
-    * YM7101 timing is causing it to be very slow... speeding this up increasing rendering speed a lot, even though the frame shouldn't be drawn that often... not sure what's wrong with the timing
     * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
 
 
+Macintosh:
+
+    * issues when booting the rom, attempt to write to rom during the driver init/open phase
+    * for the address bus/repeating thing in the mac with the rom and ram, can you make it work for both the 128 and 512
+
 
 68000:
+
     * add instruction timing to M68k
-    * make tests for each instruction
     * check all instructions in the docs
 
     * unimplemented:  BFFFO, BFINS, CHK, ILLEGAL, NBCD, NEGX, RTR, RTD
@@ -52,13 +70,15 @@ Genesis/Mega Drive:
     * add support for FPU
     * Coprocessor instructions: cpBcc, cpDBcc, cpGEN, cpScc, cpTRAPcc
 
+    * add more m68k tests and try to test against a working impl (m68k-test-suite project)
+
+
 Z80:
     * add instruction timings to Z80
+    * unimplemented: CPD, CPDR, CPI, CPIR, DAA, IND, INDR, INI, INIR, INic, INx, OTDR, OTIR, OUTD, OUTI, OUTic, OUTx, RETI, RETN, RLD, RRD
 
 
 * work on mac128/512
 * work on sega genesis
-
-* how can you have multiple CPUs
 * can you eventually make the system connections all configurable via a config file?
 
