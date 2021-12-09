@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use crate::memory::Bus;
 use crate::debugger::Debugger;
+use crate::signals::EdgeSignal;
 use crate::error::{Error, ErrorType};
 use crate::interrupts::InterruptController;
 use crate::devices::{Clock, ClockElapsed, Address, TransmutableBox};
@@ -20,6 +21,8 @@ pub struct System {
 
     pub bus: Rc<RefCell<Bus>>,
     pub interrupt_controller: RefCell<InterruptController>,
+
+    pub break_signal: Option<EdgeSignal>,
 }
 
 impl System {
@@ -34,6 +37,8 @@ impl System {
 
             bus: Rc::new(RefCell::new(Bus::new())),
             interrupt_controller: RefCell::new(InterruptController::new()),
+
+            break_signal: None,
         }
     }
 
@@ -78,7 +83,7 @@ impl System {
         self.debug_enabled.set(false);
     }
 
-    pub fn step(&mut self) -> Result<(), Error> {
+    fn process_one_event(&mut self) -> Result<(), Error> {
         let mut event_device = self.event_queue.pop().unwrap();
         self.clock = event_device.next_clock;
         let result = match event_device.device.borrow_mut().as_steppable().unwrap().step(&self) {
@@ -92,26 +97,43 @@ impl System {
         result
     }
 
+    pub fn step(&mut self) -> Result<(), Error> {
+        if self.debug_enabled.get() && self.event_queue[self.event_queue.len() - 1].device.borrow_mut().as_debuggable().is_some() {
+            self.debugger.borrow_mut().run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone());
+        }
+
+        match self.process_one_event() {
+            Ok(()) => { }
+            Err(err) if err.err == ErrorType::Breakpoint => {
+                println!("Breakpoint reached: {}", err.msg);
+                self.enable_debugging();
+            },
+            Err(err) => {
+                self.exit_error();
+                println!("{:?}", err);
+                return Err(err);
+            },
+        }
+        Ok(())
+    }
+
     pub fn run_for(&mut self, elapsed: ClockElapsed) -> Result<(), Error> {
         let target = self.clock + elapsed;
 
         while self.clock < target {
-            if self.debug_enabled.get() && self.event_queue[self.event_queue.len() - 1].device.borrow_mut().as_debuggable().is_some() {
-                self.debugger.borrow_mut().run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone());
-            }
+            self.step()?;
+        }
+        Ok(())
+    }
 
-            match self.step() {
-                Ok(()) => { }
-                Err(err) if err.err == ErrorType::Breakpoint => {
-                    println!("Breakpoint reached: {}", err.msg);
-                    self.enable_debugging();
-                },
-                Err(err) => {
-                    self.exit_error();
-                    println!("{:?}", err);
-                    return Err(err);
-                },
-            }
+    pub fn run_until_break(&mut self) -> Result<(), Error> {
+        let mut signal = match &self.break_signal {
+            Some(signal) => signal.clone(),
+            None => return Ok(()),
+        };
+
+        while !signal.get() {
+            self.step()?;
         }
         Ok(())
     }

@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::signals::Signal;
+use crate::signals::{Signal, Observable};
 use crate::memory::{MemoryBlock, Bus, BusPort};
 use crate::devices::{wrap_transmutable, Address, Addressable, Debuggable};
 
@@ -95,8 +95,8 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     system.add_addressable_device(0x00a11000, wrap_transmutable(coproc)).unwrap();
 
     let vdp = genesis::ym7101::Ym7101::new(host, interrupt);
+    system.break_signal = Some(vdp.frame_complete.clone());
     system.add_peripheral("vdp", 0x00c00000, wrap_transmutable(vdp)).unwrap();
-
 
     let mut cpu = M68k::new(M68kType::MC68000, 7_670_454, BusPort::new(0, 24, 16, system.bus.clone()));
     system.add_interruptable_device("cpu", wrap_transmutable(cpu)).unwrap();

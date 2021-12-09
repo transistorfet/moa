@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::signals::{Signal, Register};
+use crate::signals::{Signal, ObservableSignal, Observable};
 use crate::devices::{ClockElapsed, Address, Addressable, Steppable, Transmutable};
 
 
@@ -34,8 +34,8 @@ impl Port {
 
 
 pub struct Mos6522 {
-    pub port_a: Register<Port>,
-    pub port_b: Register<Port>,
+    pub port_a: ObservableSignal<Port>,
+    pub port_b: ObservableSignal<Port>,
     pub peripheral_ctrl: u8,
     pub interrupt: Signal<bool>,
     pub interrupt_flags: u8,
@@ -45,8 +45,8 @@ pub struct Mos6522 {
 impl Mos6522 {
     pub fn new() -> Self {
         Self {
-            port_a: Register::new(Port::new()),
-            port_b: Register::new(Port::new()),
+            port_a: ObservableSignal::new(Port::new()),
+            port_b: ObservableSignal::new(Port::new()),
             peripheral_ctrl: 0,
             interrupt: Signal::new(false),
             interrupt_flags: 0,

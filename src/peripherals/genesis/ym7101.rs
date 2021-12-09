@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use crate::error::Error;
 use crate::system::System;
 use crate::memory::dump_slice;
+use crate::signals::{Signal, EdgeSignal};
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, read_beu16, read_beu32, write_beu16};
 use crate::host::traits::{Host, BlitableSurface, HostData};
 use crate::host::gfx::{Frame, FrameSwapper};
@@ -542,6 +543,7 @@ pub struct Ym7101 {
     pub swapper: FrameSwapper,
     pub state: Ym7101State,
     pub external_interrupt: HostData<bool>,
+    pub frame_complete: EdgeSignal,
 }
 
 impl Ym7101 {
@@ -554,6 +556,7 @@ impl Ym7101 {
             swapper,
             state: Ym7101State::new(),
             external_interrupt,
+            frame_complete: EdgeSignal::new(),
         }
     }
 }
@@ -602,7 +605,7 @@ impl Steppable for Ym7101 {
         }
         if self.state.v_clock > 16_630_000 {
             self.state.status &= !STATUS_IN_VBLANK;
-            self.state.v_clock = 0;
+            self.state.v_clock -= 16_630_000;
             if self.state.vsync_int_enabled() {
                 system.get_interrupt_controller().set(true, 6, 30)?;
             }
@@ -666,6 +669,8 @@ impl Steppable for Ym7101 {
             //frame.blit(8, 8, PatternIterator::new(&self.state, 0x403 * 32, 3, false, false), 8, 8);
             //frame.blit(16, 0, PatternIterator::new(&self.state, 0x404 * 32, 3, false, false), 8, 8);
             //frame.blit(16, 8, PatternIterator::new(&self.state, 0x405 * 32, 3, false, false), 8, 8);
+
+            self.frame_complete.signal();
         }
 
         if self.state.transfer_run != DmaType::None && (self.state.mode_2 & MODE2_BF_DMA_ENABLED) != 0 {

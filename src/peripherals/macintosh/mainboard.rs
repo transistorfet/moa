@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use crate::memory::Bus;
 use crate::error::Error;
 use crate::system::System;
-use crate::signals::Signal;
+use crate::signals::{Signal, Observable};
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 use crate::peripherals::z8530::Z8530;
