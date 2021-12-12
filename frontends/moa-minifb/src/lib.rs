@@ -8,8 +8,10 @@ use clap::{App, ArgMatches};
 
 use moa::error::Error;
 use moa::system::System;
-use moa::host::traits::{Host, ControllerUpdater, KeyboardUpdater, WindowUpdater};
+use moa::host::traits::{Host, HostData, ControllerUpdater, KeyboardUpdater, WindowUpdater, Audio};
 use moa::host::controllers::{ControllerDevice, ControllerEvent};
+
+use moa_common::audio::{AudioOutput, AudioMixer, AudioSource};
 
 mod keys;
 mod controllers;
@@ -77,6 +79,7 @@ pub struct MiniFrontendBuilder {
     pub window: Option<Box<dyn WindowUpdater>>,
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
+    pub mixer: Option<HostData<AudioMixer>>,
     pub finalized: bool,
 }
 
@@ -86,6 +89,7 @@ impl MiniFrontendBuilder {
             window: None,
             controller: None,
             keyboard: None,
+            mixer: Some(AudioMixer::new_default()),
             finalized: false,
         }
     }
@@ -98,7 +102,8 @@ impl MiniFrontendBuilder {
         let window = std::mem::take(&mut self.window);
         let controller = std::mem::take(&mut self.controller);
         let keyboard = std::mem::take(&mut self.keyboard);
-        MiniFrontend::new(window, controller, keyboard)
+        let mixer = std::mem::take(&mut self.mixer);
+        MiniFrontend::new(window, controller, keyboard, mixer.unwrap())
     }
 }
 
@@ -130,6 +135,11 @@ impl Host for MiniFrontendBuilder {
         self.keyboard = Some(input);
         Ok(())
     }
+
+    fn create_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
+        let source = AudioSource::new(self.mixer.as_ref().unwrap().clone());
+        Ok(Box::new(source))
+    }
 }
 
 
@@ -139,16 +149,18 @@ pub struct MiniFrontend {
     pub window: Option<Box<dyn WindowUpdater>>,
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
+    pub audio: AudioOutput,
 }
 
 impl MiniFrontend {
-    pub fn new(window: Option<Box<dyn WindowUpdater>>, controller: Option<Box<dyn ControllerUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>) -> Self {
+    pub fn new(window: Option<Box<dyn WindowUpdater>>, controller: Option<Box<dyn ControllerUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>, mixer: HostData<AudioMixer>) -> Self {
         Self {
             buffer: vec![0; (WIDTH * HEIGHT) as usize],
             modifiers: 0,
             window,
             controller,
             keyboard,
+            audio: AudioOutput::create_audio_output(mixer),
         }
     }
 
@@ -187,6 +199,7 @@ impl MiniFrontend {
         while window.is_open() && !window.is_key_down(Key::Escape) {
             if let Some(system) = system.as_mut() {
                 system.run_for(16_600_000).unwrap();
+                //system.run_until_break().unwrap();
             }
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::No) {

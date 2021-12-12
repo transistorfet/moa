@@ -5,8 +5,10 @@ edition = "2018"
 
 [features]
 tty = ["nix"]
+audio = ["cpal"]
 
 [dependencies]
 moa = { path = "../../" }
 nix = { version = "0.23", optional = true }
+cpal = { version = "0.13", optional = true }
 

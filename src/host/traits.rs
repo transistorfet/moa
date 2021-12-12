@@ -10,7 +10,7 @@ pub trait Host {
         Err(Error::new("This frontend doesn't support PTYs"))
     }
 
-    fn add_window(&mut self, updater: Box<dyn WindowUpdater>) -> Result<(), Error> {
+    fn add_window(&mut self, _updater: Box<dyn WindowUpdater>) -> Result<(), Error> {
         Err(Error::new("This frontend doesn't support windows"))
     }
 
@@ -21,7 +21,12 @@ pub trait Host {
     fn register_keyboard(&mut self, _input: Box<dyn KeyboardUpdater>) -> Result<(), Error> {
         Err(Error::new("This frontend doesn't support the keyboard"))
     }
+
+    fn create_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
+        Err(Error::new("This frontend doesn't support the sound"))
+    }
 }
+
 
 pub trait Tty {
     fn device_name(&self) -> String;
@@ -32,6 +37,7 @@ pub trait Tty {
 pub trait WindowUpdater: Send {
     fn get_size(&mut self) -> (u32, u32);
     fn update_frame(&mut self, width: u32, height: u32, bitmap: &mut [u32]);
+    //fn update_frame(&mut self, draw_buffer: &mut dyn FnMut(u32, u32, &[u32]));
 }
 
 pub trait ControllerUpdater: Send {
@@ -40,6 +46,11 @@ pub trait ControllerUpdater: Send {
 
 pub trait KeyboardUpdater: Send {
     fn update_keyboard(&mut self, key: Key, state: bool);
+}
+
+pub trait Audio {
+    fn samples_per_second(&self) -> usize;
+    fn write_samples(&mut self, samples: usize, iter: &mut Iterator<Item=f32>);
 }
 
 pub trait BlitableSurface {

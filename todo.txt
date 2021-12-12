@@ -1,33 +1,28 @@
 
-* I'm trying to explore the alternative of having the frontend call a function and pass a closure that takes a frame (or buffer) and then draws
-  calls the update function from there...
-* you can't put a closure into the WindowUpdate trait because you pass it in as Box<dyn WindowUpdater> which is a trait object, and you
-  can't mix generics and trait objects...
-* you could maybe pass a closure in if you pass the updater as a generic WindowUpdater, although then you can only have one per application
-* you could have a shared buffer that you submit to the frontend, and you both update it whenever (less synchronized which might not be good)
+* for the mixer, it might be easier to have a buffer for each source, but then you'd need to have a list of all sources, even though
+  each source has a copy of the mixer as well... Likely there'd be a sub object in Source which is the buffer and anything else needed
+  by the mixer
+
+* I'm leaning towards having an object that data is written to by the device.  The device can decide how often to update.  The issue is
+  knowing what data to exclude or insert when mixing the incoming buffers
+* Removing at a sample-level granularity would compress or lengthen the waveforms, so it would be better to mix/drop a whole chunk at
+  once (either predetermined by the audio system or determined by each device by the amount of samples it writes at once).  The chunk
+  size could either be specified by the device in microseconds or something, or can be inferred by the sample_rate and the size of the
+  chunk.
+
+* how do you know how big an audio frame should be?  How do other emulators do audio without stretching or compressing the waveforms, and
+  can/should I do mixing as well, given that I have 2 sources, and at least for those two, they should be connected to the same output
 * you could make the sound device be an object that is passed back to the simulation section like SimplePty.  You need to either register
   a callback with the frontend sound system that is called when it needs data, or you write to a shared buffer which is passed back to the
   frontend when it needs it, or it has a copy it can use directly
 
-* can you make some kind of signal that goes high when a frame has been drawn, and also all the system to pause execution at that point
-
-* for Signal/Register, you could possibly unify them, or you could distinguish them even more
-* should you rename Register to AsyncSignal or something
-* copy the callback over to Signal, or even make a trait that implements it for both?  Or should you make a special object that is observable
-  which should always use the callback, and Signal would always be used when the callback wasn't used
-* think more about what kinds of signals are used:
-    - one setter with multiple passive listeners
-    - one one-shot setter (no reset) with one active listener that resets the signal
-    - 
-
 * add sound
 * should you rename devices.rs traits.rs?
-* rewrite the frame swapper thing to either not use the swapper or somethnig... it's just very sloppy and needs improving
-* modify the frame swapper and frontend to avoid the extra buffer copy
 * add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
 
 * can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
   like specifying that address pins 10-7 should be ignored/unconnected, pin 11 will connect to "chip select", etc
+* should you add a unique ID to devices, such that they can be indexed, and their step functions can reset the next_run count and run them immediately
 
 
 * should you simulate bus arbitration?
@@ -47,9 +42,15 @@ Debugger:
 
 Genesis/Mega Drive:
 
+    * the 68000/Z80 bank switching is probably buggy, and there's that other banking stuff in the 0xC00000 range, which isn't implemented at all
+    * add support for the H/V counters at 0xC00008
     * need to implement the 1.5ms reset in the genesis controllers
     * fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
     * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
+    * refactor to allow per-line horizontal scrolling, which might need a pattern iterator than only does a line at a time
+    * refactor ym7101 into multiple files perhaps.  You can separate the DMA stuff, the address/interfacing parts, and the graphics state
+    * fix sprite/cell priorities so that they're drawn correctly
+    * add support for the sprite overflow flag (low priority)
 
 
 Macintosh:

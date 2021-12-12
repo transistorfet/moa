@@ -57,7 +57,7 @@ pub struct FrameUpdateWrapper(Arc<Mutex<Frame>>);
 
 impl WindowUpdater for FrameUpdateWrapper {
     fn get_size(&mut self) -> (u32, u32) {
-        match  self.0.lock() {
+        match self.0.lock() {
             Ok(frame) => (frame.width, frame.height),
             _ => (0, 0),
         }

@@ -10,8 +10,8 @@ use crate::devices::{wrap_transmutable, Address, Addressable, Debuggable};
 
 use crate::cpus::m68k::{M68k, M68kType};
 use crate::cpus::z80::{Z80, Z80Type};
-use crate::peripherals::ym2612::YM2612;
-use crate::peripherals::sn76489::SN76489;
+use crate::peripherals::ym2612::Ym2612;
+use crate::peripherals::sn76489::Sn76489;
 use crate::peripherals::genesis;
 use crate::peripherals::genesis::coprocessor::{CoprocessorBankRegister, CoprocessorBankArea};
 
@@ -63,8 +63,8 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     // Build the Coprocessor's Bus
     let bank_register = Signal::new(0);
     let coproc_ram = wrap_transmutable(MemoryBlock::new(vec![0; 0x00002000]));
-    let coproc_ym_sound = wrap_transmutable(YM2612::new());
-    let coproc_sn_sound = wrap_transmutable(SN76489::new());
+    let coproc_ym_sound = wrap_transmutable(Ym2612::create(host)?);
+    let coproc_sn_sound = wrap_transmutable(Sn76489::create(host)?);
     let coproc_register = wrap_transmutable(CoprocessorBankRegister::new(bank_register.clone()));
     let coproc_area = wrap_transmutable(CoprocessorBankArea::new(bank_register, system.bus.clone()));
 
@@ -75,8 +75,10 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
     coproc_bus.borrow_mut().insert(0x8000, coproc_area);
     let coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus.clone()));
-    let reset = coproc.reset.clone();
-    let bus_request = coproc.bus_request.clone();
+    let mut reset = coproc.reset.clone();
+    let mut bus_request = coproc.bus_request.clone();
+    reset.set(true);
+    bus_request.set(true);
 
     // Add coprocessor devices to the system bus so the 68000 can access them too
     system.add_addressable_device(0x00a00000, coproc_ram)?;
@@ -84,7 +86,6 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     system.add_addressable_device(0x00a06000, coproc_register)?;
     system.add_addressable_device(0x00c00010, coproc_sn_sound)?;
     system.add_device("coproc", wrap_transmutable(coproc))?;
-
 
 
     let controllers = genesis::controllers::GenesisController::create(host)?;
