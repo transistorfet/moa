@@ -130,7 +130,7 @@ impl Z80 {
     }
 
     #[allow(dead_code)]
-    pub fn reset(&mut self) {
+    pub fn clear_state(&mut self) {
         self.state = Z80State::new();
         self.decoder = Z80Decoder::new();
         self.debugger = Z80Debugger::new();

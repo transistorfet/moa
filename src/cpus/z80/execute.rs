@@ -22,12 +22,15 @@ enum RotateType {
 
 impl Steppable for Z80 {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        if self.reset.get() {
-            self.reset();
-        } else if !self.bus_request.get() {
-            self.step_internal(system)?;
-        }
-        Ok((1_000_000_000 / self.frequency as u64) * 4)
+        let clocks = if self.reset.get() {
+            self.reset()?
+        } else if self.bus_request.get() {
+            1
+        } else {
+            self.step_internal(system)?
+        };
+
+        Ok((1_000_000_000 / self.frequency as ClockElapsed) * clocks as ClockElapsed)
     }
 
     fn on_error(&mut self, _system: &System) {
@@ -54,16 +57,16 @@ impl Transmutable for Z80 {
 
 
 impl Z80 {
-    pub fn step_internal(&mut self, system: &System) -> Result<(), Error> {
+    pub fn step_internal(&mut self, system: &System) -> Result<u16, Error> {
         match self.state.status {
             Status::Init => self.init(),
             Status::Halted => Err(Error::new("CPU stopped")),
             Status::Running => {
                 match self.cycle_one(system) {
-                    Ok(()) => Ok(()),
+                    Ok(clocks) => Ok(clocks),
                     Err(Error { err: ErrorType::Processor, .. }) => {
                         //self.exception(system, native as u8, false)?;
-                        Ok(())
+                        Ok(4)
                     },
                     Err(err) => Err(err),
                 }
@@ -71,18 +74,23 @@ impl Z80 {
         }
     }
 
-    pub fn init(&mut self) -> Result<(), Error> {
+    pub fn init(&mut self) -> Result<u16, Error> {
         self.state.pc = 0;
         self.state.status = Status::Running;
-        Ok(())
+        Ok(4)
     }
 
-    pub fn cycle_one(&mut self, system: &System) -> Result<(), Error> {
+    pub fn reset(&mut self) -> Result<u16, Error> {
+        self.clear_state();
+        Ok(16)
+    }
+
+    pub fn cycle_one(&mut self, system: &System) -> Result<u16, Error> {
         self.decode_next()?;
         self.execute_current()?;
         //self.check_pending_interrupts(system)?;
         self.check_breakpoints(system);
-        Ok(())
+        Ok(4)
     }
 
     pub fn decode_next(&mut self) -> Result<(), Error> {
