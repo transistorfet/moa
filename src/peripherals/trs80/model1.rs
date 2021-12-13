@@ -16,9 +16,9 @@ use super::charset::CharacterGenerator;
 const DEV_NAME: &'static str = "model1";
 
 pub struct Model1Peripherals {
-    pub frame: Arc<Mutex<Frame>>,
-    pub keyboard_mem: Arc<Mutex<[u8; 8]>>,
-    pub video_mem: [u8; 1024],
+    frame: Arc<Mutex<Frame>>,
+    keyboard_mem: Arc<Mutex<[u8; 8]>>,
+    video_mem: [u8; 1024],
 }
 
 impl Model1Peripherals {

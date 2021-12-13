@@ -3,6 +3,7 @@ use std::thread;
 use std::sync::mpsc;
 use std::time::Duration;
 use std::io::{Read, Write};
+use std::os::unix::io::AsRawFd;
 
 use nix::fcntl::OFlag;
 use nix::pty::{self, PtyMaster};

@@ -50,7 +50,7 @@ pub trait KeyboardUpdater: Send {
 
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
-    fn write_samples(&mut self, samples: usize, iter: &mut Iterator<Item=f32>);
+    fn write_samples(&mut self, samples: usize, iter: &mut dyn Iterator<Item=f32>);
 }
 
 pub trait BlitableSurface {

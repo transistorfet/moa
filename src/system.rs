@@ -99,7 +99,7 @@ impl System {
 
     pub fn step(&mut self) -> Result<(), Error> {
         if self.debug_enabled.get() && self.event_queue[self.event_queue.len() - 1].device.borrow_mut().as_debuggable().is_some() {
-            self.debugger.borrow_mut().run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone());
+            self.debugger.borrow_mut().run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone()).unwrap();
         }
 
         match self.process_one_event() {

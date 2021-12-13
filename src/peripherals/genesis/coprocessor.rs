@@ -5,14 +5,14 @@ use std::cell::RefCell;
 use crate::memory::Bus;
 use crate::error::Error;
 use crate::signals::Signal;
-use crate::devices::{Address, Addressable, Transmutable, TransmutableBox};
+use crate::devices::{Address, Addressable, Transmutable};
 
 
 const DEV_NAME: &'static str = "coprocessor";
 
 pub struct CoprocessorCoordinator {
-    pub bus_request: Signal<bool>,
-    pub reset: Signal<bool>,
+    bus_request: Signal<bool>,
+    reset: Signal<bool>,
 }
 
 
@@ -73,7 +73,7 @@ impl Transmutable for CoprocessorCoordinator {
 
 
 pub struct CoprocessorBankRegister {
-    pub base: Signal<Address>,
+    base: Signal<Address>,
 }
 
 impl CoprocessorBankRegister {
@@ -89,12 +89,13 @@ impl Addressable for CoprocessorBankRegister {
         0x01
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _addr: Address, _data: &mut [u8]) -> Result<(), Error> {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _addr: Address, data: &[u8]) -> Result<(), Error> {
         let value = ((self.base.get() >> 1) | ((data[0] as Address) << 23)) & 0xFF8000;
+        //let value = ((self.base.get() << 1) | ((data[0] as Address) << 15)) & 0xFF8000;
         println!("New base is {:x}", value);
         self.base.set(value);
         Ok(())
@@ -109,8 +110,8 @@ impl Transmutable for CoprocessorBankRegister {
 
 
 pub struct CoprocessorBankArea {
-    pub base: Signal<Address>,
-    pub bus: Rc<RefCell<Bus>>,
+    base: Signal<Address>,
+    bus: Rc<RefCell<Bus>>,
 }
 
 impl CoprocessorBankArea {

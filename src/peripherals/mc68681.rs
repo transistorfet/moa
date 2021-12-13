@@ -58,12 +58,12 @@ const SR_RX_READY: u8 = 0x01;
 
 
 // Interrupt Status/Mask Bits (ISR/IVR)
-const ISR_INPUT_CHANGE: u8 = 0x80;
-const ISR_CH_B_BREAK_CHANGE: u8 = 0x40;
+//const ISR_INPUT_CHANGE: u8 = 0x80;
+//const ISR_CH_B_BREAK_CHANGE: u8 = 0x40;
 const ISR_CH_B_RX_READY_FULL: u8 = 0x20;
 const ISR_CH_B_TX_READY: u8 = 0x10;
 const ISR_TIMER_CHANGE: u8 = 0x08;
-const ISR_CH_A_BREAK_CHANGE: u8 = 0x04;
+//const ISR_CH_A_BREAK_CHANGE: u8 = 0x04;
 const ISR_CH_A_RX_READY_FULL: u8 = 0x02;
 const ISR_CH_A_TX_READY: u8 = 0x01;
 
@@ -71,13 +71,13 @@ const ISR_CH_A_TX_READY: u8 = 0x01;
 const DEV_NAME: &'static str = "mc68681";
 
 pub struct MC68681Port {
-    pub tty: Option<Box<dyn Tty>>,
-    pub status: u8,
+    tty: Option<Box<dyn Tty>>,
+    status: u8,
 
-    pub tx_enabled: bool,
+    tx_enabled: bool,
 
-    pub rx_enabled: bool,
-    pub input: u8,
+    rx_enabled: bool,
+    input: u8,
 }
 
 impl MC68681Port {
@@ -164,23 +164,23 @@ impl MC68681Port {
 }
 
 pub struct MC68681 {
-    pub acr: u8,
+    acr: u8,
     pub port_a: MC68681Port,
     pub port_b: MC68681Port,
 
-    pub int_mask: u8,
-    pub int_status: u8,
-    pub int_vector: u8,
+    int_mask: u8,
+    int_status: u8,
+    int_vector: u8,
 
-    pub timer_preload: u16,
-    pub timer_count: u16,
-    pub is_timing: bool,
-    pub timer_divider: u16,
+    timer_preload: u16,
+    timer_count: u16,
+    is_timing: bool,
+    timer_divider: u16,
 
-    pub input_pin_change: u8,
-    pub input_state: u8,
-    pub output_conf: u8,
-    pub output_state: u8,
+    input_pin_change: u8,
+    input_state: u8,
+    output_conf: u8,
+    output_state: u8,
 }
 
 impl MC68681 {

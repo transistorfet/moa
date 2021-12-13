@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Debuggable, wrap_transmutable};
+use crate::devices::wrap_transmutable;
 use crate::memory::{MemoryBlock, BusPort};
 
 use crate::cpus::z80::{Z80, Z80Type};
@@ -42,7 +42,7 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
     let model1 = trs80::model1::Model1Peripherals::create(host)?;
     system.add_addressable_device(0x37E0, wrap_transmutable(model1)).unwrap();
 
-    let mut cpu = Z80::new(Z80Type::Z80, options.frequency, BusPort::new(0, 16, 8, system.bus.clone()));
+    let cpu = Z80::new(Z80Type::Z80, options.frequency, BusPort::new(0, 16, 8, system.bus.clone()));
     //cpu.add_breakpoint(0x0);
     //cpu.add_breakpoint(0xb55);
     //cpu.add_breakpoint(0xb76);

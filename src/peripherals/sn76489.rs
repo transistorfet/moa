@@ -2,25 +2,11 @@
 use crate::error::Error;
 use crate::system::System;
 use crate::devices::{ClockElapsed, Address, Addressable, Steppable, Transmutable};
-use crate::host::audio::{SineWave, SquareWave};
+use crate::host::audio::{SquareWave};
 use crate::host::traits::{Host, Audio};
 
 
 const DEV_NAME: &'static str = "sn76489";
-
-/*
-pub struct Sn76489Updater(HostData<SineWave>);
-
-impl AudioUpdater for Sn76489Updater {
-    fn update_audio_frame(&mut self, samples: usize, sample_rate: usize, buffer: &mut [f32]) {
-        let mut sine = self.0.lock();
-        //for i in 0..samples {
-        //    buffer[i] = sine.next().unwrap();
-        //}
-    }
-}
-*/
-
 
 pub struct Sn76489 {
     pub regs: [u8; 8],
@@ -52,8 +38,8 @@ impl Steppable for Sn76489 {
             self.sine.frequency -= 1.0;
         }
 
-        let rate = self.source.samples_per_second();
-        self.source.write_samples(rate / 1000, &mut self.sine);
+        //let rate = self.source.samples_per_second();
+        //self.source.write_samples(rate / 1000, &mut self.sine);
         //println!("{}", self.sine.frequency);
         Ok(1_000_000)          // Every 1ms of simulated time
     }
@@ -64,7 +50,7 @@ impl Addressable for Sn76489 {
         0x01
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _addr: Address, _data: &mut [u8]) -> Result<(), Error> {
         warning!("{}: !!! device can't be read", DEV_NAME);
         Ok(())
     }

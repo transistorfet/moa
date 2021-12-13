@@ -16,7 +16,6 @@
   a callback with the frontend sound system that is called when it needs data, or you write to a shared buffer which is passed back to the
   frontend when it needs it, or it has a copy it can use directly
 
-* add sound
 * should you rename devices.rs traits.rs?
 * add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
 

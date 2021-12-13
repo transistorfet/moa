@@ -4,9 +4,9 @@ use crate::devices::TransmutableBox;
 
 
 pub struct InterruptController {
-    pub target: Option<TransmutableBox>,
-    pub interrupts: Vec<(bool, u8)>,
-    pub highest: u8,
+    target: Option<TransmutableBox>,
+    interrupts: Vec<(bool, u8)>,
+    highest: u8,
 }
 
 impl InterruptController {

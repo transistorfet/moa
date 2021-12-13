@@ -102,7 +102,7 @@ impl Addressable for Mos6522 {
 }
 
 impl Steppable for Mos6522 {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
 
         Ok(16_600_000)
     }

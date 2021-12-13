@@ -5,25 +5,24 @@ use std::cell::RefCell;
 use crate::memory::Bus;
 use crate::error::Error;
 use crate::system::System;
-use crate::signals::{Signal, Observable};
+use crate::signals::Observable;
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 use crate::peripherals::z8530::Z8530;
 use crate::peripherals::mos6522::Mos6522;
 use crate::peripherals::macintosh::iwm::IWM;
-use crate::peripherals::macintosh::video::MacVideo;
 
 const DEV_NAME: &'static str = "mac";
 
 
 pub struct Mainboard {
-    pub lower_bus: Rc<RefCell<Bus>>,
-    pub scc1: Z8530,
-    pub scc2: Z8530,
-    pub iwm: IWM,
-    pub via: Mos6522,
-    pub phase_read: PhaseRead,
-    pub last_sec: Clock,
+    lower_bus: Rc<RefCell<Bus>>,
+    scc1: Z8530,
+    scc2: Z8530,
+    iwm: IWM,
+    via: Mos6522,
+    phase_read: PhaseRead,
+    last_sec: Clock,
 }
 
 impl Mainboard {
@@ -35,8 +34,6 @@ impl Mainboard {
         let phase_read = PhaseRead::new();
 
         let lower_bus = Rc::new(RefCell::new(Bus::new()));
-        let ram_len = ram.borrow_mut().as_addressable().unwrap().len();
-        let rom_len = rom.borrow_mut().as_addressable().unwrap().len();
 
         let mainboard = Self {
             lower_bus: lower_bus.clone(),
@@ -51,13 +48,13 @@ impl Mainboard {
         mainboard.via.port_a.set_observer(move |port| {
             if (port.data & 0x10) == 0 {
                 println!("{}: overlay is 0 (normal)", DEV_NAME);
-                lower_bus.borrow_mut().blocks.clear();
+                lower_bus.borrow_mut().clear_all_bus_devices();
                 lower_bus.borrow_mut().insert(0x000000, wrap_transmutable(AddressRepeater::new(ram.clone(), 32)));
                 lower_bus.borrow_mut().insert(0x400000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
                 lower_bus.borrow_mut().insert(0x600000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
             } else {
                 println!("{}: overlay is 1 (startup)", DEV_NAME);
-                lower_bus.borrow_mut().blocks.clear();
+                lower_bus.borrow_mut().clear_all_bus_devices();
                 lower_bus.borrow_mut().insert(0x000000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
                 lower_bus.borrow_mut().insert(0x200000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
                 lower_bus.borrow_mut().insert(0x400000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
@@ -82,14 +79,13 @@ impl Addressable for Mainboard {
         } else if addr >= 0x900000 && addr < 0xA00000 {
             self.scc1.read((addr >> 9) & 0x0F, data)
         } else if addr >= 0xB00000 && addr < 0xC00000 {
-            self.scc1.read((addr >> 9) & 0x0F, data)
+            self.scc2.read((addr >> 9) & 0x0F, data)
         } else if addr >= 0xD00000 && addr < 0xE00000 {
             self.iwm.read((addr >> 9) & 0x0F, data)
         } else if addr >= 0xE80000 && addr < 0xF00000 {
             self.via.read((addr >> 9) & 0x0F, data)
         } else if addr >= 0xF00000 && addr < 0xF80000 {
-            // TODO phase read
-            Ok(())
+            self.phase_read.read(addr, data)
         } else if addr >= 0xF80000 && addr < 0xF80010 {
             // Debugger
             Ok(())
@@ -104,14 +100,13 @@ impl Addressable for Mainboard {
         } else if addr >= 0x900000 && addr < 0xA00000 {
             self.scc1.write((addr >> 9) & 0x0F, data)
         } else if addr >= 0xB00000 && addr < 0xC00000 {
-            self.scc1.write((addr >> 9) & 0x0F, data)
+            self.scc2.write((addr >> 9) & 0x0F, data)
         } else if addr >= 0xD00000 && addr < 0xE00000 {
             self.iwm.write((addr >> 9) & 0x0F, data)
         } else if addr >= 0xE80000 && addr < 0xF00000 {
             self.via.write((addr >> 9) & 0x0F, data)
         } else if addr >= 0xF00000 && addr < 0xF80000 {
-            // TODO phase read
-            Ok(())
+            self.phase_read.write(addr, data)
         } else {
             Err(Error::new(&format!("Error writing address {:#010x}", addr)))
         }
@@ -161,13 +156,14 @@ impl Addressable for PhaseRead {
         0x80000
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-
+    fn read(&mut self, _addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        // TODO I'm not sure how this is supposed to work
+        data[0] = 0x00;
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-
+    fn write(&mut self, _addr: Address, _data: &[u8]) -> Result<(), Error> {
+        // TODO I'm not sure how this is supposed to work
         Ok(())
     }
 }
@@ -175,8 +171,8 @@ impl Addressable for PhaseRead {
 
 
 pub struct AddressRepeater {
-    pub subdevice: TransmutableBox,
-    pub repeat: u8,
+    subdevice: TransmutableBox,
+    repeat: u8,
 }
 
 impl AddressRepeater {

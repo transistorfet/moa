@@ -1,12 +1,11 @@
 
 use std::iter::Iterator;
-use std::sync::{Arc, Mutex};
 
 use crate::error::Error;
 use crate::system::System;
 use crate::memory::dump_slice;
-use crate::signals::{Signal, EdgeSignal};
-use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, read_beu16, read_beu32, write_beu16};
+use crate::signals::{EdgeSignal};
+use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, read_beu16};
 use crate::host::traits::{Host, BlitableSurface, HostData};
 use crate::host::gfx::{Frame, FrameSwapper};
 
@@ -37,18 +36,18 @@ const REG_DMA_ADDR_MID: usize           = 0x16;
 const REG_DMA_ADDR_HIGH: usize          = 0x17;
 
 
-const STATUS_PAL_MODE: u16              = 0x0001;
+//const STATUS_PAL_MODE: u16              = 0x0001;
 const STATUS_DMA_BUSY: u16              = 0x0002;
 const STATUS_IN_HBLANK: u16             = 0x0004;
 const STATUS_IN_VBLANK: u16             = 0x0008;
-const STATUS_ODD_FRAME: u16             = 0x0010;
-const STATUS_SPRITE_COLLISION: u16      = 0x0020;
-const STATUS_SPRITE_OVERFLOW: u16       = 0x0040;
-const STATUS_V_INTERRUPT: u16           = 0x0080;
-const STATUS_FIFO_FULL: u16             = 0x0100;
+//const STATUS_ODD_FRAME: u16             = 0x0010;
+//const STATUS_SPRITE_COLLISION: u16      = 0x0020;
+//const STATUS_SPRITE_OVERFLOW: u16       = 0x0040;
+//const STATUS_V_INTERRUPT: u16           = 0x0080;
+//const STATUS_FIFO_FULL: u16             = 0x0100;
 const STATUS_FIFO_EMPTY: u16            = 0x0200;
 
-const MODE1_BF_ENABLE_HV_COUNTER: u8    = 0x02;
+//const MODE1_BF_ENABLE_HV_COUNTER: u8    = 0x02;
 const MODE1_BF_HSYNC_INTERRUPT: u8      = 0x10;
 
 const MODE2_BF_V_CELL_MODE: u8          = 0x08;
@@ -60,7 +59,7 @@ const MODE3_BF_V_SCROLL_MODE: u8        = 0x04;
 const MODE3_BF_H_SCROLL_MODE: u8        = 0x03;
 
 const MODE4_BF_H_CELL_MODE: u8          = 0x01;
-const MODE4_BF_SHADOW_HIGHLIGHT: u8     = 0x08;
+//const MODE4_BF_SHADOW_HIGHLIGHT: u8     = 0x08;
 
 
 
@@ -387,7 +386,6 @@ impl Ym7101State {
     pub fn draw_scrolls(&mut self, frame: &mut Frame) {
         let (scroll_h, scroll_v) = self.scroll_size;
         let (cells_h, cells_v) = self.screen_size;
-        let (offset_x, offset_y) = self.window_offset;
 
         if scroll_h == 0 || scroll_v == 0 {
             return;
@@ -458,7 +456,6 @@ impl Ym7101State {
             let (size_h, size_v) = (((size >> 2) & 0x03) as u16 + 1, (size & 0x03) as u16 + 1);
             let h_rev = (pattern_name & 0x0800) != 0;
             let v_rev = (pattern_name & 0x1000) != 0;
-//println!("i: {} ({} {}) {:x} ({}, {}) {:x}", i, h_pos, v_pos, size, size_h, size_v, pattern_name);
 
             for ih in 0..size_h {
                 for iv in 0..size_v {
@@ -467,7 +464,6 @@ impl Ym7101State {
                     if x > 128 && x < pos_limit_h && y > 128 && y < pos_limit_v {
                         let iter = self.get_pattern_iter(((pattern_name & 0x07FF) + (h * size_v) + v) | (pattern_name & 0xF800));
 
-//println!("{}: ({} {}), {:x}", i, x, y, ((pattern_name & 0x07FF) + (h * size_v) + v));
                         frame.blit(x as u32 - 128, y as u32 - 128, iter, 8, 8);
                     }
                 }
@@ -540,8 +536,9 @@ impl<'a> Iterator for PatternIterator<'a> {
 
 
 pub struct Ym7101 {
-    pub swapper: FrameSwapper,
-    pub state: Ym7101State,
+    swapper: FrameSwapper,
+    state: Ym7101State,
+
     pub external_interrupt: HostData<bool>,
     pub frame_complete: EdgeSignal,
 }
@@ -612,63 +609,6 @@ impl Steppable for Ym7101 {
 
             let mut frame = self.swapper.current.lock().unwrap();
             self.state.draw_frame(&mut frame);
-
-            //let mut frame = self.swapper.current.lock().unwrap();
-            //let iter = PatternIterator::new(&self.state, 0x260, 0, true, true);
-            //frame.blit(0, 0, iter, 8, 8);
-
-            /*
-            // Print Palette
-            for i in 0..16 {
-                println!("{:x}", self.state.get_palette_colour(0, i));
-            }
-            */
-
-            /*
-            // Print Pattern Table
-            let mut frame = self.swapper.current.lock().unwrap();
-            let (cells_h, cells_v) = self.state.get_screen_size();
-            for cell_y in 0..cells_v {
-                for cell_x in 0..cells_h {
-                    let pattern_addr = (cell_x + (cell_y * cells_h)) * 32;
-                    let iter = PatternIterator::new(&self.state, pattern_addr as u32, 0, false, false);
-                    frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
-                }
-            }
-            */
-
-
-            /*
-            // Print Sprite
-            let mut frame = self.swapper.current.lock().unwrap();
-            self.state.draw_background(&mut frame);
-            let sprite_table = self.get_vram_sprites_addr();
-            let (cells_h, cells_v) = self.state.get_screen_size();
-            let sprite = 0;
-            println!("{:?}", &self.state.vram[(sprite_table + (sprite * 8))..(sprite_table + (sprite * 8) + 8)].iter().map(|byte| format!("{:02x}", byte)).collect::<Vec<String>>());
-            let size = self.state.vram[sprite_table + (sprite * 8) + 2];
-            let (size_h, size_v) = (((size >> 2) & 0x03) as u16 + 1, (size & 0x03) as u16 + 1);
-            let pattern_name = ((self.state.vram[sprite_table + (sprite * 8) + 4] as u16) << 8) | (self.state.vram[sprite_table + (sprite * 8) + 5] as u16);
-            let pattern_gen = pattern_name & 0x7FF;
-            println!("{:x}", pattern_name);
-
-            for cell_y in 0..size_v {
-                for cell_x in 0..size_h {
-                    let pattern_addr = (pattern_gen + (cell_y * size_h) + cell_x) as u32;
-                    println!("pattern: ({}, {}) {:x}", cell_x, cell_y, pattern_addr);
-                    let iter = PatternIterator::new(&self.state, pattern_addr * 32, 3, true, true);
-                    frame.blit((cell_x << 3) as u32, (cell_y << 3) as u32, iter, 8, 8);
-                }
-            }
-            */
-
-            //let mut frame = self.swapper.current.lock().unwrap();
-            //frame.blit(0, 0, PatternIterator::new(&self.state, 0x408 * 32, 3, false, false), 8, 8);
-            //frame.blit(0, 8, PatternIterator::new(&self.state, 0x409 * 32, 3, false, false), 8, 8);
-            //frame.blit(8, 0, PatternIterator::new(&self.state, 0x402 * 32, 3, false, false), 8, 8);
-            //frame.blit(8, 8, PatternIterator::new(&self.state, 0x403 * 32, 3, false, false), 8, 8);
-            //frame.blit(16, 0, PatternIterator::new(&self.state, 0x404 * 32, 3, false, false), 8, 8);
-            //frame.blit(16, 8, PatternIterator::new(&self.state, 0x405 * 32, 3, false, false), 8, 8);
 
             self.frame_complete.signal();
         }
@@ -810,7 +750,7 @@ impl Addressable for Ym7101 {
 
 
 impl Inspectable for Ym7101 {
-    fn inspect(&mut self, system: &System, args: &[&str]) -> Result<(), Error> {
+    fn inspect(&mut self, _system: &System, args: &[&str]) -> Result<(), Error> {
         match args[0] {
             "" | "state" => {
                 self.state.dump_state();

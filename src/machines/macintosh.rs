@@ -2,12 +2,9 @@
 use crate::error::Error;
 use crate::system::System;
 use crate::devices::{wrap_transmutable, Debuggable};
-use crate::memory::{MemoryBlock, AddressAdapter, BusPort};
+use crate::memory::{MemoryBlock, BusPort};
 
 use crate::cpus::m68k::{M68k, M68kType};
-use crate::peripherals::mos6522::Mos6522;
-use crate::peripherals::z8530::Z8530;
-use crate::peripherals::macintosh::iwm::IWM;
 use crate::peripherals::macintosh::video::MacVideo;
 use crate::peripherals::macintosh::mainboard::Mainboard;
 
@@ -18,6 +15,10 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     let mut system = System::new();
 
     /*
+    use crate::peripherals::mos6522::Mos6522;
+    use crate::peripherals::z8530::Z8530;
+    use crate::peripherals::macintosh::iwm::IWM;
+
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
     ram.load_at(0, "binaries/macintosh/Macintosh 128k.rom")?;
     let boxed_ram = wrap_transmutable(ram);
@@ -60,7 +61,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     system.add_addressable_device(0x00EFE000, wrap_transmutable(adapter))?;
     */
 
-    let mut ram = MemoryBlock::new(vec![0; 0x00080000]);
+    let ram = MemoryBlock::new(vec![0; 0x00080000]);
     let mut rom = MemoryBlock::load("binaries/macintosh/Macintosh 512k.rom")?;
     rom.read_only();
 

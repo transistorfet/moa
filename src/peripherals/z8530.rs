@@ -43,15 +43,21 @@ impl Addressable for Z8530 {
     }
 }
 
+impl Steppable for Z8530 {
+    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
+
+        Ok(1_000_000_00)
+    }
+}
 
 impl Transmutable for Z8530 {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         Some(self)
     }
 
-    //fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
-    //    Some(self)
-    //}
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
 }
 
 

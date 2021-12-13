@@ -8,8 +8,8 @@ use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, read_b
 
 
 pub struct MemoryBlock {
-    pub read_only: bool,
-    pub contents: Vec<u8>,
+    read_only: bool,
+    contents: Vec<u8>,
 }
 
 impl MemoryBlock {
@@ -76,8 +76,8 @@ impl Transmutable for MemoryBlock {
 
 
 pub struct AddressAdapter {
-    pub subdevice: TransmutableBox,
-    pub shift: u8,
+    subdevice: TransmutableBox,
+    shift: u8,
 }
 
 impl AddressAdapter {
@@ -118,7 +118,7 @@ pub struct Block {
 }
 
 pub struct Bus {
-    pub blocks: Vec<Block>,
+    blocks: Vec<Block>,
 }
 
 impl Bus {
@@ -126,6 +126,10 @@ impl Bus {
         Bus {
             blocks: vec!(),
         }
+    }
+
+    pub fn clear_all_bus_devices(&mut self) {
+        self.blocks.clear();
     }
 
     pub fn insert(&mut self, base: Address, dev: TransmutableBox) {
@@ -189,10 +193,10 @@ impl Addressable for Bus {
 }
 
 pub struct BusPort {
-    pub offset: Address,
-    pub address_mask: Address,
-    pub data_width: u8,
-    pub subdevice: Rc<RefCell<Bus>>,
+    offset: Address,
+    address_mask: Address,
+    data_width: u8,
+    subdevice: Rc<RefCell<Bus>>,
 }
 
 impl BusPort {

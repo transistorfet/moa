@@ -34,10 +34,10 @@ const ATA_SECTOR_SIZE: u32              = 512;
 const DEV_NAME: &'static str = "ata";
 
 pub struct AtaDevice {
-    pub selected_sector: u32,
-    pub selected_count: u32,
-    pub last_error: u8,
-    pub contents: Vec<u8>,
+    selected_sector: u32,
+    selected_count: u32,
+    last_error: u8,
+    contents: Vec<u8>,
 }
 
 

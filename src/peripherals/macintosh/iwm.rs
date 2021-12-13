@@ -4,21 +4,21 @@ use crate::system::System;
 use crate::devices::{ClockElapsed, Address, Addressable, Steppable, Transmutable};
 
 
-const CA0: u8           = 0x01;
-const CA1: u8           = 0x02;
-const CA2: u8           = 0x04;
-const LSTRB: u8         = 0x08;
+//const CA0: u8           = 0x01;
+//const CA1: u8           = 0x02;
+//const CA2: u8           = 0x04;
+//const LSTRB: u8         = 0x08;
 const ENABLE: u8        = 0x10;
-const SELECT: u8        = 0x20;
+//const SELECT: u8        = 0x20;
 const Q6: u8            = 0x40;
 const Q7: u8            = 0x80;
 
 const DEV_NAME: &'static str = "iwm";
 
 pub struct IWM {
-    pub state: u8,
-    pub mode: u8,
-    pub handshake: u8,
+    state: u8,
+    mode: u8,
+    handshake: u8,
 }
 
 impl IWM {
@@ -102,14 +102,20 @@ impl Addressable for IWM {
     }
 }
 
+impl Steppable for IWM {
+    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
+
+        Ok(1_000_000_00)
+    }
+}
 
 impl Transmutable for IWM {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         Some(self)
     }
 
-    //fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
-    //    Some(self)
-    //}
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
 }
 

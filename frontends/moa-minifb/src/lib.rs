@@ -9,7 +9,7 @@ use clap::{App, ArgMatches};
 use moa::error::Error;
 use moa::system::System;
 use moa::host::traits::{Host, HostData, ControllerUpdater, KeyboardUpdater, WindowUpdater, Audio};
-use moa::host::controllers::{ControllerDevice, ControllerEvent};
+use moa::host::controllers::{ControllerDevice};
 
 use moa_common::audio::{AudioOutput, AudioMixer, AudioSource};
 

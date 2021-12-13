@@ -4,7 +4,7 @@ use std::num::NonZeroU8;
 use crate::error::Error;
 use crate::system::System;
 use crate::devices::{ClockElapsed, Address, Addressable, Steppable, Transmutable};
-use crate::host::audio::{SineWave, SquareWave};
+use crate::host::audio::{SquareWave};
 use crate::host::traits::{Host, Audio};
 
 const DEV_NAME: &'static str = "ym2612";
@@ -53,7 +53,7 @@ impl Ym2612 {
         Ok(Self {
             source,
             selected_reg: None,
-            channels: vec![Channel::new(sample_rate); 6],
+            channels: vec![Channel::new(sample_rate); 7],
         })
     }
 
@@ -64,6 +64,9 @@ impl Ym2612 {
                 self.channels[ch].on = data >> 4;
                 println!("Note: {}: {:x}", ch, self.channels[ch].on);
             },
+            0x30 => {
+                let _op = if bank == 0 { 0 } else { 3 };
+            }
             _ => warning!("{}: !!! unhandled write to register {:0x} with {:0x}", DEV_NAME, reg, data),
         }
     }

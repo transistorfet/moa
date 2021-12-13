@@ -1,7 +1,6 @@
 
 use crate::error::Error;
-use crate::system::System;
-use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable};
+use crate::devices::{Address, Addressable, Transmutable};
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
 use crate::host::traits::{Host, ControllerUpdater, HostData};
 
@@ -24,13 +23,13 @@ pub struct GenesisControllerPort {
     /// Data contains bits:
     /// 11 | 10 | 9 |    8 |     7 | 6 | 5 | 4 |     3 |    2 |    1 |  0
     ///  X |  Y | Z | MODE | START | A | C | B | RIGHT | LEFT | DOWN | UP
-    pub buttons: HostData<u16>,
+    buttons: HostData<u16>,
 
-    pub ctrl: u8,
-    pub outputs: u8,
-    pub th_count: u8,
+    ctrl: u8,
+    outputs: u8,
+    th_count: u8,
 
-    pub s_ctrl: u8,
+    s_ctrl: u8,
 }
 
 impl GenesisControllerPort {
@@ -113,12 +112,12 @@ impl ControllerUpdater for GenesisControllerUpdater {
 
 
 pub struct GenesisController {
-    pub port_1: GenesisControllerPort,
-    pub port_2: GenesisControllerPort,
-    pub expansion: GenesisControllerPort,
-    pub interrupt: HostData<bool>,
-    pub last_clock: Clock,
-    pub last_write: Clock,
+    port_1: GenesisControllerPort,
+    port_2: GenesisControllerPort,
+    expansion: GenesisControllerPort,
+    interrupt: HostData<bool>,
+    //last_clock: Clock,
+    //last_write: Clock,
 }
 
 impl GenesisController {
@@ -128,8 +127,8 @@ impl GenesisController {
             port_2: GenesisControllerPort::new(),
             expansion: GenesisControllerPort::new(),
             interrupt: HostData::new(false),
-            last_clock: 0,
-            last_write: 0,
+            //last_clock: 0,
+            //last_write: 0,
         }
     }
 

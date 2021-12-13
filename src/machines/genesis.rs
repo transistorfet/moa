@@ -4,9 +4,9 @@ use std::cell::RefCell;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::signals::{Signal, Observable};
+use crate::signals::{Signal};
 use crate::memory::{MemoryBlock, Bus, BusPort};
-use crate::devices::{wrap_transmutable, Address, Addressable, Debuggable};
+use crate::devices::{wrap_transmutable, Address, Addressable};
 
 use crate::cpus::m68k::{M68k, M68kType};
 use crate::cpus::z80::{Z80, Z80Type};
@@ -33,7 +33,7 @@ impl SegaGenesisOptions {
 pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Result<System, Error> {
     let mut system = System::new();
 
-    let mut rom = MemoryBlock::load(&options.rom).unwrap();
+    let rom = MemoryBlock::load(&options.rom).unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/GenTestV3.0.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/HDRV_Genesis_Test_v1_4.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/ComradeOj's tiny demo.bin").unwrap();
@@ -99,7 +99,7 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     system.break_signal = Some(vdp.frame_complete.clone());
     system.add_peripheral("vdp", 0x00c00000, wrap_transmutable(vdp)).unwrap();
 
-    let mut cpu = M68k::new(M68kType::MC68000, 7_670_454, BusPort::new(0, 24, 16, system.bus.clone()));
+    let cpu = M68k::new(M68kType::MC68000, 7_670_454, BusPort::new(0, 24, 16, system.bus.clone()));
     system.add_interruptable_device("cpu", wrap_transmutable(cpu)).unwrap();
 
     Ok(system)

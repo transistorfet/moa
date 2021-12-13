@@ -12,7 +12,7 @@ use crate::host::traits::{Host, BlitableSurface};
 const SCRN_BASE: u32    = 0x07A700;
 
 pub struct MacVideo {
-    pub frame: Arc<Mutex<Frame>>,
+    frame: Arc<Mutex<Frame>>,
 }
 
 impl MacVideo {
@@ -28,8 +28,8 @@ impl MacVideo {
 }
 
 pub struct BitIter {
-    pub bit: i8,
-    pub data: u16,
+    bit: i8,
+    data: u16,
 }
 
 impl BitIter {

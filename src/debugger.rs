@@ -7,9 +7,9 @@ use crate::devices::{Address, Addressable, Debuggable, TransmutableBox};
 
 
 pub struct Debugger {
-    pub last_command: Option<String>,
-    pub repeat: u32,
-    pub trace_only: bool,
+    last_command: Option<String>,
+    repeat: u32,
+    trace_only: bool,
 }
 
 

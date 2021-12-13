@@ -1,6 +1,6 @@
 
 use moa::host::traits::{HostData, Audio};
-use cpal::{Data, Sample, Stream, SampleRate, SampleFormat, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use cpal::{Sample, Stream, SampleRate, SampleFormat, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait}};
 
 
 const SAMPLE_RATE: usize = 48000;
@@ -122,8 +122,8 @@ impl AudioSource {
         }
     }
 
-    pub fn fill_with(&mut self, samples: usize, iter: &mut Iterator<Item=f32>) {
-        for i in 0..samples {
+    pub fn fill_with(&mut self, samples: usize, iter: &mut dyn Iterator<Item=f32>) {
+        for _ in 0..samples {
             let sample = 0.25 * iter.next().unwrap();
             self.buffer.insert(sample);
             self.buffer.insert(sample);
@@ -156,7 +156,7 @@ impl Audio for AudioSource {
         self.sample_rate
     }
 
-    fn write_samples(&mut self, samples: usize, iter: &mut Iterator<Item=f32>) {
+    fn write_samples(&mut self, samples: usize, iter: &mut dyn Iterator<Item=f32>) {
         self.fill_with(samples, iter);
     }
 }
@@ -254,7 +254,7 @@ impl AudioMixer {
     // it's running fast. (If it's running slow, you can insert silence)
 }
 
-
+#[allow(dead_code)]
 pub struct AudioOutput {
     stream: Stream,
     mixer: HostData<AudioMixer>,
@@ -274,7 +274,7 @@ impl AudioOutput {
             .with_sample_rate(SampleRate(SAMPLE_RATE as u32))
             .into();
 
-        let channels = config.channels as usize;
+        //let channels = config.channels as usize;
 
         let data_callback = {
             let mixer = mixer.clone();
@@ -308,8 +308,7 @@ impl AudioOutput {
             &config,
             data_callback,
             move |err| {
-                // react to errors here.
-                println!("ERROR");
+                println!("ERROR: {:?}", err);
             },
         ).unwrap();
 

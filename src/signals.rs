@@ -9,9 +9,13 @@ pub trait Observable<T> {
 
 // TODO these could be used to imply how it should be used, or they could even be shorthands for T=bool, except TriState which would have 3
 // TODO or maybe even tristate is T=Option<S>
+#[allow(dead_code)]
 type Output<T> = Signal<T>;
+#[allow(dead_code)]
 type Input<T> = Signal<T>;
+#[allow(dead_code)]
 type TriState<T> = Signal<T>;
+
 
 #[derive(Clone, Debug)]
 pub struct Signal<T: Copy>(Rc<Cell<T>>);
