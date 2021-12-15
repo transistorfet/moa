@@ -29,7 +29,7 @@ use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority}
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         self.step_internal(system)?;
-        Ok((1_000_000_000 / self.frequency as u64) * 4 as ClockElapsed)
+        Ok((1_000_000_000 / self.frequency as u64) * self.timing.calculate_clocks(false, 1) as ClockElapsed)
     }
 
     fn on_error(&mut self, system: &System) {
@@ -151,9 +151,13 @@ impl M68k {
     }
 
     pub fn decode_next(&mut self) -> Result<(), Error> {
+        self.timing.reset();
+
         self.timer.decode.start();
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
         self.timer.decode.end();
+
+        self.timing.add_instruction(&self.decoder.instruction);
 
         if self.debugger.use_tracing {
             self.decoder.dump_decoded(&mut self.port);

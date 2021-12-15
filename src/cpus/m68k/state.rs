@@ -6,7 +6,7 @@ use crate::memory::BusPort;
 
 use super::decode::M68kDecoder;
 use super::debugger::M68kDebugger;
-
+use super::timing::M68kInstructionTiming;
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -126,6 +126,7 @@ pub struct M68k {
     pub frequency: u32,
     pub state: M68kState,
     pub decoder: M68kDecoder,
+    pub timing: M68kInstructionTiming,
     pub debugger: M68kDebugger,
     pub port: BusPort,
     pub timer: CpuTimer,
@@ -138,6 +139,7 @@ impl M68k {
             frequency,
             state: M68kState::new(),
             decoder: M68kDecoder::new(cputype, 0),
+            timing: M68kInstructionTiming::new(cputype, port.data_width()),
             debugger: M68kDebugger::new(),
             port: port,
             timer: CpuTimer::new(),
@@ -148,6 +150,7 @@ impl M68k {
     pub fn reset(&mut self) {
         self.state = M68kState::new();
         self.decoder = M68kDecoder::new(self.cputype, 0);
+        self.timing = M68kInstructionTiming::new(self.cputype, self.port.data_width());
         self.debugger = M68kDebugger::new();
     }
 

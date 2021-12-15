@@ -9,6 +9,7 @@ mod decode_tests {
     use crate::cpus::m68k::{M68k, M68kType};
     use crate::cpus::m68k::state::Exceptions;
     use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, XRegister, BaseRegister, IndexRegister, Direction, ShiftDirection};
+    use crate::cpus::m68k::timing::M68kInstructionTiming;
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
@@ -26,8 +27,15 @@ mod decode_tests {
         TestCase { cpu: M68kType::MC68000, data: &[0x003C, 0x00FF],                     ins: Some(Instruction::ORtoCCR(0xFF)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x007C, 0x1234],                     ins: Some(Instruction::ORtoSR(0x1234)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x0263, 0x1234],                     ins: Some(Instruction::AND(Target::Immediate(0x1234), Target::IndirectARegDec(3), Size::Word)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0240, 0x1234],                     ins: Some(Instruction::AND(Target::Immediate(0x1234), Target::DirectDReg(0), Size::Word)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x02A3, 0x1234, 0x5678],             ins: Some(Instruction::AND(Target::Immediate(0x12345678), Target::IndirectARegDec(3), Size::Long)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x0280, 0x1234, 0x5678],             ins: Some(Instruction::AND(Target::Immediate(0x12345678), Target::DirectDReg(0), Size::Long)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x023C, 0x1234],                     ins: Some(Instruction::ANDtoCCR(0x34)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x027C, 0xF8FF],                     ins: Some(Instruction::ANDtoSR(0xF8FF)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x4240],                             ins: Some(Instruction::CLR(Target::DirectDReg(0), Size::Word)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x4280],                             ins: Some(Instruction::CLR(Target::DirectDReg(0), Size::Long)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x4250],                             ins: Some(Instruction::CLR(Target::IndirectAReg(0), Size::Word)) },
+        TestCase { cpu: M68kType::MC68000, data: &[0x4290],                             ins: Some(Instruction::CLR(Target::IndirectAReg(0), Size::Long)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x0487, 0x1234, 0x5678],             ins: Some(Instruction::SUB(Target::Immediate(0x12345678), Target::DirectDReg(7), Size::Long)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x063A, 0x1234, 0x0055],             ins: Some(Instruction::ADD(Target::Immediate(0x34), Target::IndirectRegOffset(BaseRegister::PC, None, 0x55), Size::Byte)) },
         TestCase { cpu: M68kType::MC68000, data: &[0x0A23, 0x1234],                     ins: Some(Instruction::EOR(Target::Immediate(0x34), Target::IndirectARegDec(3), Size::Byte)) },
@@ -113,6 +121,65 @@ mod decode_tests {
         for case in DECODE_TESTS {
             println!("Testing for {:?}", case.ins);
             run_decode_test(case);
+        }
+    }
+
+    //use super::super::testcases::{TimingCase, TIMING_TESTS};
+
+    struct TimingCase {
+        cpu: M68kType,
+        data: &'static [u16],
+        timing: (u16, u16, u16),
+        ins: Instruction,
+    }
+
+    const TIMING_TESTS: &'static [TimingCase] = &[
+        TimingCase { cpu: M68kType::MC68000, data: &[0xD090], timing: ( 14,  14,   6), ins: Instruction::ADD(Target::IndirectAReg(0), Target::DirectDReg(0), Size::Long) },
+    ];
+
+    fn run_timing_test(case: &TimingCase) -> Result<(), Error> {
+        let (mut cpu, system) = init_decode_test(case.cpu);
+        let mut timing = M68kInstructionTiming::new(case.cpu, 16);
+
+        load_memory(&system, case.data);
+        cpu.decode_next().unwrap();
+        assert_eq!(cpu.decoder.instruction, case.ins.clone());
+
+        timing.add_instruction(&cpu.decoder.instruction);
+        let result = timing.calculate_clocks(false, 1);
+        let expected = match case.cpu {
+            M68kType::MC68000 => case.timing.0,
+            M68kType::MC68010 => case.timing.1,
+            _ => case.timing.2,
+        };
+
+        //assert_eq!(expected, result);
+        if expected == result {
+            Ok(())
+        } else {
+            println!("{:?}", timing);
+            Err(Error::new(&format!("expected {} but found {}", expected, result)))
+        }
+    }
+
+    #[test]
+    pub fn run_timing_tests() {
+        let mut errors = 0;
+        for case in TIMING_TESTS {
+            // NOTE switched to only show the failures rather than all tests
+            //print!("Testing for {:?}...", case.ins);
+            //match run_timing_test(case) {
+            //    Ok(()) => println!("ok"),
+            //    Err(err) => { println!("{}", err.msg); errors += 1 },
+            //}
+
+            if let Err(err) = run_timing_test(case) {
+                errors += 1;
+            }
+        }
+
+        if errors > 0 {
+            panic!("{} errors", errors);
         }
     }
 
@@ -306,7 +373,7 @@ mod decode_tests {
         system.get_bus().write_beu16(INIT_ADDR, expected as u16).unwrap();
 
         let target = cpu.decoder.get_mode_as_target(&mut cpu.port, 0b111, 0b000, Some(size)).unwrap();
-        assert_eq!(target, Target::IndirectMemory(expected));
+        assert_eq!(target, Target::IndirectMemory(expected, Size::Word));
     }
 
     #[test]
@@ -319,7 +386,7 @@ mod decode_tests {
         system.get_bus().write_beu32(INIT_ADDR, expected).unwrap();
 
         let target = cpu.decoder.get_mode_as_target(&mut cpu.port, 0b111, 0b001, Some(size)).unwrap();
-        assert_eq!(target, Target::IndirectMemory(expected));
+        assert_eq!(target, Target::IndirectMemory(expected, Size::Long));
     }
 
     #[test]
