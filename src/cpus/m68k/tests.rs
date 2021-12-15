@@ -173,7 +173,7 @@ mod decode_tests {
             //    Err(err) => { println!("{}", err.msg); errors += 1 },
             //}
 
-            if let Err(err) = run_timing_test(case) {
+            if let Err(_) = run_timing_test(case) {
                 errors += 1;
             }
         }
@@ -189,7 +189,7 @@ mod decode_tests {
 
     #[test]
     fn target_direct_d() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
+        let (mut cpu, _) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
 
@@ -199,7 +199,7 @@ mod decode_tests {
 
     #[test]
     fn target_direct_a() {
-        let (mut cpu, system) = init_decode_test(M68kType::MC68010);
+        let (mut cpu, _) = init_decode_test(M68kType::MC68010);
 
         let size = Size::Word;
 

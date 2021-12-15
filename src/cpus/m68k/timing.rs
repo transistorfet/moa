@@ -1,21 +1,7 @@
 
 use super::state::M68kType;
 
-use super::instructions::{
-    Register,
-    Size,
-    Sign,
-    Direction,
-    ShiftDirection,
-    XRegister,
-    BaseRegister,
-    IndexRegister,
-    RegOrImmediate,
-    ControlRegister,
-    Condition,
-    Target,
-    Instruction,
-};
+use super::instructions::{Size, Sign, Direction, Target, Instruction};
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -147,14 +133,14 @@ impl M68kInstructionTiming {
             Target::IndirectAReg(_) => self.add_access(size),
             Target::IndirectARegInc(_) => self.add_access(size),
             Target::IndirectARegDec(_) => self.add_access(size).add_internal(2),
-            Target::IndirectRegOffset(base_reg, index_reg, offset) => {
+            Target::IndirectRegOffset(_, index_reg, _) => {
                 match index_reg {
                     None => self.add_access(size).add_internal(4),
                     Some(_) => self.add_access(size).add_internal(6),
                 }
             },
-            Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) |
-            Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
+            Target::IndirectMemoryPreindexed(_, index_reg, _, _) |
+            Target::IndirectMemoryPostindexed(_, index_reg, _, _) => {
                 // TODO this is very wrong, but the 68020 timings are complicated
                 match index_reg {
                     None => self.add_access(size).add_internal(4),
@@ -205,21 +191,21 @@ impl M68kInstructionTiming {
 
     pub fn add_instruction_68000(&mut self, instruction: &Instruction) -> &mut Self {
         match instruction {
-            Instruction::ABCD(src, dest) => self.add_reg_v_mem(dest, 6, 18),
+            Instruction::ABCD(_, dest) => self.add_reg_v_mem(dest, 6, 18),
 
-            Instruction::ADD(src @ Target::Immediate(x), dest, size) if *x <= 8 => self.add_immediate_set(*size, dest, (4, 8), (8, 12)).add_target(*size, dest),// ADDQ
-            Instruction::ADD(src @ Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 16), (12, 20)).add_target(*size, dest),         // ADDI
+            Instruction::ADD(Target::Immediate(x), dest, size) if *x <= 8 => self.add_immediate_set(*size, dest, (4, 8), (8, 12)).add_target(*size, dest),// ADDQ
+            Instruction::ADD(Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 16), (12, 20)).add_target(*size, dest),         // ADDI
 
             Instruction::ADD(src, dest, size) => self.add_standard_set(*size, dest, (8, 6), (4, 6), (8, 12)).add_two_targets(*size, src, dest),
-            Instruction::ADDA(target, reg, size) => self.add_word_v_long(*size, 8, 6).add_target(*size, target),
-            Instruction::ADDX(src, dest, size) => self.add_reg_mem_set(*size, dest, (4, 8), (18, 30)),
+            Instruction::ADDA(target, _, size) => self.add_word_v_long(*size, 8, 6).add_target(*size, target),
+            Instruction::ADDX(_, dest, size) => self.add_reg_mem_set(*size, dest, (4, 8), (18, 30)),
 
-            Instruction::AND(src @ Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 14), (12, 20)).add_target(*size, dest),
+            Instruction::AND(Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 14), (12, 20)).add_target(*size, dest),
             Instruction::AND(src, dest, size) => self.add_standard_set(*size, dest, (0, 0), (4, 6), (8, 12)).add_two_targets(*size, src, dest),
             Instruction::ANDtoCCR(_) => self.add_internal(20),
             Instruction::ANDtoSR(_) => self.add_internal(20),
 
-            Instruction::ASd(count, target, size, dir) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
+            Instruction::ASd(_, target, size, _) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
 
             Instruction::Bcc(_, _) => self.add_internal(8).add_on_branch(2),
             Instruction::BRA(_) => self.add_internal(10),
@@ -242,10 +228,10 @@ impl M68kInstructionTiming {
                 _ => self.add_reg_v_mem(target, 6, 4),
             }.add_target(*size, target),
 
-            Instruction::CHK(target, reg, size) => self.add_internal(10),
+            Instruction::CHK(_, _, _) => self.add_internal(10),
             Instruction::CLR(target, size) => self.add_reg_v_mem(target, 4, 8).add_word_v_long(*size, 0, 2).add_target(*size, target),
 
-            Instruction::CMP(src @ Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 14), (8, 12)).add_target(*size, dest),
+            Instruction::CMP(Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 14), (8, 12)).add_target(*size, dest),
             Instruction::CMP(src, dest, size) => self.add_standard_set(*size, dest, (6, 6), (4, 6), (0, 0)).add_two_targets(*size, src, dest),
             Instruction::CMPA(target, _, size) => self.add_word_v_long(*size, 6, 6).add_target(*size, target),
 
@@ -255,7 +241,7 @@ impl M68kInstructionTiming {
                 Sign::Signed => self.add_internal(158).add_target(Size::Long, src),
             },
 
-            Instruction::EOR(src @ Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 16), (12, 20)).add_target(*size, dest),
+            Instruction::EOR(Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 16), (12, 20)).add_target(*size, dest),
             Instruction::EOR(src, dest, size) => self.add_standard_set(*size, dest, (0, 0), (4, 8), (8, 12)).add_two_targets(*size, src, dest),
             Instruction::EORtoCCR(_) => self.add_internal(20),
             Instruction::EORtoSR(_) => self.add_internal(20),
@@ -268,9 +254,9 @@ impl M68kInstructionTiming {
             Instruction::JMP(target) => self.add_indirect_set(target, 8, 10, 14, 10, 12),
             Instruction::JSR(target) => self.add_indirect_set(target, 16, 18, 22, 18, 20),
 
-            Instruction::LEA(target, reg) => self.add_indirect_set(target, 4, 8, 12, 8, 12),
+            Instruction::LEA(target, _) => self.add_indirect_set(target, 4, 8, 12, 8, 12),
             Instruction::LINK(_, _) => self.add_internal(16),
-            Instruction::LSd(count, target, size, dir) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
+            Instruction::LSd(_, target, size, _) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
 
             Instruction::MOVE(src, dest, size) => self.add_internal(4).add_two_targets(*size, src, dest),
             Instruction::MOVEA(target, _, size) => self.add_internal(4).add_target(*size, target),
@@ -278,10 +264,10 @@ impl M68kInstructionTiming {
             Instruction::MOVEtoSR(target) => self.add_internal(12).add_target(Size::Word, target),
             Instruction::MOVEfromCCR(target) => self.add_internal(12).add_target(Size::Word, target),
             Instruction::MOVEtoCCR(target) => self.add_internal(12).add_target(Size::Word, target),
-            Instruction::MOVEC(target, reg, dir) => self.add_reg_v_mem(target, 10, 12),
+            Instruction::MOVEC(target, _, _) => self.add_reg_v_mem(target, 10, 12),
             Instruction::MOVEM(target, size, dir, mask) => self.add_movem(*size, target, *dir, mask.count_ones() as u8),
             Instruction::MOVEP(_, _, _, size, _) => self.add_word_v_long(*size, 16, 24),
-            Instruction::MOVEQ(value, reg) => self.add_internal(4),
+            Instruction::MOVEQ(_, _) => self.add_internal(4),
             Instruction::MOVEUSP(_, _) => self.add_internal(4),
 
             Instruction::MULW(src, _, _) => self.add_internal(70).add_target(Size::Word, src),
@@ -293,7 +279,7 @@ impl M68kInstructionTiming {
             Instruction::NOP => self.add_internal(4),
             Instruction::NOT(target, size) => self.add_reg_mem_set(*size, target, (4, 6), (8, 12)).add_target(*size, target),
 
-            Instruction::OR(src @ Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 16), (12, 20)).add_target(*size, dest),
+            Instruction::OR(Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 16), (12, 20)).add_target(*size, dest),
             Instruction::OR(src, dest, size) => self.add_standard_set(*size, dest, (0, 0), (4, 6), (8, 12)).add_two_targets(*size, src, dest),
             Instruction::ORtoCCR(_) => self.add_internal(20),
             Instruction::ORtoSR(_) => self.add_internal(20),
@@ -302,26 +288,26 @@ impl M68kInstructionTiming {
 
             Instruction::RESET => self.add_internal(132),
 
-            Instruction::ROd(count, target, size, dir) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
-            Instruction::ROXd(count, target, size, dir) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
+            Instruction::ROd(_, target, size, _) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
+            Instruction::ROXd(_, target, size, _) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
 
             Instruction::RTE => self.add_internal(20),
             Instruction::RTR => self.add_internal(20),
             Instruction::RTS => self.add_internal(16),
             //Instruction::RTD(offset) => ,
 
-            Instruction::SBCD(src, dest) => self.add_reg_v_mem(dest, 6, 18),
+            Instruction::SBCD(_, dest) => self.add_reg_v_mem(dest, 6, 18),
             Instruction::Scc(_, target) => self.add_reg_v_mem(target, 4, 8).add_on_branch(2).add_target(Size::Byte, target),
             Instruction::STOP(_) => self.add_internal(4),
 
             Instruction::SUB(Target::Immediate(x), Target::DirectAReg(_), Size::Byte)
             | Instruction::SUB(Target::Immediate(x), Target::DirectAReg(_), Size::Word) if *x <= 8 => self.add_internal(8),      // SUBQ with an address reg as dest
-            Instruction::SUB(src @ Target::Immediate(x), dest, size) if *x <= 8 => self.add_immediate_set(*size, dest, (4, 8), (8, 12)).add_target(*size, dest), // SUBQ
-            Instruction::SUB(src @ Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 16), (12, 20)).add_target(*size, dest), // SUBI
+            Instruction::SUB(Target::Immediate(x), dest, size) if *x <= 8 => self.add_immediate_set(*size, dest, (4, 8), (8, 12)).add_target(*size, dest), // SUBQ
+            Instruction::SUB(Target::Immediate(_), dest, size) => self.add_immediate_set(*size, dest, (8, 16), (12, 20)).add_target(*size, dest), // SUBI
 
             Instruction::SUB(src, dest, size) => self.add_standard_set(*size, dest, (0, 0), (4, 6), (8, 12)).add_two_targets(*size, src, dest),
-            Instruction::SUBA(target, reg, size) => self.add_word_v_long(*size, 8, 6).add_target(*size, target),
-            Instruction::SUBX(src, dest, size) => self.add_reg_mem_set(*size, dest, (4, 8), (18, 30)),
+            Instruction::SUBA(target, _, size) => self.add_word_v_long(*size, 8, 6).add_target(*size, target),
+            Instruction::SUBX(_, dest, size) => self.add_reg_mem_set(*size, dest, (4, 8), (18, 30)),
 
             Instruction::SWAP(_) => self.add_internal(4),
 
