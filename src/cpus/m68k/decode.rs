@@ -74,7 +74,7 @@ impl M68kDecoder {
             OPCG_BIT_OPS => {
                 let optype = (ins & 0x0F00) >> 8;
 
-                if (ins & 0x3F) == 0b111100 {
+                if (ins & 0x13F) == 0x03C {
                     match (ins & 0x00C0) >> 6 {
                         0b00 => {
                             let data = self.read_instruction_word(memory)?;
@@ -171,11 +171,15 @@ impl M68kDecoder {
                 let ins_0f00 = ins & 0xF00;
                 let ins_00f0 = ins & 0x0F0;
 
-                if (ins & 0x180) == 0x180 && (ins & 0x038) != 0 {
+                if (ins & 0x180) == 0x180 {
                     if (ins & 0x040) == 0 {
                         let size = match get_size(ins) {
                             Some(Size::Word) => Size::Word,
-                            Some(Size::Long) if self.cputype >= M68kType::MC68020 => Size::Long,
+                            // TODO 2021-12-14: the docs for the 68000 show the size field, even though it says it only operates on words
+                            //                  and according to some other sources, it seems they are parsed and executed on the 68000, so
+                            //                  I'm removing the check that only allows this on the MC68020
+                            //Some(Size::Long) if self.cputype >= M68kType::MC68020 => Size::Long,
+                            Some(Size::Long) => Size::Long,
                             _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         };
 
@@ -698,11 +702,11 @@ impl M68kDecoder {
                 match reg {
                     0b000 => {
                         let value = sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word) as u32;
-                        Target::IndirectMemory(value)
+                        Target::IndirectMemory(value, Size::Word)
                     },
                     0b001 => {
                         let value = self.read_instruction_long(memory)?;
-                        Target::IndirectMemory(value)
+                        Target::IndirectMemory(value, Size::Long)
                     },
                     0b010 => {
                         let displacement = sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word);
@@ -754,7 +758,7 @@ impl M68kDecoder {
             (0..((self.end - self.start) / 2)).map(|offset|
                 Ok(format!("{:04x} ", memory.read_beu16((self.start + (offset * 2)) as Address).unwrap()))
             ).collect();
-        println!("{:#010x}: {}\n\t{:?}\n", self.start, ins_data.unwrap(), self.instruction);
+        println!("{:#010x}: {}\n\t{}\n", self.start, ins_data.unwrap(), self.instruction);
     }
 }
 
@@ -807,7 +811,6 @@ fn get_condition(ins: u16) -> Condition {
         0b1101 => Condition::LessThan,
         0b1110 => Condition::GreaterThan,
         0b1111 => Condition::LessThanOrEqual,
-
         _ => Condition::True,
     }
 }

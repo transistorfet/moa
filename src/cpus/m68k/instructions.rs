@@ -91,7 +91,7 @@ pub enum Target {
     IndirectRegOffset(BaseRegister, Option<IndexRegister>, i32),
     IndirectMemoryPreindexed(BaseRegister, Option<IndexRegister>, i32, i32),
     IndirectMemoryPostindexed(BaseRegister, Option<IndexRegister>, i32, i32),
-    IndirectMemory(u32),
+    IndirectMemory(u32, Size),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -285,6 +285,15 @@ impl fmt::Display for ControlRegister {
     }
 }
 
+impl fmt::Display for RegOrImmediate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RegOrImmediate::DReg(reg) => write!(f, "%d{}", reg),
+            RegOrImmediate::Immediate(value) => write!(f, "#{:#02x}", value),
+        }
+    }
+}
+
 impl fmt::Display for XRegister {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -339,13 +348,50 @@ impl fmt::Display for Target {
                 let index_str = fmt_index_disp(index_reg);
                 write!(f, "([{}#{:08x}]{} + #{:08x})", base_reg, base_disp, index_str, outer_disp)
             },
-            Target::IndirectMemory(value) => write!(f, "(#{:08x})", value),
+            Target::IndirectMemory(value, size) => if *size == Size::Word {
+                write!(f, "(#{:04x})", value)
+            } else {
+                write!(f, "(#{:08x})", value)
+            },
         }
     }
 }
 
-fn fmt_movem_mask(mask: u16) -> String {
-    format!("something")
+fn fmt_movem_mask(mut mask: u16, target: &Target) -> String {
+    let mut output = vec![];
+
+    match target {
+        Target::IndirectARegDec(_) => {
+            for i in (0..8).rev() {
+                if (mask & 0x01) != 0 {
+                    output.push(format!("%a{}", i));
+                }
+                mask >>= 1;
+            }
+            for i in (0..8).rev() {
+                if (mask & 0x01) != 0 {
+                    output.push(format!("%d{}", i));
+                }
+                mask >>= 1;
+            }
+        },
+        _ => {
+            for i in 0..8 {
+                if (mask & 0x01) != 0 {
+                    output.push(format!("%d{}", i));
+                }
+                mask >>= 1;
+            }
+            for i in 0..8 {
+                if (mask & 0x01) != 0 {
+                    output.push(format!("%a{}", i));
+                }
+                mask >>= 1;
+            }
+        },
+    }
+
+    output.join("/")
 }
 
 impl fmt::Display for Instruction {
@@ -353,6 +399,8 @@ impl fmt::Display for Instruction {
         match self {
             Instruction::ABCD(src, dest) => write!(f, "abcd\t{}, {}", src, dest),
             Instruction::ADD(src, dest, size) => write!(f, "add{}\t{}, {}", size, src, dest),
+            Instruction::ADDA(target, reg, size) => write!(f, "adda{}\t{}, %a{}", size, target, reg),
+            Instruction::ADDX(src, dest, size) => write!(f, "addx{}\t{}, {}", size, src, dest),
             Instruction::AND(src, dest, size) => write!(f, "and{}\t{}, {}", size, src, dest),
             Instruction::ANDtoCCR(value) => write!(f, "andb\t{:02x}, %ccr", value),
             Instruction::ANDtoSR(value) => write!(f, "andw\t{:04x}, %sr", value),
@@ -365,7 +413,15 @@ impl fmt::Display for Instruction {
             Instruction::BCLR(src, dest, size) => write!(f, "bclr{}\t{}, {}", size, src, dest),
             Instruction::BSET(src, dest, size) => write!(f, "bset{}\t{}, {}", size, src, dest),
             Instruction::BTST(src, dest, size) => write!(f, "btst{}\t{}, {}", size, src, dest),
-            //Instruction::BKPT(value),
+            Instruction::BFCHG(target, offset, width) => write!(f, "bfchg\t{}, {}, {}", target, offset, width),
+            Instruction::BFCLR(target, offset, width) => write!(f, "bfclr\t{}, {}, {}", target, offset, width),
+            Instruction::BFEXTS(target, offset, width, reg) => write!(f, "bfexts\t{}, {}, {}, %d{}", target, offset, width, reg),
+            Instruction::BFEXTU(target, offset, width, reg) => write!(f, "bfextu\t{}, {}, {}, %d{}", target, offset, width, reg),
+            Instruction::BFFFO(target, offset, width, reg) => write!(f, "bfffo\t{}, {}, {}, %d{}", target, offset, width, reg),
+            Instruction::BFINS(reg, target, offset, width) => write!(f, "bfins\t%d{}, {}, {}, {}", reg, target, offset, width),
+            Instruction::BFSET(target, offset, width) => write!(f, "bfset\t{}, {}, {}", target, offset, width),
+            Instruction::BFTST(target, offset, width) => write!(f, "bftst\t{}, {}, {}", target, offset, width),
+            Instruction::BKPT(value) => write!(f, "bkpt\t{}", value),
 
             Instruction::CHK(target, reg, size) => write!(f, "chk{}\t{}, %d{}", size, target, reg),
             Instruction::CLR(target, size) => write!(f, "clr{}\t{}", size, target),
@@ -405,8 +461,8 @@ impl fmt::Display for Instruction {
                 Direction::FromTarget => write!(f, "movec\t{}, {}", target, reg),
             },
             Instruction::MOVEM(target, size, dir, mask) => match dir {
-                Direction::ToTarget => write!(f, "movem{}\t{}, {}", size, fmt_movem_mask(*mask), target),
-                Direction::FromTarget => write!(f, "movem{}\t{}, {}", size, target, fmt_movem_mask(*mask)),
+                Direction::ToTarget => write!(f, "movem{}\t{}, {}", size, fmt_movem_mask(*mask, target), target),
+                Direction::FromTarget => write!(f, "movem{}\t{}, {}", size, target, fmt_movem_mask(*mask, target)),
             },
             Instruction::MOVEP(dreg, areg, offset, size, dir) => match dir {
                 Direction::ToTarget => write!(f, "movep{}\t%d{}, ({}, %a{})", size, dreg, areg, offset),
@@ -448,6 +504,8 @@ impl fmt::Display for Instruction {
             Instruction::Scc(cond, target) => write!(f, "s{}\t{}", cond, target),
             Instruction::STOP(value) => write!(f, "stop\t#{:04x}", value),
             Instruction::SUB(src, dest, size) => write!(f, "sub{}\t{}, {}", size, src, dest),
+            Instruction::SUBA(target, reg, size) => write!(f, "suba{}\t{}, %a{}", size, target, reg),
+            Instruction::SUBX(src, dest, size) => write!(f, "subx{}\t{}, {}", size, src, dest),
             Instruction::SWAP(reg) => write!(f, "swap\t%d{}", reg),
 
             Instruction::TAS(target) => write!(f, "tas\t{}", target),
@@ -456,7 +514,8 @@ impl fmt::Display for Instruction {
             Instruction::TRAPV => write!(f, "trapv"),
 
             Instruction::UNLK(reg) => write!(f, "unlk\t%a{}", reg),
-            _ => write!(f, "UNIMPL"),
+            Instruction::UnimplementedA(ins) => write!(f, "coproc_a\t{:#06x}", ins),
+            Instruction::UnimplementedF(ins) => write!(f, "coproc_f\t{:#06x}", ins),
         }
     }
 }

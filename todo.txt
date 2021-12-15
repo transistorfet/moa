@@ -1,20 +1,7 @@
 
-* for the mixer, it might be easier to have a buffer for each source, but then you'd need to have a list of all sources, even though
-  each source has a copy of the mixer as well... Likely there'd be a sub object in Source which is the buffer and anything else needed
-  by the mixer
+* when a MOVE's targets are both ARegDec, the 2 extra clocks can be combined (-2 clocks in this one case)
 
-* I'm leaning towards having an object that data is written to by the device.  The device can decide how often to update.  The issue is
-  knowing what data to exclude or insert when mixing the incoming buffers
-* Removing at a sample-level granularity would compress or lengthen the waveforms, so it would be better to mix/drop a whole chunk at
-  once (either predetermined by the audio system or determined by each device by the amount of samples it writes at once).  The chunk
-  size could either be specified by the device in microseconds or something, or can be inferred by the sample_rate and the size of the
-  chunk.
 
-* how do you know how big an audio frame should be?  How do other emulators do audio without stretching or compressing the waveforms, and
-  can/should I do mixing as well, given that I have 2 sources, and at least for those two, they should be connected to the same output
-* you could make the sound device be an object that is passed back to the simulation section like SimplePty.  You need to either register
-  a callback with the frontend sound system that is called when it needs data, or you write to a shared buffer which is passed back to the
-  frontend when it needs it, or it has a copy it can use directly
 
 * should you rename devices.rs traits.rs?
 * add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
@@ -30,6 +17,25 @@
 * should you modify Addressable to also take the absolute address as input?  I'm thinking of how the same device could be mapped to multiple addresses in memory instead
   of taking up a whole range of addresses
 * you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
+
+
+Audio:
+    * for the mixer, it might be easier to have a buffer for each source, but then you'd need to have a list of all sources, even though
+      each source has a copy of the mixer as well... Likely there'd be a sub object in Source which is the buffer and anything else needed
+      by the mixer
+
+    * I'm leaning towards having an object that data is written to by the device.  The device can decide how often to update.  The issue is
+      knowing what data to exclude or insert when mixing the incoming buffers
+    * Removing at a sample-level granularity would compress or lengthen the waveforms, so it would be better to mix/drop a whole chunk at
+      once (either predetermined by the audio system or determined by each device by the amount of samples it writes at once).  The chunk
+      size could either be specified by the device in microseconds or something, or can be inferred by the sample_rate and the size of the
+      chunk.
+
+    * how do you know how big an audio frame should be?  How do other emulators do audio without stretching or compressing the waveforms, and
+      can/should I do mixing as well, given that I have 2 sources, and at least for those two, they should be connected to the same output
+    * you could make the sound device be an object that is passed back to the simulation section like SimplePty.  You need to either register
+      a callback with the frontend sound system that is called when it needs data, or you write to a shared buffer which is passed back to the
+      frontend when it needs it, or it has a copy it can use directly
 
 
 Debugger:

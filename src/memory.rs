@@ -217,6 +217,10 @@ impl BusPort {
     pub fn dump_memory(&mut self, addr: Address, count: Address) {
         self.subdevice.borrow_mut().dump_memory(self.offset + (addr & self.address_mask), count)
     }
+
+    pub fn data_width(&self) -> u8 {
+        self.data_width
+    }
 }
 
 impl Addressable for BusPort {

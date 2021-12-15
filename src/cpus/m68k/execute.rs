@@ -29,7 +29,7 @@ use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority}
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         self.step_internal(system)?;
-        Ok((1_000_000_000 / self.frequency as u64) * 4)
+        Ok((1_000_000_000 / self.frequency as u64) * 4 as ClockElapsed)
     }
 
     fn on_error(&mut self, system: &System) {
@@ -756,11 +756,11 @@ impl M68k {
                 let addr = self.get_a_reg_mut(reg);
                 *addr = new_value;
             },
-            Instruction::UnimplementedA(ins) => {
+            Instruction::UnimplementedA(_) => {
                 self.state.pc -= 2;
                 self.exception(Exceptions::LineAEmulator as u8, false)?;
             },
-            Instruction::UnimplementedF(ins) => {
+            Instruction::UnimplementedF(_) => {
                 self.state.pc -= 2;
                 self.exception(Exceptions::LineFEmulator as u8, false)?;
             },
@@ -771,8 +771,8 @@ impl M68k {
         Ok(())
     }
 
-    fn execute_movem(&mut self, target: Target, size: Size, dir: Direction, mut mask: u16) -> Result<(), Error> {
-        let mut addr = self.get_target_address(target)?;
+    fn execute_movem(&mut self, target: Target, size: Size, dir: Direction, mask: u16) -> Result<(), Error> {
+        let addr = self.get_target_address(target)?;
 
         // If we're using a MC68020 or higher, and it was Post-Inc/Pre-Dec target, then update the value before it's stored
         if self.cputype >= M68kType::MC68020 {
@@ -786,13 +786,13 @@ impl M68k {
         }
 
         let post_addr = match target {
-            Target::IndirectARegInc(reg) => {
+            Target::IndirectARegInc(_) => {
                 if dir != Direction::FromTarget {
                     return Err(Error::new(&format!("Cannot use {:?} with {:?}", target, dir)));
                 }
                 self.move_memory_to_registers(addr, size, mask)?
             },
-            Target::IndirectARegDec(reg) => {
+            Target::IndirectARegDec(_) => {
                 if dir != Direction::ToTarget {
                     return Err(Error::new(&format!("Cannot use {:?} with {:?}", target, dir)));
                 }
@@ -937,7 +937,7 @@ impl M68k {
                 let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
                 self.get_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, size)
             },
-            Target::IndirectMemory(addr) => {
+            Target::IndirectMemory(addr, _) => {
                 self.get_address_sized(addr as Address, size)
             },
         }
@@ -984,7 +984,7 @@ impl M68k {
                 let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
                 self.set_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, value, size)?;
             },
-            Target::IndirectMemory(addr) => {
+            Target::IndirectMemory(addr, _) => {
                 self.set_address_sized(addr as Address, value, size)?;
             },
             _ => return Err(Error::new(&format!("Unimplemented addressing target: {:?}", target))),
@@ -1012,7 +1012,7 @@ impl M68k {
                 let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
                 intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32)
             },
-            Target::IndirectMemory(addr) => {
+            Target::IndirectMemory(addr, _) => {
                 addr
             },
             _ => return Err(Error::new(&format!("Invalid addressing target: {:?}", target))),

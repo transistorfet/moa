@@ -1,7 +1,7 @@
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Address, Addressable, Debuggable};
+use crate::devices::{Address, Debuggable};
 
 use super::state::Z80;
 use super::decode::Z80Decoder;
