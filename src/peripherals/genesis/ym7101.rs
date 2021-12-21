@@ -625,26 +625,29 @@ impl Steppable for Ym7101 {
         }
 
         self.state.h_clock += diff;
-        if (self.state.status & STATUS_IN_HBLANK) == 0 && self.state.v_clock > 58_820 {
-            self.state.status |= STATUS_IN_HBLANK;
-        }
-        if self.state.h_clock > 63_500 {
+        if (self.state.status & STATUS_IN_HBLANK) != 0 && self.state.h_clock >= 2_340 && self.state.h_clock <= 61_160 {
             self.state.status &= !STATUS_IN_HBLANK;
-            self.state.h_clock = 0;
-            self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
+        }
+        if (self.state.status & STATUS_IN_HBLANK) == 0 && self.state.h_clock >= 61_160 {
+            self.state.status |= STATUS_IN_HBLANK;
+
             if self.state.hsync_int_enabled() && self.state.h_scanlines == 0  {
                 self.state.h_scanlines = self.state.h_int_lines;
                 system.get_interrupt_controller().set(true, 4, 28)?;
             }
         }
+        if self.state.h_clock > 63_500 {
+            self.state.h_clock -= 63_500;
+            self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
+        }
 
         self.state.v_clock += diff;
-        if (self.state.status & STATUS_IN_VBLANK) == 0 && self.state.v_clock > 14_218_000 {
-            self.state.status |= STATUS_IN_VBLANK;
-        }
-        if self.state.v_clock > 16_630_000 {
+        if (self.state.status & STATUS_IN_VBLANK) != 0 && self.state.v_clock >= 1_205_992 && self.state.v_clock <= 15_424_008 {
             self.state.status &= !STATUS_IN_VBLANK;
-            self.state.v_clock -= 16_630_000;
+        }
+        if (self.state.status & STATUS_IN_VBLANK) == 0 && self.state.v_clock >= 15_424_008 {
+            self.state.status |= STATUS_IN_VBLANK;
+
             if self.state.vsync_int_enabled() {
                 system.get_interrupt_controller().set(true, 6, 30)?;
             }
@@ -653,6 +656,9 @@ impl Steppable for Ym7101 {
             self.state.draw_frame(&mut frame);
 
             self.frame_complete.signal();
+        }
+        if self.state.v_clock > 16_630_000 {
+            self.state.v_clock -= 16_630_000;
         }
 
         if self.state.transfer_run != DmaType::None && (self.state.mode_2 & MODE2_BF_DMA_ENABLED) != 0 {
