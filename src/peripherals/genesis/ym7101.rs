@@ -313,15 +313,15 @@ impl Ym7101State {
         (((rgb & 0xF00) as u32) >> 4) | (((rgb & 0x0F0) as u32) << 8) | (((rgb & 0x00F) as u32) << 20)
     }
 
-    pub fn get_pattern_iter<'a>(&'a self, pattern_name: u16) -> PatternIterator<'a> {
+    pub fn get_pattern_iter<'a>(&'a self, pattern_name: u16, line: i8) -> PatternIterator<'a> {
         let pattern_addr = (pattern_name & 0x07FF) << 5;
         let pattern_palette = ((pattern_name & 0x6000) >> 13) as u8;
         let h_rev = (pattern_name & 0x0800) != 0;
         let v_rev = (pattern_name & 0x1000) != 0;
-        PatternIterator::new(&self, pattern_addr as u32, pattern_palette, h_rev, v_rev)
+        PatternIterator::new(&self, pattern_addr as u32, pattern_palette, h_rev, v_rev, line)
     }
 
-    pub fn get_hscroll(&self, hcell: usize) -> (u32, u32) {
+    pub fn get_hscroll(&self, hcell: usize, column: usize) -> (u32, u32) {
         let base_addr = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
             0 => self.hscroll_addr,
             2 => self.hscroll_addr + (hcell << 4),
@@ -329,8 +329,9 @@ impl Ym7101State {
             _ => panic!("Unsupported horizontal scroll mode"),
         };
 
-        let scroll_a = read_beu16(&self.vram[base_addr..]) as u32 & 0x3FF;
-        let scroll_b = read_beu16(&self.vram[base_addr + 2..]) as u32 & 0x3FF;
+        let scroll_addr = base_addr + (column * 2 * 2);
+        let scroll_a = read_beu16(&self.vram[scroll_addr..]) as u32 & 0x3FF;
+        let scroll_b = read_beu16(&self.vram[scroll_addr + 2..]) as u32 & 0x3FF;
         (scroll_a, scroll_b)
     }
 
@@ -367,8 +368,13 @@ impl Ym7101State {
 
 
     pub fn draw_pattern(&mut self, frame: &mut Frame, pattern: u16, pixel_x: u32, pixel_y: u32) {
-        let iter = self.get_pattern_iter(pattern);
+        let iter = self.get_pattern_iter(pattern, 0);
         frame.blit(pixel_x, pixel_y, iter, 8, 8);
+    }
+
+    pub fn draw_pattern_line(&mut self, frame: &mut Frame, pattern: u16, pixel_x: u32, pixel_y: u32, line: i8) {
+        let iter = self.get_pattern_iter(pattern, line);
+        frame.blit(pixel_x, pixel_y, iter, 8, 1);
     }
 
     pub fn draw_frame(&mut self, frame: &mut Frame) {
@@ -383,25 +389,61 @@ impl Ym7101State {
         frame.clear(bg_colour);
     }
 
+    #[inline(always)]
     pub fn draw_scrolls(&mut self, frame: &mut Frame) {
-        let (scroll_h, scroll_v) = self.scroll_size;
-        let (cells_h, cells_v) = self.screen_size;
-
-        if scroll_h == 0 || scroll_v == 0 {
-            return;
+        if (self.mode_3 & MODE3_BF_H_SCROLL_MODE) != 3 {
+            self.draw_scrolls_cell(frame);
+        } else {
+            self.draw_scrolls_line(frame);
         }
+    }
+
+    pub fn draw_scrolls_cell(&mut self, frame: &mut Frame) {
+        let (cells_h, cells_v) = self.screen_size;
 
         for cell_y in 0..cells_v {
             let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_y);
             for cell_x in 0..cells_h {
-                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_x);
+                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_x, 0);
 
                 let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b as usize, vscrolling_b as usize);
                 let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a as usize, vscrolling_a as usize);
 
                 //if (pattern_b & 0x8000) != 0 && (pattern_a & 0x8000) == 0 {
-                self.draw_pattern(frame, pattern_b, (cell_x << 3) as u32, (cell_y << 3) as u32);
-                self.draw_pattern(frame, pattern_a, (cell_x << 3) as u32, (cell_y << 3) as u32);
+                self.draw_pattern(frame, pattern_b, (cell_x << 3) as u32, (cell_y << 3) as u32 - (vscrolling_b % 8));
+                self.draw_pattern(frame, pattern_a, (cell_x << 3) as u32, (cell_y << 3) as u32 - (vscrolling_b % 8));
+            }
+        }
+    }
+
+    pub fn draw_scrolls_line(&mut self, frame: &mut Frame) {
+        let (cells_h, cells_v) = self.screen_size;
+
+        for cell_y in 0..cells_v {
+            let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_y);
+            for cell_x in 0..cells_h {
+                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_x, 0);
+
+                let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b as usize, vscrolling_b as usize);
+
+                for line in 0..8 {
+                    let (_, offset_b) = self.get_hscroll(cell_x, line as usize);
+                    self.draw_pattern_line(frame, pattern_b, (cell_x << 3) as u32 + (offset_b % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_b % 8), line);
+                }
+            }
+        }
+
+        for cell_y in 0..cells_v {
+            let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_y);
+            for cell_x in 0..cells_h {
+                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_x, 0);
+
+                let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a as usize, vscrolling_a as usize);
+
+                for line in 0..8 {
+                    let (offset_a, _) = self.get_hscroll(cell_x, line as usize);
+                    self.draw_pattern_line(frame, pattern_a, (cell_x << 3) as u32 + (offset_a % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_a % 8), line);
+                }
             }
         }
     }
@@ -462,7 +504,7 @@ impl Ym7101State {
                     let (h, v) = (if !h_rev { ih } else { size_h - 1 - ih }, if !v_rev { iv } else { size_v - 1 - iv });
                     let (x, y) = (h_pos + ih * 8, v_pos + iv * 8);
                     if x > 128 && x < pos_limit_h && y > 128 && y < pos_limit_v {
-                        let iter = self.get_pattern_iter(((pattern_name & 0x07FF) + (h * size_v) + v) | (pattern_name & 0xF800));
+                        let iter = self.get_pattern_iter(((pattern_name & 0x07FF) + (h * size_v) + v) | (pattern_name & 0xF800), 0);
 
                         frame.blit(x as u32 - 128, y as u32 - 128, iter, 8, 8);
                     }
@@ -493,14 +535,14 @@ pub struct PatternIterator<'a> {
 }
 
 impl<'a> PatternIterator<'a> {
-    pub fn new(state: &'a Ym7101State, start: u32, palette: u8, h_rev: bool, v_rev: bool) -> Self {
+    pub fn new(state: &'a Ym7101State, start: u32, palette: u8, h_rev: bool, v_rev: bool, line: i8) -> Self {
         Self {
             state,
             palette,
             base: start as usize,
             h_rev,
             v_rev,
-            line: 0,
+            line,
             col: 0,
             second: false,
         }
