@@ -1,6 +1,7 @@
 
 use crate::error::Error;
-use crate::devices::{Address, Addressable, Transmutable};
+use crate::system::System;
+use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable};
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
 use crate::host::traits::{Host, ControllerUpdater, HostData};
 
@@ -64,7 +65,7 @@ impl GenesisControllerPort {
         let prev_th = self.outputs & 0x40;
         self.outputs = outputs;
 
-        if ((outputs & 0x40) ^ prev_th) != 0 {
+        if ((outputs & 0x40) ^ prev_th) != 0 && (outputs & 0x40) == 0 {
             // TH bit was toggled
 
             self.th_count += 1;
@@ -116,8 +117,7 @@ pub struct GenesisController {
     port_2: GenesisControllerPort,
     expansion: GenesisControllerPort,
     interrupt: HostData<bool>,
-    //last_clock: Clock,
-    //last_write: Clock,
+    reset_timer: Clock,
 }
 
 impl GenesisController {
@@ -127,8 +127,7 @@ impl GenesisController {
             port_2: GenesisControllerPort::new(),
             expansion: GenesisControllerPort::new(),
             interrupt: HostData::new(false),
-            //last_clock: 0,
-            //last_write: 0,
+            reset_timer: 0,
         }
     }
 
@@ -179,13 +178,7 @@ impl Addressable for GenesisController {
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        // TODO this causes sonic2 to read incorrect inputs, but works without the reset
-        //if self.last_clock - self.last_write >= 1_500_000 {
-        //    self.port_1.reset_count();
-        //    self.port_2.reset_count();
-        //    self.expansion.reset_count();
-        //}
-        //self.last_write = self.last_clock; 
+        self.reset_timer = 0;
 
         debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
@@ -204,21 +197,28 @@ impl Addressable for GenesisController {
     }
 }
 
-//impl Steppable for GenesisController {
-//    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-//        self.last_clock = system.clock;
-//        Ok(100_000)     // Update every 100us
-//    }
-//}
+impl Steppable for GenesisController {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+        let duration = 100_00;     // Update every 100us
+
+        self.reset_timer += duration;
+        if self.reset_timer >= 1_500_000 {
+            self.port_1.reset_count();
+            self.port_2.reset_count();
+            self.expansion.reset_count();
+        }
+        Ok(duration)
+    }
+}
 
 impl Transmutable for GenesisController {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         Some(self)
     }
 
-    //fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
-    //    Some(self)
-    //}
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
 }
 
 
