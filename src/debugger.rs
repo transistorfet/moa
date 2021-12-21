@@ -29,6 +29,7 @@ impl Debugger {
     pub fn run_debugger(&mut self, system: &System, target: TransmutableBox) -> Result<(), Error> {
         let mut target = target.borrow_mut();
         let debug_obj = target.as_debuggable().unwrap();
+        println!("@ {} ns", system.clock);
         debug_obj.print_current_step(system)?;
 
         if self.trace_only {

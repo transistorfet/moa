@@ -28,6 +28,7 @@ impl StackTracer {
 
 
 pub struct M68kDebugger {
+    pub enabled: bool,
     pub breakpoints: Vec<u32>,
     pub use_tracing: bool,
     pub step_until_return: Option<usize>,
@@ -37,6 +38,7 @@ pub struct M68kDebugger {
 impl M68kDebugger {
     pub fn new() -> M68kDebugger {
         M68kDebugger {
+            enabled: false,
             breakpoints: vec!(),
             use_tracing: false,
             step_until_return: None,
@@ -46,13 +48,23 @@ impl M68kDebugger {
 }
 
 impl Debuggable for M68k {
+    fn debugging_enabled(&mut self) -> bool {
+        self.debugger.enabled
+    }
+
+    fn set_debugging(&mut self, enable: bool) {
+        self.debugger.enabled = enable;
+    }
+
     fn add_breakpoint(&mut self, addr: Address) {
         self.debugger.breakpoints.push(addr as u32);
+        self.debugger.enabled = true;
     }
 
     fn remove_breakpoint(&mut self, addr: Address) {
         if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == addr as u32) {
             self.debugger.breakpoints.remove(index);
+            self.debugger.enabled = !self.debugger.breakpoints.is_empty();
         }
     }
 

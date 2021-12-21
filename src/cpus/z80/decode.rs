@@ -177,6 +177,7 @@ pub struct Z80Decoder {
     pub start: u16,
     pub end: u16,
     pub instruction: Instruction,
+    pub execution_time: u16,
 }
 
 impl Z80Decoder {
@@ -185,6 +186,7 @@ impl Z80Decoder {
             start: 0,
             end: 0,
             instruction: Instruction::NOP,
+            execution_time: 0,
         }
     }
 }
@@ -193,6 +195,7 @@ impl Z80Decoder {
     pub fn decode_at(&mut self, memory: &mut dyn Addressable, start: u16) -> Result<(), Error> {
         self.start = start;
         self.end = start;
+        self.execution_time = 0;
         self.instruction = self.decode_one(memory)?;
         Ok(())
     }
@@ -674,12 +677,14 @@ impl Z80Decoder {
     fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Error> {
         let byte = device.read_u8(self.end as Address)?;
         self.end += 1;
+        self.execution_time += 4;
         Ok(byte)
     }
 
     fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Error> {
         let word = device.read_leu16(self.end as Address)?;
         self.end += 2;
+        self.execution_time += 8;
         Ok(word)
     }
 

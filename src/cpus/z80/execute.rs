@@ -23,10 +23,13 @@ enum RotateType {
 impl Steppable for Z80 {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         let clocks = if self.reset.get() {
+//println!("RESET");
             self.reset()?
         } else if self.bus_request.get() {
-            1
+//println!("BUS REQ");
+            4
         } else {
+//println!("RUNNING {:?}", self.decoder.instruction);
             self.step_internal(system)?
         };
 
@@ -77,7 +80,7 @@ impl Z80 {
     pub fn init(&mut self) -> Result<u16, Error> {
         self.state.pc = 0;
         self.state.status = Status::Running;
-        Ok(4)
+        Ok(16)
     }
 
     pub fn reset(&mut self) -> Result<u16, Error> {
@@ -90,7 +93,7 @@ impl Z80 {
         self.execute_current()?;
         //self.check_pending_interrupts(system)?;
         self.check_breakpoints(system);
-        Ok(4)
+        Ok(self.decoder.execution_time)
     }
 
     pub fn decode_next(&mut self) -> Result<(), Error> {
@@ -876,17 +879,6 @@ fn sub_words(operand1: u16, operand2: u16) -> (u16, bool, bool) {
     let (result, carry) = operand1.overflowing_sub(operand2);
     let (_, overflow) = ((operand1 as i8) as i16).overflowing_sub((operand2 as i8) as i16);
     (result, carry, overflow)
-}
-
-
-#[inline(always)]
-fn get_msb_byte(value: u8) -> bool {
-    (value & 0x80) != 0
-}
-
-#[inline(always)]
-fn get_msb_word(value: u16) -> bool {
-    (value & 0x8000) != 0
 }
 
 #[inline(always)]

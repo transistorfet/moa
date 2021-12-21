@@ -76,6 +76,7 @@ impl System {
 
     pub fn enable_debugging(&self) {
         self.debug_enabled.set(true);
+        self.devices.get("cpu").map(|result| result.try_borrow_mut().map(|mut borrow| borrow.as_debuggable().map(|debug| debug.set_debugging(true))));
         self.debugger.borrow_mut().breakpoint_occurred();
     }
 
@@ -98,9 +99,7 @@ impl System {
     }
 
     pub fn step(&mut self) -> Result<(), Error> {
-        if self.debug_enabled.get() && self.event_queue[self.event_queue.len() - 1].device.borrow_mut().as_debuggable().is_some() {
-            self.debugger.borrow_mut().run_debugger(&self, self.event_queue[self.event_queue.len() - 1].device.clone()).unwrap();
-        }
+        self.check_debugger();
 
         match self.process_one_event() {
             Ok(()) => { }
@@ -151,6 +150,14 @@ impl System {
         }
     }
 
+    fn check_debugger(&mut self) {
+        if self.debug_enabled.get() {
+            let top = self.event_queue[self.event_queue.len() - 1].device.clone();
+            if top.borrow_mut().as_debuggable().map(|debug| debug.debugging_enabled()).unwrap_or(false) {
+                self.debugger.borrow_mut().run_debugger(&self, top.clone()).unwrap();
+            }
+        }
+    }
 
     fn try_queue_device(&mut self, device: TransmutableBox) {
         if device.borrow_mut().as_steppable().is_some() {

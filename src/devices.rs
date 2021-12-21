@@ -162,6 +162,8 @@ pub fn write_leu32(data: &mut [u8], value: u32) -> &mut [u8] {
 
 /// A device (cpu) that can debugged using the built-in debugger
 pub trait Debuggable {
+    fn debugging_enabled(&mut self) -> bool;
+    fn set_debugging(&mut self, enable: bool);
     fn add_breakpoint(&mut self, addr: Address);
     fn remove_breakpoint(&mut self, addr: Address);
 
