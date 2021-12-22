@@ -1,12 +1,4 @@
 
-* there is possibly a cpu bug in causing the acceleration in sonic 2 to be very slow.  Speeding up the CPU makes it playably fast, but I think it's still
-  incorrect, in that the top speed is faster than it should be, but the acceleration is correct...
-* for the speed problem, I've actually noticed the level vint is only called every ~33_200_000 ns which is twice as long as it should be, so maybe there's
-  a vint problem, maybe even a toggle trigger that should be a one-shot
-* there is definitely something related to interrupts; 2 interrupts occur in between each call to Vint_Level (ie. Vint_Level only runs every 2 frames (33.2ms) instead
-  of every frame (16.6 ms), which perfectly explains the slowdown without it being related to an instruction implementation error... but why is this happening?
-  Maybe it's because the clock advances too much and first interrupt doesn't complete, or maybe there's a problem with interrupts and masking...
-  It does appear to do I/O with the VDP between te interrupts so it doesn't seem to be just waiting around 
 
 * for the line based hscroll, you need to add that extra cell cycle...
 * there is still some kind of hscroll glitch, and it seems to entirely be caused by the horizontal scroll offset value.  I could be calculating or adding/moding
@@ -53,6 +45,7 @@ Audio:
 Debugger:
 
     * i need a way to debug only the cpu and not the coprocessor, but that's tricky without a way to id or compare Transmutables
+    * you also need a way to specify the device in a breakpoint, perhaps "break cpu:4a", or "break -cpu 4a"
     * how can you improve the debugger?
     * the command line definitely needs to be fixed so it prints the prompt correctly
     * debugger could maybe even allows arrows left/right for editing, and up/down for history

@@ -470,7 +470,7 @@ impl Ym7101State {
         let mut i = 0;
         loop {
             let link = self.vram[sprite_table + (links[i] * 8) + 3];
-            if link == 0 || link > 80 {
+            if link == 0 || link >= 80 {
                 break;
             }
             i += 1;
@@ -776,7 +776,7 @@ impl Addressable for Ym7101 {
                     if data.len() == 4 {
                         let value = read_beu16(&data[2..]);
                         if (value & 0xC000) != 0x8000 {
-                            panic!("Unexpected");
+                            Err(Error:new(&format!("{}: unexpected second byte {:x}", DEV_NAME, value)));
                         }
                         self.state.set_register(value);
                     }
