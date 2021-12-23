@@ -631,6 +631,7 @@ impl Steppable for Ym7101 {
         if (self.state.status & STATUS_IN_HBLANK) == 0 && self.state.h_clock >= 61_160 {
             self.state.status |= STATUS_IN_HBLANK;
 
+            self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
             if self.state.hsync_int_enabled() && self.state.h_scanlines == 0  {
                 self.state.h_scanlines = self.state.h_int_lines;
                 system.get_interrupt_controller().set(true, 4, 28)?;
@@ -638,7 +639,6 @@ impl Steppable for Ym7101 {
         }
         if self.state.h_clock > 63_500 {
             self.state.h_clock -= 63_500;
-            self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
         }
 
         self.state.v_clock += diff;
@@ -776,7 +776,7 @@ impl Addressable for Ym7101 {
                     if data.len() == 4 {
                         let value = read_beu16(&data[2..]);
                         if (value & 0xC000) != 0x8000 {
-                            Err(Error:new(&format!("{}: unexpected second byte {:x}", DEV_NAME, value)));
+                            return Err(Error::new(&format!("{}: unexpected second byte {:x}", DEV_NAME, value)));
                         }
                         self.state.set_register(value);
                     }
