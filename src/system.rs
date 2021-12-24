@@ -154,7 +154,9 @@ impl System {
         if self.debug_enabled.get() {
             let top = self.event_queue[self.event_queue.len() - 1].device.clone();
             if top.borrow_mut().as_debuggable().map(|debug| debug.debugging_enabled()).unwrap_or(false) {
-                self.debugger.borrow_mut().run_debugger(&self, top.clone()).unwrap();
+                if let Err(err) = self.debugger.borrow_mut().run_debugger(&self, top.clone()) {
+                    println!("Error: {:?}", err);
+                }
             }
         }
     }

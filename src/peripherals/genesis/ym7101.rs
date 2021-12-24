@@ -652,6 +652,7 @@ impl Steppable for Ym7101 {
                 system.get_interrupt_controller().set(true, 6, 30)?;
             }
 
+            self.swapper.swap();
             let mut frame = self.swapper.current.lock().unwrap();
             self.state.draw_frame(&mut frame);
 

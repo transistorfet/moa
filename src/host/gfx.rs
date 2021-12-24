@@ -92,6 +92,10 @@ impl FrameSwapper {
     pub fn to_boxed(swapper: FrameSwapper) -> Box<dyn WindowUpdater> {
         Box::new(swapper)
     }
+
+    pub fn swap(&mut self) {
+        std::mem::swap(&mut self.current.lock().unwrap().bitmap, &mut self.previous.lock().unwrap().bitmap);
+    }
 }
 
 impl WindowUpdater for FrameSwapper {
@@ -104,8 +108,6 @@ impl WindowUpdater for FrameSwapper {
     }
 
     fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
-        std::mem::swap(&mut self.current.lock().unwrap().bitmap, &mut self.previous.lock().unwrap().bitmap);
-
         if let Ok(frame) = self.previous.lock() {
             for y in 0..frame.height {
                 for x in 0..frame.width {
