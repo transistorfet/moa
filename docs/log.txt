@@ -1,0 +1,276 @@
+
+- 2021-09-28: started the project, computie monitor working after a week
+- 2021-10-08: I think the Computie OS could boot by this point
+- 2021-10-14: I think I started working on the genesis at this point, or maybe a bit before
+- 2021-10-20: added frontend refactoring
+- 2021-10-25: added Sega Genesis peripherals for the first time, even though I think I had been
+  working on it for at least a couple weeks by that point
+- 2021-10-27: added minifb frontend
+- 2021-11-01 to 2021-11-11: worked on the Z80/TRS-80
+- 2021-11-13: was working on Mac (and Genesis a bit)
+- 2021-11-28: took up the Genesis again after posting first article
+
+
+Genesis
+=======
+
+(pieced together after the fact)
+
+before 2021-10-25
+- controllers and coproc controls aren't an issue as dummies until much later
+- implement dma
+- try implementing the scrolls and get nothing
+- try printing just the patterns and get nothing
+- cram is 0s, fight and find a few dma/transfer bugs
+- cram is then sorta working, getting 0xeee and 0xee0 colours, but showing as pink
+- turns out to be index issue into cram, fixing makes colours ok, but still nothing on screen
+
+
+2021-10-25
+- still nothing on the screen.
+- maybe it's not working because I haven't implemented the h/v blanking bits at all, so I add
+  them and it makes something appear instead of blackness.  At least for Sonic 2, it waits
+  for the vblank bit to be set
+
+2021-10-26
+- what caused those pink screens I was initialling getting?!?  there was an issue with the cram
+  not being correct, and I remember fighting a ton with that...
+- it was caused by the cram being byte-wise, but the index into the array when fetching the
+  colour was not multiplied by 2, so the colours were wrong.  It was fixed in commit 109ae4d
+
+- add the BusPort thing to fix issues with how data is written.  Some writes can bet 4 bytes, or
+  2 bytes, and they could be to the same address or the adjacent address, so adding BusPort,
+  which breaks up the reads into all 2 bytes reads as the real hardware would see simplifies
+  the number of cases to deal with when accepting data on the VDP ports
+
+2021-10-27
+- oct. 27, commit 109ae4d doesn't seem to work and it seems to be related to the interrupts not,
+  which I got working in the immediately following commit.  It actually does work but is super
+  slow to display anything, which was fixed later, as in minutes before the screen goes white
+  to display the sega logo.  The interrupt print log is very slow, only a few interrupts in a
+  minute
+
+2021-10-29
+- the next commit 250c0 speeds things up by making the step function occur less often for the vdp
+  Also this commit adds code to change the interrupt mask, but only if a hardware interrupt occurs
+  I think this was causing problems with the computie binaries.  There's still an int bug
+
+- commit 93c080e: finally fix interrupts properly.  The code I was using before didn't properly
+  reset the interrupt signal, so it couldn't reoccur.  The CPU now checks the interrupt controller
+  each cycle for a pending interrupt, rather than relying on a callback and the Interruptable trait
+  which I partially removed.
+- it now actually runs and shows the screens at a reasonable speed
+
+- I recall there was an issue with the pattern indexing using the wrong formula to calculate, and
+  that caused some of the issues
+
+
+-----
+
+2021-10-31
+- at this point I had finally gotten the scrolls to work enough to print the SEGA logo at the start
+
+2021-11-01
+- started working on the Z80 and TRS-80 implementations, as well as debugging the Mac stuff, which
+  I think I was doing for most of November (instead of working on the Genesis impl)
+
+
+2021-11-30
+- after getting things working somewhat with the scrolls, but not the sprites, I finally found
+  ComradeOj's demo, which I'm now using to test with, and I've also got BlastEm setup so that I
+  can compile the code and modify it to print out all of vram so that I can verify against mine
+
+- there is a difference in VRAM in the patterns section with non-zero data starting at VRAM:0020
+  the first differing byte is VRAM:0046 which is 0x1111 in my VDP but 0x0000 in blastem's VDP
+- checked what data was actually being transferred to VRAM, the source data is in ram at 0xff2000
+  (ie. 0xff2000 is copied to VRAM:0020 for some number of bytes, maybe 256 or so)
+- ram copy of data is incorrect so the problem is not the VDP code specifically, but the code
+  that loads the ram.
+- traced it further to the decompress function called at 0x00c0, this function definitely loads
+  the source ram and it's definitely incorrect long before the actual VRAM is loaded
+
+- so I set a breakpoint at c0 in blastem, and then at that point set 266 and continued until the
+  first different byte was loaded, and inspected all the CPU registers at that point.  The only
+  one differing is %d6 which holds a copy of the flags, which is somehow/somewhere restored after
+  being saved.  It's 0x2700 in blastem but 0x2710 in moa...
+- so far I'm suspecting that the Extend flag is not being correctly simulated somewhere, and
+  that's causing problems.  The code uses roxd instructions which use the Extend flag... sus
+- the two places where %d6 is set in the decompress function are just after LSR instructions.
+  I didn't have tests for LSR or LSL, so adding some caught the issue where Extend is not cleared
+  by the instruction nor by the logic flags code (since most logic instructions don't affect extend)
+- fixing this made the text of the demo appear correctly, along with colour changing of the text,
+  but the background is not rendering at all
+
+- switching gears now, trying GenTestV3.  A write to read only memory occurs at 0x2976 because %a4
+  is 0 when it should be the VDP data register (0xC00000)
+- tracing back, there is some code run at 0x2572 which causes the registers to be cleared, but
+  checking in BlastEm's debugger with a breakpoint there shows it's not executing there, so this
+  is a problem in moa and it's caused an erroneous processor state...
+- there's a comparison at 0x255e which jumps to the code that shouldn't run, checking in BlastEm
+  shows that the previous comparison should not be equal (flags are 0x2700), but in moa it's 0x2704
+- the comparison is correct, but the value in %d7/%d3 should be 0xff instead of 0xef
+- at 0x2a78 the values are read from the controller inputs 0xa10003, and this is what's not correct
+  the data read is 0 but should be something else I think (start of code is 0x2a4a)
+- it appears that the controller inputs should be 1s instead of 0s when not pressed?? or when all
+  bits are 0?
+- changing to that behaviour makes it work until the ram test is invoked, but it seems that BlastEm
+  also does write to address 0 when the RAM test is run...
+- the writing to address 0 might be an unintentional bug in the rom, which doesn't otherwise affect
+  anything because removing read_only makes it work enough to run
+
+- next issue is controllers, it turns out the button logic is inverted, so the rom expects to read
+  all 1s (0xfff) for the button states, and a bit will drop to 0 when it's pressed.
+- now there's an issue with the 'a' button to go to the info screen where it sometimes seems to run
+  the memory test instead, or otherwise behave inconsistently, and it's probably that 1.5ms delay
+  that resets the cycle to avoid the extra 3 buttons.  This rom probably only reads the first 3 and
+  expects the counter to reset
+- turned out that i actually need to reset the th counter after the ctrl port is written to, and the
+  count/next_byte logic was broken, so the buttons were incorrectly mapped
+
+- now the test works, memory tests work, and so far looking at the info pages, the sprites are almost
+  correct, but sonic is busted.  It might be something to do with the sprite being reversed
+
+2021-12-04
+- colour bleed test: 0x230a
+- there are two of the four bars of colours with the rest black except some garbage at the bottom.
+- I was able to modify the pattern printing to put a white dot in the upper corner so I could count
+  the cells to figure out where in memory the garbage pixels were appearing.  The garbage starts on
+  a ways into line 23 and continues on lines 24/25/26, where the scroll is 64 cells across, and the
+  start of scroll a is 0xE000, which makes 0xEB80 about the start of the garbled line.
+- the cells in the table look correct here, each line contains increasing pattern numbers (0x0518 at
+  the garbled cells), so the problem isn't here
+- looking at the pattern for 0x518, which corresponds to address 0xA300 in video memory, the data is
+  not at all like the regular patterns at the start of VRAM.  Comparing it to blastem shows the VRAM
+  is correctly regular (0x1111 or 0x5151 and other regular repeating patterns), so it looks like
+  a problem with loading VRAM
+- look at the included source, the start of the colour bleed test is 0x2056, the DMA transfer is set
+  up at 0x207a which then writes to the control port to start the transfer
+- I started suspecting the transfer count might be the number of read/write cycles as opposed to the
+  number of bytes, and only half the data is transferred, which would explain why the bottom half of
+  all the screens was broken but the top half looked fine
+- sure enough, checking in blastem it even prints $4600 words, but moa was subtracting 2 from the
+  count.  Changing to 1 pretty much fix all the remaining glitches, and sonic 2 now displays pretty
+  well
+
+- started implementing scrolling.  It seems the horizontal and vertical values work opposite to each
+  other.  The horizontal value needs to be subtracted.  I might also need to convert them to signed?
+- initial problem was caused by getting the mask wrong (0x3F instead of 0x3FF), but the mask is
+  required because technically games can use the extra bits for whatever they want =(
+- the background was still glitching and it turned out to be because for scroll b, I was reading
+  the scrolling data 1 byte over instead of 2 bytes over (because they are words).  That fixed
+  the glitching
+
+
+2021-12-15
+- started trying to make horizontal line scrolling work.  Turns out to not be too hard except that
+  there's a few glitches
+- one turned out to just be that i was multiplying by 2 instead of 4 for the hscroll addr
+- the other is that it's drawing the lines for scroll a and scroll b at the same time, and they
+  overlap incorrectly when the per-pixel column offset is different between the layers
+
+2021-12-20
+- looking into the hscroll and vscroll issue, I realized I wasn't adding the (vscroll % 8) value to the
+  pixel offset, which is now being added, which causes some glitches at the bottom/left of the screen,
+  but it now scrolls more smoothly in the vertical
+- there is still an issue with the hscroll, particularly when the offsets are very different, no idea
+
+- after spending the day looking into the slowdown issue, I found the issue.  I started by looking at
+  the sonic 2 disassembly looking for code that reads the controllers (ReadJoypads) and then looking
+  for where that is called from, and found the Vint_Level function which after setting some breakpoints
+  is definitely only called during gameplay but is called each frame and reads the input before updating
+  the screen.
+- looking at the code, and tracing the first few instructions where the ReadJoypads function is called
+  showed that it sometimes skipped over the various timer checks every other time it's called
+- I added the system clock time to the debug output, which showed that it was indeed ~33_200_000 ns
+  between each call to Vint_Level
+- so I turned on a debug message for the hardware interrupts and it showed the interrupt occurring
+  twice for every time the Vint_Level function is called.  After the first vint, it takes ~14ms until
+  the Vint_Level function runs... looking at what runs by tracing that period between the int and call
+  shows that it's looping while checking the status bit of the VDP, which corresponds to the vblank
+  bit, of which there is a bad implementation that just turns the bit on after 14ms ... so it is
+  definitely a problem with the vertical interrupt and vertical blanking bit timing in the VDP step
+- I had hackishly made some code to turn the blanking bit on at ~14ms, and then turn it off just before
+  the vint was triggered.  It would have worked had the frame been drawn at the 14ms mark, and then the
+  blanking bit reset at 16.6ms.  I've now changed it to be proper, in that the blanking bit is set at
+  15ms, the count is reset at 16.6ms, and the blank bit is cleared at 1.2ms
+
+
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------------------------------------
+
+Macintosh
+=========
+
+- ram self test is run by jumping to 0x400694, which returns by jumping to %a6 which contains 0x4000f0
+  if it returns with eq set, it will jump to the system initialization at 0x40026c
+  it doesn't have eq set, so it ends up in an infinite loop.
+- turns out MOVEM was broken such that it was incrementing instead of decrementing address (found by
+  inspecting the first byte of memory when trying to get 0x5555AAAA to cancel itself out
+
+2021-11-19
+- still not working, calling 0x4000f0 to fail.  Turns out this is where the dead mac is supposed to
+  be printed, but it's not (found that from another blog post)
+
+2021-11-23
+- finally got dead mac screen showing with 0F0003 as the error.  It wasn't showing because the 0 colour
+  used by the genesis, which is a mask colour, causes nothing to appear
+- then the issue was the indexing of the memory page (x * 2) * y instead of (x * 2) + (y * 512/8)
+
+- so the 0F0003 dead mac was caused by the first trap instruction in the ROM, appearing at 4002adc
+  It causes an illegal instruction, which then jumps to the exception entry points start at 4001aa
+  in rom which all jump to the same function at 4001d2, which then ends up in the failure
+- trying to find why, i traced the program to find where the trap table was being set up, which
+  turned out to be around 400448 which is where I'd been debugging the last issue.  It sets location
+  0x28 to 401018 which is the trap handler...
+- 0x28 is not the illegal instruction handler, it's the 1010 line emulator exception... 1010 as it A
+  as in the A line traps... So the m68k is specifically not handling the a000 instructions correctly
+
+- it's now getting past the dead mac, but instead it causes two writes to read only memory when it
+  tries to set some bits indirectly to an address in rom (0x4034ae), which is something do with the
+  drivers. The Sound and Disk drivers are opened and it's during each of the open functions that the
+  write occurs
+- it's possible to continue (which might be in broken state) and it then attempts to write to
+  sequential addresses in upper ram which eventually spills over into 0x100000 which isn't mapped...
+  No idea if this is just because of something going wrong earlier, or if this is also an emulator bug
+
+- the writes to rom issues happens during InitIO (0x400614), when initializing the first two drivers,
+  the Sound and Disk (I think).  There is a pointer to a pointer to a value that contains 0x4034ae,
+  which seems to be calculated from a jump table, presumably pointing to something in rom that contains
+  the driver, but for some reason the code is bit setting that value.  I'm not sure if the data is wrong
+  and it should normally see a 0 instead of the rom addr, or if there's a branch that shouldn't/should
+  happen that leads it to that code when it shouldn't
+- c4c and c7c seem to be driver descriptors of some kind, each with a rom addr and what seems to be some
+  flags after that.  They also have 0xfffb and 0xfffc.  That said, if there's a bug in the code that
+  creates that data, it would likely be broken for both
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
