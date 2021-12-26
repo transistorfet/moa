@@ -6,7 +6,7 @@ use crate::error::Error;
 use crate::system::System;
 use crate::signals::{Signal};
 use crate::memory::{MemoryBlock, Bus, BusPort};
-use crate::devices::{wrap_transmutable, Address, Addressable};
+use crate::devices::{wrap_transmutable, Address, Addressable, Debuggable};
 
 use crate::cpus::m68k::{M68k, M68kType};
 use crate::cpus::z80::{Z80, Z80Type};
@@ -68,13 +68,15 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     let coproc_register = wrap_transmutable(CoprocessorBankRegister::new(bank_register.clone()));
     let coproc_area = wrap_transmutable(CoprocessorBankArea::new(bank_register, system.bus.clone()));
 
-    let coproc_bus = Rc::new(RefCell::new(Bus::new()));
+    let mut coproc_bus = Rc::new(RefCell::new(Bus::new()));
+    coproc_bus.borrow_mut().set_ignore_unmapped(true);
     coproc_bus.borrow_mut().insert(0x0000, coproc_ram.clone());
     coproc_bus.borrow_mut().insert(0x4000, coproc_ym_sound.clone());
     coproc_bus.borrow_mut().insert(0x6000, coproc_register.clone());
     coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
     coproc_bus.borrow_mut().insert(0x8000, coproc_area);
-    let coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus.clone()));
+    let mut coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus.clone()));
+    coproc.set_debugging(true);
     let mut reset = coproc.reset.clone();
     let mut bus_request = coproc.bus_request.clone();
     reset.set(true);

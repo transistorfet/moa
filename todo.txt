@@ -1,11 +1,12 @@
 
+* there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
+  stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
 
-* for the line based hscroll, you need to add that extra cell cycle...
 * there is still some kind of hscroll glitch, and it seems to entirely be caused by the horizontal scroll offset value.  I could be calculating or adding/moding
   it incorrectly somewhere somehow, or the data in the hscroll table could be incorrect due to the cpu impl
+
+
 * go through the testcases and make sure they are decoded correctly
-
-
 
 * should you rename devices.rs traits.rs?
 * add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame

@@ -50,6 +50,10 @@ impl System {
         self.interrupt_controller.borrow_mut()
     }
 
+    pub fn get_device(&self, name: &str) -> Result<TransmutableBox, Error> {
+        self.devices.get(name).cloned().ok_or_else(|| Error::new(&format!("system: no device named {}", name)))
+    }
+
     pub fn add_device(&mut self, name: &str, device: TransmutableBox) -> Result<(), Error> {
         self.try_queue_device(device.clone());
         self.devices.insert(name.to_string(), device);

@@ -118,14 +118,20 @@ pub struct Block {
 }
 
 pub struct Bus {
+    ignore_unmapped: bool,
     blocks: Vec<Block>,
 }
 
 impl Bus {
     pub fn new() -> Bus {
         Bus {
+            ignore_unmapped: false,
             blocks: vec!(),
         }
+    }
+
+    pub fn set_ignore_unmapped(&mut self, ignore_unmapped: bool) {
+        self.ignore_unmapped = ignore_unmapped;
     }
 
     pub fn clear_all_bus_devices(&mut self) {
@@ -180,13 +186,27 @@ impl Addressable for Bus {
     }
 
     fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        let (dev, relative_addr) = self.get_device_at(addr, data.len())?;
+        let (dev, relative_addr) = match self.get_device_at(addr, data.len()) {
+            Ok(result) => result,
+            Err(err) if self.ignore_unmapped => {
+                info!("{:?}", err);
+                return Ok(())
+            },
+            Err(err) => return Err(err),
+        };
         let result = dev.borrow_mut().as_addressable().unwrap().read(relative_addr, data);
         result
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        let (dev, relative_addr) = self.get_device_at(addr, data.len())?;
+        let (dev, relative_addr) = match self.get_device_at(addr, data.len()) {
+            Ok(result) => result,
+            Err(err) if self.ignore_unmapped => {
+                info!("{:?}", err);
+                return Ok(())
+            },
+            Err(err) => return Err(err),
+        };
         let result = dev.borrow_mut().as_addressable().unwrap().write(relative_addr, data);
         result
     }
