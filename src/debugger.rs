@@ -70,18 +70,36 @@ impl Debugger {
                 if args.len() != 2 {
                     println!("Usage: breakpoint <addr>");
                 } else {
-                    let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse breakpoint address"))?;
-                    debug_obj.add_breakpoint(addr as Address);
-                    println!("Breakpoint set for {:08x}", addr);
+                    let (name, addr) = parse_address(args[1])?;
+                    match name {
+                        Some(name) => {
+                            let target = system.get_device(name)?;
+                            target.borrow_mut().as_debuggable().unwrap().add_breakpoint(addr);
+                            println!("Breakpoint set for devices {:?} at {:08x}", name, addr);
+                        },
+                        None => {
+                            debug_obj.add_breakpoint(addr);
+                            println!("Breakpoint set for {:08x}", addr);
+                        },
+                    }
                 }
             },
             "r" | "remove" => {
                 if args.len() != 2 {
                     println!("Usage: remove <addr>");
                 } else {
-                    let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse breakpoint address"))?;
-                    debug_obj.remove_breakpoint(addr as Address);
-                    println!("Breakpoint removed for {:08x}", addr);
+                    let (name, addr) = parse_address(args[1])?;
+                    match name {
+                        Some(name) => {
+                            let target = system.get_device(name)?;
+                            target.borrow_mut().as_debuggable().unwrap().remove_breakpoint(addr);
+                            println!("Breakpoint removed for devices {:?} at {:08x}", name, addr);
+                        },
+                        None => {
+                            debug_obj.remove_breakpoint(addr);
+                            println!("Breakpoint removed for {:08x}", addr);
+                        },
+                    }
                 }
             },
             "d" | "dump" => {
@@ -97,7 +115,7 @@ impl Debugger {
                 if args.len() < 2 {
                     println!("Usage: inspect <device_name> [<device specific arguments>]");
                 } else {
-                    let device = system.devices.get(args[1]).ok_or_else(|| Error::new(&format!("No device named {}", args[1])))?;
+                    let device = system.get_device(args[1])?;
                     let subargs = if args.len() > 2 { &args[2..] } else { &[""] };
                     device.borrow_mut().as_inspectable()
                         .ok_or_else(|| Error::new("That device is not inspectable"))?
@@ -172,5 +190,18 @@ impl Debugger {
         }
         Ok(())
     }
+}
+
+fn parse_address(arg: &str) -> Result<(Option<&str>, Address), Error> {
+    let (name, addrstr) = match arg.find(':') {
+        Some(index) => {
+            let (name, addrstr) = arg.split_at(index);
+            (Some(name), &addrstr[1..])
+        },
+        None => (None, arg),
+    };
+
+    let addr = Address::from_str_radix(addrstr, 16).map_err(|_| Error::new("Unable to parse address"))?;
+    Ok((name, addr))
 }
 
