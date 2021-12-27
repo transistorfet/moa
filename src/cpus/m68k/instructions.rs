@@ -439,7 +439,7 @@ impl fmt::Display for Instruction {
             Instruction::EORtoCCR(value) => write!(f, "eorb\t{:02x}, %ccr", value),
             Instruction::EORtoSR(value) => write!(f, "eorw\t{:04x}, %sr", value),
             Instruction::EXG(src, dest) => write!(f, "exg\t{}, {}", src, dest),
-            Instruction::EXT(reg, from_size, to_size) => write!(f, "ext{}{}\t%d{}", from_size, to_size, reg),
+            Instruction::EXT(reg, from_size, to_size) => write!(f, "ext{}{}\t%d{}", if *from_size == Size::Byte && *to_size == Size::Long { "b" } else { "" }, to_size, reg),
 
             Instruction::ILLEGAL => write!(f, "illegal"),
 

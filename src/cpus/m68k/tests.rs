@@ -754,6 +754,14 @@ mod execute_tests {
             fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x007101C3, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
         },
         TestCase {
+            name: "divs",
+            ins: Instruction::DIVW(Target::Immediate(48), 0, Sign::Signed),
+            data: &[ 0x81FC, 0x0030 ],
+            cputype: M68kType::MC68010,
+            init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0xFFFFEB00, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
+            fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000FF90, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2708, mem: 0x00000000 },
+        },
+        TestCase {
             name: "eori",
             ins: Instruction::EOR(Target::DirectDReg(1), Target::DirectDReg(0), Size::Long),
             data: &[ 0xB380 ],

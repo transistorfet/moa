@@ -381,8 +381,8 @@ impl M68k {
                 let existing = get_value_sized(self.state.d_reg[dest as usize], Size::Long);
                 let (remainder, quotient) = match sign {
                     Sign::Signed => {
-                        let value = sign_extend_to_long(value, Size::Word) as u32;
-                        (existing % value, existing / value)
+                        let value = sign_extend_to_long(value, Size::Word) as i32;
+                        ((existing as i32 % value) as u32, (existing as i32 / value) as u32)
                     },
                     Sign::Unsigned => (existing % value, existing / value),
                 };

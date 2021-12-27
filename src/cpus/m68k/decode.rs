@@ -238,9 +238,9 @@ impl M68kDecoder {
                         _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else if ins_0f00 == 0x800 || ins_0f00 == 0x900 {
-                    let subselect = (ins & 0x01C0) >> 6;
+                    let opmode = (ins & 0x01C0) >> 6;
                     let mode = get_low_mode(ins);
-                    match (subselect, mode) {
+                    match (opmode, mode) {
                         (0b000, 0b001) if self.cputype >= M68kType::MC68020 => {
                             let data = self.read_instruction_long(memory)? as i32;
                             Ok(Instruction::LINK(get_low_reg(ins), data))
