@@ -324,8 +324,8 @@ impl Ym7101State {
     pub fn get_hscroll(&self, hcell: usize, line: usize) -> (u32, u32) {
         let base_addr = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
             0 => self.hscroll_addr,
-            2 => self.hscroll_addr + (hcell << 4),
-            3 => self.hscroll_addr + (hcell << 4),
+            2 => self.hscroll_addr + (hcell << 5),
+            3 => self.hscroll_addr + (hcell << 5),
             _ => panic!("Unsupported horizontal scroll mode"),
         };
 
@@ -456,7 +456,9 @@ impl Ym7101State {
         for cell_y in 0..cells_v {
             for cell_x in 0..cells_h {
                 let pattern_w = read_beu16(&self.vram[self.get_pattern_addr(cell_table, cell_x as usize, cell_y as usize)..]);
-                self.draw_pattern(frame, pattern_w, (cell_x << 3) as u32, (cell_y << 3) as u32);
+                if pattern_w != 0 {
+                    self.draw_pattern(frame, pattern_w, (cell_x << 3) as u32, (cell_y << 3) as u32);
+                }
             }
         }
     }
@@ -837,6 +839,7 @@ impl Ym7101State {
         println!("DMA Source: {:#06x}", self.transfer_src_addr);
         println!("DMA Dest  : {:#06x}", self.transfer_dest_addr);
         println!("DMA Count : {:#06x}", self.transfer_count);
+        println!("Auto-Inc  : {:#06x}", self.transfer_auto_inc);
     }
 
     pub fn dump_vram(&self) {

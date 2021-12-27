@@ -223,6 +223,16 @@ before 2021-10-25
   has to be looked up for ever column, so swapping the vscroll and hscroll between the inner and
   outer loops fixed the issue perfectly.  Kind of odd that it wasn't more broken when inverted
 
+- now I've noticed there's a scroll problem in Ren & Stimpy.  Every other cell's hscroll is 0
+- looks like address 0x264 is the start of the transfer to the hscroll table in vram
+  0x83e2 is the function that calls 0x244.  244 sets up the transfer and 83e2 sends the data
+- the auto-increment is set to 0x20 which leaves that 0 in between, but after thinking about it more,
+  I realized that's correct, and that it's actually 32 bytes (16 words) between each scroll value,
+  The bug was in the hscroll function which I didn't actually fix properly.  I modified it to
+  multiply the line by 4 instead of 2, but I also needed to shift to the hcell value by 5 instead
+  of 4 (multiply by 32 instead of 16) to get the proper base scroll
+  Now, Ren & Stimpy works, and Sonic 2's Scroll B actually looks right
+
 
 
 
