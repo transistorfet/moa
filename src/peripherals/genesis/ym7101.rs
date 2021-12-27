@@ -321,7 +321,7 @@ impl Ym7101State {
         PatternIterator::new(&self, pattern_addr as u32, pattern_palette, h_rev, v_rev, line)
     }
 
-    pub fn get_hscroll(&self, hcell: usize, column: usize) -> (u32, u32) {
+    pub fn get_hscroll(&self, hcell: usize, line: usize) -> (u32, u32) {
         let base_addr = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
             0 => self.hscroll_addr,
             2 => self.hscroll_addr + (hcell << 4),
@@ -329,7 +329,7 @@ impl Ym7101State {
             _ => panic!("Unsupported horizontal scroll mode"),
         };
 
-        let scroll_addr = base_addr + (column * 2 * 2);
+        let scroll_addr = base_addr + (line * 2 * 2);
         let scroll_a = read_beu16(&self.vram[scroll_addr..]) as u32 & 0x3FF;
         let scroll_b = read_beu16(&self.vram[scroll_addr + 2..]) as u32 & 0x3FF;
         (scroll_a, scroll_b)
@@ -402,9 +402,9 @@ impl Ym7101State {
         let (cells_h, cells_v) = self.screen_size;
 
         for cell_y in 0..cells_v {
-            let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_y);
+            let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_y, 0);
             for cell_x in 0..cells_h {
-                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_x, 0);
+                let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_x);
 
                 let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b as usize, vscrolling_b as usize);
                 let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a as usize, vscrolling_a as usize);
@@ -420,29 +420,25 @@ impl Ym7101State {
         let (cells_h, cells_v) = self.screen_size;
 
         for cell_y in 0..cells_v {
-            let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_y);
-            for cell_x in 0..cells_h {
-                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_x, 0);
+            for line in 0..8 {
+                let (_, hscrolling_b) = self.get_hscroll(cell_y, line as usize);
+                for cell_x in 0..cells_h {
+                    let (_, vscrolling_b) = self.get_vscroll(cell_x);
 
-                let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b as usize, vscrolling_b as usize);
-
-                for line in 0..8 {
-                    let (_, offset_b) = self.get_hscroll(cell_x, line as usize);
-                    self.draw_pattern_line(frame, pattern_b, (cell_x << 3) as u32 + (offset_b % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_b % 8), line);
+                    let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b as usize, vscrolling_b as usize);
+                    self.draw_pattern_line(frame, pattern_b, (cell_x << 3) as u32 + (hscrolling_b % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_b % 8), line);
                 }
             }
         }
 
         for cell_y in 0..cells_v {
-            let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_y);
-            for cell_x in 0..cells_h {
-                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_x, 0);
+            for line in 0..8 {
+                let (hscrolling_a, _) = self.get_hscroll(cell_y, line as usize);
+                for cell_x in 0..cells_h {
+                    let (vscrolling_a, _) = self.get_vscroll(cell_x);
 
-                let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a as usize, vscrolling_a as usize);
-
-                for line in 0..8 {
-                    let (offset_a, _) = self.get_hscroll(cell_x, line as usize);
-                    self.draw_pattern_line(frame, pattern_a, (cell_x << 3) as u32 + (offset_a % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_a % 8), line);
+                    let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a as usize, vscrolling_a as usize);
+                    self.draw_pattern_line(frame, pattern_a, (cell_x << 3) as u32 + (hscrolling_a % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_a % 8), line);
                 }
             }
         }

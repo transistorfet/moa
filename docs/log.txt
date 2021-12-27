@@ -216,7 +216,12 @@ before 2021-10-25
 - so far I'm suspecting the DIV followed by the EXTW at 0xc62a might be doing something incorrect,
   and then when it adds the result in %d0 to %d3 before using that as the scroll value, it's adding
   too large a value (that should have been cut off to a word)
-
+- there was indeed a problem with the div.  It's a signed div but the division was unsigned.  Now
+  the scroll values look about right, but the black glitches are still there
+- turns out it was that the scroll values were inverted.  The hscroll values are supposed to be the
+  offset *per line*, so you use the same hscroll value for every line.  It's the vscroll value that
+  has to be looked up for ever column, so swapping the vscroll and hscroll between the inner and
+  outer loops fixed the issue perfectly.  Kind of odd that it wasn't more broken when inverted
 
 
 
