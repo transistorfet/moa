@@ -194,6 +194,28 @@ before 2021-10-25
   blanking bit reset at 16.6ms.  I've now changed it to be proper, in that the blanking bit is set at
   15ms, the count is reset at 16.6ms, and the blank bit is cleared at 1.2ms
 
+2021-12-23
+- looking into the coprocessor not working.  I tried Mortal Kombat 2 and apart from something weird
+  going on during the character select screen, everything worked until combat started and then it
+  crashed due to an invalid memory access to address 0x0068eebb, which occurs at PC: 0xffff0245,
+  so something is causing it to execute ram, which is probably not what's supposed to happen
+- It looks like it's swapping stacks, and that's making it hard to trace.  At some point, it swaps
+  the stack and then does a rts, but the stack return value is invalid and that causes it to mess up.
+  It almost looks like it does put a valid return on the stack but then unintentionally overwrites it
+  due to overlapping memory areas (I could just be tracing this wrong).  I'll come back to this later
+
+2021-12-26
+- looking into the scroll black bits, I checked the scroll table for Sonic2 in BlastEm and the values
+  are clearly different for Scroll B.  The values in BlastEm are close to 0xffff but the ones in Moa
+  are 0x10f2, 0x11f2, etc.  And it's wrong in the source ram (0xffe000 which is copied to 0xfc00 in VRAM)
+- I added watcher debug commands to watch for modifications to a given memory location, and used that
+  to watch 0xffe322, which is an scroll value for Scroll B in an area near the end of the hscroll table
+  where the scroll value is different from BlastEm.
+- breakpoint occurs at 0xc670 where that value is written to.  The function starts at 0xC57E and
+  calculates scroll values.
+- so far I'm suspecting the DIV followed by the EXTW at 0xc62a might be doing something incorrect,
+  and then when it adds the result in %d0 to %d3 before using that as the scroll value, it's adding
+  too large a value (that should have been cut off to a word)
 
 
 

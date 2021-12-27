@@ -718,7 +718,7 @@ impl Addressable for Ym7101 {
         0x20
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             // Read from Data Port
             0x00 | 0x02 => {
@@ -734,10 +734,16 @@ impl Addressable for Ym7101 {
             },
 
             // Read from Control Port
-            0x04 | 0x06 => {
+            0x04 | 0x05 | 0x06 | 0x07 => {
                 debug!("{}: read status byte {:x}", DEV_NAME, self.state.status);
-                data[0] = (self.state.status >> 8) as u8;
-                data[1] = (self.state.status & 0x00FF) as u8;
+                for i in 0..data.len() {
+                    data[i] = if (addr % 2) == 0 {
+                        (self.state.status >> 8) as u8
+                    } else {
+                        (self.state.status & 0x00FF) as u8
+                    };
+                    addr += 1;
+                }
             },
 
             _ => { println!("{}: !!! unhandled read from {:x}", DEV_NAME, addr); },

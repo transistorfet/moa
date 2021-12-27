@@ -106,7 +106,11 @@ impl System {
         self.check_debugger();
 
         match self.process_one_event() {
-            Ok(()) => { }
+            Ok(()) => {
+                if self.get_bus().check_and_reset_watcher_modified() {
+                    self.enable_debugging();
+                }
+            },
             Err(err) if err.err == ErrorType::Breakpoint => {
                 println!("Breakpoint reached: {}", err.msg);
                 self.enable_debugging();

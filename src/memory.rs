@@ -118,8 +118,10 @@ pub struct Block {
 }
 
 pub struct Bus {
-    ignore_unmapped: bool,
     blocks: Vec<Block>,
+    ignore_unmapped: bool,
+    watchers: Vec<Address>,
+    watcher_modified: bool,
 }
 
 impl Bus {
@@ -127,6 +129,8 @@ impl Bus {
         Bus {
             ignore_unmapped: false,
             blocks: vec!(),
+            watchers: vec!(),
+            watcher_modified: false,
         }
     }
 
@@ -177,6 +181,23 @@ impl Bus {
             println!("{}", line);
         }
     }
+
+    pub fn add_watcher(&mut self, addr: Address) {
+        self.watchers.push(addr);
+    }
+
+    pub fn remove_watcher(&mut self, addr: Address) {
+        self.watchers.push(addr);
+        if let Some(index) = self.watchers.iter().position(|a| *a == addr) {
+            self.watchers.remove(index);
+        }
+    }
+
+    pub fn check_and_reset_watcher_modified(&mut self) -> bool {
+        let result = self.watcher_modified;
+        self.watcher_modified = false;
+        result
+    }
 }
 
 impl Addressable for Bus {
@@ -199,6 +220,11 @@ impl Addressable for Bus {
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+        if let Some(_) = self.watchers.iter().position(|a| *a == addr) {
+            println!("watch: writing to address {:#06x} with {:?}", addr, data);
+            self.watcher_modified = true;
+        }
+
         let (dev, relative_addr) = match self.get_device_at(addr, data.len()) {
             Ok(result) => result,
             Err(err) if self.ignore_unmapped => {

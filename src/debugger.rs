@@ -102,6 +102,23 @@ impl Debugger {
                     }
                 }
             },
+            "w" | "watch" => {
+                if args.len() != 2 {
+                    println!("Usage: watch <addr>");
+                } else {
+                    let addr = Address::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?;
+                    system.get_bus().add_watcher(addr);
+                }
+            },
+            "rw" | "rwatch" | "remove_watch" => {
+                if args.len() != 2 {
+                    println!("Usage: remove_watch <addr>");
+                } else {
+                    let addr = Address::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?;
+                    system.get_bus().remove_watcher(addr);
+                }
+            },
+
             "d" | "dump" => {
                 if args.len() > 1 {
                     let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?;
