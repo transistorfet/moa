@@ -59,7 +59,7 @@ const MODE3_BF_V_SCROLL_MODE: u8        = 0x04;
 const MODE3_BF_H_SCROLL_MODE: u8        = 0x03;
 
 const MODE4_BF_H_CELL_MODE: u8          = 0x01;
-//const MODE4_BF_SHADOW_HIGHLIGHT: u8     = 0x08;
+const MODE4_BF_SHADOW_HIGHLIGHT: u8     = 0x08;
 
 
 
@@ -79,6 +79,13 @@ pub enum TargetType {
     Vram,
     Cram,
     Vsram,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ColourMode {
+    Normal,
+    Shadow,
+    Highlight,
 }
 
 pub struct Ym7101State {
@@ -305,12 +312,18 @@ impl Ym7101State {
         (self.mode_3 & MODE3_BF_EXTERNAL_INTERRUPT) != 0
     }
 
-    pub fn get_palette_colour(&self, palette: u8, colour: u8) -> u32 {
+    pub fn get_palette_colour(&self, palette: u8, colour: u8, mode: ColourMode) -> u32 {
         if colour == 0 {
             return 0xFFFFFFFF;
         }
+        let shift_enabled = (self.mode_4 & MODE4_BF_SHADOW_HIGHLIGHT) != 0;
         let rgb = read_beu16(&self.cram[(((palette * 16) + colour) * 2) as usize..]);
-        (((rgb & 0xF00) as u32) >> 4) | (((rgb & 0x0F0) as u32) << 8) | (((rgb & 0x00F) as u32) << 20)
+        if !shift_enabled || mode == ColourMode::Normal {
+            (((rgb & 0xF00) as u32) >> 4) | (((rgb & 0x0F0) as u32) << 8) | (((rgb & 0x00F) as u32) << 20)
+        } else {
+            let offset = if mode == ColourMode::Highlight { 0x808080 } else { 0x00 };
+            (((rgb & 0xF00) as u32) >> 5) | (((rgb & 0x0F0) as u32) << 7) | (((rgb & 0x00F) as u32) << 19) | offset
+        }
     }
 
     pub fn get_pattern_iter<'a>(&'a self, pattern_name: u16, line: i8) -> PatternIterator<'a> {
@@ -318,7 +331,8 @@ impl Ym7101State {
         let pattern_palette = ((pattern_name & 0x6000) >> 13) as u8;
         let h_rev = (pattern_name & 0x0800) != 0;
         let v_rev = (pattern_name & 0x1000) != 0;
-        PatternIterator::new(&self, pattern_addr as u32, pattern_palette, h_rev, v_rev, line)
+        let mode = if (pattern_name & 0x8000) != 0 { ColourMode::Shadow } else { ColourMode::Normal };
+        PatternIterator::new(&self, pattern_addr as u32, pattern_palette, mode, h_rev, v_rev, line)
     }
 
     pub fn get_hscroll(&self, hcell: usize, line: usize) -> (u32, u32) {
@@ -385,7 +399,7 @@ impl Ym7101State {
     }
 
     pub fn draw_background(&mut self, frame: &mut Frame) {
-        let bg_colour = self.get_palette_colour((self.background & 0x30) >> 4, self.background & 0x0f);
+        let bg_colour = self.get_palette_colour((self.background & 0x30) >> 4, self.background & 0x0f, ColourMode::Normal);
         frame.clear(bg_colour);
     }
 
@@ -421,19 +435,14 @@ impl Ym7101State {
 
         for cell_y in 0..cells_v {
             for line in 0..8 {
-                let (_, hscrolling_b) = self.get_hscroll(cell_y, line as usize);
+                let (hscrolling_a, hscrolling_b) = self.get_hscroll(cell_y, line as usize);
                 for cell_x in 0..cells_h {
                     let (_, vscrolling_b) = self.get_vscroll(cell_x);
 
                     let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b as usize, vscrolling_b as usize);
                     self.draw_pattern_line(frame, pattern_b, (cell_x << 3) as u32 + (hscrolling_b % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_b % 8), line);
                 }
-            }
-        }
 
-        for cell_y in 0..cells_v {
-            for line in 0..8 {
-                let (hscrolling_a, _) = self.get_hscroll(cell_y, line as usize);
                 for cell_x in 0..cells_h {
                     let (vscrolling_a, _) = self.get_vscroll(cell_x);
 
@@ -524,6 +533,7 @@ fn decode_scroll_size(size: u8) -> usize {
 pub struct PatternIterator<'a> {
     state: &'a Ym7101State,
     palette: u8,
+    mode: ColourMode,
     base: usize,
     h_rev: bool,
     v_rev: bool,
@@ -533,10 +543,11 @@ pub struct PatternIterator<'a> {
 }
 
 impl<'a> PatternIterator<'a> {
-    pub fn new(state: &'a Ym7101State, start: u32, palette: u8, h_rev: bool, v_rev: bool, line: i8) -> Self {
+    pub fn new(state: &'a Ym7101State, start: u32, palette: u8, mode: ColourMode, h_rev: bool, v_rev: bool, line: i8) -> Self {
         Self {
             state,
             palette,
+            mode,
             base: start as usize,
             h_rev,
             v_rev,
@@ -553,9 +564,9 @@ impl<'a> Iterator for PatternIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let offset = self.base + (if !self.v_rev { self.line } else { 7 - self.line }) as usize * 4 + (if !self.h_rev { self.col } else { 3 - self.col }) as usize;
         let value = if (!self.h_rev && !self.second) || (self.h_rev && self.second) {
-            self.state.get_palette_colour(self.palette, self.state.vram[offset] >> 4)
+            self.state.get_palette_colour(self.palette, self.state.vram[offset] >> 4, self.mode)
         } else {
-            self.state.get_palette_colour(self.palette, self.state.vram[offset] & 0x0f)
+            self.state.get_palette_colour(self.palette, self.state.vram[offset] & 0x0f, self.mode)
         };
 
         if !self.second {

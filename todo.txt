@@ -1,15 +1,14 @@
 
+* you need to refactor the ym7101 stuff
+* can you make vram/cram/vsram be Addressables that can be accessed the same way?  Would this add too much overhead?
+* you can directly use a MemoryBlock, and separate out the dma
+
 * there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
   stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
 
 * go through the testcases.rs file and make sure they were decoded correctly
 
 * should you rename devices.rs traits.rs?
-* add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
-
-* can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
-  like specifying that address pins 10-7 should be ignored/unconnected, pin 11 will connect to "chip select", etc
-* should you add a unique ID to devices, such that they can be indexed, and their step functions can reset the next_run count and run them immediately
 
 
 Audio:
@@ -33,6 +32,10 @@ Audio:
 
 System/Traits:
 
+    * can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
+      like specifying that address pins 10-7 should be ignored/unconnected, pin 11 will connect to "chip select", etc
+    * should you add a unique ID to devices, such that they can be indexed, and their step functions can reset the next_run count and run them immediately
+
     * should you simulate bus arbitration?
     * interrupts could be done in a better way
     * need a better way of handling disparate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
@@ -47,6 +50,7 @@ Debugger:
     * add a way to delete a watcher
     * can you improve how the watcher implementation in the Bus works, instead of setting a flag and then checking it every cycle, pass in the System to Addressable??
     * can you use the breakpoint address parser in other commands?
+    * get stack tracing working again, but can you do it with just data?
     * how can you improve the debugger?
     * the command line definitely needs to be fixed so it prints the prompt correctly
     * debugger could maybe even allows arrows left/right for editing, and up/down for history
@@ -61,6 +65,7 @@ Genesis/Mega Drive:
     * in some games the controller doesn't seem to work at all (Earthworm Jim, and Mortal Kombat)
     * refactor ym7101 into multiple files perhaps.  You can separate the DMA stuff, the address/interfacing parts, and the graphics state
     * colours are still broken in Sonic1
+    * sonic3 needs some kind of nvram to run
 
     * implement sn76489 and ym2612 for audio
     * the 68000/Z80 bank switching is probably buggy, and there's that other banking stuff in the 0xC00000 range, which isn't implemented at all
