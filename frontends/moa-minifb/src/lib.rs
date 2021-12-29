@@ -1,5 +1,6 @@
 
 use std::thread;
+use std::str::FromStr;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
@@ -8,6 +9,7 @@ use clap::{App, ArgMatches};
 
 use moa::error::Error;
 use moa::system::System;
+use moa::devices::Clock;
 use moa::host::traits::{Host, HostData, ControllerUpdater, KeyboardUpdater, WindowUpdater, Audio};
 use moa::host::controllers::{ControllerDevice};
 
@@ -28,6 +30,7 @@ pub fn new(name: &str) -> App {
     App::new(name)
         .arg("-s, --scale=[1,2,4]    'Scale the screen'")
         .arg("-t, --threaded         'Run the simulation in a separate thread'")
+        .arg("-x, --speed=[]         'Adjust the speed of the simulation'")
         .arg("-d, --debugger         'Start the debugger before running machine'")
 }
 
@@ -177,6 +180,12 @@ impl MiniFrontend {
             _ => minifb::Scale::X2,
         };
 
+        let speed = match matches.value_of("speed") {
+            Some(x) => f32::from_str(x).unwrap(),
+            None => 1.0,
+        };
+        let nanoseconds_per_frame = (16_600_000 as f32 * speed) as Clock;
+
         let mut size = (WIDTH, HEIGHT);
         if let Some(updater) = self.window.as_mut() {
             size = updater.get_size();
@@ -198,7 +207,7 @@ impl MiniFrontend {
 
         while window.is_open() && !window.is_key_down(Key::Escape) {
             if let Some(system) = system.as_mut() {
-                system.run_for(16_600_000).unwrap();
+                system.run_for(nanoseconds_per_frame).unwrap();
                 //system.run_until_break().unwrap();
             }
 

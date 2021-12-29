@@ -2,11 +2,7 @@
 * there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
   stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
 
-* there is still some kind of hscroll glitch, and it seems to entirely be caused by the horizontal scroll offset value.  I could be calculating or adding/moding
-  it incorrectly somewhere somehow, or the data in the hscroll table could be incorrect due to the cpu impl
-
-
-* go through the testcases and make sure they are decoded correctly
+* go through the testcases.rs file and make sure they were decoded correctly
 
 * should you rename devices.rs traits.rs?
 * add command line arguments to speed up or slow down either the frame rate limiter or the simulated time per frame
@@ -14,14 +10,6 @@
 * can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
   like specifying that address pins 10-7 should be ignored/unconnected, pin 11 will connect to "chip select", etc
 * should you add a unique ID to devices, such that they can be indexed, and their step functions can reset the next_run count and run them immediately
-
-
-* should you simulate bus arbitration?
-* interrupts could be done in a better way
-* need a better way of handling disparate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
-* should you modify Addressable to also take the absolute address as input?  I'm thinking of how the same device could be mapped to multiple addresses in memory instead
-  of taking up a whole range of addresses
-* you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
 
 
 Audio:
@@ -43,10 +31,22 @@ Audio:
       frontend when it needs it, or it has a copy it can use directly
 
 
+System/Traits:
+
+    * should you simulate bus arbitration?
+    * interrupts could be done in a better way
+    * need a better way of handling disparate reads/writes to I/O spaces, rather than having multiple devices or having a massive chunk of address space allocated, continuously
+    * should you modify Addressable to also take the absolute address as input?  I'm thinking of how the same device could be mapped to multiple addresses in memory instead
+      of taking up a whole range of addresses
+    * you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
+
+
 Debugger:
 
     * i need a way to debug only the cpu and not the coprocessor, but that's tricky without a way to id or compare Transmutables
-    * you also need a way to specify the device in a breakpoint, perhaps "break cpu:4a", or "break -cpu 4a"
+    * add a way to delete a watcher
+    * can you improve how the watcher implementation in the Bus works, instead of setting a flag and then checking it every cycle, pass in the System to Addressable??
+    * can you use the breakpoint address parser in other commands?
     * how can you improve the debugger?
     * the command line definitely needs to be fixed so it prints the prompt correctly
     * debugger could maybe even allows arrows left/right for editing, and up/down for history
@@ -54,14 +54,19 @@ Debugger:
 
 Genesis/Mega Drive:
 
+    * the line hscroll mode needs to draw an extra cell in order to cover up the foreground on the left and bottom edges of the screen
+    * some games seem to be missing a row of cells at the top (Ghostbuster's dialog borders seem cut off)
+    * fix sprite/cell priorities so that they're drawn correctly
+    * implement highlight and shadow mode, which is also related to the priority
+    * in some games the controller doesn't seem to work at all (Earthworm Jim, and Mortal Kombat)
+    * refactor ym7101 into multiple files perhaps.  You can separate the DMA stuff, the address/interfacing parts, and the graphics state
+    * colours are still broken in Sonic1
+
+    * implement sn76489 and ym2612 for audio
     * the 68000/Z80 bank switching is probably buggy, and there's that other banking stuff in the 0xC00000 range, which isn't implemented at all
     * add support for the H/V counters at 0xC00008
-    * need to implement the 1.5ms reset in the genesis controllers
     * fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
     * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
-    * refactor to allow per-line horizontal scrolling, which might need a pattern iterator than only does a line at a time
-    * refactor ym7101 into multiple files perhaps.  You can separate the DMA stuff, the address/interfacing parts, and the graphics state
-    * fix sprite/cell priorities so that they're drawn correctly
     * add support for the sprite overflow flag (low priority)
 
 
