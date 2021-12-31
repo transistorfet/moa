@@ -55,6 +55,11 @@ which seems to have broken it in Earthworm Jim (and Mortal Kombat 1).
 
 ![alt text](images/sega-genesis-earthworm-jim.png)
 
+The following gif was only recorded at 15 frames a second instead of the full
+60, so it appears jerky and some animations seem to freeze in the gif, even
+though that doesn't happen during normal play
+
+![alt text](images/sega-genesis-sonic2-demo.gif)
 
 Computie
 --------
