@@ -5,3 +5,6 @@ Cargo.lock
 
 perf.data
 perf.data.old
+
+binaries/*/*.asm
+binaries/*/*.bin

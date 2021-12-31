@@ -8,11 +8,52 @@ Moa is an emulator/simulator for computers using various 68000 and Z80 CPUs and
 peripherals.  The original idea was to emulate the computer I had built as part
 of the [Computie project](https://jabberwocky.ca/projects/computie/).
 
-Currently it can simulate Computie (68000) and the TRS-80 Model I (Z80), and I'm
-working on supporting the Macintosh 512k and Sega Genesis.
+Currently it can simulate Computie (68000), the TRS-80 Model I (Z80), and the
+Sega Genesis.  Support for the Macintosh 512k is partially implemented but the
+ROM still wont boot.
 
 For more detail, check out this post about how I started the project:
 [Making a 68000 Emulator in Rust](https://jabberwocky.ca/posts/2021-11-making_an_emulator.html)
+
+
+Sega Genesis/MegaDrive
+----------------------
+
+From the project root, run the following:
+```
+cargo run -p moa-minifb --release --bin moa-genesis -- <ROM FILE>
+```
+
+The Genesis emulator is slowly coming along.  It can play a decent number of
+game, but some games wont display anything, and a few games run but don't
+respond to the controller input.  Games that require extra memory or nvram that
+would normally be inside the cartridge usually crash.
+
+It only supports NTSC mode at the moment, and only VDP mode 5 (not the backwards
+compatible mode 4).  I've rewritten the frame drawing code to operate pixel by
+pixel, so it will now draw all the layers, including the window, sort out the
+priority of the pixels, and almost accurately implement the shadow and highlight
+colour modes.  Audio is not implemented yet.
+
+There are still some problems like the colour of Tails in the Sonic 2 title
+screen being off.  I'm not sure why that happens, but it could be trying to
+update the colours during the drawing of the frame, and since the code is
+drawing the entire frame at once when the vertical blanking period is reached,
+the on-the-fly changes don't have an affect.
+
+![alt text](images/sega-genesis-sonic2-title.png)
+
+The game play is mostly working but the time in the upper left corner doesn't
+seem to progress
+
+![alt text](images/sega-genesis-sonic2-start.png)
+
+![alt text](images/sega-genesis-sonic2-bridge.png)
+
+Earthworm Jim was working before I fixed the controller behaviour in Sonic 2,
+which seems to have broken it in Earthworm Jim (and Mortal Kombat 1).
+
+![alt text](images/sega-genesis-earthworm-jim.png)
 
 
 Computie
@@ -54,45 +95,6 @@ The characters are being drawn pixel by pixel (6x8) using characters I drew
 using [this handy website](https://maxpromer.github.io/LCD-Character-Creator/).
 They aren't a perfect match of the characters used by the TRS-80
 
-Sega Genesis/MegaDrive
-----------------------
-
-It can be run with:
-```
-cargo run -p moa-minifb --release --bin moa-genesis -- <ROM FILE>
-```
-
-The Genesis emulator is a work in progress.  It can play a few games but some
-games won't run because the bank switching for the Z80 coprocessor is not
-working yet, and some games will hang waiting for the Z80 to respond.  For the
-video processor, the window layer is not drawn and the layer priority is not
-handled.  The horizontal scroll also doesn't work on a line-by-line basis so it
-tends to be quite jerky as you move, with the sprites and cells misaligned
-until you've moved one complete cell over (8x8 pixels).
-
-On the Sonic 2 title screen, the colours for Tails are wonky, probably because
-there's some trickery going on to get more than 16 colours per line, but the
-emulator currently renders the whole frame at once instead of line by line, so
-changes that should be made while the screen is updating don't show up
-
-![alt text](images/sega-genesis-sonic2-title.png)
-
-The game play is mostly working but the bottom of the clouds should be a
-different colour, probably because highlight/shadow colours are not yet
-supported.  The time in the upper left corner also doesn't seem to progress
-
-![alt text](images/sega-genesis-sonic2-start.png)
-
-I'm not yet sure why the clouds in the background are cut off suddenly.  They
-change in a glitchy way when you move around
-
-![alt text](images/sega-genesis-sonic2-bridge.png)
-
-There are some graphics glitches in Earthworm Jim, but it's almost playable if it
-wasn't for the 'jump' button, which only makes him jump a few pixels
-
-![alt text](images/sega-genesis-earthworm-jim.png)
-
 
 General Options
 ---------------
@@ -113,4 +115,9 @@ the rom instructions being emulated.  The state of the CPU registers will
 be displayed after each instruction, breakpoints can be set, memory contents
 can be examined, and memory locations can be modified.  This has helped a lot
 with tracking down errors in the emulator itself.
+
+The `-x` or `--speed` option, when given a decimal number, will multiply that
+number by the milliseconds per frame, increasing or decreasing the gameplay
+clock relative to the frontend's update loop.  Setting it to 0.5 slows the game
+down to half speed and setting it to 2 doubles the speed.
 
