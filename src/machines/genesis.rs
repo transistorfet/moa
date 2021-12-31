@@ -68,7 +68,7 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     let coproc_register = wrap_transmutable(CoprocessorBankRegister::new(bank_register.clone()));
     let coproc_area = wrap_transmutable(CoprocessorBankArea::new(bank_register, system.bus.clone()));
 
-    let mut coproc_bus = Rc::new(RefCell::new(Bus::new()));
+    let coproc_bus = Rc::new(RefCell::new(Bus::new()));
     coproc_bus.borrow_mut().set_ignore_unmapped(true);
     coproc_bus.borrow_mut().insert(0x0000, coproc_ram.clone());
     coproc_bus.borrow_mut().insert(0x4000, coproc_ym_sound.clone());

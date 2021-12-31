@@ -7,7 +7,7 @@ use crate::memory::dump_slice;
 use crate::signals::{EdgeSignal};
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, read_beu16};
 use crate::host::traits::{Host, BlitableSurface, HostData};
-use crate::host::gfx::{Frame, FrameSwapper, MASK_COLOUR};
+use crate::host::gfx::{Frame, FrameSwapper};
 
 
 const REG_MODE_SET_1: usize             = 0x00;
@@ -133,15 +133,6 @@ impl Ym7101Memory {
             Memory::Vsram => &self.vsram[addr..],
         };
         read_beu16(addr)
-    }
-
-    #[inline(always)]
-    fn read_u8(&self, target: Memory, addr: usize) -> u8 {
-        match target {
-            Memory::Vram => self.vram[addr],
-            Memory::Cram => self.cram[addr],
-            Memory::Vsram => self.vsram[addr],
-        }
     }
 
     pub fn set_dma_mode(&mut self, mode: DmaType) {
@@ -316,6 +307,9 @@ pub struct Ym7101State {
     pub sprites_addr: usize,
     pub hscroll_addr: usize,
 
+    pub sprites: Vec<Sprite>,
+    pub sprites_by_line: Vec<Vec<usize>>,
+
     pub last_clock: Clock,
     pub h_clock: u32,
     pub v_clock: u32,
@@ -343,6 +337,9 @@ impl Ym7101State {
             window_addr: 0,
             sprites_addr: 0,
             hscroll_addr: 0,
+
+            sprites: vec![],
+            sprites_by_line: vec![],
 
             last_clock: 0,
             h_clock: 0,
@@ -432,12 +429,12 @@ impl Ym7101State {
         cell_table + ((cell_x + (cell_y * self.scroll_size.0 as usize)) << 1)
     }
 
-    pub fn build_sprites_lists(&mut self) -> (Vec<Sprite>, Vec<Vec<usize>>) {
+    pub fn build_sprites_lists(&mut self) {
         let sprite_table = self.sprites_addr;
         let max_lines = self.screen_size.1 * 8;
 
-        let mut sprites = vec![];
-        let mut lines = vec![vec![]; max_lines];
+        self.sprites.clear();
+        self.sprites_by_line = vec![vec![]; max_lines];
 
         let mut link = 0;
         loop {
@@ -447,19 +444,17 @@ impl Ym7101State {
             for y in 0..(sprite.size.1 as i16 * 8) {
                 let pos_y = start_y + y;
                 if pos_y >= 0 && pos_y < max_lines as i16 {
-                    lines[pos_y as usize].push(sprites.len());
+                    self.sprites_by_line[pos_y as usize].push(self.sprites.len());
                 }
             }
 
             link = sprite.link as usize;
-            sprites.push(sprite);
+            self.sprites.push(sprite);
 
             if link == 0 {
                 break;
             }
         }
-
-        (sprites, lines)
     }
 
     pub fn get_pattern_pixel(&self, pattern_word: u16, x: usize, y: usize) -> (u8, u8) {
@@ -480,83 +475,88 @@ impl Ym7101State {
     }
 
     pub fn draw_frame(&mut self, frame: &mut Frame) {
-        let bg_colour = ((self.background & 0x30) >> 4, self.background & 0x0f);
-        let (sprites, sprites_per_line) = self.build_sprites_lists();
+        self.build_sprites_lists();
 
         for y in 0..(self.screen_size.1 * 8) {
-            let (hscrolling_a, hscrolling_b) = self.get_hscroll(y / 8, y % 8);
+            self.draw_frame_line(frame, y);
+        }
+    }
 
-            for x in 0..(self.screen_size.0 * 8) {
-                let (vscrolling_a, vscrolling_b) = self.get_vscroll(x / 8);
+    pub fn draw_frame_line(&mut self, frame: &mut Frame, y: usize) {
+        let bg_colour = ((self.background & 0x30) >> 4, self.background & 0x0f);
 
-                let pixel_a_x = (x - hscrolling_a) % (self.scroll_size.0 * 8);
-                let pixel_a_y = (y + vscrolling_a) % (self.scroll_size.1 * 8);
-                let pattern_a_addr = self.get_pattern_addr(self.scroll_a_addr, pixel_a_x / 8, pixel_a_y / 8);
-                let pattern_a_word = self.memory.read_beu16(Memory::Vram, pattern_a_addr);
-                let priority_a = (pattern_a_word & 0x8000) != 0;
-                let pixel_a = self.get_pattern_pixel(pattern_a_word, pixel_a_x % 8, pixel_a_y % 8);
+        let (hscrolling_a, hscrolling_b) = self.get_hscroll(y / 8, y % 8);
+        for x in 0..(self.screen_size.0 * 8) {
+            let (vscrolling_a, vscrolling_b) = self.get_vscroll(x / 8);
 
-                let pixel_b_x = (x - hscrolling_b) % (self.scroll_size.0 * 8);
-                let pixel_b_y = (y + vscrolling_b) % (self.scroll_size.1 * 8);
-                let pattern_b_addr = self.get_pattern_addr(self.scroll_b_addr, pixel_b_x / 8, pixel_b_y / 8);
-                let pattern_b_word = self.memory.read_beu16(Memory::Vram, pattern_b_addr);
-                let priority_b = (pattern_b_word & 0x8000) != 0;
-                let pixel_b = self.get_pattern_pixel(pattern_b_word, pixel_b_x % 8, pixel_b_y % 8);
+            let pixel_a_x = (x - hscrolling_a) % (self.scroll_size.0 * 8);
+            let pixel_a_y = (y + vscrolling_a) % (self.scroll_size.1 * 8);
+            let pattern_a_addr = self.get_pattern_addr(self.scroll_a_addr, pixel_a_x / 8, pixel_a_y / 8);
+            let pattern_a_word = self.memory.read_beu16(Memory::Vram, pattern_a_addr);
+            let priority_a = (pattern_a_word & 0x8000) != 0;
+            let pixel_a = self.get_pattern_pixel(pattern_a_word, pixel_a_x % 8, pixel_a_y % 8);
 
-                let pixel_win = if self.window_addr != 0 && self.is_inside_window(x, y) { 
-                    let pixel_win_x = x - self.window_pos.0.0 * 8;
-                    let pixel_win_y = y - self.window_pos.0.1 * 8;
-                    let pattern_win_addr = self.get_pattern_addr(self.window_addr, pixel_win_x / 8, pixel_win_y / 8);
-                    let pattern_win_word = self.memory.read_beu16(Memory::Vram, pattern_win_addr);
-                    //let priority_win = (pattern_win_word & 0x8000) != 0;
-                    self.get_pattern_pixel(pattern_win_word, pixel_win_x % 8, pixel_win_y % 8)
-                } else {
-                    (0, 0)
-                };
+            let pixel_b_x = (x - hscrolling_b) % (self.scroll_size.0 * 8);
+            let pixel_b_y = (y + vscrolling_b) % (self.scroll_size.1 * 8);
+            let pattern_b_addr = self.get_pattern_addr(self.scroll_b_addr, pixel_b_x / 8, pixel_b_y / 8);
+            let pattern_b_word = self.memory.read_beu16(Memory::Vram, pattern_b_addr);
+            let priority_b = (pattern_b_word & 0x8000) != 0;
+            let pixel_b = self.get_pattern_pixel(pattern_b_word, pixel_b_x % 8, pixel_b_y % 8);
 
-                let mut pixel_sprite = (0, 0);
-                let mut priority_sprite = false;
-                for sprite_num in sprites_per_line[y].iter() {
-                    let offset_x = x as i16 - sprites[*sprite_num].pos.0;
-                    let offset_y = y as i16 - sprites[*sprite_num].pos.1;
+            let pixel_win = if self.window_addr != 0 && self.is_inside_window(x, y) { 
+                let pixel_win_x = x - self.window_pos.0.0 * 8;
+                let pixel_win_y = y - self.window_pos.0.1 * 8;
+                let pattern_win_addr = self.get_pattern_addr(self.window_addr, pixel_win_x / 8, pixel_win_y / 8);
+                let pattern_win_word = self.memory.read_beu16(Memory::Vram, pattern_win_addr);
+                //let priority_win = (pattern_win_word & 0x8000) != 0;
+                self.get_pattern_pixel(pattern_win_word, pixel_win_x % 8, pixel_win_y % 8)
+            } else {
+                (0, 0)
+            };
 
-                    if offset_x >= 0 && offset_x < (sprites[*sprite_num].size.0 as i16 * 8) {
-                        let pattern = sprites[*sprite_num].calculate_pattern(offset_x as usize / 8, offset_y as usize / 8);
-                        priority_sprite = (pattern & 0x8000) != 0;
+            let mut pixel_sprite = (0, 0);
+            let mut priority_sprite = false;
+            for sprite_num in self.sprites_by_line[y].iter() {
+                let sprite = &self.sprites[*sprite_num];
+                let offset_x = x as i16 - sprite.pos.0;
+                let offset_y = y as i16 - sprite.pos.1;
 
-                        pixel_sprite = self.get_pattern_pixel(pattern, offset_x as usize % 8, offset_y as usize % 8);
-                        if pixel_sprite.1 != 0 {
-                            break;
-                        }
-                    }
-                }
+                if offset_x >= 0 && offset_x < (sprite.size.0 as i16 * 8) {
+                    let pattern = sprite.calculate_pattern(offset_x as usize / 8, offset_y as usize / 8);
+                    priority_sprite = (pattern & 0x8000) != 0;
 
-                let pixels = match (priority_sprite, priority_a, priority_b) {
-                    (false, false, true) =>
-                        [ pixel_win, pixel_b, pixel_sprite, pixel_a, bg_colour ],
-                    (true, false, true) =>
-                        [ pixel_win, pixel_sprite, pixel_b, pixel_a, bg_colour ],
-                    (false, true, false) =>
-                        [ pixel_win, pixel_a, pixel_sprite, pixel_b, bg_colour ],
-                    (false, true, true) =>
-                        [ pixel_win, pixel_a, pixel_b, pixel_sprite, bg_colour ],
-                    _ =>
-                        [ pixel_win, pixel_sprite, pixel_a, pixel_b, bg_colour ],
-                };
-
-                for i in 0..pixels.len() {
-                    if pixels[i].1 != 0 || i == pixels.len() - 1 {
-                        let mode = if pixels[i] == (3, 14) {
-                            ColourMode::Highlight
-                        } else if (!priority_a && !priority_b) || pixels[i] == (3, 15) {
-                            ColourMode::Shadow
-                        } else {
-                            ColourMode::Normal
-                        };
-
-                        frame.set_pixel(x as u32, y as u32, self.get_palette_colour(pixels[i].0, pixels[i].1, mode));
+                    pixel_sprite = self.get_pattern_pixel(pattern, offset_x as usize % 8, offset_y as usize % 8);
+                    if pixel_sprite.1 != 0 {
                         break;
                     }
+                }
+            }
+
+            let pixels = match (priority_sprite, priority_a, priority_b) {
+                (false, false, true) =>
+                    [ pixel_win, pixel_b, pixel_sprite, pixel_a, bg_colour ],
+                (true, false, true) =>
+                    [ pixel_win, pixel_sprite, pixel_b, pixel_a, bg_colour ],
+                (false, true, false) =>
+                    [ pixel_win, pixel_a, pixel_sprite, pixel_b, bg_colour ],
+                (false, true, true) =>
+                    [ pixel_win, pixel_a, pixel_b, pixel_sprite, bg_colour ],
+                _ =>
+                    [ pixel_win, pixel_sprite, pixel_a, pixel_b, bg_colour ],
+            };
+
+            for i in 0..pixels.len() {
+                if pixels[i].1 != 0 || i == pixels.len() - 1 {
+                    let mode = if pixels[i] == (3, 14) {
+                        ColourMode::Highlight
+                    } else if (!priority_a && !priority_b) || pixels[i] == (3, 15) {
+                        ColourMode::Shadow
+                    } else {
+                        ColourMode::Normal
+                    };
+
+                    frame.set_pixel(x as u32, y as u32, self.get_palette_colour(pixels[i].0, pixels[i].1, mode));
+                    break;
                 }
             }
         }
@@ -597,6 +597,64 @@ impl Sprite {
         (self.pattern & 0xF800) | ((self.pattern & 0x07FF) + (h as u16 * self.size.1) + v as u16)
     }
 }
+
+impl Steppable for Ym7101 {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+        let diff = (system.clock - self.state.last_clock) as u32;
+        self.state.last_clock = system.clock;
+
+        if self.state.external_int_enabled() && self.external_interrupt.get() {
+            self.external_interrupt.set(false);
+            system.get_interrupt_controller().set(true, 2, 26)?;
+        }
+
+        self.state.h_clock += diff;
+        if (self.state.status & STATUS_IN_HBLANK) != 0 && self.state.h_clock >= 2_340 && self.state.h_clock <= 61_160 {
+            self.state.status &= !STATUS_IN_HBLANK;
+        }
+        if (self.state.status & STATUS_IN_HBLANK) == 0 && self.state.h_clock >= 61_160 {
+            self.state.status |= STATUS_IN_HBLANK;
+
+            self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
+            if self.state.hsync_int_enabled() && self.state.h_scanlines == 0  {
+                self.state.h_scanlines = self.state.h_int_lines;
+                system.get_interrupt_controller().set(true, 4, 28)?;
+            }
+        }
+        if self.state.h_clock > 63_500 {
+            self.state.h_clock -= 63_500;
+        }
+
+        self.state.v_clock += diff;
+        if (self.state.status & STATUS_IN_VBLANK) != 0 && self.state.v_clock >= 1_205_992 && self.state.v_clock <= 15_424_008 {
+            self.state.status &= !STATUS_IN_VBLANK;
+        }
+        if (self.state.status & STATUS_IN_VBLANK) == 0 && self.state.v_clock >= 15_424_008 {
+            self.state.status |= STATUS_IN_VBLANK;
+
+            if self.state.vsync_int_enabled() {
+                system.get_interrupt_controller().set(true, 6, 30)?;
+            }
+
+            self.swapper.swap();
+            let mut frame = self.swapper.current.lock().unwrap();
+            self.state.draw_frame(&mut frame);
+
+            self.frame_complete.signal();
+        }
+        if self.state.v_clock > 16_630_000 {
+            self.state.v_clock -= 16_630_000;
+        }
+
+        if (self.state.mode_2 & MODE2_BF_DMA_ENABLED) != 0 {
+            self.state.memory.step_dma(system)?;
+            self.state.status = (self.state.status & !STATUS_DMA_BUSY) | (if self.state.memory.transfer_dma_busy { STATUS_DMA_BUSY } else { 0 });
+        }
+
+        Ok((1_000_000_000 / 13_423_294) * 4)
+    }
+}
+
 
 
 pub struct Ym7101 {
@@ -692,63 +750,6 @@ fn decode_scroll_size(size: u8) -> usize {
         0b01 => 64,
         0b11 => 128,
         _ => panic!("{}: invalid scroll size option {:x}", DEV_NAME, size),
-    }
-}
-
-impl Steppable for Ym7101 {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        let diff = (system.clock - self.state.last_clock) as u32;
-        self.state.last_clock = system.clock;
-
-        if self.state.external_int_enabled() && self.external_interrupt.get() {
-            self.external_interrupt.set(false);
-            system.get_interrupt_controller().set(true, 2, 26)?;
-        }
-
-        self.state.h_clock += diff;
-        if (self.state.status & STATUS_IN_HBLANK) != 0 && self.state.h_clock >= 2_340 && self.state.h_clock <= 61_160 {
-            self.state.status &= !STATUS_IN_HBLANK;
-        }
-        if (self.state.status & STATUS_IN_HBLANK) == 0 && self.state.h_clock >= 61_160 {
-            self.state.status |= STATUS_IN_HBLANK;
-
-            self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
-            if self.state.hsync_int_enabled() && self.state.h_scanlines == 0  {
-                self.state.h_scanlines = self.state.h_int_lines;
-                system.get_interrupt_controller().set(true, 4, 28)?;
-            }
-        }
-        if self.state.h_clock > 63_500 {
-            self.state.h_clock -= 63_500;
-        }
-
-        self.state.v_clock += diff;
-        if (self.state.status & STATUS_IN_VBLANK) != 0 && self.state.v_clock >= 1_205_992 && self.state.v_clock <= 15_424_008 {
-            self.state.status &= !STATUS_IN_VBLANK;
-        }
-        if (self.state.status & STATUS_IN_VBLANK) == 0 && self.state.v_clock >= 15_424_008 {
-            self.state.status |= STATUS_IN_VBLANK;
-
-            if self.state.vsync_int_enabled() {
-                system.get_interrupt_controller().set(true, 6, 30)?;
-            }
-
-            self.swapper.swap();
-            let mut frame = self.swapper.current.lock().unwrap();
-            self.state.draw_frame(&mut frame);
-
-            self.frame_complete.signal();
-        }
-        if self.state.v_clock > 16_630_000 {
-            self.state.v_clock -= 16_630_000;
-        }
-
-        if (self.state.mode_2 & MODE2_BF_DMA_ENABLED) != 0 {
-            self.state.memory.step_dma(system)?;
-            self.state.status = (self.state.status & !STATUS_DMA_BUSY) | (if self.state.memory.transfer_dma_busy { STATUS_DMA_BUSY } else { 0 });
-        }
-
-        Ok((1_000_000_000 / 13_423_294) * 4)
     }
 }
 
