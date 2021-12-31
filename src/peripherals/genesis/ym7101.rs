@@ -285,7 +285,6 @@ impl Ym7101Memory {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ColourMode {
-    Unmasked,
     Normal,
     Shadow,
     Highlight,
@@ -305,11 +304,11 @@ pub struct Ym7101State {
     pub mode_2: u8,
     pub mode_3: u8,
     pub mode_4: u8,
-    pub window_pos: (u8, u8),
     pub h_int_lines: u8,
     pub screen_size: (usize, usize),
     pub scroll_size: (usize, usize),
-    pub window_offset: (usize, usize),
+    pub window_pos: ((usize, usize), (usize, usize)),
+    pub window_values: (u8, u8),
     pub background: u8,
     pub scroll_a_addr: usize,
     pub scroll_b_addr: usize,
@@ -333,11 +332,11 @@ impl Ym7101State {
             mode_2: 0,
             mode_3: 0,
             mode_4: 0,
-            window_pos: (0, 0),
             h_int_lines: 0,
             screen_size: (0, 0),
             scroll_size: (0, 0),
-            window_offset: (0, 0),
+            window_pos: ((0, 0), (0, 0)),
+            window_values: (0, 0),
             background: 0,
             scroll_a_addr: 0,
             scroll_b_addr: 0,
@@ -349,26 +348,6 @@ impl Ym7101State {
             h_clock: 0,
             v_clock: 0,
             h_scanlines: 0,
-        }
-    }
-
-    pub fn update_screen_size(&mut self) {
-        let h_cells = if (self.mode_4 & MODE4_BF_H_CELL_MODE) == 0 { 32 } else { 40 };
-        let v_cells = if (self.mode_2 & MODE2_BF_V_CELL_MODE) == 0 { 28 } else { 30 };
-        self.screen_size = (h_cells, v_cells);
-    }
-
-    pub fn update_window_offset(&mut self) {
-        let win_h = ((self.window_pos.0 & 0x1F) << 1) as usize;
-        let win_v = (self.window_pos.1 & 0x1F) as usize;
-        let right = (self.window_pos.0 & 0x80) != 0;
-        let down = (self.window_pos.1 & 0x80) != 0;
-
-        self.window_offset = match (right, down) {
-            (false, false) => (win_h, win_v),
-            (true, false) => (win_h - self.screen_size.0, win_v),
-            (false, true) => (win_h, win_v - self.screen_size.1),
-            (true, true) => (win_h - self.screen_size.0, win_v - self.screen_size.1),
         }
     }
 
@@ -387,10 +366,32 @@ impl Ym7101State {
         (self.mode_3 & MODE3_BF_EXTERNAL_INTERRUPT) != 0
     }
 
-    pub fn get_palette_colour(&self, palette: u8, colour: u8, mode: ColourMode) -> u32 {
-        if colour == 0 && mode != ColourMode::Unmasked {
-            return MASK_COLOUR;
+    pub fn update_screen_size(&mut self) {
+        let h_cells = if (self.mode_4 & MODE4_BF_H_CELL_MODE) == 0 { 32 } else { 40 };
+        let v_cells = if (self.mode_2 & MODE2_BF_V_CELL_MODE) == 0 { 28 } else { 30 };
+        self.screen_size = (h_cells, v_cells);
+    }
+
+    pub fn update_window_position(&mut self) {
+        let win_h = ((self.window_values.0 & 0x1F) << 1) as usize;
+        let win_v = (self.window_values.1 & 0x1F) as usize;
+        let right = (self.window_values.0 & 0x80) != 0;
+        let down = (self.window_values.1 & 0x80) != 0;
+
+        self.window_pos = match (right, down) {
+            (false, false) => ((0, 0), (win_h, win_v)),
+            (true, false) => ((win_h, 0), (self.screen_size.0, win_v)),
+            (false, true) => ((0, win_v), (win_h, self.screen_size.1)),
+            (true, true) => ((win_h, win_v), (self.screen_size.0, self.screen_size.1)),
         }
+    }
+
+    pub fn is_inside_window(&mut self, x: usize, y: usize) -> bool {
+        x >= self.window_pos.0.0 && x <= self.window_pos.1.0 && y >= self.window_pos.0.1 && y <= self.window_pos.1.1
+    }
+
+
+    pub fn get_palette_colour(&self, palette: u8, colour: u8, mode: ColourMode) -> u32 {
         let shift_enabled = (self.mode_4 & MODE4_BF_SHADOW_HIGHLIGHT) != 0;
         let rgb = self.memory.read_beu16(Memory::Cram, (((palette * 16) + colour) * 2) as usize);
         if !shift_enabled || mode == ColourMode::Normal {
@@ -461,26 +462,25 @@ impl Ym7101State {
         (sprites, lines)
     }
 
-    pub fn get_pattern_pixel(&self, pattern_word: u16, x: usize, y: usize) -> u32 {
+    pub fn get_pattern_pixel(&self, pattern_word: u16, x: usize, y: usize) -> (u8, u8) {
         let pattern_addr = (pattern_word & 0x07FF) << 5;
         let palette = ((pattern_word & 0x6000) >> 13) as u8;
         let h_rev = (pattern_word & 0x0800) != 0;
         let v_rev = (pattern_word & 0x1000) != 0;
-        let mode = if (pattern_word & 0x8000) != 0 { ColourMode::Shadow } else { ColourMode::Normal };
 
         let offset = pattern_addr as usize + (if !v_rev { y } else { 7 - y }) as usize * 4 + (if !h_rev { x / 2 } else { 3 - (x / 2) }) as usize;
         let second = x % 2 == 1;
         let value = if (!h_rev && !second) || (h_rev && second) {
-            self.get_palette_colour(palette, self.memory.vram[offset] >> 4, mode)
+            (palette, self.memory.vram[offset] >> 4)
         } else {
-            self.get_palette_colour(palette, self.memory.vram[offset] & 0x0f, mode)
+            (palette, self.memory.vram[offset] & 0x0f)
         };
 
         value
     }
 
     pub fn draw_frame(&mut self, frame: &mut Frame) {
-        let bg_colour = self.get_palette_colour((self.background & 0x30) >> 4, self.background & 0x0f, ColourMode::Unmasked);
+        let bg_colour = ((self.background & 0x30) >> 4, self.background & 0x0f);
         let (sprites, sprites_per_line) = self.build_sprites_lists();
 
         for y in 0..(self.screen_size.1 * 8) {
@@ -503,7 +503,18 @@ impl Ym7101State {
                 let priority_b = (pattern_b_word & 0x8000) != 0;
                 let pixel_b = self.get_pattern_pixel(pattern_b_word, pixel_b_x % 8, pixel_b_y % 8);
 
-                let mut pixel_sprite = MASK_COLOUR;
+                let pixel_win = if self.window_addr != 0 && self.is_inside_window(x, y) { 
+                    let pixel_win_x = x - self.window_pos.0.0 * 8;
+                    let pixel_win_y = y - self.window_pos.0.1 * 8;
+                    let pattern_win_addr = self.get_pattern_addr(self.window_addr, pixel_win_x / 8, pixel_win_y / 8);
+                    let pattern_win_word = self.memory.read_beu16(Memory::Vram, pattern_win_addr);
+                    //let priority_win = (pattern_win_word & 0x8000) != 0;
+                    self.get_pattern_pixel(pattern_win_word, pixel_win_x % 8, pixel_win_y % 8)
+                } else {
+                    (0, 0)
+                };
+
+                let mut pixel_sprite = (0, 0);
                 let mut priority_sprite = false;
                 for sprite_num in sprites_per_line[y].iter() {
                     let offset_x = x as i16 - sprites[*sprite_num].pos.0;
@@ -514,7 +525,7 @@ impl Ym7101State {
                         priority_sprite = (pattern & 0x8000) != 0;
 
                         pixel_sprite = self.get_pattern_pixel(pattern, offset_x as usize % 8, offset_y as usize % 8);
-                        if pixel_sprite != MASK_COLOUR {
+                        if pixel_sprite.1 != 0 {
                             break;
                         }
                     }
@@ -522,20 +533,28 @@ impl Ym7101State {
 
                 let pixels = match (priority_sprite, priority_a, priority_b) {
                     (false, false, true) =>
-                        [ pixel_b, pixel_sprite, pixel_a, bg_colour, 0x000000 ],
+                        [ pixel_win, pixel_b, pixel_sprite, pixel_a, bg_colour ],
                     (true, false, true) =>
-                        [ pixel_sprite, pixel_b, pixel_a, bg_colour, 0x000000 ],
+                        [ pixel_win, pixel_sprite, pixel_b, pixel_a, bg_colour ],
                     (false, true, false) =>
-                        [ pixel_a, pixel_sprite, pixel_b, bg_colour, 0x000000 ],
+                        [ pixel_win, pixel_a, pixel_sprite, pixel_b, bg_colour ],
                     (false, true, true) =>
-                        [ pixel_a, pixel_b, pixel_sprite, bg_colour, 0x000000 ],
+                        [ pixel_win, pixel_a, pixel_b, pixel_sprite, bg_colour ],
                     _ =>
-                        [ pixel_sprite, pixel_a, pixel_b, bg_colour, 0x000000 ],
+                        [ pixel_win, pixel_sprite, pixel_a, pixel_b, bg_colour ],
                 };
 
-                for pixel in pixels {
-                    if pixel != MASK_COLOUR {
-                        frame.set_pixel(x as u32, y as u32, pixel);
+                for i in 0..pixels.len() {
+                    if pixels[i].1 != 0 || i == pixels.len() - 1 {
+                        let mode = if pixels[i] == (3, 14) {
+                            ColourMode::Highlight
+                        } else if (!priority_a && !priority_b) || pixels[i] == (3, 15) {
+                            ColourMode::Shadow
+                        } else {
+                            ColourMode::Normal
+                        };
+
+                        frame.set_pixel(x as u32, y as u32, self.get_palette_colour(pixels[i].0, pixels[i].1, mode));
                         break;
                     }
                 }
@@ -859,12 +878,12 @@ impl Ym7101 {
                 self.state.scroll_size = (h, v);
             },
             REG_WINDOW_H_POS => {
-                self.state.window_pos.0 = data;
-                self.state.update_window_offset();
+                self.state.window_values.0 = data;
+                self.state.update_window_position();
             },
             REG_WINDOW_V_POS => {
-                self.state.window_pos.1 = data;
-                self.state.update_window_offset();
+                self.state.window_values.1 = data;
+                self.state.update_window_position();
             },
             REG_DMA_COUNTER_LOW => {
                 self.state.memory.transfer_count = (self.state.memory.transfer_count & 0xFF00) | data as u32;

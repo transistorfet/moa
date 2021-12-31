@@ -2,14 +2,6 @@
 * I need some better function for dealing with memory, like a function that copies data with a loop, or allows offset reading of
   a fixed piece of data..., the trick is what function are the most common.  You can use generics
 
-* should you modify the drawing to always draw line by line and combine all layers at once.  It's more complicated and would be
-  slower because some things would need to be calculated multiple times, but it'd be more accurate
-
-* you need to refactor the ym7101 stuff
-* can you make vram/cram/vsram be Addressables that can be accessed the same way?  Would this add too much overhead?
-* you can directly use a MemoryBlock, and separate out the dma
-* it's not working so well because of the &mut needed by .read()
-
 * there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
   stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
 
@@ -66,8 +58,6 @@ Debugger:
 Genesis/Mega Drive:
 
     * there's a bug when Sonic 2 goes to the demo screen, it's all corrupted (could it be a dma copy error)
-    * the line hscroll mode needs to draw an extra cell in order to cover up the foreground on the left and bottom edges of the screen
-    * some games seem to be missing a row of cells at the top (Ghostbuster's dialog borders seem cut off)
     * fix sprite/cell priorities so that they're drawn correctly
     * implement highlight and shadow mode, which is also related to the priority
     * in some games the controller doesn't seem to work at all (Earthworm Jim, and Mortal Kombat)
