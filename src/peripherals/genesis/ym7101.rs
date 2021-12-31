@@ -7,7 +7,7 @@ use crate::memory::dump_slice;
 use crate::signals::{EdgeSignal};
 use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, read_beu16};
 use crate::host::traits::{Host, BlitableSurface, HostData};
-use crate::host::gfx::{Frame, FrameSwapper};
+use crate::host::gfx::{Frame, FrameSwapper, MASK_COLOUR};
 
 
 const REG_MODE_SET_1: usize             = 0x00;
@@ -285,9 +285,16 @@ impl Ym7101Memory {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ColourMode {
+    Unmasked,
     Normal,
     Shadow,
     Highlight,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Scroll {
+    ScrollA,
+    ScrollB,
 }
 
 pub struct Ym7101State {
@@ -381,8 +388,8 @@ impl Ym7101State {
     }
 
     pub fn get_palette_colour(&self, palette: u8, colour: u8, mode: ColourMode) -> u32 {
-        if colour == 0 {
-            return 0xFFFFFFFF;
+        if colour == 0 && mode != ColourMode::Unmasked {
+            return MASK_COLOUR;
         }
         let shift_enabled = (self.mode_4 & MODE4_BF_SHADOW_HIGHLIGHT) != 0;
         let rgb = self.memory.read_beu16(Memory::Cram, (((palette * 16) + colour) * 2) as usize);
@@ -394,6 +401,149 @@ impl Ym7101State {
         }
     }
 
+    pub fn get_hscroll(&self, hcell: usize, line: usize) -> (usize, usize) {
+        let scroll_addr = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
+            0 => self.hscroll_addr,
+            2 => self.hscroll_addr + (hcell << 5),
+            3 => self.hscroll_addr + (hcell << 5) + (line * 2 * 2),
+            _ => panic!("Unsupported horizontal scroll mode"),
+        };
+
+        let scroll_a = self.memory.read_beu16(Memory::Vram, scroll_addr) as usize & 0x3FF;
+        let scroll_b = self.memory.read_beu16(Memory::Vram, scroll_addr + 2) as usize & 0x3FF;
+        (scroll_a, scroll_b)
+    }
+
+    pub fn get_vscroll(&self, vcell: usize) -> (usize, usize) {
+        let base_addr = if (self.mode_3 & MODE3_BF_V_SCROLL_MODE) == 0 {
+            0
+        } else {
+            vcell >> 1
+        };
+
+        let scroll_a = self.memory.read_beu16(Memory::Vsram, base_addr) as usize & 0x3FF;
+        let scroll_b = self.memory.read_beu16(Memory::Vsram, base_addr + 2) as usize & 0x3FF;
+        (scroll_a, scroll_b)
+    }
+
+    #[inline(always)]
+    pub fn get_pattern_addr(&self, cell_table: usize, cell_x: usize, cell_y: usize) -> usize {
+        cell_table + ((cell_x + (cell_y * self.scroll_size.0 as usize)) << 1)
+    }
+
+    pub fn build_sprites_lists(&mut self) -> (Vec<Sprite>, Vec<Vec<usize>>) {
+        let sprite_table = self.sprites_addr;
+        let max_lines = self.screen_size.1 * 8;
+
+        let mut sprites = vec![];
+        let mut lines = vec![vec![]; max_lines];
+
+        let mut link = 0;
+        loop {
+            let sprite = Sprite::new(&self.memory.vram[sprite_table + (link * 8)..]);
+
+            let start_y = sprite.pos.1;
+            for y in 0..(sprite.size.1 as i16 * 8) {
+                let pos_y = start_y + y;
+                if pos_y >= 0 && pos_y < max_lines as i16 {
+                    lines[pos_y as usize].push(sprites.len());
+                }
+            }
+
+            link = sprite.link as usize;
+            sprites.push(sprite);
+
+            if link == 0 {
+                break;
+            }
+        }
+
+        (sprites, lines)
+    }
+
+    pub fn get_pattern_pixel(&self, pattern_word: u16, x: usize, y: usize) -> u32 {
+        let pattern_addr = (pattern_word & 0x07FF) << 5;
+        let palette = ((pattern_word & 0x6000) >> 13) as u8;
+        let h_rev = (pattern_word & 0x0800) != 0;
+        let v_rev = (pattern_word & 0x1000) != 0;
+        let mode = if (pattern_word & 0x8000) != 0 { ColourMode::Shadow } else { ColourMode::Normal };
+
+        let offset = pattern_addr as usize + (if !v_rev { y } else { 7 - y }) as usize * 4 + (if !h_rev { x / 2 } else { 3 - (x / 2) }) as usize;
+        let second = x % 2 == 1;
+        let value = if (!h_rev && !second) || (h_rev && second) {
+            self.get_palette_colour(palette, self.memory.vram[offset] >> 4, mode)
+        } else {
+            self.get_palette_colour(palette, self.memory.vram[offset] & 0x0f, mode)
+        };
+
+        value
+    }
+
+    pub fn draw_frame(&mut self, frame: &mut Frame) {
+        let bg_colour = self.get_palette_colour((self.background & 0x30) >> 4, self.background & 0x0f, ColourMode::Unmasked);
+        let (sprites, sprites_per_line) = self.build_sprites_lists();
+
+        for y in 0..(self.screen_size.1 * 8) {
+            let (hscrolling_a, hscrolling_b) = self.get_hscroll(y / 8, y % 8);
+
+            for x in 0..(self.screen_size.0 * 8) {
+                let (vscrolling_a, vscrolling_b) = self.get_vscroll(x / 8);
+
+                let pixel_a_x = (x - hscrolling_a) % (self.scroll_size.0 * 8);
+                let pixel_a_y = (y + vscrolling_a) % (self.scroll_size.1 * 8);
+                let pattern_a_addr = self.get_pattern_addr(self.scroll_a_addr, pixel_a_x / 8, pixel_a_y / 8);
+                let pattern_a_word = self.memory.read_beu16(Memory::Vram, pattern_a_addr);
+                let priority_a = (pattern_a_word & 0x8000) != 0;
+                let pixel_a = self.get_pattern_pixel(pattern_a_word, pixel_a_x % 8, pixel_a_y % 8);
+
+                let pixel_b_x = (x - hscrolling_b) % (self.scroll_size.0 * 8);
+                let pixel_b_y = (y + vscrolling_b) % (self.scroll_size.1 * 8);
+                let pattern_b_addr = self.get_pattern_addr(self.scroll_b_addr, pixel_b_x / 8, pixel_b_y / 8);
+                let pattern_b_word = self.memory.read_beu16(Memory::Vram, pattern_b_addr);
+                let priority_b = (pattern_b_word & 0x8000) != 0;
+                let pixel_b = self.get_pattern_pixel(pattern_b_word, pixel_b_x % 8, pixel_b_y % 8);
+
+                let mut pixel_sprite = MASK_COLOUR;
+                let mut priority_sprite = false;
+                for sprite_num in sprites_per_line[y].iter() {
+                    let offset_x = x as i16 - sprites[*sprite_num].pos.0;
+                    let offset_y = y as i16 - sprites[*sprite_num].pos.1;
+
+                    if offset_x >= 0 && offset_x < (sprites[*sprite_num].size.0 as i16 * 8) {
+                        let pattern = sprites[*sprite_num].calculate_pattern(offset_x as usize / 8, offset_y as usize / 8);
+                        priority_sprite = (pattern & 0x8000) != 0;
+
+                        pixel_sprite = self.get_pattern_pixel(pattern, offset_x as usize % 8, offset_y as usize % 8);
+                        if pixel_sprite != MASK_COLOUR {
+                            break;
+                        }
+                    }
+                }
+
+                let pixels = match (priority_sprite, priority_a, priority_b) {
+                    (false, false, true) =>
+                        [ pixel_b, pixel_sprite, pixel_a, bg_colour, 0x000000 ],
+                    (true, false, true) =>
+                        [ pixel_sprite, pixel_b, pixel_a, bg_colour, 0x000000 ],
+                    (false, true, false) =>
+                        [ pixel_a, pixel_sprite, pixel_b, bg_colour, 0x000000 ],
+                    (false, true, true) =>
+                        [ pixel_a, pixel_b, pixel_sprite, bg_colour, 0x000000 ],
+                    _ =>
+                        [ pixel_sprite, pixel_a, pixel_b, bg_colour, 0x000000 ],
+                };
+
+                for pixel in pixels {
+                    if pixel != MASK_COLOUR {
+                        frame.set_pixel(x as u32, y as u32, pixel);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /*
     pub fn get_pattern_iter<'a>(&'a self, pattern_name: u16, line: i8) -> PatternIterator<'a> {
         let pattern_addr = (pattern_name & 0x07FF) << 5;
         let pattern_palette = ((pattern_name & 0x6000) >> 13) as u8;
@@ -401,37 +551,6 @@ impl Ym7101State {
         let v_rev = (pattern_name & 0x1000) != 0;
         let mode = if (pattern_name & 0x8000) != 0 { ColourMode::Shadow } else { ColourMode::Normal };
         PatternIterator::new(&self, pattern_addr as u32, pattern_palette, mode, h_rev, v_rev, line)
-    }
-
-    pub fn get_hscroll(&self, hcell: usize, line: usize) -> (u32, u32) {
-        let base_addr = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
-            0 => self.hscroll_addr,
-            2 => self.hscroll_addr + (hcell << 5),
-            3 => self.hscroll_addr + (hcell << 5),
-            _ => panic!("Unsupported horizontal scroll mode"),
-        };
-
-        let scroll_addr = base_addr + (line * 2 * 2);
-        let scroll_a = self.memory.read_beu16(Memory::Vram, scroll_addr) as u32 & 0x3FF;
-        let scroll_b = self.memory.read_beu16(Memory::Vram, scroll_addr + 2) as u32 & 0x3FF;
-        (scroll_a, scroll_b)
-    }
-
-    pub fn get_vscroll(&self, vcell: usize) -> (u32, u32) {
-        let base_addr = if (self.mode_3 & MODE3_BF_V_SCROLL_MODE) == 0 {
-            0
-        } else {
-            vcell >> 1
-        };
-
-        let scroll_a = self.memory.read_beu16(Memory::Vsram, base_addr) as u32 & 0x3FF;
-        let scroll_b = self.memory.read_beu16(Memory::Vsram, base_addr + 2) as u32 & 0x3FF;
-        (scroll_a, scroll_b)
-    }
-
-    #[inline(always)]
-    pub fn get_pattern_addr(&self, cell_table: usize, cell_x: usize, cell_y: usize) -> usize {
-        cell_table + ((cell_x + (cell_y * self.scroll_size.0 as usize)) << 1)
     }
 
     pub fn get_scroll_a_pattern(&self, cell_x: usize, cell_y: usize, hscrolling_a: usize, vscrolling_a: usize) -> u16 {
@@ -459,7 +578,9 @@ impl Ym7101State {
         frame.blit(pixel_x, pixel_y, iter, 8, 1);
     }
 
-    pub fn draw_frame(&mut self, frame: &mut Frame) {
+
+
+    pub fn draw_frame_old(&mut self, frame: &mut Frame) {
         self.draw_background(frame);
         self.draw_scrolls(frame);
         //self.draw_window(frame);
@@ -488,12 +609,12 @@ impl Ym7101State {
             for cell_x in 0..cells_h {
                 let (vscrolling_a, vscrolling_b) = self.get_vscroll(cell_x);
 
-                let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b as usize, vscrolling_b as usize);
-                let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a as usize, vscrolling_a as usize);
+                let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b, vscrolling_b);
+                let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a, vscrolling_a);
 
                 //if (pattern_b & 0x8000) != 0 && (pattern_a & 0x8000) == 0 {
-                self.draw_pattern(frame, pattern_b, (cell_x << 3) as u32, (cell_y << 3) as u32 - (vscrolling_b % 8));
-                self.draw_pattern(frame, pattern_a, (cell_x << 3) as u32, (cell_y << 3) as u32 - (vscrolling_b % 8));
+                self.draw_pattern(frame, pattern_b, (cell_x << 3) as u32, (cell_y << 3) as u32 - (vscrolling_b as u32 % 8));
+                self.draw_pattern(frame, pattern_a, (cell_x << 3) as u32, (cell_y << 3) as u32 - (vscrolling_b as u32 % 8));
             }
         }
     }
@@ -507,15 +628,15 @@ impl Ym7101State {
                 for cell_x in 0..cells_h {
                     let (_, vscrolling_b) = self.get_vscroll(cell_x);
 
-                    let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b as usize, vscrolling_b as usize);
-                    self.draw_pattern_line(frame, pattern_b, (cell_x << 3) as u32 + (hscrolling_b % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_b % 8), line);
+                    let pattern_b = self.get_scroll_b_pattern(cell_x, cell_y, hscrolling_b, vscrolling_b);
+                    self.draw_pattern_line(frame, pattern_b, (cell_x << 3) as u32 + (hscrolling_b as u32 % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_b as u32 % 8), line);
                 }
 
                 for cell_x in 0..cells_h {
                     let (vscrolling_a, _) = self.get_vscroll(cell_x);
 
-                    let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a as usize, vscrolling_a as usize);
-                    self.draw_pattern_line(frame, pattern_a, (cell_x << 3) as u32 + (hscrolling_a % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_a % 8), line);
+                    let pattern_a = self.get_scroll_a_pattern(cell_x, cell_y, hscrolling_a, vscrolling_a);
+                    self.draw_pattern_line(frame, pattern_a, (cell_x << 3) as u32 + (hscrolling_a as u32 % 8), (cell_y << 3) as u32 + line as u32 - (vscrolling_a as u32 % 8), line);
                 }
             }
         }
@@ -587,8 +708,46 @@ impl Ym7101State {
             }
         }
     }
+    */
 }
 
+pub struct Sprite {
+    pub pos: (i16, i16),
+    pub size: (u16, u16),
+    pub rev: (bool, bool),
+    pub pattern: u16,
+    pub link: u8,
+}
+
+impl Sprite {
+    pub fn new(sprite_data: &[u8]) -> Self {
+        let v_pos = read_beu16(&sprite_data[0..]);
+        let size = sprite_data[2];
+        let link = sprite_data[3];
+        let pattern = read_beu16(&sprite_data[4..]);
+        let h_pos = read_beu16(&sprite_data[6..]);
+
+        let (size_h, size_v) = (((size >> 2) & 0x03) as u16 + 1, (size & 0x03) as u16 + 1);
+        let h_rev = (pattern & 0x0800) != 0;
+        let v_rev = (pattern & 0x1000) != 0;
+
+        Self {
+            pos: (h_pos as i16 - 128, v_pos as i16 - 128),
+            size: (size_h, size_v),
+            rev: (h_rev, v_rev),
+            pattern,
+            link,
+        }
+    }
+
+    pub fn calculate_pattern(&self, cell_x: usize, cell_y: usize) -> u16 {
+        let (h, v) = (if !self.rev.0 { cell_x } else { self.size.0 as usize - 1 - cell_x }, if !self.rev.1 { cell_y } else { self.size.1 as usize - 1 - cell_y });
+        (self.pattern & 0xF800) | ((self.pattern & 0x07FF) + (h as u16 * self.size.1) + v as u16)
+    }
+}
+
+
+/*
 pub struct PatternIterator<'a> {
     state: &'a Ym7101State,
     palette: u8,
@@ -642,6 +801,7 @@ impl<'a> Iterator for PatternIterator<'a> {
         Some(value)
     }
 }
+*/
 
 
 pub struct Ym7101 {
@@ -790,6 +950,7 @@ impl Steppable for Ym7101 {
 
         if (self.state.mode_2 & MODE2_BF_DMA_ENABLED) != 0 {
             self.state.memory.step_dma(system)?;
+            self.state.status = (self.state.status & !STATUS_DMA_BUSY) | (if self.state.memory.transfer_dma_busy { STATUS_DMA_BUSY } else { 0 });
         }
 
         Ok((1_000_000_000 / 13_423_294) * 4)

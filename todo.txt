@@ -1,4 +1,10 @@
 
+* I need some better function for dealing with memory, like a function that copies data with a loop, or allows offset reading of
+  a fixed piece of data..., the trick is what function are the most common.  You can use generics
+
+* should you modify the drawing to always draw line by line and combine all layers at once.  It's more complicated and would be
+  slower because some things would need to be calculated multiple times, but it'd be more accurate
+
 * you need to refactor the ym7101 stuff
 * can you make vram/cram/vsram be Addressables that can be accessed the same way?  Would this add too much overhead?
 * you can directly use a MemoryBlock, and separate out the dma

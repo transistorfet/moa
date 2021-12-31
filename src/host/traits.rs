@@ -50,11 +50,13 @@ pub trait KeyboardUpdater: Send {
 
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
-    fn write_samples(&mut self, samples: usize, iter: &mut dyn Iterator<Item=f32>);
+    fn write_samples(&mut self, samples: usize, iter: &mut Iterator<Item=f32>);
+    //fn write_samples(&mut self, buffer: &[f32]);
 }
 
 pub trait BlitableSurface {
     fn set_size(&mut self, width: u32, height: u32);
+    fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32);
     fn blit<B: Iterator<Item=u32>>(&mut self, pos_x: u32, pos_y: u32, bitmap: B, width: u32, height: u32);
     fn clear(&mut self, value: u32);
 }
