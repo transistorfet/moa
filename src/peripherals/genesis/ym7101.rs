@@ -311,9 +311,13 @@ pub struct Ym7101State {
     pub sprites_by_line: Vec<Vec<usize>>,
 
     pub last_clock: Clock,
+    pub p_clock: u32,
     pub h_clock: u32,
     pub v_clock: u32,
     pub h_scanlines: u8,
+
+    pub current_x: i32,
+    pub current_y: i32,
 }
 
 impl Ym7101State {
@@ -342,9 +346,13 @@ impl Ym7101State {
             sprites_by_line: vec![],
 
             last_clock: 0,
+            p_clock: 0,
             h_clock: 0,
             v_clock: 0,
             h_scanlines: 0,
+
+            current_x: 0,
+            current_y: 0,
         }
     }
 
@@ -608,12 +616,22 @@ impl Steppable for Ym7101 {
             system.get_interrupt_controller().set(true, 2, 26)?;
         }
 
+        let clocks_per_pixel = 63_500 / (self.state.screen_size.0 as u32 * 8 + 88);
+        self.state.p_clock += diff;
+        if self.state.p_clock >= clocks_per_pixel {
+            let pixels = self.state.p_clock / clocks_per_pixel;
+            self.state.p_clock -= pixels * clocks_per_pixel;
+            self.state.current_x += pixels as i32;
+        }
+
         self.state.h_clock += diff;
         if (self.state.status & STATUS_IN_HBLANK) != 0 && self.state.h_clock >= 2_340 && self.state.h_clock <= 61_160 {
             self.state.status &= !STATUS_IN_HBLANK;
+            self.state.current_x = 0;
         }
         if (self.state.status & STATUS_IN_HBLANK) == 0 && self.state.h_clock >= 61_160 {
             self.state.status |= STATUS_IN_HBLANK;
+            self.state.current_y += 1;
 
             self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
             if self.state.hsync_int_enabled() && self.state.h_scanlines == 0  {
@@ -628,6 +646,7 @@ impl Steppable for Ym7101 {
         self.state.v_clock += diff;
         if (self.state.status & STATUS_IN_VBLANK) != 0 && self.state.v_clock >= 1_205_992 && self.state.v_clock <= 15_424_008 {
             self.state.status &= !STATUS_IN_VBLANK;
+            self.state.current_y = 0;
         }
         if (self.state.status & STATUS_IN_VBLANK) == 0 && self.state.v_clock >= 15_424_008 {
             self.state.status |= STATUS_IN_VBLANK;
@@ -692,6 +711,7 @@ impl Ym7101 {
             REG_MODE_SET_2 => {
                 self.state.mode_2 = data;
                 self.state.update_screen_size();
+                self.swapper.set_size(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8);
             },
             REG_SCROLL_A_ADDR => { self.state.scroll_a_addr = (data as usize) << 10; },
             REG_WINDOW_ADDR => { self.state.window_addr = (data as usize) << 10; },
@@ -703,6 +723,7 @@ impl Ym7101 {
             REG_MODE_SET_4 => {
                 self.state.mode_4 = data;
                 self.state.update_screen_size();
+                self.swapper.set_size(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8);
             },
             REG_HSCROLL_ADDR => { self.state.hscroll_addr = (data as usize) << 10; },
             REG_AUTO_INCREMENT => { self.state.memory.transfer_auto_inc = data as u32; },
@@ -773,6 +794,14 @@ impl Addressable for Ym7101 {
                         (self.state.status & 0x00FF) as u8
                     };
                     addr += 1;
+                }
+            },
+
+            // Read from H/V Counter
+            0x08 | 0x0A => {
+                data[0] = self.state.current_y as u8;
+                if data.len() > 1 {
+                    data[1] = (self.state.current_x >> 1) as u8;
                 }
             },
 

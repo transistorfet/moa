@@ -90,7 +90,7 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     system.add_device("coproc", wrap_transmutable(coproc))?;
 
 
-    let controllers = genesis::controllers::GenesisController::create(host)?;
+    let controllers = genesis::controllers::GenesisControllers::create(host)?;
     let interrupt = controllers.get_interrupt_signal();
     system.add_addressable_device(0x00a10000, wrap_transmutable(controllers)).unwrap();
 

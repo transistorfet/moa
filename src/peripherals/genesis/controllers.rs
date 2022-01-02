@@ -85,9 +85,9 @@ impl GenesisControllerPort {
     }
 }
 
-pub struct GenesisControllerUpdater(HostData<u16>, HostData<bool>);
+pub struct GenesisControllersUpdater(HostData<u16>, HostData<bool>);
 
-impl ControllerUpdater for GenesisControllerUpdater {
+impl ControllerUpdater for GenesisControllersUpdater {
     fn update_controller(&mut self, event: ControllerEvent) {
         let (mask, state) = match event {
             ControllerEvent::ButtonA(state) => (0x0040, state),
@@ -112,7 +112,7 @@ impl ControllerUpdater for GenesisControllerUpdater {
 
 
 
-pub struct GenesisController {
+pub struct GenesisControllers {
     port_1: GenesisControllerPort,
     port_2: GenesisControllerPort,
     expansion: GenesisControllerPort,
@@ -120,9 +120,9 @@ pub struct GenesisController {
     reset_timer: Clock,
 }
 
-impl GenesisController {
+impl GenesisControllers {
     pub fn new() -> Self {
-        GenesisController {
+        Self {
             port_1: GenesisControllerPort::new(),
             port_2: GenesisControllerPort::new(),
             expansion: GenesisControllerPort::new(),
@@ -132,11 +132,11 @@ impl GenesisController {
     }
 
     pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let controller = GenesisController::new();
+        let controller = GenesisControllers::new();
 
-        let controller1 = Box::new(GenesisControllerUpdater(controller.port_1.buttons.clone(), controller.interrupt.clone()));
+        let controller1 = Box::new(GenesisControllersUpdater(controller.port_1.buttons.clone(), controller.interrupt.clone()));
         host.register_controller(ControllerDevice::A, controller1)?;
-        let controller2 = Box::new(GenesisControllerUpdater(controller.port_2.buttons.clone(), controller.interrupt.clone()));
+        let controller2 = Box::new(GenesisControllersUpdater(controller.port_2.buttons.clone(), controller.interrupt.clone()));
         host.register_controller(ControllerDevice::B, controller2)?;
 
         Ok(controller)
@@ -147,7 +147,7 @@ impl GenesisController {
     }
 }
 
-impl Addressable for GenesisController {
+impl Addressable for GenesisControllers {
     fn len(&self) -> usize {
         0x30
     }
@@ -197,7 +197,7 @@ impl Addressable for GenesisController {
     }
 }
 
-impl Steppable for GenesisController {
+impl Steppable for GenesisControllers {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         let duration = 100_00;     // Update every 100us
 
@@ -211,7 +211,7 @@ impl Steppable for GenesisController {
     }
 }
 
-impl Transmutable for GenesisController {
+impl Transmutable for GenesisControllers {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         Some(self)
     }
