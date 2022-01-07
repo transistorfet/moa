@@ -150,10 +150,10 @@ impl Ym7101Memory {
         }
     }
 
-    pub fn setup_transfer(&mut self, upper: u16, lower: u16) {
+    pub fn setup_transfer(&mut self, first: u16, second: u16) {
         self.ctrl_port_buffer = None;
-        self.transfer_type = ((((upper & 0xC000) >> 14) | ((lower & 0x00F0) >> 2))) as u8;
-        self.transfer_dest_addr = ((upper & 0x3FFF) | ((lower & 0x0003) << 14)) as u32;
+        self.transfer_type = ((((first & 0xC000) >> 14) | ((second & 0x00F0) >> 2))) as u8;
+        self.transfer_dest_addr = ((first & 0x3FFF) | ((second & 0x0003) << 14)) as u32;
         self.transfer_target = match self.transfer_type & 0x0E {
             0 => Memory::Vram,
             4 => Memory::Vsram,

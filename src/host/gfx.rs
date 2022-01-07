@@ -108,6 +108,11 @@ impl FrameSwapper {
     pub fn swap(&mut self) {
         std::mem::swap(&mut self.current.lock().unwrap().bitmap, &mut self.previous.lock().unwrap().bitmap);
     }
+
+    pub fn set_size(&mut self, width: u32, height: u32) {
+        self.previous.lock().unwrap().set_size(width, height);
+        self.current.lock().unwrap().set_size(width, height);
+    }
 }
 
 impl WindowUpdater for FrameSwapper {

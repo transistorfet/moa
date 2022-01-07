@@ -46,18 +46,10 @@ impl Addressable for CoprocessorCoordinator {
         match addr {
             0x000 => { /* ROM vs DRAM mode */ },
             0x100 => {
-                if data[0] != 0 {
-                    self.bus_request.set(true);
-                } else {
-                    self.bus_request.set(false);
-                }
+                self.bus_request.set(data[0] != 0);
             },
             0x200 => {
-                if data[0] == 0 {
-                    self.reset.set(true);
-                } else {
-                    self.reset.set(false);
-                }
+                self.reset.set(data[0] == 0);
             },
             _ => { warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
