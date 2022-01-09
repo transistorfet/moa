@@ -1,5 +1,4 @@
 
-
 use moa_minifb;
 use moa::machines::genesis::{build_genesis, SegaGenesisOptions};
 

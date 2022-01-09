@@ -22,8 +22,10 @@ detail about that here and instead focus on the Genesis-specific hardware, and t
 debugging the emulator itself.
 
 This is Part I in the series, which covers setting up the emulator, getting some game ROMs to run,
-and implementing the DMA and memory features of the VDP.  Part II covers adding a graphical frontend
-to Moa, and then implementing a first attempt at generating video output.  Part III will be about
+and implementing the DMA and memory features of the VDP.  [Part
+II](https://jabberwocky.ca/posts/2022-01-emulating_the_sega_genesis_part2.html) will cover adding a
+graphical frontend to Moa, and then implementing a first attempt at generating video output.  [Part
+III](https://jabberwocky.ca/posts/2022-01-emulating_the_sega_genesis_part3.html) will be about
 debugging the various problems in the VDP and CPU implementations to get a working emulator capable
 of playing games.
 
