@@ -53,7 +53,7 @@ impl Ym2612 {
         Ok(Self {
             source,
             selected_reg: None,
-            channels: vec![Channel::new(sample_rate); 7],
+            channels: vec![Channel::new(sample_rate); 8],
         })
     }
 

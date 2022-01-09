@@ -234,6 +234,10 @@ before 2021-10-25
   Now, Ren & Stimpy works, and Sonic 2's Scroll B actually looks right
 
 
+2021-12-30
+- rewrote the main drawing functions to go pixel by pixel through the whole image and determine what
+  colour that pixel should be.  It's a lot slower, but it's more accurate, and makes it possible
+  to more properly implement the priority shadow/highlight modes
 
 
 
