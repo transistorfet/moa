@@ -2,7 +2,7 @@
 Emulating the Sega Genesis - Part I
 ===================================
 
-###### *Written December 2021 by transistor_fet*
+###### *Written December 2021/January 2022 by transistor_fet*
 
 
 A few months ago, I wrote a 68000 emulator in Rust named
