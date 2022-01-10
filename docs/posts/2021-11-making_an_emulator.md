@@ -2,6 +2,8 @@
 Making a 68000 Emulator in Rust
 ===============================
 
+*Also available on [dev.to](https://dev.to/transistorfet/making-a-68000-emulator-in-rust-1kfk)*
+
 ###### *Written November 2021 by transistor_fet*
 
 
