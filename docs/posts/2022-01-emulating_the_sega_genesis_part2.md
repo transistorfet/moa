@@ -2,6 +2,8 @@
 Emulating the Sega Genesis - Part II
 ====================================
 
+*Also available on [dev.to](https://dev.to/transistorfet/emulating-the-sega-genesis-part-ii-841)*
+
 ###### *Written December 2021/January 2022 by transistor_fet*
 
 
@@ -49,7 +51,7 @@ displaying output.  The data, which is already loaded into VRAM, CRAM, and VSRAM
 internal VDP registers, needs to be turned into pictures.  While the real hardware would generate a
 CRT video signal which would directly control a CRT-based television, the emulator will generate a
 single frame of video at a time, stored in a buffer, and display that buffer in a local window on
-the host computer.
+the host computer.  Do this fast enough and I'll have video.
 
 
 Choosing A Graphics Crate
@@ -67,18 +69,21 @@ applications, but is much simpler.  I also tried out
 emulation, but I found it much more restrictive than the others because of it's narrow focus.
 
 Initially I had wanted to run the simulation in another thread so that I could run it the same way I
-had been for emulating Computie, but most of these libraries are set up to use a single main loop
-where everything happens in-line with the screen updating and input reading.  For a normal game, the
-gameplay and any frame updating would be done just before submitting the frame buffer to be drawn to
-the screen, and then the library would block until the next frame is needed.
+had been for emulating Computie, but most of these libraries are set up to use a single thread and
+single main loop where everything happens in-line with the screen updating and input reading.  For a
+typical video game, the gameplay and any frame updating would be done just before submitting the
+frame buffer to the library to be drawn to the screen, and then the library would block until the
+next frame is needed.
 
-In order to run it inline, I added a function to `System` to only run the step functions for a given
-amount of simulated time before returning, which would allow the simulation to proceed until the
-next frame is updated before it updates the GUI window.  Even though there is no specific
-coordination between when the frame is updated vs how much simulated time has passed, it still works
-surprisingly well.  That said I'm still concerned with the fact that the emulator is not
-cycle-accurate yet, so I still wanted the option of running it in another thread.  This was a major
-factor in choosing a library.
+In order to run it inline with the update loop, I added a function to `System` to only run the step
+functions for a given amount of simulated time before returning, which would allow the simulation to
+proceed far enough for the next frame to be updated before the loop updates the GUI window.  Even
+though there is no specific coordination between when the frame is updated vs how much simulated
+time has passed, it still works surprisingly well.  That said I'm still concerned with the fact that
+the emulator is not cycle-accurate yet, so the simulated time is not accurate either.  Having the
+option of running it in another thread would allow me to use other means of coordinating the
+simulation with the real clock, and would give me more options when I implement other platforms.
+This was a major factor in choosing a library.
 
 Piston is feature rich, and it's modular design allows it to be tailored for any given use, but it's
 a bit more than I need for this project.  It includes all sorts of drawing primitives for 2D
@@ -98,9 +103,11 @@ work that I don't intend to do any time soon, and since Macroquad wont easily su
 mode, I'll leave it as a possible secondary frontend for a later date.
 
 Libretro has a similar restriction in that you give it a function to be called each time a frame is
-needed, and the simulation would have to be run in that time.  It also really doesn't fit with my
-hope for a more general simulation platform, as it's specifically intended for game emulators, so
-this definitely isn't a good choice as my primary frontend.
+needed, and the simulation would have to be run in that time.  However it also supplies its own main
+function and update loop, and control is only passed to the specific machine emulator when a game is
+loaded (which is also handled by the library) or when the next frame of data is needed.  It might be
+fine for a single-purpose video game emulator but it really doesn't fit with my hope for a more
+general simulation platform, so this definitely isn't a good choice as my primary frontend.
 
 That left Minifb, which turned out to be the best fit.  It's very simple without a lot of features.
 You create a window (just one function call), a frame buffer to fill the window, and a main loop
@@ -153,11 +160,12 @@ fn main() {
 }
 ```
 
-In order to interface between the common Moa devices and the frontend, there is a `Host` trait which
-is implemented in each frontend, and passed to the machine building function that's called from the
-frontend machine-specific binary.  Through that trait, a callback can be registered by whichever
-devices need to output video data.  Separate callbacks can be registered for getting data from the
-keyboard or controllers.
+In order to provide a generic frontend-agnostic interface between the common Moa devices and a
+specific frontend, there is a `Host` trait which is implemented by each frontend, and passed to the
+machine building function to build the `System` object.  Through that trait, the machine definition
+can register a callback for whichever devices need to output video data (which is machine-specific).
+Separate callbacks can be registered through the same `Host` trait to get data from the keyboard or
+controllers.
 
 ```rust
 pub trait Host {
@@ -184,7 +192,7 @@ pub trait ControllerUpdater: Send {
 
 The `Host` trait is implemented by each frontend and passed to the function that builds the machine
 configuration, before the simulation is started.  The machine configuration can choose to create a
-window only when  needed by that machine.  Not shown in the above snippet are the `Host` functions
+window only when needed by that machine.  Not shown in the above snippet are the `Host` functions
 to create PTYs (used only by Computie), and to register a keyboard updater (used by the TRS-80 and
 Macintosh machines).
 
@@ -231,10 +239,10 @@ impl MiniFrontend {
 }
 ```
 
-There's not much to it.  Only one window can be created at the momemnt, and input is not yet
+There's not much to it.  Only one window can be created at the moment, and input is not yet
 supported.  The threaded option is also not shown here.  Before long, the code grew more
 complicated, and now includes parsing of command line arguments with the `clap` crate.  To see the
-latest, check out the latest [Genesis machine-specific
+latest version, check out the [Genesis machine-specific
 binary](https://github.com/transistorfet/moa/blob/main/frontends/moa-minifb/src/bin/moa-genesis.rs)
 and the [MiniFB host impl and main
 loop](https://github.com/transistorfet/moa/blob/main/frontends/moa-minifb/src/lib.rs)
@@ -335,17 +343,17 @@ I've kept it, but if I ever try to run in on slower hardware, I might see about 
 There is also the issue of partial frames.  Currently the VDP simulation code draws an entire frame
 at once instead of more accurately drawing it line by line spread out over many calls to its step
 function.  I suspect that this causes the issue with the Sonic 2 title screen where Tails appears to
-be an incorrect colour.  The ROM might be trying to change something while the image is being
-updated in order to pack more colours onto the screen at once.
+be an incorrect colour.  The ROM might be trying to change the colour palette while the image is
+being updated in order to pack more colours onto the screen at once.
 
 The advantage of updating all at once, however, is that the frame will always be completely drawn
-when the frame buffer lock is obtained.  I had originally written some code to use two frames,
-swapping them after each draw cycle is complete, so that there's always a complete frame available
-when the screen is updated.  If the simulation is running slow, then the same completed frame will
-be sent more than once.  If it's too fast, then some frames wont be sent to the screen at all before
-being redrawn.  This turned out to not be necessary because of the all-at-once update, but I will
-likely need to change this in the future, so the `FrameSwapper` code has been left in place in the
-actual Moa code.
+when the frame buffer lock is obtained.  I had originally written some code have two frames, and to
+swap them after each draw cycle is complete, so that there's always a complete frame available when
+the screen is updated.  If the simulation is running slow, then the same completed frame will be
+sent more than once.  If it's too fast, then some frames wont be sent to the screen at all before
+being redrawn.  This turned out to not be necessary because of the all-at-once update, but since I
+will likely need to change to line-by-line updating in the future, the `FrameSwapper` code has been
+left in place in the actual Moa code.
 
 
 The VDP Device
@@ -556,10 +564,12 @@ Scrolls And Sprites
 -------------------
 
 Now that there's a way to draw cells to the screen, how is the VDP told which ones to draw and
-where?  They can either be specified in a scroll table, or they can be added as a sprite.  There are
-two moveable planes called Scroll A and Scroll B, the tables for which are stored in VRAM and the
-starting address of each table is stored in their own VDP registers.  Each table is an array of
-16-bit words where each word is called a pattern name and contains the pattern number, the colour
+where?  There are two ways.  They can either be specified in one of the two scroll tables, or they
+can be specified in a sprite.
+
+There are two moveable planes called Scroll A and Scroll B, the tables for which are stored in VRAM
+and the starting address of each table is stored in their own VDP registers.  Each table is an array
+of 16-bit words where each word is called a pattern name and contains the pattern number, the colour
 palette to render it with, two bits to reverse the pattern in the horizontal and/or vertical
 direction, and a priority bit used to determine the draw order of the different planes.  The exact
 format in memory is better shown at
@@ -568,26 +578,28 @@ format in memory is better shown at
 
 Both scrolls must be the same size, but the size can be any combination of 32, 64, or 128 cells in
 either direction.  This means they are usually bigger than the size of the screen itself, which for
-the NTSC version is usually 40 x 28 cells.  The portion of the scroll that's drawn on the screen can
-be controlled using the scrolling features of the VDP, which at its simplest is just two numbers per
-plane to specify the vertical and horizontal offset of the scroll relative to the upper left corner
-of the screen, but at it's most complex can have a different offset for each line of pixels which
-controls the horizontal position of each line.  I left the scrolling functionality unimplemented
-until the scroll planes were working, so I'll go into more detail about it later.  For the logo and
-title screens, there usually isn't a scroll offset, so displaying the upper left corner of the
-scroll at the upper left corner of the screen should still display something.
+the NTSC version is usually 40 x 28 cells (320 x 224 pixels).  Which portion of the scroll plane to
+draw on the screen can be controlled using the scrolling features of the VDP, which at its simplest
+is just two numbers per plane to specify the vertical and horizontal offset of the scroll relative
+to the upper left corner of the screen, but at it's most complex can have a different offset for
+each line of pixels which controls the horizontal position of each line.  I left the scrolling
+functionality unimplemented until the scroll planes were working, so I'll go into more detail about
+it later.  For the logo and title screens, there usually isn't a scroll offset, so displaying the
+upper left corner of the scroll at the upper left corner of the screen should still display
+something.
 
-There is also a special fixed plane called the window, but not many games seem to need it and my
+There is also a special fixed plane called the window, but not many games seem to use it and my
 early attempts at implementing it caused weird graphics, so I left it for later.
 
 The other way to draw to the screen is using sprites.  Like the scrolls, a table of sprite data is
-stored in VRAM and a special register contains the address of the start of that table.  Each entry
-in the table is four 16-bit words instead of just one, with each entry corresponding to an
-independent sprite.  For each sprite, there is a vertical and horizontal position (relative to the
-upper left corner of the screen minus 128 pixels in each direction), the size of the sprite in cells
-(a single sprite can be comprised of up to 4 x 4 cells), the pattern name to use for the first cell
-(in the same format as the scrolls), and a link number.  The organization of a sprite entry is more
-clearly displayed [here](https://wiki.megadrive.org/index.php?title=VDP_Sprites)
+stored in VRAM and a special register contains the address of the start of that table.  Unlike the
+scrolls, each entry in the sprite table is four 16-bit words instead of just one, with each entry
+corresponding to an independent sprite.  For each sprite, there is a vertical and horizontal
+position (relative to the upper left corner of the screen minus 128 pixels in each direction), the
+size of the sprite in cells (a single sprite can be comprised of up to 4 x 4 cells), the pattern
+name to use for the first cell (in the same format as the scrolls), and a link number.  The
+organization of a sprite entry is more clearly displayed
+[here](https://wiki.megadrive.org/index.php?title=VDP_Sprites)
 
 The link number is used to determine the sprite priority.  Sprite 0, which is the first entry in the
 table, is always the highest priority sprite.  Its link number is the index in the sprite table for
@@ -606,8 +618,8 @@ Sprites (the moveable graphics), and then the final image is the three planes co
 
 The following code is my first attempt at implementing this.  (Please note: this code contains many
 issues but it wasn't until after much debugging that I figured out what they all were.  I'd like to
-describe the process of debugging this code in Part III, so I'm showing the code I started with
-here.  Bonus points to anyone who can figure them out without reading onward).
+describe the process of debugging this code in Part III, so I'm showing the code that I started with
+here.  Bonus points to anyone who can figure out the bugs without reading onward).
 
 ```rust
 pub fn draw_frame(&mut self, frame: &mut Frame) {
@@ -721,13 +733,13 @@ internal workings of the console, implementing a simple swappable frontend, and 
 first best guess of how it should work, I could display a very mangled image with bright magenta
 colours instead of blues.  To be honest, I was a bit dejected.  I was hoping to have something that
 at least looked coherent before I added my work in progress to git.  Fiddling with it wasn't
-improving matters at all, so it wasn't going to be a quick fix.
+improving matters at all, so it wasn't going to be a quick fix.  I was going to have roll up my
+sleeves and grind it out.
 
-I was going to have roll up my sleeves and grind it out.  This is where the real journey began,
-tirelessly debugging until I hit a wall, taking some detours, working on other projects for a while,
-eventually returning to it, isolating the problems with the help of some test ROMs and another
-Genesis emulator as a reference, and finally getting it working.  Stay tuned for the (not so)
-thrilling conclusion in [Part
+This is where the real journey began, tirelessly debugging until I hit a wall, taking some detours,
+working on other projects for a while, eventually returning to it, isolating the problems with the
+help of some test ROMs and another Genesis emulator as a reference, and finally getting it working.
+Stay tuned for the (not so) thrilling conclusion in [Part
 III](https://jabberwocky.ca/posts/2022-01-emulating_the_sega_genesis_part3.html) of Emulating The
 Sega Genesis.
 
