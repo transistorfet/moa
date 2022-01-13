@@ -2,6 +2,8 @@
 Emulating the Sega Genesis - Part III
 =====================================
 
+*Also available on [dev.to]()*
+
 ###### *Written December 2021/January 2022 by transistor_fet*
 
 
@@ -71,11 +73,11 @@ Fixing The Colours
 
 The most obvious thing that was wrong was the colours, so I looked into this first.  Since I
 couldn't be sure that all the data was getting into the VDP correctly, I needed to simplify the
-output a bit, so I wrote an alternate `draw_frame()` function to display the patterns instead of the
-scroll tables. It would draw each pattern in memory across the screen from left to right, top to
-bottom so that I could inspect them better.  They might not look like a coherent picture, being only
-8x8 pixels each and arranged in an unintended order, but it should at least show something.  The
-result was this:
+output a bit, so I wrote an alternate `draw_frame()` function to display just the patterns instead
+of the scroll tables. It would draw each pattern in memory across the screen from left to right, top
+to bottom so that I could inspect them better.  They might not look like a coherent picture, being
+only 8x8 pixels each and arranged in an unintended order, but it should at least show something.
+The result was this:
 
 <p align="center">
 <img src="images/2022-01/patterns-broken-colours.png" title="Display all patterns in memory" />
@@ -146,7 +148,8 @@ received (the joys of analogue signals), the video signal itself needs to incorp
 delays where no data is sent. These blanking periods just so happen to be convenient times for the
 CPU to update or change data in the VDP, when those changes wont affect the output.  This is
 especially important during the vertical blanking period, when the positions of everything on the
-screen can be updated at once before the next frame is drawn to prevent artifacts in the image.
+screen can be updated at once before the next frame is drawn to prevent artifacts and glitches in
+the image.
 
 I was moving fast to get something working, so I quickly implemented the vertical blanking bit by
 setting it just before getting to the end of the frame, at 14_218_000 ns, and then resetting the bit
@@ -158,20 +161,20 @@ could actually play the games that I noticed the problem, and by that point I ha
 this bit.  It took me a day or two of debugging before I finally tracked down the problem to the
 `VBLANK` bit.
 
-Since the vertical blanking bit was *reset* instead of set just before the vertical interrupt
-occurred, some games would busy wait until it was set before running the game loop code.  Sonic 2 is
-one such game, but Sonic 1 doesn't do this check.  Because the bit is only set about 2ms before the
-vertical blanking period, the game's frame update would be in progress when the next vertical
-interrupt occurred.  As a result, it would take two frames of time before one frame of the game
-would be drawn, and only one cycle of the game loop would execute.  Sonic was moving at exactly half
-speed, and doubling the amount of simulated time fixed it (which didn't make any sense at first).  I
-even went to the trouble of implementing more accurate instruction timing in the 68000 in order to
-see if it was caused by the fact that all the instructions had previously been running in 4 clock
-cycles (I was going to add that anyways).  Shown below is the more recent code with the fixed
-blanking behaviour.
+After the vertical interrupt occurs, some games would busy wait until the vertical blanking bit was
+set before actually running the game loop.  Sonic 2 is one such game, but Sonic 1 doesn't do this
+check.  Since the bit is only set about 2ms before the next vertical interrupt, the game's frame
+updater would only start 2ms before the next interrupt, and would still be updating the frame at
+that point, so it would ignore the second vertical interrupt.  As a result, it would take two frames
+of time (2 vertical interrupts) before one frame of the game would be drawn, and only one cycle of
+the game loop would execute.  Sonic was moving at exactly half speed.  Doubling the amount of
+simulated time fixed the issue (which didn't make any sense at first).  I even went to the trouble
+of implementing more accurate instruction timing in the 68000 in order to see if it was caused by
+the fact that all the instructions had previously been running in 4 clock cycles.  Shown below is
+the more recent code with the fixed blanking behaviour.
 
-The following code is in the VDP's `.step()` function.  The `HBLANK` code looks similar but with
-different timing values.
+The following code is in the updated VDP's `.step()` function, including the `VBLANK` bit handling.
+The `HBLANK` code looks similar but with different timing values.
 
 ```rust
 self.state.v_clock += diff;
@@ -286,7 +289,7 @@ The Macintosh 512k also used the 68000 and it's a fairly simple computer, in ter
 very basic video display circuit made from generic logic that looped through memory addresses and
 shifted the bits into the video output stream.  The display only supported black and white so each
 pixel was a single bit that was either on or off.  The ROMs that were embedded on the motherboard
-were available at [archive.org](https://archive.org/details/mac_rom_archive_-_as_of_8-19-2011), so I
+are available at [archive.org](https://archive.org/details/mac_rom_archive_-_as_of_8-19-2011), so I
 started making some devices and running the ROMs to see if I could find some bugs in the 68000
 emulation alone.
 
@@ -301,7 +304,7 @@ implementation well enough, beyond just basic functioning of the instructions.  
 existing platform, with all its expectations of how the real system behaves embedded in its logic,
 and that meant implementing devices for an existing platform.  I looked around for the simplest Z80
 platform I could find, which turned out to be the TRS-80.  I'm not the biggest fan of the TRS-80,
-but I did have a model I in my computer collection at one point (that I sadly had to sell), so it
+but I did have a "Model I" in my computer collection at one point (that I sadly had to sell), so it
 wasn't entirely foreign to me.  I could get away with just implementing the video display and the
 keyboard in order to run the BASIC interpreter that comes in its ROM.
 
@@ -315,10 +318,10 @@ The Macintosh implementation didn't go as smoothly however.  I did manage to fin
 in the 68000, and I got far enough to display the Dead Mac screen, but I got stuck just before the
 end of the ROM's initialization where it opens the default device drivers.  At some point, it
 attempts to write to a location in the ROM.  In hardware that shouldn't have an affect, except that
-I have some code in Moa raise an error when that happens, since it's likely a bug.  Ignoring that
-error doesn't make it get any farther.  I couldn't for the life of me find out what was wrong, but
-at one point, using another [emulator](https://github.com/TomHarte/CLK), I was able to confirm that
-if the ROMs ran on a system that didn't mirror the RAM and ROM address exactly as the hardware does,
+I have some code in Moa to raise an error when that happens, since it's likely a bug.  Ignoring that
+error didn't make it get any farther.  I couldn't for the life of me find out what was wrong, but at
+one point, using another [emulator](https://github.com/TomHarte/CLK), I was able to confirm that if
+the ROMs ran on a system that didn't mirror the RAM and ROM address exactly as the hardware does,
 the ROM wont boot. *facepalm*  Effort went into making sure the Macintosh was not cloned like the
 IBM PC, so I was fighting against those effort as well.  After a while I decided to give the Genesis
 a try again.
@@ -328,8 +331,8 @@ Back to the Genesis
 -------------------
 
 After getting stuck on the Macintosh implementation, I picked up the Genesis again.  I had spent
-almost an entire month away.  In that time, I worked on another hardware revision for Computie, and
-wrote the article "Making a 68000 Emulator In Rust".  I also had improved the Moa debugger,
+almost an entire month away.  In that time, I had worked on another hardware revision for Computie,
+and wrote the article "Making a 68000 Emulator In Rust".  I also had improved the Moa debugger,
 implemented the Z80 entirely, filled in a number of missing 68k instructions, and finished
 implementing all the 68k instruction decoding (although a few instructions are still not implemented
 because they aren't use by any code I've tried to run).  I also fixed some bugs in existing
@@ -340,13 +343,13 @@ On the surface though, the results were the same as last time.  The scrolls were
 the sprites were broken, and Sonic was still falling through the floor to his death.  I had added
 the Z80 coprocessor into the system, now that it was implemented (I might as well), but I had left
 the Z80 address space as one big 64 KB `MemoryBlock`.  The Z80 alone didn't changed anything in
-Sonic 2, or in Sonic 1, was still getting stuck at the title screen as it a had before.
+Sonic 2, or in Sonic 1, which was still getting stuck at the title screen as it a had before.
 
 I needed a way to isolate the drawing of sprites so I could better figure out what was wrong, and it
-was only at this point it occurred to me to search for demo and test ROMs that might help.  It
+was only at this point it occurred to me to search for demo and test ROMs that might help.  That
 immediately turned up [ComradeOj's demos](https://www.mode5.net/), particularly Tiny Demo, which
 scrolls some text across the screen, and GenTest v3 which contains a number of screens with
-different graphics to test possible issues, including a display of some static sprites
+different graphics to test possible issues, including a display of some static sprites.
 
 I also came across the [BlastEm](https://www.retrodev.com/blastem/) emulator in C, which has a
 builtin debugger.  I was able to modify and compile a local version which dumps out the contents of
@@ -539,8 +542,8 @@ so the value in `Extend` will be put into the number (either the left or right e
 rotated out of the opposite end will be put into `Extend`.  So an error in the `Extend` flag could
 definitely cause some problem with the `decompress` code.
 
-Adding a line of code to clear the Extend flag before the `.set_logic_flags()` function is called is
-enough to fix it.  Now the text in the demo is showing legibly.  It's still nothing like what it
+Adding a line of code to clear the `Extend` flag before the `.set_logic_flags()` function is called
+is enough to fix it.  Now the text in the demo is showing legibly.  It's still nothing like what it
 looks like in BlastEm, which has a moving background that stretches the text vertically, but I'm
 still calling it a win.
 
@@ -550,7 +553,8 @@ still calling it a win.
 
 And looking at Sonic 2, it's still very garbled but Sonic is no longer falling to his death!  The
 `Extend` flag in the shift and rotate instructions was the cause of whichever comparison lead to
-Sonic not being on firm ground.
+Sonic not being on firm ground.  I didn't even have to dig into the source of that problem in the
+Sonic 2 ROM to fix it, which was a relief.
 
 <p align="center">
 <img src="images/2022-01/sonic2-dma-broken.png" title="Sonic 2 scrolls still broken" />
@@ -602,7 +606,7 @@ address `0x2976`, and I also knew what the values of the registers at that point
 ...
 ```
 
-And the emulator's logs:
+And the register values:
 
 ```
 Breakpoint reached: Attempt to write to read-only memory at 4 with data [64, 0]
@@ -664,12 +668,12 @@ instruction before that?  It's a branch to `0x292c` which appears in the previou
 seems to be a function that sets all the register values to `0`!  Wait, why would it do that?  The
 register values were almost all `0` when the error occurred, except for the two registers used as
 return values, so it did run that code, but why would it clear everything just before using an
-uninitialized register.
+now zero'd register as an address.
 
 I set a breakpoint for `0x2572`, which looked like the start of the current function, given that
 there's a branch instruction just before.  The `%a4` register, interestingly enough, contains
 `0xc00000`, which would make sense as the intended value of `%a4` where the erroneous write
-occurred, if all the registers hadn't be cleared just before.  Most of the other registers are `0`
+occurred, if all the registers hadn't been cleared just before.  Most of the other registers are `0`
 except for `%a2` which contains `0x2554`, possibly the return value of the caller.
 
 ```objdump
@@ -703,17 +707,18 @@ happen), so why is it jumping when it shouldn't.
 
 I set a breakpoint for `0x2554` in both emulators to see if that code would run and this time,
 BlastEm runs that code.  Stepping through the code in both emulators shows the status register
-values are different just after the comparison at `0x255a`.  *groan* Not the flags again.
+values are different just after the comparison at `0x255a`.  *groan*  Not the flags again.
 
-Looking closer at the code though, the value of `%d7` is different between the emulators as well.
+Looking closer at the code though, the values of `%d7` are different between the emulators as well.
 The comparison in Moa is setting the flags correctly for the data used, but the data values are
 different, and so BlastEm doesn't make the branch where Moa does.  Ok, so maybe it's not the flags
 this time.  So why are the values of `%d7` different.  Well it's set just a few instructions ahead
 with the lower byte value of `%d3`, which in Moa is `0`.  In BlastEm, it's 0xff.  Aha!  So where is
 `%d3` set?
 
-It's not set in the code just above, but there is a branch to `0x2a4a` which looks like a
-register-returning function call, and the code at that location does change `%d3`.
+It's not set in the code just above the comparison, but there is a branch to `0x2a4a` just before
+which looks like a register-returning function call, and the code at that location does change
+`%d3`.
 
 ```objdump
 2a4a:   7600            moveq #0,%d3
@@ -739,24 +744,25 @@ register-returning function call, and the code at that location does change `%d3
 
 Tracing through the debuggers shows that this is the code where BlastEm gets 0xff into register
 `%d3` and it's doing it by reading the controller input.  `0xa10003` is the byte address of the data
-port for controller 1, and `0xa10009` is control port for controller 1.  I had taken a stab at
+port for controller 1, and `0xa10009` is the control port for controller 1.  I had taken a stab at
 implementing the weird [TH counting](https://segaretro.org/Sega_Mega_Drive/Control_pad_inputs) that
-the controllers need, but I hadn't tested it.  I had only hooked up the Start button to a key press,
-which was all I had needed up until this point, to get through the title screen to the game play.
+the controllers need to do, but I hadn't tested it.  I had only hooked up the Start button to a key
+press, which was all I had needed up until this point, to get through the title screen to the game
+play.
 
-Here from the code, it seemed as if the correct behaviour, at least according to how BlastEm worked,
+Here, from the code, it seemed as if the correct behaviour, at least according to how BlastEm worked,
 was for the controllers to return `0xff` when no buttons are pressed, rather than `0`.  Changing
 that one thing is Moa got to the first screen of GenTest asking which test to run!  Success!  Well,
 I still needed to fix the controllers properly, since button presses still didn't work, but this is
 at least the cause of GenTest not running.
 
-There turned out to be quite a few minor bugs in the TH counting code.  It was counting too fast,
-and the button states needed to be inverted (1 means the button is not pressed and 0 means it is).
-I also needed to reset the counter when the control port was written to, for the count to be in sync
-with what the ROM was expecting.  Not all ROMs progressed through the entire count, if they only
-needed to read a few buttons.  Eventually I got it sorted out and buttons were working but it took a
-while to get them right.  The latest code for the controllers is
-[here](https://github.com/transistorfet/moa/blob/main/src/peripherals/genesis/controllers.rs)
+There turned out to be quite a few minor bugs in the TH counting code.  The count was incrementing
+twice as often as it should have, and the button states needed to be inverted (1 means the button is
+not pressed and 0 means it is).  I also needed to reset the counter when the control port was
+written to, for the count to be in sync with what the ROM was expecting.  Not all ROMs progressed
+through the entire count, if they only needed to read a few buttons.  Eventually I got it sorted out
+and buttons were working but it took a while to get them right.  The latest code for the controllers
+is [here](https://github.com/transistorfet/moa/blob/main/src/peripherals/genesis/controllers.rs)
 
 
 Fixing Sprites
@@ -767,7 +773,7 @@ could now control the characters in game play, even though I couldn't see much o
 still.  The elephant in the room was those sprites not working, so with my enthusiasm high, I
 pressed on to tackle the sprites.
 
-Fixing the Extend flag bug fixed Sonic falling through the floor to his death, so that was a
+Fixing the `Extend` flag bug fixed Sonic falling through the floor to his death, so that was a
 significant step forward, but multi-cell sprites were still being drawn incorrectly.  Luckily the
 GenTest ROM has a page that displays a static multi-pattern sprite, both forward and reversed.
 
@@ -775,26 +781,29 @@ GenTest ROM has a page that displays a static multi-pattern sprite, both forward
 <img src="images/2022-01/gentest-sprites-broken.png" title="GenTest sprites broken" />
 </p>
 
-The forward sprite works fine, but the reversed sprite is messed up.  If you look closely, you can
-see the vertical columns of cells seem to line up correctly, but the horizontal arrangement of the
-columns is mixed up.  This one turned out to be a bit subtle.
+The forward sprite (Knuckles) works fine, but the reversed sprite (Sonic) is messed up.  If you look
+closely, you can see the vertical columns of cells seem to line up correctly, but the horizontal
+arrangement of the columns is mixed up.  This one turned out to be a bit subtle.
 
-I had tried fiddling with reversing the cells in multicell sprites but to no avail.  It turned out
-when switching the reversing code I was changing both the order of the cells, and also reversing the
-positions they were drawn in, rather than switching only one.  At the time I didn't have a way of
-just drawing one sprite in one location to inspect it closely enough to figure out what was wrong,
-but the GenTest ROM made it much clearer what was wrong.  I also had an off by one error with
+I had tried fiddling with reversing the cell drawing order in multicell sprites but to no avail.  It
+turned out when switching the revere-sprite code I was changing both the order of the cells, and
+also reversing the positions they were drawn in, rather than switching only one.  I was also
+adjusting both coordinates instead of just the horizontal arrangement.  At the time I didn't have a
+way of just drawing one sprite in one location to inspect it closely enough to figure out what was
+wrong, but the GenTest ROM made it much clearer what was wrong.  I also had an off by one error with
 reversed sprites where I needed to subtract one from the size in order to get the right vertical row
 of patterns to use.
 
-First, the existing code is shown below.  The variables that appear are defined as follows:
+First, the existing code is shown below.  Note: Multi-cell sprites are drawn top to bottom, left to
+right, unlike everything else in the Genesis, so the outer loop is for the horizontal direction, and
+the inner loop is the vertical direction.  The variables that appear are defined as follows:
 
 - `pattern_name` is the 16-bit pattern specifier
 - `(h_pos, v_pos)` is the pixel position on screen where the sprite should be drawn
 - `(size_h, size_v)` is the size in cells of the sprite
 - `(h_rev, v_rev)` are bools of whether the sprite should be reversed in a given direction
 - `self.is_sprite_on_screen(x, y)` returns whether those pixel positions are on-screen (sprites can
-  be entirely off the screen, in which case we wont bother drawing them)
+  be entirely off the screen, in which case they wont be drawn)
 
 ```rust
 for ih in 0..size_h {
@@ -816,8 +825,9 @@ for ih in 0..size_h {
 ```
 
 Changing the following lines is enough to fix it.  It needs to take an extra 1 off the h and v
-values, and also use the loop's values to calculate the position where the cell should be drawn
-instead of using the previously calculated cell positions, which have already been reversed.
+values when the sprite is reversed, and also use the loop's values to calculate the position where
+the cell should be drawn instead of using the previously calculated cell positions, which have
+already been reversed.
 
 ```rust
     let h = if !h_rev { ih } else { size_h - 1 - ih };
@@ -833,8 +843,8 @@ sometimes.
 <img src="images/2022-01/gentest-sprites-fixed.png" title="GenTest sprites fixed" />
 </p>
 
-The intro sprites in Earthworm Jim are working now too.  I had tried to use it for testing before
-I had taken that break, but it wasn't as helpful as the GenTest sprite screen.
+The intro sprites in Earthworm Jim are working now too.  I had tried to use that game for testing
+sprites before I had taken that break, but it wasn't as helpful as the GenTest sprite screen.
 
 <p align="center">
 <img src="images/2022-01/earthwormjim-sprites.png" title="Earthworm Jim's sprites on the SEGA logo are working" />
@@ -850,10 +860,11 @@ How is Sonic 2 looking now that the sprites have been fixed.
 </p>
 
 Well... it honestly doesn't look any different.  In fact this is the same image from after the
-`Extend` flag was fixed, but before the sprites were fixed.  I could not tell the difference, they
-were so identical, so I didn't even bother making another screenshot.  No wonder I couldn't fix the
-sprites before, when I was using Sonic 2 to test with.  The garbled sprites in Sonic 2 were caused
-by something else entirely.
+`Extend` flag was fixed, but before the sprites were fixed.  I literally could not tell the
+difference between the image before and after fixing the sprites, they were so identical, so I
+didn't even bother adding another screenshot.  No wonder I couldn't fix the sprites before, when I
+was using Sonic 2 to test with.  The garbled sprites in Sonic 2 were caused by something else
+entirely.
 
 Are there any other test screens in the GenTest ROM that looked messed up?  Sure enough, all the
 video output patterns are broken.  I'll use the colour bleed test as an example.
@@ -1010,7 +1021,7 @@ with these strange black artifacts showing on the screen.
 
 It took me a while of fussing around with the code before I realized that I had the line and column
 coordinates backwards when passing them to the scroll fetching functions.  That's a little
-embarassing.  I was sending the cell_x value to the horizontal scroll offset when it should have
+embarrassing.  I was sending the cell_x value to the horizontal scroll offset when it should have
 been getting the cell_y value (ie. the horizontal offset is based on what *line* is currently being
 drawn, so you give it the line number and it gives you the x offset).  Swapping these around and
 reorganizing the loops fixed this.  Now the scrolling is smooth!
@@ -1019,33 +1030,33 @@ reorganizing the loops fixed this.  Now the scrolling is smooth!
 Rewriting
 ---------
 
-There were still some issues with the left hand and bottom edges of the screen when the scroll was
-offset by less than a cell.  Changing the existing code to add an extra cell was not as trivial as
-it would appear because there was a possibility of attempting to access a scroll value in the table
-that is before the starting address due to the need to use a negative number, or if the iterators
-started at 0, and a cell was subtraced from the scroll offsets, it would be misaligned with the
-sprites.
+There were still some issues with the left hand and bottom edges of the screen where the foreground
+is not drawn to the edge because the scroll offset is not on a cell boundary.  Changing the existing
+code to add an extra cell was not as trivial as it would appear.  Shifting the cells over caused the
+sprites to be misaligned with the background, and starting the iterators one cell early would mean
+starting at `-1`, which would require changing to signed numbers, and possibly calculating an
+invalid offset due to the presence of negatives, or adding many checks to prevent that.
 
-I also didn't have drawing priority working because I didn't have all the scroll cell and sprite
-priority bits at the same time to determine which to display, and the code was awfully messy at this
-point.  It was time to rewrite all the display code.  I had learned so much and run into so many
-issue.  I had a better understanding of how it was all supposed to work, and I could incorporate all
-those lessons in the next version.
+I also didn't have drawing priority working because I didn't have all the cell and sprite priority
+bits calculated at the same time, to determine which to display, and the code was awfully messy at
+this point.  It was time to rewrite all the display code.  I had learned so much and run into so
+many issue by this point.  I had a better understanding of how it was all supposed to work now, and
+I could incorporate all those lessons in the next version.
 
-In order to make it recreate the output more accurately, I opted to more faithfully simulate what
-the hardware VDP would be doing.  Since it's generating a video signal on the fly, it draws the
-image pixel by pixel, line by line, exactly in step with the CRT.  If I did it this way, it would
-also allow me to implement the priority bits to decide on which pixel from the different planes
-should be drawn to the screen.  There would be a lot more duplicated calculations and slower
-performance, but since the existing performance wasn't an issue, it should still be fast enough to
-emulate at full speed.
+In order to recreate the video output more accurately, I opted to more faithfully simulate what the
+hardware VDP would be doing.  Since it's generating a video signal on the fly, it draws the image
+pixel by pixel, line by line, exactly in step with the CRT.  If I did it this way, it would also
+allow me to implement the priority bits to decide on which pixel from the different planes should be
+drawn to the screen, since everything would be in the same loop.  There would be a lot more
+duplicated calculations and slower performance as a result, but since the existing performance
+wasn't an issue, it should still be fast enough to emulate at full speed.
 
-To make it easier to debug in the short term, I stuffed everything into one big loop.  Later, I
-could break this up into multiple functions to reuse code, and store some of the calculated values
-across iterations to avoid recalculating, but I wanted everything in one loop to make it easier to
-adjust while I debugged it.  I did break out the vertical drawing loop from the horizontal one,
-which will eventually be used to step through the drawing line by line, instead of drawing the whole
-frame before the vertical interrupt, but this isn't yet implemented.
+To make it easier to debug in the short term, I duplicated the code to calculate the cell indices
+for the scrolls.  Later, I can break this up into multiple functions to reuse code, and also store
+some of the calculated values across iterations to avoid recalculating, but I wanted everything in
+one loop to make it easier to adjust while I debugged it.  I did break out the vertical drawing loop
+from the horizontal one, which will eventually be used to step through the drawing line by line,
+instead of drawing the whole frame before the vertical interrupt, but this isn't yet implemented.
 
 ```rust
 pub fn draw_frame(&mut self, frame: &mut Frame) {
@@ -1194,13 +1205,13 @@ behind the trees.  It works better than this gif even shows.  I recorded it at 1
 instead of 30 or 60, to keep the file size small, so when Sonic gets his fast boots, it seems like
 the sprite isn't animated, but it's actually just moving too fast to be recorded.
 
-By the way, out of each 16.6ms interval between updating a frame, the old code was running at around
-2ms, and the new code was running at around 6ms, so the new code is significantly slower.  This is
-in part because I'm calculating which cell to draw for each of the planes, and fetching the scroll
-values, for each pixel on the screen.  This could be improved upon by storing the pattern data for
-the current cell between iterations and only updating it if the calculated offset into the scroll
-for the current pixel is on a cell boundary.  Doing so will make the code harder to read though, and
-I wanted it to be as clear (if verbose) while getting the glitches fixed.
+For those who are curious, out of each 16.6ms interval between updating a frame, the old display
+code was running in around 2ms, and the new code is running in around 6ms, so the new code is
+significantly slower (but still well within the time available).  This is in part because I'm
+calculating which cell to draw for each of the planes, and fetching the scroll values, for each
+pixel on the screen.  This could be improved upon by storing the pattern data for the current cells
+for each plane between iterations and only updating them when the cell changes.  That said, doing so
+will only make a small improvement in performance, while also making the code harder to read.
 
 
 Conclusion
@@ -1209,9 +1220,9 @@ Conclusion
 This project definitely turned into more than I was expecting when I started.  I had hoped to get
 some pretty graphics after only a few weeks of work, (the initial implementation only took about
 that long), but that didn't happen and it quickly became my white whale.  I *had* to finish it.  The
-real journey was the six to eight weeks of switching between debugging and working on other projects
-while the problems percolated in the back of my brain.  But I did it.  I got it to a playable
-(albeit still buggy) state.
+real journey was the eight weeks of switching between debugging and working on other projects while
+the problems percolated in the back of my brain.  But I did it.  I got it to a playable (albeit
+still buggy) state.
 
 Special thanks to [ComradeOj](https://mode5.net/) for the demo ROMs, and [Mike
 Pavone](https://twitter.com/mikepavone) and the other contributors for
