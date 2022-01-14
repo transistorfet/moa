@@ -2,7 +2,7 @@
 Emulating the Sega Genesis - Part III
 =====================================
 
-*Also available on [dev.to]()*
+*Also available on [dev.to](https://dev.to/transistorfet/emulating-the-sega-genesis-part-iii-220f)*
 
 ###### *Written December 2021/January 2022 by transistor_fet*
 
