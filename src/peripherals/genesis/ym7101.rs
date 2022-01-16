@@ -47,6 +47,7 @@ const STATUS_IN_VBLANK: u16             = 0x0008;
 //const STATUS_FIFO_FULL: u16             = 0x0100;
 const STATUS_FIFO_EMPTY: u16            = 0x0200;
 
+const MODE1_BF_DISABLE_DISPLAY: u8      = 0x01;
 //const MODE1_BF_ENABLE_HV_COUNTER: u8    = 0x02;
 const MODE1_BF_HSYNC_INTERRUPT: u8      = 0x10;
 
@@ -652,8 +653,10 @@ impl Steppable for Ym7101 {
             }
 
             self.swapper.swap();
-            let mut frame = self.swapper.current.lock().unwrap();
-            self.state.draw_frame(&mut frame);
+            if (self.state.mode_1 & MODE1_BF_DISABLE_DISPLAY) == 0 {
+                let mut frame = self.swapper.current.lock().unwrap();
+                self.state.draw_frame(&mut frame);
+            }
 
             self.frame_complete.signal();
         }

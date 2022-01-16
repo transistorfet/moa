@@ -56,7 +56,7 @@ impl GenesisControllerPort {
             (true,  2) => self.outputs | ((inputs & 0x0030) as u8) | (((inputs & 0x0F00) >> 8) as u8),
             (false, 3) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | 0x0F,
             (true,  3) => self.outputs | ((inputs & 0x003F) as u8),
-            (false, 1) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
+            (false, 0) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
             _ => 0,
         }
     }
