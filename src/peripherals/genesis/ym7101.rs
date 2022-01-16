@@ -159,7 +159,7 @@ impl Ym7101Memory {
             4 => Memory::Vsram,
             _ => Memory::Cram,
         };
-        info!("{}: transfer requested of type {:x} ({:?}) to address {:x}", DEV_NAME, self.transfer_type, self.transfer_target, self.transfer_dest_addr);
+        debug!("{}: transfer requested of type {:x} ({:?}) to address {:x}", DEV_NAME, self.transfer_type, self.transfer_target, self.transfer_dest_addr);
         if (self.transfer_type & 0x20) != 0 {
             if (self.transfer_type & 0x10) != 0 {
                 self.set_dma_mode(DmaType::Copy);
@@ -227,7 +227,7 @@ impl Ym7101Memory {
 
             match self.transfer_run {
                 DmaType::Memory => {
-                    info!("{}: starting dma transfer {:x} from Mem:{:x} to {:?}:{:x} ({} bytes)", DEV_NAME, self.transfer_type, self.transfer_src_addr, self.transfer_target, self.transfer_dest_addr, self.transfer_remain);
+                    debug!("{}: starting dma transfer {:x} from Mem:{:x} to {:?}:{:x} ({} bytes)", DEV_NAME, self.transfer_type, self.transfer_src_addr, self.transfer_target, self.transfer_dest_addr, self.transfer_remain);
                     let mut bus = system.get_bus();
 
                     while self.transfer_remain > 0 {
@@ -245,7 +245,7 @@ impl Ym7101Memory {
                     }
                 },
                 DmaType::Copy => {
-                    info!("{}: starting dma copy from VRAM:{:x} to VRAM:{:x} ({} bytes)", DEV_NAME, self.transfer_src_addr, self.transfer_dest_addr, self.transfer_remain);
+                    debug!("{}: starting dma copy from VRAM:{:x} to VRAM:{:x} ({} bytes)", DEV_NAME, self.transfer_src_addr, self.transfer_dest_addr, self.transfer_remain);
                     while self.transfer_remain > 0 {
                         self.vram[self.transfer_dest_addr as usize] = self.vram[self.transfer_src_addr as usize];
                         self.transfer_dest_addr += self.transfer_auto_inc;
@@ -254,7 +254,7 @@ impl Ym7101Memory {
                     }
                 },
                 DmaType::Fill => {
-                    info!("{}: starting dma fill to VRAM:{:x} ({} bytes) with {:x}", DEV_NAME, self.transfer_dest_addr, self.transfer_remain, self.transfer_fill_word);
+                    debug!("{}: starting dma fill to VRAM:{:x} ({} bytes) with {:x}", DEV_NAME, self.transfer_dest_addr, self.transfer_remain, self.transfer_fill_word);
                     while self.transfer_remain > 0 {
                         self.vram[self.transfer_dest_addr as usize] = self.transfer_fill_word as u8;
                         self.transfer_dest_addr += self.transfer_auto_inc;
@@ -697,7 +697,7 @@ impl Ym7101 {
     fn set_register(&mut self, word: u16) {
         let reg = ((word & 0x1F00) >> 8) as usize;
         let data = (word & 0x00FF) as u8;
-        info!("{}: register {:x} set to {:x}", DEV_NAME, reg, data);
+        debug!("{}: register {:x} set to {:x}", DEV_NAME, reg, data);
         self.update_register_value(reg, data);
     }
 

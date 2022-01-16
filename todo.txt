@@ -57,20 +57,18 @@ Debugger:
 
 Genesis/Mega Drive:
 
-    * there's a bug when Sonic 2 goes to the demo screen, it's all corrupted (could it be a dma copy error)
-    * fix sprite/cell priorities so that they're drawn correctly
-    * implement highlight and shadow mode, which is also related to the priority
+    * implement sn76489 and ym2612 for audio
     * in some games the controller doesn't seem to work at all (Earthworm Jim, and Mortal Kombat)
-    * refactor ym7101 into multiple files perhaps.  You can separate the DMA stuff, the address/interfacing parts, and the graphics state
+    * refactor to print line by line, so that colour palette changes have an effect
+    * there's a bug when Sonic 2 goes to the demo screen, it's all corrupted (could it be a dma copy error)
     * colours are still broken in Sonic1
     * sonic3 needs some kind of nvram to run
 
-    * implement sn76489 and ym2612 for audio
-    * the 68000/Z80 bank switching is probably buggy, and there's that other banking stuff in the 0xC00000 range, which isn't implemented at all
-    * add support for the H/V counters at 0xC00008
-    * fix ym7101 to better handle V/H interrupts (right now it sets and then the next step will clear, but it'd be nice if it could 'edge trigger')
+    * the 68000/Z80 bank switching is probably buggy
+    * the H/V counters are not accurate because it seems to count at different speeds in the blanking period (time vs return value numbers don't divide properly)
     * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
     * add support for the sprite overflow flag (low priority)
+    * still possibly a bug with the shadow/highlight colours
 
 
 Macintosh:

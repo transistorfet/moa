@@ -50,13 +50,13 @@ impl GenesisControllerPort {
 
         match (th_state, self.th_count) {
             (true,  0) => self.outputs | ((inputs & 0x003F) as u8),
-            (false, 0) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
+            (false, 1) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
             (true,  1) => self.outputs | ((inputs & 0x003F) as u8),
-            (false, 1) => self.outputs | (((inputs & 0x00C0) >> 2) as u8),
+            (false, 2) => self.outputs | (((inputs & 0x00C0) >> 2) as u8),
             (true,  2) => self.outputs | ((inputs & 0x0030) as u8) | (((inputs & 0x0F00) >> 8) as u8),
-            (false, 2) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | 0x0F,
+            (false, 3) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | 0x0F,
             (true,  3) => self.outputs | ((inputs & 0x003F) as u8),
-            (false, 3) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
+            (false, 1) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
             _ => 0,
         }
     }
@@ -173,14 +173,14 @@ impl Addressable for GenesisControllers {
             REG_S_CTRL3 => { data[i] = self.expansion.s_ctrl | 0x02; },
             _ => { warning!("{}: !!! unhandled reading from {:0x}", DEV_NAME, addr); },
         }
-        debug!("{}: read from register {:x} the value {:x}", DEV_NAME, addr, data[0]);
+        info!("{}: read from register {:x} the value {:x}", DEV_NAME, addr, data[0]);
         Ok(())
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         self.reset_timer = 0;
 
-        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+        info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             REG_DATA1 => { self.port_1.set_data(data[0]); }
             REG_DATA2 => { self.port_2.set_data(data[0]); },
