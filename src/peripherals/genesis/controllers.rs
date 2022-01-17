@@ -199,7 +199,7 @@ impl Addressable for GenesisControllers {
 
 impl Steppable for GenesisControllers {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        let duration = 100_00;     // Update every 100us
+        let duration = 100_000;     // Update every 100us
 
         self.reset_timer += duration;
         if self.reset_timer >= 1_500_000 {

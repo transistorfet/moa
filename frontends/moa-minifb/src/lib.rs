@@ -32,6 +32,7 @@ pub fn new(name: &str) -> App {
         .arg("-t, --threaded         'Run the simulation in a separate thread'")
         .arg("-x, --speed=[]         'Adjust the speed of the simulation'")
         .arg("-d, --debugger         'Start the debugger before running machine'")
+        .arg("-a, --disable-audio    'Disable audio output'")
 }
 
 pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
@@ -152,7 +153,8 @@ pub struct MiniFrontend {
     pub window: Option<Box<dyn WindowUpdater>>,
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
-    pub audio: AudioOutput,
+    pub audio: Option<AudioOutput>,
+    pub mixer: HostData<AudioMixer>,
 }
 
 impl MiniFrontend {
@@ -163,13 +165,18 @@ impl MiniFrontend {
             window,
             controller,
             keyboard,
-            audio: AudioOutput::create_audio_output(mixer),
+            audio: None,
+            mixer: mixer,
         }
     }
 
     pub fn start(&mut self, matches: ArgMatches, mut system: Option<System>) {
         if matches.occurrences_of("debugger") > 0 {
             system.as_mut().map(|system| system.enable_debugging());
+        }
+
+        if matches.occurrences_of("disable-audio") <= 0 {
+            self.audio = Some(AudioOutput::create_audio_output(self.mixer.clone()));
         }
 
         let mut options = minifb::WindowOptions::default();

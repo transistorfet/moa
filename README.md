@@ -129,3 +129,7 @@ number by the milliseconds per frame, increasing or decreasing the gameplay
 clock relative to the frontend's update loop.  Setting it to 0.5 slows the game
 down to half speed and setting it to 2 doubles the speed.
 
+The `-a` or `--disable-audio` option will prevent the audio device from being
+created, so no audio will be played (although it will still be simulated by any
+devices that simulate it).
+

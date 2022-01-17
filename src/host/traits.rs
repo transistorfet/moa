@@ -37,7 +37,6 @@ pub trait Tty {
 pub trait WindowUpdater: Send {
     fn get_size(&mut self) -> (u32, u32);
     fn update_frame(&mut self, width: u32, height: u32, bitmap: &mut [u32]);
-    //fn update_frame(&mut self, draw_buffer: &mut dyn FnMut(u32, u32, &[u32]));
 }
 
 pub trait ControllerUpdater: Send {
@@ -50,8 +49,7 @@ pub trait KeyboardUpdater: Send {
 
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
-    fn write_samples(&mut self, samples: usize, iter: &mut Iterator<Item=f32>);
-    //fn write_samples(&mut self, buffer: &[f32]);
+    fn write_samples(&mut self, buffer: &[f32]);
 }
 
 pub trait BlitableSurface {

@@ -1,4 +1,6 @@
 
+* make it possible to compile without audio support (minifb frontend requires it atm)
+
 * I need some better function for dealing with memory, like a function that copies data with a loop, or allows offset reading of
   a fixed piece of data..., the trick is what function are the most common.  You can use generics
 

@@ -122,9 +122,9 @@ impl AudioSource {
         }
     }
 
-    pub fn fill_with(&mut self, samples: usize, iter: &mut dyn Iterator<Item=f32>) {
-        for _ in 0..samples {
-            let sample = 0.25 * iter.next().unwrap();
+    pub fn fill_with(&mut self, buffer: &[f32]) {
+        for sample in buffer.iter() {
+            let sample = 0.25 * *sample;
             self.buffer.insert(sample);
             self.buffer.insert(sample);
             if self.buffer.is_full() {
@@ -156,8 +156,8 @@ impl Audio for AudioSource {
         self.sample_rate
     }
 
-    fn write_samples(&mut self, samples: usize, iter: &mut dyn Iterator<Item=f32>) {
-        self.fill_with(samples, iter);
+    fn write_samples(&mut self, buffer: &[f32]) {
+        self.fill_with(buffer);
     }
 }
 
