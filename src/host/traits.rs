@@ -49,6 +49,7 @@ pub trait KeyboardUpdater: Send {
 
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
+    fn space_available(&self) -> usize;
     fn write_samples(&mut self, buffer: &[f32]);
 }
 

@@ -72,6 +72,14 @@ impl<T: Copy> CircularBuffer<T> {
         }
     }
 
+    pub fn free_space(&self) -> usize {
+	if self.out > self.inp {
+	    self.out - self.inp - 1
+	} else {
+	    self.buffer.len() - self.inp + self.out - 1
+        }
+    }
+
     fn next_in(&self) -> usize {
         if self.inp + 1 < self.buffer.len() {
             self.inp + 1
@@ -122,9 +130,14 @@ impl AudioSource {
         }
     }
 
+    pub fn space_available(&self) -> usize {
+        self.buffer.free_space()
+    }
+
     pub fn fill_with(&mut self, buffer: &[f32]) {
         for sample in buffer.iter() {
-            let sample = 0.25 * *sample;
+            // TODO this is here to keep it quiet for testing, but should be removed later
+            let sample = 0.5 * *sample;
             self.buffer.insert(sample);
             self.buffer.insert(sample);
             if self.buffer.is_full() {
@@ -154,6 +167,10 @@ impl AudioSource {
 impl Audio for AudioSource {
     fn samples_per_second(&self) -> usize {
         self.sample_rate
+    }
+
+    fn space_available(&self) -> usize {
+        self.space_available()
     }
 
     fn write_samples(&mut self, buffer: &[f32]) {

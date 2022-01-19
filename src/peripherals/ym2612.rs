@@ -42,9 +42,18 @@ impl Operator {
         self.wave.frequency = frequency * self.multiplier;
     }
 
+    pub fn reset(&mut self) {
+        self.wave.reset();
+    }
+
     pub fn set_multiplier(&mut self, frequency: f32, multiplier: f32) {
         self.multiplier = multiplier;
         self.set_frequency(frequency);
+    }
+
+    pub fn get_sample(&mut self) -> f32 {
+        // TODO this would need to take into account the volume and envelope
+        self.wave.next().unwrap()
     }
 }
 
@@ -73,52 +82,55 @@ impl Channel {
         }
     }
 
+    pub fn reset(&mut self) {
+        for operator in self.operators.iter_mut() {
+            operator.reset();
+        }
+    }
+
     pub fn get_sample(&mut self) -> f32 {
         match self.algorithm {
             OperatorAlgorithm::A0 => {
-                let mut sample = 0.0;
-                sample *= self.operators[0].wave.next().unwrap();
-                sample *= self.operators[1].wave.next().unwrap();
-                sample *= self.operators[2].wave.next().unwrap();
-                sample *= self.operators[3].wave.next().unwrap();
-                sample
+                self.operators[0].get_sample()
+                * self.operators[1].get_sample()
+                * self.operators[2].get_sample()
+                * self.operators[3].get_sample()
             },
             OperatorAlgorithm::A1 => {
-                let mut sample = self.operators[0].wave.next().unwrap() + self.operators[1].wave.next().unwrap();
-                sample *= self.operators[2].wave.next().unwrap();
-                sample *= self.operators[3].wave.next().unwrap();
-                sample
+                let sample1 = (self.operators[0].get_sample() + self.operators[1].get_sample()) / 2.0;
+                let sample2 = self.operators[2].get_sample();
+                let sample3 = self.operators[3].get_sample();
+                sample1 * sample2 * sample3
             },
             OperatorAlgorithm::A2 => {
-                let mut sample = self.operators[0].wave.next().unwrap() + (self.operators[1].wave.next().unwrap() * self.operators[2].wave.next().unwrap());
-                sample *= self.operators[3].wave.next().unwrap();
+                let mut sample = (self.operators[0].get_sample() + (self.operators[1].get_sample() * self.operators[2].get_sample())) / 2.0;
+                sample *= self.operators[3].get_sample();
                 sample
             },
             OperatorAlgorithm::A3 => {
-                let mut sample = (self.operators[0].wave.next().unwrap() * self.operators[1].wave.next().unwrap()) + self.operators[2].wave.next().unwrap();
-                sample *= self.operators[3].wave.next().unwrap();
+                let mut sample = ((self.operators[0].get_sample() * self.operators[1].get_sample()) + self.operators[2].get_sample()) / 2.0;
+                sample *= self.operators[3].get_sample();
                 sample
             },
             OperatorAlgorithm::A4 => {
-                let sample1 = self.operators[0].wave.next().unwrap() * self.operators[1].wave.next().unwrap();
-                let sample2 = self.operators[2].wave.next().unwrap() * self.operators[3].wave.next().unwrap();
-                sample1 + sample2
+                let sample1 = self.operators[0].get_sample() * self.operators[1].get_sample();
+                let sample2 = self.operators[2].get_sample() * self.operators[3].get_sample();
+                (sample1 + sample2) / 2.0
             },
             OperatorAlgorithm::A5 => {
-                let sample1 = self.operators[0].wave.next().unwrap();
-                let sample2 = self.operators[1].wave.next().unwrap() + self.operators[2].wave.next().unwrap() + self.operators[3].wave.next().unwrap();
+                let sample1 = self.operators[0].get_sample();
+                let sample2 = (self.operators[1].get_sample() + self.operators[2].get_sample() + self.operators[3].get_sample()) / 3.0;
                 sample1 * sample2
             },
             OperatorAlgorithm::A6 => {
-                let sample1 = self.operators[0].wave.next().unwrap() * self.operators[1].wave.next().unwrap();
-                sample1 + self.operators[2].wave.next().unwrap() + self.operators[3].wave.next().unwrap()
+                let sample1 = self.operators[0].get_sample() * self.operators[1].get_sample();
+                (sample1 + self.operators[2].get_sample() + self.operators[3].get_sample()) / 3.0
             },
             OperatorAlgorithm::A7 => {
-                let mut sample = 0.0;
-                sample += self.operators[0].wave.next().unwrap();
-                sample += self.operators[1].wave.next().unwrap();
-                sample += self.operators[2].wave.next().unwrap();
-                sample += self.operators[3].wave.next().unwrap();
+                let sample = self.operators[0].get_sample()
+                + self.operators[1].get_sample()
+                + self.operators[2].get_sample()
+                + self.operators[3].get_sample();
                 sample / 4.0
             },
         }
@@ -150,45 +162,43 @@ impl Ym2612 {
     }
 
     pub fn set_register(&mut self, bank: usize, reg: usize, data: u8) {
-        match reg {
-            0x28 => {
-                let ch = (data as usize) & 0x07;
-                self.channels[ch].on = data >> 4;
-                println!("Note: {}: {:x}", ch, self.channels[ch].on);
-            },
-            0x30 => {
-                let (ch, op) = get_ch_op(bank, reg);
-                let multiplier = if data == 0 { 0.5 } else { (data & 0x0F) as f32 };
-                let frequency = self.channels[ch].base_frequency;
-                self.channels[ch].operators[op].set_multiplier(frequency, multiplier)
-            },
-            0xA4 | 0xA5 | 0xA6 => {
-                let ch = (reg & 0x07) - 4 + (bank * 3);
-                self.channel_frequencies[ch].1 = (self.channel_frequencies[ch].1 & 0xFF) | ((data as u16) & 0x07) << 8;
-                self.channel_frequencies[ch].0 = (data & 0x1C) >> 3;
-            },
-            0xA0 | 0xA1 | 0xA2 => {
-                let ch = (reg & 0x07) + (bank * 3);
-                self.channel_frequencies[ch].1 = (self.channel_frequencies[ch].1 & 0xFF00) | data as u16;
+        if reg == 0x28 {
+            let ch = (data as usize) & 0x07;
+            self.channels[ch].on = data >> 4;
+            self.channels[ch].reset();
+            println!("Note: {}: {:x}", ch, self.channels[ch].on);
+        } else if (reg & 0xF0) == 0x30 {
+            let (ch, op) = get_ch_op(bank, reg);
+            let multiplier = if data == 0 { 0.5 } else { (data & 0x0F) as f32 };
+            let frequency = self.channels[ch].base_frequency;
+            debug!("{}: channel {} operator {} set to multiplier {}", DEV_NAME, ch + 1, op + 1, multiplier);
+            self.channels[ch].operators[op].set_multiplier(frequency, multiplier)
+        } else if reg >= 0xA4 && reg <= 0xA6 {
+            let ch = (reg & 0x07) - 4 + (bank * 3);
+            self.channel_frequencies[ch].1 = (self.channel_frequencies[ch].1 & 0xFF) | ((data as u16) & 0x07) << 8;
+            self.channel_frequencies[ch].0 = (data & 0x38) >> 3;
+        } else if reg >= 0xA0 && reg <= 0xA2 {
+            let ch = (reg & 0x07) + (bank * 3);
+            self.channel_frequencies[ch].1 = (self.channel_frequencies[ch].1 & 0xFF00) | data as u16;
 
-                let frequency = fnumber_to_frequency(self.channel_frequencies[ch]);
-                self.channels[ch].set_frequency(frequency);
-            },
-            0xB0 | 0xB1 | 0xB2 => {
-                let ch = (reg & 0x07) + (bank * 3);
-                self.channels[ch].algorithm = match data & 0x07 {
-                    0 => OperatorAlgorithm::A0,
-                    1 => OperatorAlgorithm::A1,
-                    2 => OperatorAlgorithm::A2,
-                    3 => OperatorAlgorithm::A3,
-                    4 => OperatorAlgorithm::A4,
-                    5 => OperatorAlgorithm::A5,
-                    6 => OperatorAlgorithm::A6,
-                    7 => OperatorAlgorithm::A7,
-                    _ => OperatorAlgorithm::A0,
-                };
-            },
-            _ => warning!("{}: !!! unhandled write to register {:0x} with {:0x}", DEV_NAME, reg, data),
+            let frequency = fnumber_to_frequency(self.channel_frequencies[ch]);
+            debug!("{}: channel {} set to frequency {}", DEV_NAME, ch + 1, frequency);
+            self.channels[ch].set_frequency(frequency);
+        } else if reg >= 0xB0 && reg <= 0xB2 {
+            let ch = (reg & 0x07) + (bank * 3);
+            self.channels[ch].algorithm = match data & 0x07 {
+                0 => OperatorAlgorithm::A0,
+                1 => OperatorAlgorithm::A1,
+                2 => OperatorAlgorithm::A2,
+                3 => OperatorAlgorithm::A3,
+                4 => OperatorAlgorithm::A4,
+                5 => OperatorAlgorithm::A5,
+                6 => OperatorAlgorithm::A6,
+                7 => OperatorAlgorithm::A7,
+                _ => OperatorAlgorithm::A0,
+            };
+        } else {
+            warning!("{}: !!! unhandled write to register {:0x} with {:0x}", DEV_NAME, reg, data);
         }
     }
 }
@@ -224,24 +234,28 @@ impl Steppable for Ym2612 {
         //    self.source.write_samples(rate / 1000, &mut self.sine);
         //}
 
-        let rate = self.source.samples_per_second() / 1000;
-        let mut buffer = vec![0.0; rate];
-        for i in 0..rate {
-            let mut sample = 0.0;
-            let mut count = 0;
+        let rate = self.source.samples_per_second();
+        let available = self.source.space_available();
+        let samples = if available < rate / 1000 { available } else { rate / 1000 };
+        //if self.source.space_available() >= samples {
+            let mut buffer = vec![0.0; samples];
+            for i in 0..samples {
+                let mut sample = 0.0;
+                let mut count = 0;
 
-            for ch in 0..7 {
-                if self.channels[ch].on != 0 {
-                    sample += self.channels[ch].get_sample();
-                    count += 1;
+                for ch in 0..7 {
+                    if self.channels[ch].on != 0 {
+                        sample += self.channels[ch].get_sample();
+                        count += 1;
+                    }
+                }
+
+                if count > 0 {
+                    buffer[i] = sample / count as f32;
                 }
             }
-
-            if count > 0 {
-                buffer[i] = sample / count as f32;
-            }
-        }
-        self.source.write_samples(&buffer);
+            self.source.write_samples(&buffer);
+        //}
 
         Ok(1_000_000)          // Every 1ms of simulated time
     }

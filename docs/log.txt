@@ -240,6 +240,32 @@ before 2021-10-25
   to more properly implement the priority shadow/highlight modes
 
 
+Audio
+-----
+
+2021-12-12
+- this is when I committed the audio support, but I'm not sure when I started.  It was a little earlier
+- cpal uses a callback to get the next buffer of data, so the buffer needs to be assembled outside of
+  the callback, with each device creating a Source with a buffer, that the mixer/output can draw upon
+- initially I had it give an iterator to load the buffer, but that doesn't work for ym2612 generation
+  because it itself needs to mix a bunch of sources together to get the output buffer
+- I made it use a circular buffer so that unused data can be skipped to keep the simulation in sync
+- from various glitches I was able to get it to playback tones smoothly, with only the occasional pop
+
+
+2022-01-17
+- finally have done more, added the various register locations to set the frequency of the operators,
+  and added a way to combine the samples according to the algorithm of ops to get sound
+- had to add `.reset()` to start from the beginning when a note is played, in order to prevent clicks
+  from the waveform all of a sudden jumping in level when the note starts
+- started adding a binary to control just the ym2612 for testing, so I can isolate issues, and a lot
+  of minor issues have turned up
+
+2022-01-18
+- some kind of buffer problem causing clicking, where the waveform resets, possibly related to circular buf
+- a quick attempt at fixing it shows that the audio source buffer is only copied to the mixer buffer
+  when it's written to the buffer (and overfills).  Attempt to not write to the buffer means audio stops
+  when the source buffer is full
 
 
 

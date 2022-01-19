@@ -17,6 +17,10 @@ impl SineWave {
             position: 0,
         }
     }
+
+    pub fn reset(&mut self) {
+        self.position = 0;
+    }
 }
 
 impl Iterator for SineWave {
@@ -43,6 +47,10 @@ impl SquareWave {
             sample_rate,
             position: 0,
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.position = 0;
     }
 }
 
