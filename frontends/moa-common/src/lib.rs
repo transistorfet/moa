@@ -1,4 +1,6 @@
 
+pub mod circularbuf;
+
 #[cfg(feature = "tty")]
 pub mod tty;
 
