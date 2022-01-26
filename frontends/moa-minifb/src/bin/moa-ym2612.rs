@@ -1,48 +1,55 @@
 
+use std::sync::mpsc;
+
 use moa_minifb;
 use moa::peripherals::ym2612::{Ym2612};
+use moa::peripherals::sn76489::{Sn76489};
 
 use moa::error::Error;
 use moa::system::System;
 use moa::host::gfx::Frame;
 use moa::devices::{ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 use moa::host::keys::{Key};
-use moa::host::traits::{Host, HostData, WindowUpdater, KeyboardUpdater};
+use moa::host::traits::{Host, HostData, KeyboardUpdater};
 
 
-pub struct SynthControlsUpdater(HostData<bool>);
+pub struct SynthControlsUpdater(mpsc::Sender<(Key, bool)>);
 
 impl KeyboardUpdater for SynthControlsUpdater {
     fn update_keyboard(&mut self, key: Key, state: bool) {
-        match key {
-            Key::Enter => { self.0.set(state); if state { println!("start"); } },
-            _ => { },
-        }
+        self.0.send((key, state)).unwrap();
     }
 }
 
 struct SynthControl {
-    button: HostData<bool>,
-    last: bool,
+    receiver: mpsc::Receiver<(Key, bool)>,
 }
 
 impl SynthControl {
-    pub fn new(button: HostData<bool>) -> Self {
+    pub fn new(receiver: mpsc::Receiver<(Key, bool)>) -> Self {
         Self {
-            button,
-            last: false,
+            receiver,
         }
     }
 }
 
 impl Steppable for SynthControl {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        let current = self.button.get();
+        if let Ok((key, state)) = self.receiver.try_recv() {
 
-        if current != self.last {
-            self.last = current;
-            system.get_bus().write_u8(0x00, 0x28)?;
-            system.get_bus().write_u8(0x01, if current { 0xF0 } else { 0x00 })?;
+            match key {
+                Key::Enter => {
+                    system.get_bus().write_u8(0x00, 0x28)?;
+                    system.get_bus().write_u8(0x01, if state { 0xF0 } else { 0x00 })?;
+                },
+
+                Key::A => {
+                    system.get_bus().write_u8(0x10, 0x84)?;
+                    system.get_bus().write_u8(0x10, 0x0F)?;
+                    system.get_bus().write_u8(0x10, if state { 0x90 } else { 0x9F })?;
+                },
+                _ => { },
+            }
         }
 
         Ok(1_000_000)
@@ -84,17 +91,20 @@ fn main() {
     moa_minifb::run(matches, |host| {
         let mut system = System::new();
 
-        let button = HostData::new(false);
-        let control = wrap_transmutable(SynthControl::new(button.clone()));
+        let (sender, receiver) = mpsc::channel();
+        let control = wrap_transmutable(SynthControl::new(receiver));
         system.add_device("control", control)?;
 
         let ym_sound = wrap_transmutable(Ym2612::create(host)?);
         initialize_ym(ym_sound.clone())?;
         system.add_addressable_device(0x00, ym_sound)?;
 
+        let sn_sound = wrap_transmutable(Sn76489::create(host)?);
+        system.add_addressable_device(0x10, sn_sound)?;
+
         let frame = Frame::new_shared(384, 128);
         host.add_window(Frame::new_updater(frame.clone()))?;
-        host.register_keyboard(Box::new(SynthControlsUpdater(button)))?;
+        host.register_keyboard(Box::new(SynthControlsUpdater(sender)))?;
 
         Ok(system)
     });

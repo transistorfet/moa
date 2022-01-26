@@ -267,6 +267,11 @@ Audio
   when it's written to the buffer (and overfills).  Attempt to not write to the buffer means audio stops
   when the source buffer is full
 
+2022-01-24
+- finally took another look and the glitching turned out to be an issue with the buffer size where the
+  check before the audio devices write only account for one channel of audio instead of two, so the
+  buffer was over filling.  Dividing the available buffer size by 2 fixed it
+
 
 
 

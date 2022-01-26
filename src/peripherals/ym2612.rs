@@ -27,6 +27,7 @@ pub enum OperatorAlgorithm {
 #[derive(Clone)]
 pub struct Operator {
     pub wave: SineWave,
+    pub frequency: f32,
     pub multiplier: f32,
 }
 
@@ -34,12 +35,13 @@ impl Operator {
     pub fn new(sample_rate: usize) -> Self {
         Self {
             wave: SineWave::new(400.0, sample_rate),
+            frequency: 400.0,
             multiplier: 1.0,
         }
     }
 
     pub fn set_frequency(&mut self, frequency: f32) {
-        self.wave.frequency = frequency * self.multiplier;
+        self.frequency = frequency;
     }
 
     pub fn reset(&mut self) {
@@ -48,11 +50,11 @@ impl Operator {
 
     pub fn set_multiplier(&mut self, frequency: f32, multiplier: f32) {
         self.multiplier = multiplier;
-        self.set_frequency(frequency);
     }
 
-    pub fn get_sample(&mut self) -> f32 {
+    pub fn get_sample(&mut self, modulator: f32) -> f32 {
         // TODO this would need to take into account the volume and envelope
+        self.wave.set_frequency((self.frequency * self.multiplier) + modulator);
         self.wave.next().unwrap()
     }
 }
@@ -91,46 +93,53 @@ impl Channel {
     pub fn get_sample(&mut self) -> f32 {
         match self.algorithm {
             OperatorAlgorithm::A0 => {
-                self.operators[0].get_sample()
-                * self.operators[1].get_sample()
-                * self.operators[2].get_sample()
-                * self.operators[3].get_sample()
+                let modulator0 = self.operators[0].get_sample(0.0);
+                let modulator1 = self.operators[1].get_sample(modulator0);
+                let modulator2 = self.operators[2].get_sample(modulator1);
+                self.operators[3].get_sample(modulator2)
             },
             OperatorAlgorithm::A1 => {
-                let sample1 = (self.operators[0].get_sample() + self.operators[1].get_sample()) / 2.0;
-                let sample2 = self.operators[2].get_sample();
-                let sample3 = self.operators[3].get_sample();
-                sample1 * sample2 * sample3
+                let sample1 = (self.operators[0].get_sample(0.0) + self.operators[1].get_sample(0.0)) / 2.0;
+                let sample2 = self.operators[2].get_sample(sample1);
+                let sample3 = self.operators[3].get_sample(sample2);
+                sample3
             },
             OperatorAlgorithm::A2 => {
-                let mut sample = (self.operators[0].get_sample() + (self.operators[1].get_sample() * self.operators[2].get_sample())) / 2.0;
-                sample *= self.operators[3].get_sample();
-                sample
+                let sample1 = self.operators[1].get_sample(0.0);
+                let sample2 = self.operators[2].get_sample(sample1);
+                let sample3 = (self.operators[0].get_sample(0.0) + sample2) / 2.0;
+                let sample4 = self.operators[3].get_sample(sample3);
+                sample4
             },
             OperatorAlgorithm::A3 => {
-                let mut sample = ((self.operators[0].get_sample() * self.operators[1].get_sample()) + self.operators[2].get_sample()) / 2.0;
-                sample *= self.operators[3].get_sample();
-                sample
+                let sample1 = self.operators[0].get_sample(0.0);
+                let sample2 = self.operators[1].get_sample(sample1);
+                let sample3 = self.operators[2].get_sample(0.0);
+                let sample4 = self.operators[3].get_sample((sample2 + sample3) / 2.0);
+                sample4
             },
             OperatorAlgorithm::A4 => {
-                let sample1 = self.operators[0].get_sample() * self.operators[1].get_sample();
-                let sample2 = self.operators[2].get_sample() * self.operators[3].get_sample();
-                (sample1 + sample2) / 2.0
+                let sample1 = self.operators[0].get_sample(0.0);
+                let sample2 = self.operators[1].get_sample(sample1);
+                let sample3 = self.operators[2].get_sample(0.0);
+                let sample4 = self.operators[3].get_sample(sample3);
+                (sample2 + sample4) / 2.0
             },
             OperatorAlgorithm::A5 => {
-                let sample1 = self.operators[0].get_sample();
-                let sample2 = (self.operators[1].get_sample() + self.operators[2].get_sample() + self.operators[3].get_sample()) / 3.0;
-                sample1 * sample2
+                let sample1 = self.operators[0].get_sample(0.0);
+                let sample2 = (self.operators[1].get_sample(sample1) + self.operators[2].get_sample(sample1) + self.operators[3].get_sample(sample1)) / 3.0;
+                sample2
             },
             OperatorAlgorithm::A6 => {
-                let sample1 = self.operators[0].get_sample() * self.operators[1].get_sample();
-                (sample1 + self.operators[2].get_sample() + self.operators[3].get_sample()) / 3.0
+                let sample1 = self.operators[0].get_sample(0.0);
+                let sample2 = self.operators[1].get_sample(sample1);
+                (sample2 + self.operators[2].get_sample(0.0) + self.operators[3].get_sample(0.0)) / 3.0
             },
             OperatorAlgorithm::A7 => {
-                let sample = self.operators[0].get_sample()
-                + self.operators[1].get_sample()
-                + self.operators[2].get_sample()
-                + self.operators[3].get_sample();
+                let sample = self.operators[0].get_sample(0.0)
+                + self.operators[1].get_sample(0.0)
+                + self.operators[2].get_sample(0.0)
+                + self.operators[3].get_sample(0.0);
                 sample / 4.0
             },
         }

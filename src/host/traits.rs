@@ -51,6 +51,7 @@ pub trait Audio {
     fn samples_per_second(&self) -> usize;
     fn space_available(&self) -> usize;
     fn write_samples(&mut self, buffer: &[f32]);
+    fn flush(&mut self);
 }
 
 pub trait BlitableSurface {

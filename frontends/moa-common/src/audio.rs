@@ -131,20 +131,23 @@ impl AudioSource {
     }
 
     pub fn space_available(&self) -> usize {
-        self.buffer.free_space()
+        self.buffer.free_space() / 2
     }
 
     pub fn fill_with(&mut self, buffer: &[f32]) {
-        for sample in buffer.iter() {
-            // TODO this is here to keep it quiet for testing, but should be removed later
-            let sample = 0.5 * *sample;
-            self.buffer.insert(sample);
-            self.buffer.insert(sample);
-            if self.buffer.is_full() {
-                break;
+        if self.buffer.free_space() > buffer.len() * 2 {
+            for sample in buffer.iter() {
+                // TODO this is here to keep it quiet for testing, but should be removed later
+                let sample = 0.5 * *sample;
+                self.buffer.insert(sample);
+                self.buffer.insert(sample);
             }
         }
 
+        self.flush();
+    }
+
+    pub fn flush(&mut self) {
         if self.buffer.used_space() >= self.frame_size {
             let mut locked_mixer = self.mixer.lock();
 
@@ -176,8 +179,11 @@ impl Audio for AudioSource {
     fn write_samples(&mut self, buffer: &[f32]) {
         self.fill_with(buffer);
     }
-}
 
+    fn flush(&mut self) {
+        self.flush();
+    }
+}
 
 #[derive(Clone)]
 pub struct AudioMixer {
