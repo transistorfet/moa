@@ -9,13 +9,13 @@ use crate::host::traits::{Host, Audio};
 const DEV_NAME: &'static str = "sn76489";
 
 #[derive(Clone)]
-pub struct Channel {
+pub struct ToneGenerator {
     on: bool,
     attenuation: f32,
     wave: SquareWave,
 }
 
-impl Channel {
+impl ToneGenerator {
     pub fn new(sample_rate: usize) -> Self {
         Self {
             on: false,
@@ -31,13 +31,13 @@ impl Channel {
             self.on = true;
             self.attenuation = (attenuation << 1) as f32;
         }
-        println!("set attenuation to {} {}", self.attenuation, self.on);
+        info!("set attenuation to {} {}", self.attenuation, self.on);
     }
 
     pub fn set_counter(&mut self, count: usize) {
         let frequency = 3_579_545.0 / (count as f32 * 32.0);
         self.wave.set_frequency(frequency);
-        println!("set frequency to {}", frequency);
+        info!("set frequency to {}", frequency);
     }
 
     pub fn get_sample(&mut self) -> f32 {
@@ -46,11 +46,49 @@ impl Channel {
 }
 
 
+#[derive(Clone)]
+pub struct NoiseGenerator {
+    on: bool,
+    attenuation: f32,
+}
+
+impl NoiseGenerator {
+    pub fn new() -> Self {
+        Self {
+            on: false,
+            attenuation: 0.0,
+        }
+    }
+
+    pub fn set_attenuation(&mut self, attenuation: u8) {
+        if attenuation == 0x0F {
+            self.on = false;
+        } else {
+            self.on = true;
+            self.attenuation = (attenuation << 1) as f32;
+        }
+        info!("set attenuation to {} {}", self.attenuation, self.on);
+    }
+
+    pub fn set_control(&mut self, bits: u8) {
+        //let frequency = 3_579_545.0 / (count as f32 * 32.0);
+        //self.wave.set_frequency(frequency);
+        //debug!("set frequency to {}", frequency);
+    }
+
+    pub fn get_sample(&mut self) -> f32 {
+        // TODO this isn't implemented yet
+        0.0
+    }
+}
+
+
+
 pub struct Sn76489 {
-    pub regs: [u8; 8],
     pub first_byte: Option<u8>,
     pub source: Box<dyn Audio>,
-    pub channels: Vec<Channel>,
+    pub tones: Vec<ToneGenerator>,
+    pub noise: NoiseGenerator,
 }
 
 impl Sn76489 {
@@ -59,10 +97,10 @@ impl Sn76489 {
         let sample_rate = source.samples_per_second();
 
         Ok(Self {
-            regs: [0; 8],
             first_byte: None,
             source,
-            channels: vec![Channel::new(sample_rate); 3],
+            tones: vec![ToneGenerator::new(sample_rate); 3],
+            noise: NoiseGenerator::new(),
         })
     }
 }
@@ -81,10 +119,15 @@ impl Steppable for Sn76489 {
                 let mut count = 0;
 
                 for ch in 0..3 {
-                    if self.channels[ch].on {
-                        sample += self.channels[ch].get_sample();
+                    if self.tones[ch].on {
+                        sample += self.tones[ch].get_sample();
                         count += 1;
                     }
+                }
+
+                if self.noise.on {
+                    sample += self.noise.get_sample();
+                    count += 1;
                 }
 
                 if count > 0 {
@@ -116,25 +159,25 @@ impl Addressable for Sn76489 {
             return Ok(());
         }
 
-        if (data[0] & 0x80) == 0 {
+        if (data[0] & 0x80) != 0 {
+            let reg = (data[0] & 0x70) >> 4;
+            let value = data[0] & 0x0F;
+            match reg {
+                1 => self.tones[0].set_attenuation(value),
+                3 => self.tones[1].set_attenuation(value),
+                5 => self.tones[2].set_attenuation(value),
+                6 => self.noise.set_control(value),
+                7 => self.noise.set_attenuation(value),
+                _ => { self.first_byte = Some(data[0]); },
+            }
+        } else {
             let first = self.first_byte.unwrap_or(0);
             let reg = (first & 0x70) >> 4;
             let value = ((data[0] as usize & 0x3F) << 4) | (first as usize & 0x0F);
             match reg {
-                0 => self.channels[0].set_counter(value),
-                2 => self.channels[1].set_counter(value),
-                4 => self.channels[2].set_counter(value),
-                _ => { },
-            }
-        } else {
-            let reg = (data[0] & 0x70) >> 4;
-            self.first_byte = Some(data[0]);
-            //self.regs[reg as usize] = data[0] & 0x0F;
-            let attenuation = data[0] & 0x0F;
-            match reg {
-                1 => self.channels[0].set_attenuation(attenuation),
-                3 => self.channels[1].set_attenuation(attenuation),
-                5 => self.channels[2].set_attenuation(attenuation),
+                0 => self.tones[0].set_counter(value),
+                2 => self.tones[1].set_counter(value),
+                4 => self.tones[2].set_counter(value),
                 _ => { },
             }
         }
@@ -142,7 +185,6 @@ impl Addressable for Sn76489 {
         Ok(())
     }
 }
-
 
 impl Transmutable for Sn76489 {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
@@ -153,5 +195,4 @@ impl Transmutable for Sn76489 {
         Some(self)
     }
 }
-
 

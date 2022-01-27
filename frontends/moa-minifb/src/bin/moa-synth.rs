@@ -10,7 +10,7 @@ use moa::system::System;
 use moa::host::gfx::Frame;
 use moa::devices::{ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 use moa::host::keys::{Key};
-use moa::host::traits::{Host, HostData, KeyboardUpdater};
+use moa::host::traits::{Host, KeyboardUpdater};
 
 
 pub struct SynthControlsUpdater(mpsc::Sender<(Key, bool)>);
@@ -48,6 +48,7 @@ impl Steppable for SynthControl {
                     system.get_bus().write_u8(0x10, 0x0F)?;
                     system.get_bus().write_u8(0x10, if state { 0x90 } else { 0x9F })?;
                 },
+
                 _ => { },
             }
         }
