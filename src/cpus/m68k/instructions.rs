@@ -307,8 +307,8 @@ impl fmt::Display for BaseRegister {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BaseRegister::None => Ok(()),
-            BaseRegister::PC => write!(f, "%pc + "),
-            BaseRegister::AReg(reg) => write!(f, "%a{} + ", reg),
+            BaseRegister::PC => write!(f, "%pc"),
+            BaseRegister::AReg(reg) => write!(f, "%a{}", reg),
         }
     }
 }
@@ -316,11 +316,10 @@ impl fmt::Display for BaseRegister {
 fn fmt_index_disp(index: &Option<IndexRegister>) -> String {
     match index {
         Some(index) => {
-            let mut result = format!("%{}", index.xreg);
+            let mut result = format!(", %{}", index.xreg);
             if index.scale != 0 {
                 result += &format!("<< {}", index.scale);
             }
-            result += " + ";
             result
         },
         None => "".to_string(),
@@ -330,7 +329,7 @@ fn fmt_index_disp(index: &Option<IndexRegister>) -> String {
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Target::Immediate(value) => write!(f, "#{:08x}", value),
+            Target::Immediate(value) => write!(f, "#{:#08x}", value),
             Target::DirectDReg(reg) => write!(f, "%d{}", reg),
             Target::DirectAReg(reg) => write!(f, "%a{}", reg),
             Target::IndirectAReg(reg) => write!(f, "(%a{})", reg),
@@ -338,7 +337,7 @@ impl fmt::Display for Target {
             Target::IndirectARegDec(reg) => write!(f, "-(%a{})", reg),
             Target::IndirectRegOffset(base_reg, index_reg, offset) => {
                 let index_str = fmt_index_disp(index_reg);
-                write!(f, "({}{}#{:04x})", base_reg, index_str, offset)
+                write!(f, "(#{:04x}, {}{})", offset, base_reg, index_str)
             },
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let index_str = fmt_index_disp(index_reg);
@@ -398,12 +397,14 @@ impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Instruction::ABCD(src, dest) => write!(f, "abcd\t{}, {}", src, dest),
+            Instruction::ADD(src @ Target::Immediate(_), dest, size) => write!(f, "addi{}\t{}, {}", size, src, dest),
             Instruction::ADD(src, dest, size) => write!(f, "add{}\t{}, {}", size, src, dest),
             Instruction::ADDA(target, reg, size) => write!(f, "adda{}\t{}, %a{}", size, target, reg),
             Instruction::ADDX(src, dest, size) => write!(f, "addx{}\t{}, {}", size, src, dest),
+            Instruction::AND(src @ Target::Immediate(_), dest, size) => write!(f, "andi{}\t{}, {}", size, src, dest),
             Instruction::AND(src, dest, size) => write!(f, "and{}\t{}, {}", size, src, dest),
-            Instruction::ANDtoCCR(value) => write!(f, "andb\t{:02x}, %ccr", value),
-            Instruction::ANDtoSR(value) => write!(f, "andw\t{:04x}, %sr", value),
+            Instruction::ANDtoCCR(value) => write!(f, "andib\t#{:#02x}, %ccr", value),
+            Instruction::ANDtoSR(value) => write!(f, "andiw\t#{:#04x}, %sr", value),
             Instruction::ASd(src, dest, size, dir) => write!(f, "as{}{}\t{}, {}", dir, size, src, dest),
 
             Instruction::Bcc(cond, offset) => write!(f, "b{}\t{}", cond, offset),
@@ -425,6 +426,7 @@ impl fmt::Display for Instruction {
 
             Instruction::CHK(target, reg, size) => write!(f, "chk{}\t{}, %d{}", size, target, reg),
             Instruction::CLR(target, size) => write!(f, "clr{}\t{}", size, target),
+            Instruction::CMP(src @ Target::Immediate(_), dest, size) => write!(f, "cmpi{}\t{}, {}", size, src, dest),
             Instruction::CMP(src, dest, size) => write!(f, "cmp{}\t{}, {}", size, src, dest),
             Instruction::CMPA(target, reg, size) => write!(f, "cmpa{}\t{}, %a{}", size, target, reg),
 
@@ -435,9 +437,10 @@ impl fmt::Display for Instruction {
                 write!(f, "div{}l\t{}, {}%d{}", sign, src, opt_reg, destl)
             },
 
+            Instruction::EOR(src @ Target::Immediate(_), dest, size) => write!(f, "eori{}\t{}, {}", size, src, dest),
             Instruction::EOR(src, dest, size) => write!(f, "eor{}\t{}, {}", size, src, dest),
-            Instruction::EORtoCCR(value) => write!(f, "eorb\t{:02x}, %ccr", value),
-            Instruction::EORtoSR(value) => write!(f, "eorw\t{:04x}, %sr", value),
+            Instruction::EORtoCCR(value) => write!(f, "eorib\t#{:#02x}, %ccr", value),
+            Instruction::EORtoSR(value) => write!(f, "eoriw\t#{:#04x}, %sr", value),
             Instruction::EXG(src, dest) => write!(f, "exg\t{}, {}", src, dest),
             Instruction::EXT(reg, from_size, to_size) => write!(f, "ext{}{}\t%d{}", if *from_size == Size::Byte && *to_size == Size::Long { "b" } else { "" }, to_size, reg),
 
@@ -468,7 +471,7 @@ impl fmt::Display for Instruction {
                 Direction::ToTarget => write!(f, "movep{}\t%d{}, ({}, %a{})", size, dreg, areg, offset),
                 Direction::FromTarget => write!(f, "movep{}\t({}, %a{}), %d{}", size, areg, offset, dreg),
             },
-            Instruction::MOVEQ(value, reg) => write!(f, "moveq\t#{:02x}, %d{}", value, reg),
+            Instruction::MOVEQ(value, reg) => write!(f, "moveq\t#{:#02x}, %d{}", value, reg),
             Instruction::MOVEUSP(target, dir) => match dir {
                 Direction::ToTarget => write!(f, "movel\t%usp, {}", target),
                 Direction::FromTarget => write!(f, "movel\t{}, %usp", target),
@@ -486,9 +489,10 @@ impl fmt::Display for Instruction {
             Instruction::NOP => write!(f, "nop"),
             Instruction::NOT(target, size) => write!(f, "not{}\t{}", size, target),
 
+            Instruction::OR(src @ Target::Immediate(_), dest, size) => write!(f, "ori{}\t{}, {}", size, src, dest),
             Instruction::OR(src, dest, size) => write!(f, "or{}\t{}, {}", size, src, dest),
-            Instruction::ORtoCCR(value) => write!(f, "orb\t{:02x}, %ccr", value),
-            Instruction::ORtoSR(value) => write!(f, "orw\t{:04x}, %sr", value),
+            Instruction::ORtoCCR(value) => write!(f, "orib\t#{:#02x}, %ccr", value),
+            Instruction::ORtoSR(value) => write!(f, "oriw\t#{:#04x}, %sr", value),
 
             Instruction::PEA(target) => write!(f, "pea\t{}", target),
 
@@ -502,7 +506,8 @@ impl fmt::Display for Instruction {
 
             Instruction::SBCD(src, dest) => write!(f, "sbcd\t{}, {}", src, dest),
             Instruction::Scc(cond, target) => write!(f, "s{}\t{}", cond, target),
-            Instruction::STOP(value) => write!(f, "stop\t#{:04x}", value),
+            Instruction::STOP(value) => write!(f, "stop\t#{:#04x}", value),
+            Instruction::SUB(src @ Target::Immediate(_), dest, size) => write!(f, "subi{}\t{}, {}", size, src, dest),
             Instruction::SUB(src, dest, size) => write!(f, "sub{}\t{}, {}", size, src, dest),
             Instruction::SUBA(target, reg, size) => write!(f, "suba{}\t{}, %a{}", size, target, reg),
             Instruction::SUBX(src, dest, size) => write!(f, "subx{}\t{}, {}", size, src, dest),

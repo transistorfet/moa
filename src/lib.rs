@@ -8,6 +8,7 @@ pub mod devices;
 pub mod debugger;
 pub mod interrupts;
 pub mod system;
+pub mod parser;
 
 pub mod host;
 pub mod cpus;

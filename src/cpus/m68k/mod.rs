@@ -1,4 +1,5 @@
 
+pub mod assembler;
 pub mod state;
 pub mod decode;
 pub mod execute;
