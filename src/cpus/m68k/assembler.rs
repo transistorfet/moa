@@ -31,6 +31,7 @@ pub enum Disallow {
     NoARegImmediateOrPC         = 0x0702,
     NoRegsPrePostOrImmediate    = 0x011B,
     NoImmediateOrPC             = 0x0700,
+    OnlyAReg                    = 0x07FD,
 }
 
 impl Disallow {
@@ -113,18 +114,8 @@ impl M68kAssembler {
     }
 
     fn parse(&mut self, text: &str) -> Result<Vec<(usize, AssemblyLine)>, Error> {
-        let mut output = vec![];
-        let iter = text.split_terminator("\n");
-
-        for (lineno, line_text) in iter.enumerate() {
-            let mut parser = AssemblyParser::new(lineno, line_text);
-            let parsed_line = parser.parse_line()?;
-            if let Some(line) = parsed_line {
-                output.push((lineno, line));
-            }
-        }
-
-        Ok(output)
+        let mut parser = AssemblyParser::new(text);
+        parser.parse()
     }
 
     fn apply_relocations(&mut self) -> Result<(), Error> {
@@ -212,11 +203,17 @@ impl M68kAssembler {
         let operation_size = get_size_from_mneumonic(mneumonic).ok_or_else(|| Error::new(&format!("error at line {}: expected a size specifier (b/w/l)", lineno)));
         match &mneumonic[..mneumonic.len() - 1] {
 
-            "addi" | "addai" => {
+            "addi" => {
                 self.convert_common_immediate_instruction(lineno, 0x0600, args, operation_size?, Disallow::NoARegImmediateOrPC)?;
             },
-            "add" | "adda" => {
+            "addai" => {
+                self.convert_common_immediate_instruction(lineno, 0x0600, args, operation_size?, Disallow::OnlyAReg)?;
+            },
+            "add" => {
                 self.convert_common_dreg_instruction(lineno, 0xD000, args, operation_size?, Disallow::None)?;
+            },
+            "adda" => {
+                self.convert_common_areg_instruction(lineno, 0xD000, args, operation_size?, Disallow::None)?;
             },
             "andi" => {
                 if !self.check_convert_flags_instruction(lineno, 0x23C, 0x27C, args)? {
@@ -291,11 +288,17 @@ impl M68kAssembler {
                 self.convert_common_shift_instruction(lineno, mneumonic, 0xE010, args, operation_size?)?;
             },
 
-            "subi" | "subai" => {
+            "subi" => {
                 self.convert_common_immediate_instruction(lineno, 0x0400, args, operation_size?, Disallow::NoARegImmediateOrPC)?;
             },
-            "sub" | "suba" => {
+            "subai" => {
+                self.convert_common_immediate_instruction(lineno, 0x0400, args, operation_size?, Disallow::OnlyAReg)?;
+            },
+            "sub" => {
                 self.convert_common_dreg_instruction(lineno, 0x9000, args, operation_size?, Disallow::None)?;
+            },
+            "suba" => {
+                self.convert_common_areg_instruction(lineno, 0x9000, args, operation_size?, Disallow::None)?;
             },
 
             // TODO complete remaining instructions
@@ -315,8 +318,16 @@ impl M68kAssembler {
     }
 
     fn convert_common_dreg_instruction(&mut self, lineno: usize, opcode: u16, args: &[AssemblyOperand], operation_size: Size, disallow: Disallow) -> Result<(), Error> {
+        self.convert_common_reg_instruction(lineno, opcode, args, operation_size, disallow, Disallow::NoAReg)
+    }
+
+    fn convert_common_areg_instruction(&mut self, lineno: usize, opcode: u16, args: &[AssemblyOperand], operation_size: Size, disallow: Disallow) -> Result<(), Error> {
+        self.convert_common_reg_instruction(lineno, opcode, args, operation_size, disallow, Disallow::NoDReg)
+    }
+
+    fn convert_common_reg_instruction(&mut self, lineno: usize, opcode: u16, args: &[AssemblyOperand], operation_size: Size, disallow: Disallow, disallow_reg: Disallow) -> Result<(), Error> {
         expect_args(lineno, args, 2)?;
-        let (direction, reg, operand) = convert_reg_and_other(lineno, args, Disallow::NoAReg)?;
+        let (direction, reg, operand) = convert_reg_and_other(lineno, args, disallow_reg)?;
         let (effective_address, additional_words) = convert_target(lineno, operand, operation_size, disallow)?;
         self.output.push(opcode | encode_size(operation_size) | direction | (reg << 9) | effective_address);
         self.output.extend(additional_words);
@@ -419,12 +430,13 @@ fn convert_target(lineno: usize, operand: &AssemblyOperand, size: Size, disallow
                     if name.starts_with("a") {
                         let reg = expect_reg_num(lineno, name)?;
                         return Ok(((0b100 << 3) | reg, vec![]));
+                    } else if name == "sp" {
+                        return Ok((0b100111, vec![]));
                     }
                 }
             }
             Err(Error::new(&format!("error at line {}: pre-decrement operator can only be used with a single address register", lineno)))
         },
-        // TODO complete remaining types
         _ => Err(Error::new(&format!("not implemented: {:?}", operand))),
     }
 }
@@ -474,7 +486,19 @@ fn convert_indirect(lineno: usize, args: &[AssemblyOperand], disallow: Disallow)
                 Ok(((0b101 << 3) | reg, convert_immediate(lineno, *offset, Size::Word)?))
             }
         },
-        // TODO add the index register mode
+        &[AssemblyOperand::Immediate(offset), AssemblyOperand::Register(name), AssemblyOperand::Register(index)] => {
+            let index_reg = expect_reg_num(lineno, index)?;
+            let da_select = if index.starts_with("a") { 1 << 15 } else { 0 };
+            if name == "pc" {
+                disallow.check(lineno, Disallow::NoPCRelativeIndex)?;
+                Ok((0b111011, vec![da_select | (index_reg << 12) | ((*offset as u16) & 0xff)]))
+            } else {
+                disallow.check(lineno, Disallow::NoIndirectIndexReg)?;
+                let reg = expect_address_reg_num(lineno, name)?;
+                Ok(((0b110 << 3) | reg, vec![da_select | (index_reg << 12) | ((*offset as u16) & 0xff)]))
+            }
+        },
+        // TODO add the MC68020 address options
         _ => {
             Err(Error::new(&format!("error at line {}: expected valid indirect addressing mode, but found {:?}", lineno, args)))
         }
@@ -498,14 +522,14 @@ fn convert_reg_and_other<'a>(lineno: usize, args: &'a [AssemblyOperand], disallo
 fn convert_immediate(lineno: usize, value: usize, size: Size) -> Result<Vec<u16>, Error> {
     match size {
         Size::Byte => {
-            if value < u8::MAX as usize {
+            if value <= u8::MAX as usize {
                 Ok(vec![value as u16])
             } else {
                 Err(Error::new(&format!("error at line {}: immediate number is out of range; must be less than {}, but number is {:?}", lineno, u8::MAX, value)))
             }
         },
         Size::Word => {
-            if value < u16::MAX as usize {
+            if value <= u16::MAX as usize {
                 Ok(vec![value as u16])
             } else {
                 Err(Error::new(&format!("error at line {}: immediate number is out of range; must be less than {}, but number is {:?}", lineno, u16::MAX, value)))

@@ -11,12 +11,17 @@ fn main() {
     let filename = env::args().nth(1).unwrap();
     let text = fs::read_to_string(filename).unwrap();
 
-    let words = assembler.assemble_words(&text).unwrap();
-
-    println!("Output:");
-    for word in words.iter() {
-        print!("{:04x} ", word);
-    }
-    println!("");
+    match assembler.assemble_words(&text) {
+        Ok(words) => {
+            println!("Output:");
+            for word in words.iter() {
+                print!("{:04x} ", word);
+            }
+            println!("");
+        },
+        Err(err) => {
+            println!("{}", err.msg);
+        },
+    };
 }
  

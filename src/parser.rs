@@ -28,16 +28,32 @@ pub struct AssemblyParser<'input> {
 }
 
 impl<'input> AssemblyParser<'input> {
-    pub fn new(lineno: usize, input: &'input str) -> Self {
+    pub fn new(input: &'input str) -> Self {
         Self {
-            lexer: AssemblyLexer::new(lineno, input),
+            lexer: AssemblyLexer::new(input),
         }
     }
 
-    pub fn parse_line(&mut self) -> Result<Option<AssemblyLine>, Error> {
-        let token = match self.lexer.get_next() {
-            Some(token) => token,
-            None => return Ok(None),
+    pub fn parse(&mut self) -> Result<Vec<(usize, AssemblyLine)>, Error> {
+        let mut output = vec![];
+        loop {
+            let lineno = self.lexer.get_next_lineno();
+            if let Some(line) = self.parse_line()? {
+                output.push((lineno, line));
+            } else {
+                break;
+            }
+        }
+        Ok(output)
+    }
+
+    fn parse_line(&mut self) -> Result<Option<AssemblyLine>, Error> {
+        let token = loop {
+            match self.lexer.get_next() {
+                Some(token) if token == "\n" => { },
+                Some(token) => { break token; }
+                None => { return Ok(None); },
+            }
         };
 
         let result = match token.as_str() {
@@ -67,12 +83,21 @@ impl<'input> AssemblyParser<'input> {
 
     fn parse_list_of_words(&mut self) -> Result<Vec<String>, Error> {
         let mut list = vec![];
+
+        // If we're already at the end of the line, then it's an empty list, so return
+        let next = self.lexer.peek();
+        if next.is_none() || next.as_ref().unwrap() == "\n" {
+            return Ok(list);
+        }
+
         loop {
             list.push(self.lexer.expect_next()?);
+
             let next = self.lexer.peek();
-            if next.is_none() || next.unwrap() != "," {
+            if next.is_none() || next.as_ref().unwrap() != "," {
                 return Ok(list);
             }
+            self.lexer.expect_next()?;
         }
     }
 
@@ -81,7 +106,7 @@ impl<'input> AssemblyParser<'input> {
 
         // If we're already at the end of the line, then it's an empty list, so return
         let next = self.lexer.peek();
-        if next.is_none() {
+        if next.is_none() || next.as_ref().unwrap() == "\n" {
             return Ok(list);
         }
 
@@ -160,15 +185,20 @@ pub struct AssemblyLexer<'input> {
 }
 
 impl<'input> AssemblyLexer<'input> {
-    pub fn new(lineno: usize, input: &'input str) -> Self {
+    pub fn new(input: &'input str) -> Self {
         Self {
-            lineno,
+            lineno: 1,
             chars: input.chars().peekable(),
             peeked: None,
         }
     }
 
     pub fn lineno(&self) -> usize {
+        self.lineno
+    }
+
+    pub fn get_next_lineno(&mut self) -> usize {
+        self.eat_whitespace();
         self.lineno
     }
 
@@ -214,20 +244,53 @@ impl<'input> AssemblyLexer<'input> {
     }
 
     pub fn expect_end(&mut self) -> Result<(), Error> {
-        if let Some(token) = self.get_next() {
-            Err(Error::new(&format!("expected end of line at {}: found {:?}", self.lineno, token)))
-        } else {
+        let token = self.get_next();
+        if token.is_none() || token.as_ref().unwrap() == "\n" {
             Ok(())
+        } else {
+            Err(Error::new(&format!("expected end of line at {}: found {:?}", self.lineno, token)))
         }
     }
 
     fn eat_whitespace(&mut self) {
-        while self.chars.next_if(|ch| is_whitespace(*ch)).is_some() { }
-    }
-}
+        while let Some(ch) = self.chars.peek() {
+            if *ch == '|' {
+                self.read_until('\n')
+            } else if *ch == '/' {
+                self.chars.next();
+                if self.chars.next_if(|ch| *ch == '*').is_some() {
+                    loop {
+                        self.read_until('*');
+                        self.chars.next();
+                        if self.chars.next_if(|ch| *ch == '/').is_some() {
+                            break;
+                        }
+                    }
+                } else {
 
-fn is_whitespace(ch: char) -> bool {
-    ch == ' ' || ch == '\n' || ch == '\t'
+                }
+            } else if *ch == ' ' || *ch == '\t' || *ch == '\r' {
+                self.chars.next();
+            } else {
+                if *ch == '\n' {
+                    self.lineno += 1;
+                }
+                break;
+            }
+        }
+    }
+
+    fn read_until(&mut self, test: char) {
+        while let Some(ch) = self.chars.peek() {
+            if *ch == test {
+                return;
+            }
+            if *ch == '\n' {
+                self.lineno += 1;
+            }
+            self.chars.next();
+        }
+    }
 }
 
 fn is_word(ch: char) -> bool {
