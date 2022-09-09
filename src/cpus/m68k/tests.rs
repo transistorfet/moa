@@ -167,11 +167,11 @@ mod decode_tests {
         let mut tests = 0;
         let mut errors = 0;
 
-        //use super::super::testcases::{TimingCase, TIMING_TESTS};
+        use super::super::testcases::{TimingCase, TIMING_TESTS};
         for case in TIMING_TESTS {
             tests += 1;
             let assembly_text = format!("{}", case.ins);
-            print!("Testing assembling of {:?} ", assembly_text);
+            print!("Testing assembling of {:?} from {:?}", assembly_text, case.ins);
 
             let mut assembler = M68kAssembler::new(M68kType::MC68000);
             match assembler.assemble_words(&assembly_text) {

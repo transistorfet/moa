@@ -23,20 +23,20 @@ impl AverageTimer {
     }
 
     pub fn start(&mut self) {
-        self.start = Some(Instant::now())
+        //self.start = Some(Instant::now())
     }
 
     pub fn end(&mut self) {
-        let time = self.start.unwrap().elapsed().as_nanos() as u32;
+        //let time = self.start.unwrap().elapsed().as_nanos() as u32;
 
-        self.events += 1;
-        if time > self.high {
-            self.high = time;
-        }
-        if time < self.low {
-            self.low = time;
-        }
-        self.average = (self.average + time as f32) / 2.0;
+        //self.events += 1;
+        //if time > self.high {
+        //    self.high = time;
+        //}
+        //if time < self.low {
+        //    self.low = time;
+        //}
+        //self.average = (self.average + time as f32) / 2.0;
     }
 }
 

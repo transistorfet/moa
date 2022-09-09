@@ -86,7 +86,8 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     system.add_addressable_device(0x00a00000, coproc_ram)?;
     system.add_addressable_device(0x00a04000, coproc_ym_sound)?;
     system.add_addressable_device(0x00a06000, coproc_register)?;
-    system.add_addressable_device(0x00c00010, coproc_sn_sound)?;
+    //system.add_addressable_device(0x00c00010, coproc_sn_sound)?;
+    system.add_device("sn_sound", coproc_sn_sound.clone())?;
     system.add_device("coproc", wrap_transmutable(coproc))?;
 
 
@@ -97,7 +98,7 @@ pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Resu
     let coproc = genesis::coprocessor::CoprocessorCoordinator::new(reset, bus_request);
     system.add_addressable_device(0x00a11000, wrap_transmutable(coproc)).unwrap();
 
-    let vdp = genesis::ym7101::Ym7101::new(host, interrupt);
+    let vdp = genesis::ym7101::Ym7101::new(host, interrupt, coproc_sn_sound);
     system.break_signal = Some(vdp.frame_complete.clone());
     system.add_peripheral("vdp", 0x00c00000, wrap_transmutable(vdp)).unwrap();
 

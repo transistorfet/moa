@@ -77,7 +77,7 @@ fn initialize_ym(ym_sound: TransmutableBox) -> Result<(), Error> {
     set_register(device, 0, 0x30, 0x71)?;
     set_register(device, 0, 0x34, 0x0D)?;
     set_register(device, 0, 0x38, 0x33)?;
-    set_register(device, 0, 0x3C, 0x01)?;
+    set_register(device, 0, 0x3C, 0x00)?;
 
     set_register(device, 0, 0xA4, 0x22)?;
     set_register(device, 0, 0xA0, 0x69)?;

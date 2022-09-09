@@ -41,7 +41,7 @@ impl ToneGenerator {
     }
 
     pub fn get_sample(&mut self) -> f32 {
-        self.wave.next().unwrap()
+        self.wave.next().unwrap() / self.attenuation
     }
 }
 

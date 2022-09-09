@@ -5,7 +5,7 @@ use crate::error::Error;
 use crate::system::System;
 use crate::memory::dump_slice;
 use crate::signals::{EdgeSignal};
-use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, read_beu16};
+use crate::devices::{Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16};
 use crate::host::traits::{Host, BlitableSurface, HostData};
 use crate::host::gfx::{Frame, FrameSwapper};
 
@@ -678,13 +678,14 @@ impl Steppable for Ym7101 {
 pub struct Ym7101 {
     swapper: FrameSwapper,
     state: Ym7101State,
+    sn_sound: TransmutableBox,
 
     pub external_interrupt: HostData<bool>,
     pub frame_complete: EdgeSignal,
 }
 
 impl Ym7101 {
-    pub fn new<H: Host>(host: &mut H, external_interrupt: HostData<bool>) -> Ym7101 {
+    pub fn new<H: Host>(host: &mut H, external_interrupt: HostData<bool>, sn_sound: TransmutableBox) -> Ym7101 {
         let swapper = FrameSwapper::new(320, 224);
 
         host.add_window(FrameSwapper::to_boxed(swapper.clone())).unwrap();
@@ -692,6 +693,7 @@ impl Ym7101 {
         Ym7101 {
             swapper,
             state: Ym7101State::new(),
+            sn_sound,
             external_interrupt,
             frame_complete: EdgeSignal::new(),
         }
@@ -832,6 +834,10 @@ impl Addressable for Ym7101 {
                     self.state.memory.write_control_port(addr, data)?;
                     self.state.status = (self.state.status & !STATUS_DMA_BUSY) | (if self.state.memory.transfer_dma_busy { STATUS_DMA_BUSY } else { 0 });
                 }
+            },
+
+            0x11 | 0x12 => {
+                self.sn_sound.borrow_mut().as_addressable().unwrap().write(0, data)?;
             },
 
             _ => { warning!("{}: !!! unhandled write to {:x} with {:?}", DEV_NAME, addr, data); },

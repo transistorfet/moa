@@ -19,7 +19,9 @@ impl SineWave {
     }
 
     pub fn set_frequency(&mut self, frequency: f32) {
+        let ratio = self.frequency / frequency;
         self.frequency = frequency;
+        self.position = (self.position as f32 * ratio) as usize;
     }
 
     pub fn reset(&mut self) {
@@ -54,7 +56,9 @@ impl SquareWave {
     }
 
     pub fn set_frequency(&mut self, frequency: f32) {
+        let ratio = self.frequency / frequency;
         self.frequency = frequency;
+        self.position = (self.position as f32 * ratio) as usize;
     }
 
     pub fn reset(&mut self) {
@@ -106,7 +110,9 @@ impl SkewedSquareWave {
     }
 
     pub fn set_frequency(&mut self, frequency: f32) {
+        let ratio = self.frequency / frequency;
         self.frequency = frequency;
+        self.position = (self.position as f32 * ratio) as usize;
     }
 
     pub fn reset(&mut self) {
