@@ -308,7 +308,7 @@ fn run_all_tests(args: Args, level: InfoLevel) {
     }
 
     println!("");
-    println!("passed: {}, failed: {}, total {}%", passed, failed, (passed / (passed + failed)) * 100);
+    println!("passed: {}, failed: {}, total {:.0}%", passed, failed, ((passed as f32) / (passed as f32 + failed as f32)) * 100.0);
     println!("completed in {}m {}s", elapsed_secs / 60, elapsed_secs % 60);
 }
 
