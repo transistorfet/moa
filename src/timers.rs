@@ -47,6 +47,7 @@ impl fmt::Display for AverageTimer {
 }
 
 
+#[derive(Clone)]
 pub struct CpuTimer {
     pub decode: AverageTimer,
     pub execute: AverageTimer,

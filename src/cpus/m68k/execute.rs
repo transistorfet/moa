@@ -31,8 +31,8 @@ impl Steppable for M68k {
         self.step_internal(system)
     }
 
-    fn on_error(&mut self, system: &System) {
-        self.dump_state(system);
+    fn on_error(&mut self, _system: &System) {
+        self.dump_state();
     }
 }
 

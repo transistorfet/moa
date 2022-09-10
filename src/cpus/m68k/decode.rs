@@ -38,6 +38,7 @@ const OPCG_SHIFT: u8 = 0xE;
 const OPCG_FLINE: u8 = 0xF;
 
 
+#[derive(Clone)]
 pub struct M68kDecoder {
     pub cputype: M68kType,
     pub start: u32,

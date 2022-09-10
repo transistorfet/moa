@@ -1,5 +1,5 @@
 
-const HART_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
+const DEFAULT_HART_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
 
 use std::io::prelude::*;
 use std::fmt::Debug;
@@ -23,6 +23,9 @@ use moa::cpus::m68k::state::Status;
 struct Args {
     /// Filter the tests by gzip file name
     filter: Option<String>,
+    /// Only run the one test with the given number
+    #[clap(short, long)]
+    only: Option<String>,
     /// Dump the CPU state when a test fails
     #[clap(short, long)]
     debug: bool,
@@ -32,27 +35,14 @@ struct Args {
     /// Also test instruction timing
     #[clap(short, long)]
     timing: bool,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum InfoLevel {
-    Quiet,
-    Normal,
-    Debug,
+    /// Directory to the test suite to run
+    #[clap(long, default_value = DEFAULT_HART_TESTS)]
+    testsuite: String,
 }
 
 fn main() {
     let args = Args::parse();
-
-    let level = if args.debug {
-        InfoLevel::Debug
-    } else if args.quiet {
-        InfoLevel::Quiet
-    } else {
-        InfoLevel::Normal
-    };
-
-    run_all_tests(args, level);
+    run_all_tests(&args);
 }
 
 
@@ -90,6 +80,44 @@ struct TestCase {
     final_state: TestState,
     length: usize
 }
+
+impl TestState {
+    pub fn dump(&self) {
+        println!("d0: {:08x}    a0: {:08x}", self.d0, self.a0);
+        println!("d1: {:08x}    a1: {:08x}", self.d1, self.a1);
+        println!("d2: {:08x}    a2: {:08x}", self.d2, self.a2);
+        println!("d3: {:08x}    a3: {:08x}", self.d3, self.a3);
+        println!("d4: {:08x}    a4: {:08x}", self.d4, self.a4);
+        println!("d5: {:08x}    a5: {:08x}", self.d5, self.a5);
+        println!("d6: {:08x}    a6: {:08x}", self.d6, self.a6);
+        println!("d7: {:08x}   usp: {:08x}", self.d7, self.usp);
+        println!("pc: {:08x}   ssp: {:08x}", self.pc, self.ssp);
+        println!("sr: {:04x}", self.sr);
+
+        print!("prefetch: ");
+        for word in self.prefetch.iter() {
+            print!("{:04x} ", *word);
+        }
+        println!("");
+
+        println!("ram: ");
+        for (addr, byte) in self.ram.iter() {
+            println!("{:08x} {:02x} ", *addr, *byte);
+        }
+    }
+}
+
+impl TestCase {
+    pub fn dump(&self) {
+        println!("{}", self.name);
+        println!("initial:");
+        self.initial_state.dump();
+        println!("final:");
+        self.final_state.dump();
+        println!("cycles: {}", self.length);
+    }
+}
+
 
 fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, System), Error> {
     let mut system = System::new();
@@ -205,17 +233,21 @@ fn step_cpu_and_assert(cpu: &mut M68k, system: &System, case: &TestCase, test_ti
     Ok(())
 }
 
-fn run_test(case: &TestCase, level: InfoLevel, test_timing: bool) -> Result<(), Error> {
-    let (mut cpu, system) = init_execute_test(M68kType::MC68010, &case.initial_state).unwrap();
+fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
+    let (mut cpu, system) = init_execute_test(M68kType::MC68000, &case.initial_state).unwrap();
+    let mut initial_cpu = cpu.clone();
 
-    let result = step_cpu_and_assert(&mut cpu, &system, case, test_timing);
+    let result = step_cpu_and_assert(&mut cpu, &system, case, args.timing);
 
     match result {
         Ok(()) => Ok(()),
         Err(err) => {
-            if level > InfoLevel::Quiet {
-                if level == InfoLevel::Debug {
-                    cpu.dump_state(&system);
+            if !args.quiet {
+                if args.debug {
+                    case.dump();
+                    println!("");
+                    initial_cpu.dump_state();
+                    cpu.dump_state();
                 }
                 println!("FAILED: {}",  err.msg);
             }
@@ -224,24 +256,37 @@ fn run_test(case: &TestCase, level: InfoLevel, test_timing: bool) -> Result<(), 
     }
 }
 
-fn test_json_file(path: PathBuf, level: InfoLevel, test_timing: bool) -> (usize, usize, String) {
-    let file = File::open(&path).unwrap();
-    let mut decoder = GzDecoder::new(file);
-    let mut data = String::new();
-    decoder.read_to_string(&mut data).unwrap();
-    let cases: Vec<TestCase> = serde_json::from_str(&data).unwrap();
+fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
+    let extension = path.extension().unwrap();
+
+    let cases: Vec<TestCase> = if extension == "gz" {
+        let file = File::open(&path).unwrap();
+        let mut decoder = GzDecoder::new(file);
+        let mut data = String::new();
+        decoder.read_to_string(&mut data).unwrap();
+        serde_json::from_str(&data).unwrap()
+    } else {
+        let data = fs::read(&path).unwrap();
+        serde_json::from_slice(&data).unwrap()
+    };
 
     let mut passed = 0;
     let mut failed = 0;
     for case in cases {
-        if level > InfoLevel::Quiet {
+        if let Some(only) = args.only.as_ref() {
+            if !case.name.ends_with(only) {
+                continue;
+            }
+        }
+
+        if !args.quiet {
             println!("Running test {}", case.name);
         }
-        let result = run_test(&case, level, test_timing);
+        let result = run_test(&case, args);
 
         if let Err(err) = result {
             failed += 1;
-            if level > InfoLevel::Quiet {
+            if !args.quiet {
                 println!("FAILED: {:?}",  err);
             }
         } else {
@@ -260,13 +305,13 @@ fn test_json_file(path: PathBuf, level: InfoLevel, test_timing: bool) -> (usize,
 }
 
 
-fn run_all_tests(args: Args, level: InfoLevel) {
+fn run_all_tests(args: &Args) {
     let mut passed = 0;
     let mut failed = 0;
     let mut messages = vec![];
 
 
-    let mut tests: Vec<PathBuf> = fs::read_dir(HART_TESTS)
+    let mut tests: Vec<PathBuf> = fs::read_dir(&args.testsuite)
         .unwrap()
         .map(|dirent| dirent.unwrap().path())
         .collect();
@@ -275,7 +320,8 @@ fn run_all_tests(args: Args, level: InfoLevel) {
     let start = SystemTime::now();
     for path in tests {
         // Only test gzip files (the repo has .md files as well)
-        if path.extension().unwrap() != "gz" {
+        let extension = path.extension().unwrap();
+        if extension != "json" && extension != "gz" {
             continue;
         }
 
@@ -287,10 +333,10 @@ fn run_all_tests(args: Args, level: InfoLevel) {
         }
 
         // Run every test in the file
-        let (test_passed, test_failed, message) = test_json_file(path, level, args.timing);
+        let (test_passed, test_failed, message) = test_json_file(path, args);
 
         // In quiet mode, print each summary as it's received to give a progress update
-        if level == InfoLevel::Quiet {
+        if args.quiet {
             println!("{}", message);
         }
 
@@ -301,7 +347,7 @@ fn run_all_tests(args: Args, level: InfoLevel) {
     let elapsed_secs = start.elapsed().unwrap().as_secs();
 
     // Print the stored summary if not in quite mode
-    if level > InfoLevel::Quiet {
+    if !args.quiet {
         for message in messages {
             println!("{}", message);
         }

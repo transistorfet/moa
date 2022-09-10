@@ -6,6 +6,7 @@ use crate::devices::{Address, Addressable, Debuggable};
 use super::state::M68k;
 use super::decode::M68kDecoder;
 
+#[derive(Clone)]
 pub struct StackTracer {
     pub calls: Vec<u32>,
 }
@@ -27,6 +28,7 @@ impl StackTracer {
 }
 
 
+#[derive(Clone)]
 pub struct M68kDebugger {
     pub enabled: bool,
     pub breakpoints: Vec<u32>,
@@ -68,10 +70,10 @@ impl Debuggable for M68k {
         }
     }
 
-    fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
+    fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
         self.decoder.dump_decoded(&mut self.port);
-        self.dump_state(system);
+        self.dump_state();
         Ok(())
     }
 

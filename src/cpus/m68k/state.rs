@@ -1,5 +1,4 @@
 
-use crate::system::System;
 use crate::devices::Address;
 use crate::timers::CpuTimer;
 use crate::memory::BusPort;
@@ -121,6 +120,7 @@ impl M68kState {
     }
 }
 
+#[derive(Clone)]
 pub struct M68k {
     pub cputype: M68kType,
     pub frequency: u32,
@@ -154,7 +154,7 @@ impl M68k {
         self.debugger = M68kDebugger::new();
     }
 
-    pub fn dump_state(&mut self, _system: &System) {
+    pub fn dump_state(&mut self) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#010x}", self.state.pc);
         println!("SR: {:#06x}", self.state.sr);

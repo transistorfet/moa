@@ -111,12 +111,14 @@ impl Transmutable for AddressAdapter {
 }
 
 
+#[derive(Clone)]
 pub struct Block {
     pub base: Address,
     pub length: usize,
     pub dev: TransmutableBox,
 }
 
+#[derive(Clone)]
 pub struct Bus {
     blocks: Vec<Block>,
     ignore_unmapped: bool,
@@ -238,6 +240,7 @@ impl Addressable for Bus {
     }
 }
 
+#[derive(Clone)]
 pub struct BusPort {
     offset: Address,
     address_mask: Address,
