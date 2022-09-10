@@ -1,0 +1,12 @@
+[package]
+name = "harte_tests"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+moa = { path = "../../" }
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+flate2 = "1.0"
+clap = { version = "3.2.20", features = ["derive"] }

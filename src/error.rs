@@ -1,6 +1,7 @@
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ErrorType {
+    Assertion,
     Emulator,
     Processor,
     Breakpoint,
@@ -33,6 +34,14 @@ impl Error {
     pub fn breakpoint(msg: &str) -> Error {
         Error {
             err: ErrorType::Breakpoint,
+            native: 0,
+            msg: msg.to_string(),
+        }
+    }
+
+    pub fn assertion(msg: &str) -> Error {
+        Error {
+            err: ErrorType::Assertion,
             native: 0,
             msg: msg.to_string(),
         }
