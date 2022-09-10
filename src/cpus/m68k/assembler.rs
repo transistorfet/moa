@@ -505,7 +505,7 @@ fn convert_indirect(lineno: usize, args: &[AssemblyOperand], disallow: Disallow)
     }
 }
 
-fn convert_reg_and_other<'a>(lineno: usize, args: &'a [AssemblyOperand], disallow: Disallow) -> Result<(u16, u16, &'a AssemblyOperand), Error> {
+fn convert_reg_and_other<'a>(lineno: usize, args: &'a [AssemblyOperand], _disallow: Disallow) -> Result<(u16, u16, &'a AssemblyOperand), Error> {
     match &args {
         &[AssemblyOperand::Register(reg), effective_address] => {
             Ok(((0b1 << 8), expect_reg_num(lineno, &reg)?, effective_address))
@@ -600,6 +600,7 @@ fn encode_size_for_move(size: Size) -> u16 {
     }
 }
 
+#[allow(dead_code)]
 fn encode_size_bit(size: Size) -> Result<u16, Error> {
     match size {
         Size::Word => Ok(0b01 << 6),

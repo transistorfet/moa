@@ -825,14 +825,14 @@ impl M68k {
         for i in 0..8 {
             if (mask & 0x01) != 0 {
                 self.state.d_reg[i] = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
-                addr += size.in_bytes();
+                (addr, _) = overflowing_add_sized(addr, size.in_bytes(), Size::Long);
             }
             mask >>= 1;
         }
         for i in 0..8 {
             if (mask & 0x01) != 0 {
                 *self.get_a_reg_mut(i) = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
-                addr += size.in_bytes();
+                (addr, _) = overflowing_add_sized(addr, size.in_bytes(), Size::Long);
             }
             mask >>= 1;
         }
@@ -1058,7 +1058,7 @@ impl M68k {
     fn get_x_reg_value(&self, xreg: XRegister) -> u32 {
         match xreg {
             XRegister::DReg(reg) => self.state.d_reg[reg as usize],
-            XRegister::AReg(reg) => self.state.a_reg[reg as usize],
+            XRegister::AReg(reg) => self.get_a_reg(reg),
         }
     }
 
@@ -1089,6 +1089,15 @@ impl M68k {
     #[inline(always)]
     fn get_stack_pointer_mut(&mut self) -> &mut u32 {
         if self.is_supervisor() { &mut self.state.ssp } else { &mut self.state.usp }
+    }
+
+    #[inline(always)]
+    fn get_a_reg(&self, reg: Register) -> u32 {
+        if reg == 7 {
+            if self.is_supervisor() { self.state.ssp } else { self.state.usp }
+        } else {
+            self.state.a_reg[reg as usize]
+        }
     }
 
     #[inline(always)]

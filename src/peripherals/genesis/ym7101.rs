@@ -1,6 +1,4 @@
 
-use std::iter::Iterator;
-
 use crate::error::Error;
 use crate::system::System;
 use crate::memory::dump_slice;
@@ -191,7 +189,7 @@ impl Ym7101Memory {
         Ok(())
     }
 
-    pub fn write_data_port(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    pub fn write_data_port(&mut self, data: &[u8]) -> Result<(), Error> {
         if (self.transfer_type & 0x30) == 0x20 {
             self.ctrl_port_buffer = None;
             self.transfer_fill_word = if data.len() >= 2 { read_beu16(data) } else { data[0] as u16 };
@@ -211,7 +209,7 @@ impl Ym7101Memory {
         Ok(())
     }
 
-    pub fn write_control_port(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    pub fn write_control_port(&mut self, data: &[u8]) -> Result<(), Error> {
         let value = read_beu16(data);
         match (data.len(), self.ctrl_port_buffer) {
             (2, None) => { self.ctrl_port_buffer = Some(value) },
@@ -814,7 +812,7 @@ impl Addressable for Ym7101 {
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         match addr {
             // Write to Data Port
-            0x00 | 0x02 => self.state.memory.write_data_port(addr, data)?,
+            0x00 | 0x02 => self.state.memory.write_data_port(data)?,
 
             // Write to Control Port
             0x04 | 0x06 => {
@@ -831,7 +829,7 @@ impl Addressable for Ym7101 {
                         self.set_register(value);
                     }
                 } else {
-                    self.state.memory.write_control_port(addr, data)?;
+                    self.state.memory.write_control_port(data)?;
                     self.state.status = (self.state.status & !STATUS_DMA_BUSY) | (if self.state.memory.transfer_dma_busy { STATUS_DMA_BUSY } else { 0 });
                 }
             },

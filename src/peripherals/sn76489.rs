@@ -70,7 +70,7 @@ impl NoiseGenerator {
         info!("set attenuation to {} {}", self.attenuation, self.on);
     }
 
-    pub fn set_control(&mut self, bits: u8) {
+    pub fn set_control(&mut self, _bits: u8) {
         //let frequency = 3_579_545.0 / (count as f32 * 32.0);
         //self.wave.set_frequency(frequency);
         //debug!("set frequency to {}", frequency);

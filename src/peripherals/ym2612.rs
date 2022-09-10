@@ -48,7 +48,7 @@ impl Operator {
         self.wave.reset();
     }
 
-    pub fn set_multiplier(&mut self, frequency: f32, multiplier: f32) {
+    pub fn set_multiplier(&mut self, _frequency: f32, multiplier: f32) {
         self.multiplier = multiplier;
     }
 

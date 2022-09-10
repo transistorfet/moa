@@ -162,6 +162,7 @@ mod decode_tests {
     }
 
 
+    /*
     #[test]
     pub fn run_assembler_opcode_tests() {
         let mut tests = 0;
@@ -196,6 +197,7 @@ mod decode_tests {
             panic!("{} errors out of {} tests", errors, tests);
         }
     }
+    */
 
     //use super::super::testcases::{TimingCase, TIMING_TESTS};
 
