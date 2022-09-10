@@ -3,6 +3,7 @@ use crate::system::System;
 use crate::error::{ErrorType, Error};
 use crate::devices::{ClockElapsed, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
+use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority};
 use super::instructions::{
     Register,
     Size,
@@ -23,8 +24,11 @@ use super::instructions::{
 
 const DEV_NAME: &'static str = "m68k-cpu";
 
-use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority};
-
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum Used {
+    Once,
+    Twice,
+}
 
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
@@ -171,46 +175,46 @@ impl M68k {
         self.timer.execute.start();
         match self.decoder.instruction {
             Instruction::ABCD(src, dest) => {
-                let value = convert_from_bcd(self.get_target_value(src, Size::Byte)? as u8);
-                let existing = convert_from_bcd(self.get_target_value(dest, Size::Byte)? as u8);
+                let value = convert_from_bcd(self.get_target_value(src, Size::Byte, Used::Once)? as u8);
+                let existing = convert_from_bcd(self.get_target_value(dest, Size::Byte, Used::Twice)? as u8);
                 let result = existing.wrapping_add(value).wrapping_add(self.get_flag(Flags::Extend) as u8);
                 let carry = result > 99;
-                self.set_target_value(dest, convert_to_bcd(result) as u32, Size::Byte)?;
+                self.set_target_value(dest, convert_to_bcd(result) as u32, Size::Byte, Used::Twice)?;
                 self.set_flag(Flags::Zero, result == 0);
                 self.set_flag(Flags::Carry, carry);
                 self.set_flag(Flags::Extend, carry);
             },
             Instruction::ADD(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
-                let existing = self.get_target_value(dest, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
+                let existing = self.get_target_value(dest, size, Used::Twice)?;
                 let (result, carry) = overflowing_add_sized(existing, value, size);
                 let overflow = get_add_overflow(existing, value, result, size);
                 self.set_compare_flags(result, size, carry, overflow);
                 self.set_flag(Flags::Extend, carry);
-                self.set_target_value(dest, result, size)?;
+                self.set_target_value(dest, result, size, Used::Twice)?;
             },
             Instruction::ADDA(src, dest, size) => {
-                let value = sign_extend_to_long(self.get_target_value(src, size)?, size) as u32;
+                let value = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
                 let existing = *self.get_a_reg_mut(dest);
                 let (result, _) = overflowing_add_sized(existing, value, Size::Long);
                 *self.get_a_reg_mut(dest) = result;
             },
             Instruction::ADDX(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
-                let existing = self.get_target_value(dest, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
+                let existing = self.get_target_value(dest, size, Used::Twice)?;
                 let extend = self.get_flag(Flags::Extend) as u32;
                 let (result1, carry1) = overflowing_add_sized(existing, value, size);
                 let (result2, carry2) = overflowing_add_sized(result1, extend, size);
                 let overflow = get_add_overflow(existing, value, result2, size);
                 self.set_compare_flags(result2, size, carry1 || carry2, overflow);
                 self.set_flag(Flags::Extend, carry1 || carry2);
-                self.set_target_value(dest, result2, size)?;
+                self.set_target_value(dest, result2, size, Used::Twice)?;
             },
             Instruction::AND(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
-                let existing = self.get_target_value(dest, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
+                let existing = self.get_target_value(dest, size, Used::Twice)?;
                 let result = get_value_sized(existing & value, size);
-                self.set_target_value(dest, result, size)?;
+                self.set_target_value(dest, result, size, Used::Twice)?;
                 self.set_logic_flags(result, size);
             },
             Instruction::ANDtoCCR(value) => {
@@ -221,13 +225,13 @@ impl M68k {
                 self.state.sr = self.state.sr & value;
             },
             Instruction::ASd(count, target, size, shift_dir) => {
-                let count = self.get_target_value(count, size)? % 64;
-                let mut pair = (self.get_target_value(target, size)?, false);
+                let count = self.get_target_value(count, size, Used::Once)? % 64;
+                let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
                 let original = pair.0;
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, true);
                 }
-                self.set_target_value(target, pair.0, size)?;
+                self.set_target_value(target, pair.0, size, Used::Twice)?;
 
                 // Adjust flags
                 self.set_flag(Flags::Extend, false);
@@ -256,51 +260,51 @@ impl M68k {
                 self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
             },
             Instruction::BCHG(bitnum, target, size) => {
-                let bitnum = self.get_target_value(bitnum, Size::Byte)?;
-                let mut value = self.get_target_value(target, size)?;
+                let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
+                let mut value = self.get_target_value(target, size, Used::Twice)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = (value & !mask) | (!(value & mask) & mask);
-                self.set_target_value(target, value, size)?;
+                self.set_target_value(target, value, size, Used::Twice)?;
             },
             Instruction::BCLR(bitnum, target, size) => {
-                let bitnum = self.get_target_value(bitnum, Size::Byte)?;
-                let mut value = self.get_target_value(target, size)?;
+                let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
+                let mut value = self.get_target_value(target, size, Used::Twice)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = value & !mask;
-                self.set_target_value(target, value, size)?;
+                self.set_target_value(target, value, size, Used::Twice)?;
             },
             Instruction::BSET(bitnum, target, size) => {
-                let bitnum = self.get_target_value(bitnum, Size::Byte)?;
-                let mut value = self.get_target_value(target, size)?;
+                let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
+                let mut value = self.get_target_value(target, size, Used::Twice)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
                 value = value | mask;
-                self.set_target_value(target, value, size)?;
+                self.set_target_value(target, value, size, Used::Twice)?;
             },
             Instruction::BTST(bitnum, target, size) => {
-                let bitnum = self.get_target_value(bitnum, Size::Byte)?;
-                let value = self.get_target_value(target, size)?;
+                let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
+                let value = self.get_target_value(target, size, Used::Once)?;
                 self.set_bit_test_flags(value, bitnum, size);
             },
             Instruction::BFCHG(target, offset, width) => {
                 let (offset, width) = self.get_bit_field_args(offset, width);
                 let mask = get_bit_field_mask(offset, width);
-                let value = self.get_target_value(target, Size::Long)?;
+                let value = self.get_target_value(target, Size::Long, Used::Twice)?;
                 let field = value & mask;
                 self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
-                self.set_target_value(target, (value & !mask) | (!field & mask), Size::Long)?;
+                self.set_target_value(target, (value & !mask) | (!field & mask), Size::Long, Used::Twice)?;
             },
             Instruction::BFCLR(target, offset, width) => {
                 let (offset, width) = self.get_bit_field_args(offset, width);
                 let mask = get_bit_field_mask(offset, width);
-                let value = self.get_target_value(target, Size::Long)?;
+                let value = self.get_target_value(target, Size::Long, Used::Twice)?;
                 let field = value & mask;
                 self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
-                self.set_target_value(target, value & !mask, Size::Long)?;
+                self.set_target_value(target, value & !mask, Size::Long, Used::Twice)?;
             },
             Instruction::BFEXTS(target, offset, width, reg) => {
                 let (offset, width) = self.get_bit_field_args(offset, width);
                 let mask = get_bit_field_mask(offset, width);
-                let value = self.get_target_value(target, Size::Long)?;
+                let value = self.get_target_value(target, Size::Long, Used::Once)?;
                 let field = value & mask;
                 self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
 
@@ -314,7 +318,7 @@ impl M68k {
             Instruction::BFEXTU(target, offset, width, reg) => {
                 let (offset, width) = self.get_bit_field_args(offset, width);
                 let mask = get_bit_field_mask(offset, width);
-                let value = self.get_target_value(target, Size::Long)?;
+                let value = self.get_target_value(target, Size::Long, Used::Once)?;
                 let field = value & mask;
                 self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
                 self.state.d_reg[reg as usize] = field >> (32 - offset - width);
@@ -326,15 +330,15 @@ impl M68k {
             Instruction::BFSET(target, offset, width) => {
                 let (offset, width) = self.get_bit_field_args(offset, width);
                 let mask = get_bit_field_mask(offset, width);
-                let value = self.get_target_value(target, Size::Long)?;
+                let value = self.get_target_value(target, Size::Long, Used::Twice)?;
                 let field = value & mask;
                 self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
-                self.set_target_value(target, value | mask, Size::Long)?;
+                self.set_target_value(target, value | mask, Size::Long, Used::Twice)?;
             },
             Instruction::BFTST(target, offset, width) => {
                 let (offset, width) = self.get_bit_field_args(offset, width);
                 let mask = get_bit_field_mask(offset, width);
-                let value = self.get_target_value(target, Size::Long)?;
+                let value = self.get_target_value(target, Size::Long, Used::Once)?;
                 let field = value & mask;
                 self.set_bit_field_test_flags(field, get_bit_field_msb(offset));
             },
@@ -343,19 +347,19 @@ impl M68k {
             //Instruction::CHK(Target, Size) => {
             //},
             Instruction::CLR(target, size) => {
-                self.set_target_value(target, 0, size)?;
+                self.set_target_value(target, 0, size, Used::Once)?;
                 // Clear flags except Zero flag
                 self.state.sr = (self.state.sr & 0xFFF0) | (Flags::Zero as u16);
             },
             Instruction::CMP(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
-                let existing = self.get_target_value(dest, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
+                let existing = self.get_target_value(dest, size, Used::Once)?;
                 let (result, carry) = overflowing_sub_sized(existing, value, size);
                 let overflow = get_sub_overflow(existing, value, result, size);
                 self.set_compare_flags(result, size, carry, overflow);
             },
             Instruction::CMPA(src, reg, size) => {
-                let value = sign_extend_to_long(self.get_target_value(src, size)?, size) as u32;
+                let value = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
                 let existing = *self.get_a_reg_mut(reg);
                 let (result, carry) = overflowing_sub_sized(existing, value, Size::Long);
                 let overflow = get_sub_overflow(existing, value, result, size);
@@ -372,7 +376,7 @@ impl M68k {
                 }
             },
             Instruction::DIVW(src, dest, sign) => {
-                let value = self.get_target_value(src, Size::Word)?;
+                let value = self.get_target_value(src, Size::Word, Used::Once)?;
                 if value == 0 {
                     self.exception(Exceptions::ZeroDivide as u8, false)?;
                     return Ok(());
@@ -391,7 +395,7 @@ impl M68k {
                 self.state.d_reg[dest as usize] = (remainder << 16) | (0xFFFF & quotient);
             },
             Instruction::DIVL(src, dest_h, dest_l, sign) => {
-                let value = self.get_target_value(src, Size::Long)?;
+                let value = self.get_target_value(src, Size::Long, Used::Once)?;
                 if value == 0 {
                     self.exception(Exceptions::ZeroDivide as u8, false)?;
                     return Ok(());
@@ -422,10 +426,10 @@ impl M68k {
                 self.state.d_reg[dest_l as usize] = quotient as u32;
             },
             Instruction::EOR(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
-                let existing = self.get_target_value(dest, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
+                let existing = self.get_target_value(dest, size, Used::Twice)?;
                 let result = get_value_sized(existing ^ value, size);
-                self.set_target_value(dest, result, size)?;
+                self.set_target_value(dest, result, size, Used::Twice)?;
                 self.set_logic_flags(result, size);
             },
             Instruction::EORtoCCR(value) => {
@@ -436,10 +440,10 @@ impl M68k {
                 self.state.sr = self.state.sr ^ value;
             },
             Instruction::EXG(target1, target2) => {
-                let value1 = self.get_target_value(target1, Size::Long)?;
-                let value2 = self.get_target_value(target2, Size::Long)?;
-                self.set_target_value(target1, value2, Size::Long)?;
-                self.set_target_value(target2, value1, Size::Long)?;
+                let value1 = self.get_target_value(target1, Size::Long, Used::Twice)?;
+                let value2 = self.get_target_value(target2, Size::Long, Used::Twice)?;
+                self.set_target_value(target1, value2, Size::Long, Used::Twice)?;
+                self.set_target_value(target2, value1, Size::Long, Used::Twice)?;
             },
             Instruction::EXT(reg, from_size, to_size) => {
                 let input = get_value_sized(self.state.d_reg[reg as usize], from_size);
@@ -477,12 +481,12 @@ impl M68k {
                 *self.get_stack_pointer_mut() = sp.wrapping_add((offset as i32) as u32);
             },
             Instruction::LSd(count, target, size, shift_dir) => {
-                let count = self.get_target_value(count, size)? % 64;
-                let mut pair = (self.get_target_value(target, size)?, false);
+                let count = self.get_target_value(count, size, Used::Once)? % 64;
+                let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, false);
                 }
-                self.set_target_value(target, pair.0, size)?;
+                self.set_target_value(target, pair.0, size, Used::Twice)?;
 
                 // Adjust flags
                 self.set_flag(Flags::Extend, false);
@@ -493,40 +497,40 @@ impl M68k {
                 }
             },
             Instruction::MOVE(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
                 self.set_logic_flags(value, size);
-                self.set_target_value(dest, value, size)?;
+                self.set_target_value(dest, value, size, Used::Once)?;
             },
             Instruction::MOVEA(src, reg, size) => {
-                let value = self.get_target_value(src, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
                 let value = sign_extend_to_long(value, size) as u32;
                 let addr = self.get_a_reg_mut(reg);
                 *addr = value;
             },
             Instruction::MOVEfromSR(target) => {
                 self.require_supervisor()?;
-                self.set_target_value(target, self.state.sr as u32, Size::Word)?;
+                self.set_target_value(target, self.state.sr as u32, Size::Word, Used::Once)?;
             },
             Instruction::MOVEtoSR(target) => {
                 self.require_supervisor()?;
-                self.state.sr = self.get_target_value(target, Size::Word)? as u16;
+                self.state.sr = self.get_target_value(target, Size::Word, Used::Once)? as u16;
             },
             Instruction::MOVEtoCCR(target) => {
-                let value = self.get_target_value(target, Size::Word)? as u16;
+                let value = self.get_target_value(target, Size::Word, Used::Once)? as u16;
                 self.state.sr = (self.state.sr & 0xFF00) | (value & 0x00FF);
             },
             Instruction::MOVEC(target, control_reg, dir) => {
                 self.require_supervisor()?;
                 match dir {
                     Direction::FromTarget => {
-                        let value = self.get_target_value(target, Size::Long)?;
+                        let value = self.get_target_value(target, Size::Long, Used::Once)?;
                         let addr = self.get_control_reg_mut(control_reg);
                         *addr = value;
                     },
                     Direction::ToTarget => {
                         let addr = self.get_control_reg_mut(control_reg);
                         let value = *addr;
-                        self.set_target_value(target, value, Size::Long)?;
+                        self.set_target_value(target, value, Size::Long, Used::Once)?;
                     },
                 }
             },
@@ -565,12 +569,12 @@ impl M68k {
             Instruction::MOVEUSP(target, dir) => {
                 self.require_supervisor()?;
                 match dir {
-                    Direction::ToTarget => self.set_target_value(target, self.state.usp, Size::Long)?,
-                    Direction::FromTarget => { self.state.usp = self.get_target_value(target, Size::Long)?; },
+                    Direction::ToTarget => self.set_target_value(target, self.state.usp, Size::Long, Used::Once)?,
+                    Direction::FromTarget => { self.state.usp = self.get_target_value(target, Size::Long, Used::Once)?; },
                 }
             },
             Instruction::MULW(src, dest, sign) => {
-                let value = self.get_target_value(src, Size::Word)?;
+                let value = self.get_target_value(src, Size::Word, Used::Once)?;
                 let existing = get_value_sized(self.state.d_reg[dest as usize], Size::Word);
                 let result = match sign {
                     Sign::Signed => ((((existing as u16) as i16) as i64) * (((value as u16) as i16) as i64)) as u64,
@@ -581,7 +585,7 @@ impl M68k {
                 self.state.d_reg[dest as usize] = result as u32;
             },
             Instruction::MULL(src, dest_h, dest_l, sign) => {
-                let value = self.get_target_value(src, Size::Long)?;
+                let value = self.get_target_value(src, Size::Long, Used::Once)?;
                 let existing = get_value_sized(self.state.d_reg[dest_l as usize], Size::Long);
                 let result = match sign {
                     Sign::Signed => (((existing as i32) as i64) * ((value as i32) as i64)) as u64,
@@ -597,10 +601,10 @@ impl M68k {
             //Instruction::NBCD(Target) => {
             //},
             Instruction::NEG(target, size) => {
-                let original = self.get_target_value(target, size)?;
+                let original = self.get_target_value(target, size, Used::Twice)?;
                 let (result, overflow) = overflowing_sub_signed_sized(0, original, size);
                 let carry = result != 0;
-                self.set_target_value(target, result, size)?;
+                self.set_target_value(target, result, size, Used::Twice)?;
                 self.set_compare_flags(result, size, carry, overflow);
                 self.set_flag(Flags::Extend, carry);
             },
@@ -608,16 +612,16 @@ impl M68k {
             //},
             Instruction::NOP => { },
             Instruction::NOT(target, size) => {
-                let mut value = self.get_target_value(target, size)?;
+                let mut value = self.get_target_value(target, size, Used::Twice)?;
                 value = get_value_sized(!value, size);
-                self.set_target_value(target, value, size)?;
+                self.set_target_value(target, value, size, Used::Twice)?;
                 self.set_logic_flags(value, size);
             },
             Instruction::OR(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
-                let existing = self.get_target_value(dest, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
+                let existing = self.get_target_value(dest, size, Used::Twice)?;
                 let result = get_value_sized(existing | value, size);
-                self.set_target_value(dest, result, size)?;
+                self.set_target_value(dest, result, size, Used::Twice)?;
                 self.set_logic_flags(result, size);
             },
             Instruction::ORtoCCR(value) => {
@@ -635,12 +639,12 @@ impl M68k {
             //    self.require_supervisor()?;
             //},
             Instruction::ROd(count, target, size, shift_dir) => {
-                let count = self.get_target_value(count, size)? % 64;
-                let mut pair = (self.get_target_value(target, size)?, false);
+                let count = self.get_target_value(count, size, Used::Once)? % 64;
+                let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
                 for _ in 0..count {
                     pair = rotate_operation(pair.0, size, shift_dir, None);
                 }
-                self.set_target_value(target, pair.0, size)?;
+                self.set_target_value(target, pair.0, size, Used::Twice)?;
 
                 // Adjust flags
                 self.set_logic_flags(pair.0, size);
@@ -649,13 +653,13 @@ impl M68k {
                 }
             },
             Instruction::ROXd(count, target, size, shift_dir) => {
-                let count = self.get_target_value(count, size)? % 64;
-                let mut pair = (self.get_target_value(target, size)?, false);
+                let count = self.get_target_value(count, size, Used::Once)? % 64;
+                let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
                 for _ in 0..count {
                     pair = rotate_operation(pair.0, size, shift_dir, Some(self.get_flag(Flags::Extend)));
                     self.set_flag(Flags::Extend, pair.1);
                 }
-                self.set_target_value(target, pair.0, size)?;
+                self.set_target_value(target, pair.0, size, Used::Twice)?;
 
                 // Adjust flags
                 self.set_logic_flags(pair.0, size);
@@ -682,9 +686,9 @@ impl M68k {
             Instruction::Scc(cond, target) => {
                 let condition_true = self.get_current_condition(cond);
                 if condition_true {
-                    self.set_target_value(target, 0xFF, Size::Byte)?;
+                    self.set_target_value(target, 0xFF, Size::Byte, Used::Once)?;
                 } else {
-                    self.set_target_value(target, 0x00, Size::Byte)?;
+                    self.set_target_value(target, 0x00, Size::Byte, Used::Once)?;
                 }
             },
             Instruction::STOP(flags) => {
@@ -693,55 +697,55 @@ impl M68k {
                 self.state.status = Status::Stopped;
             },
             Instruction::SBCD(src, dest) => {
-                let value = convert_from_bcd(self.get_target_value(src, Size::Byte)? as u8);
-                let existing = convert_from_bcd(self.get_target_value(dest, Size::Byte)? as u8);
+                let value = convert_from_bcd(self.get_target_value(src, Size::Byte, Used::Once)? as u8);
+                let existing = convert_from_bcd(self.get_target_value(dest, Size::Byte, Used::Twice)? as u8);
                 let result = existing.wrapping_sub(value).wrapping_sub(self.get_flag(Flags::Extend) as u8);
                 let borrow = existing < value;
-                self.set_target_value(dest, convert_to_bcd(result) as u32, Size::Byte)?;
+                self.set_target_value(dest, convert_to_bcd(result) as u32, Size::Byte, Used::Twice)?;
                 self.set_flag(Flags::Zero, result == 0);
                 self.set_flag(Flags::Carry, borrow);
                 self.set_flag(Flags::Extend, borrow);
             },
             Instruction::SUB(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
-                let existing = self.get_target_value(dest, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
+                let existing = self.get_target_value(dest, size, Used::Twice)?;
                 let (result, carry) = overflowing_sub_sized(existing, value, size);
                 let overflow = get_sub_overflow(existing, value, result, size);
                 self.set_compare_flags(result, size, carry, overflow);
                 self.set_flag(Flags::Extend, carry);
-                self.set_target_value(dest, result, size)?;
+                self.set_target_value(dest, result, size, Used::Twice)?;
             },
             Instruction::SUBA(src, dest, size) => {
-                let value = sign_extend_to_long(self.get_target_value(src, size)?, size) as u32;
+                let value = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
                 let existing = *self.get_a_reg_mut(dest);
                 let (result, _) = overflowing_sub_sized(existing, value, Size::Long);
                 *self.get_a_reg_mut(dest) = result;
             },
             Instruction::SUBX(src, dest, size) => {
-                let value = self.get_target_value(src, size)?;
-                let existing = self.get_target_value(dest, size)?;
+                let value = self.get_target_value(src, size, Used::Once)?;
+                let existing = self.get_target_value(dest, size, Used::Twice)?;
                 let extend = self.get_flag(Flags::Extend) as u32;
                 let (result1, carry1) = overflowing_sub_sized(existing, value, size);
                 let (result2, carry2) = overflowing_sub_sized(result1, extend, size);
                 let overflow = get_sub_overflow(existing, value, result2, size);
                 self.set_compare_flags(result2, size, carry1 || carry2, overflow);
                 self.set_flag(Flags::Extend, carry1 || carry2);
-                self.set_target_value(dest, result2, size)?;
+                self.set_target_value(dest, result2, size, Used::Twice)?;
             },
             Instruction::SWAP(reg) => {
                 let value = self.state.d_reg[reg as usize];
                 self.state.d_reg[reg as usize] = ((value & 0x0000FFFF) << 16) | ((value & 0xFFFF0000) >> 16);
             },
             Instruction::TAS(target) => {
-                let value = self.get_target_value(target, Size::Byte)?;
+                let value = self.get_target_value(target, Size::Byte, Used::Twice)?;
                 self.set_flag(Flags::Negative, (value & 0x80) != 0);
                 self.set_flag(Flags::Zero, value == 0);
                 self.set_flag(Flags::Overflow, false);
                 self.set_flag(Flags::Carry, false);
-                self.set_target_value(target, value | 0x80, Size::Byte)?;
+                self.set_target_value(target, value | 0x80, Size::Byte, Used::Twice)?;
             },
             Instruction::TST(target, size) => {
-                let value = self.get_target_value(target, size)?;
+                let value = self.get_target_value(target, size, Used::Once)?;
                 self.set_logic_flags(value, size);
             },
             Instruction::TRAP(number) => {
@@ -903,7 +907,7 @@ impl M68k {
         Ok(value)
     }
 
-    pub fn get_target_value(&mut self, target: Target, size: Size) -> Result<u32, Error> {
+    pub fn get_target_value(&mut self, target: Target, size: Size, used: Used) -> Result<u32, Error> {
         match target {
             Target::Immediate(value) => Ok(value),
             Target::DirectDReg(reg) => Ok(get_value_sized(self.state.d_reg[reg as usize], size)),
@@ -915,7 +919,9 @@ impl M68k {
             Target::IndirectARegInc(reg) => {
                 let addr = *self.get_a_reg_mut(reg);
                 let result = self.get_address_sized(addr as Address, size);
-                *self.get_a_reg_mut(reg) += size.in_bytes();
+                if used != Used::Twice {
+                    *self.get_a_reg_mut(reg) += size.in_bytes();
+                }
                 result
             },
             Target::IndirectARegDec(reg) => {
@@ -946,7 +952,7 @@ impl M68k {
         }
     }
 
-    pub fn set_target_value(&mut self, target: Target, value: u32, size: Size) -> Result<(), Error> {
+    pub fn set_target_value(&mut self, target: Target, value: u32, size: Size, used: Used) -> Result<(), Error> {
         match target {
             Target::DirectDReg(reg) => {
                 set_value_sized(&mut self.state.d_reg[reg as usize], value, size);
@@ -965,8 +971,10 @@ impl M68k {
                 *addr = (*addr).wrapping_add(size.in_bytes());
             },
             Target::IndirectARegDec(reg) => {
-                let addr = self.get_a_reg_mut(reg);
-                *addr = (*addr).wrapping_sub(size.in_bytes());
+                if used != Used::Twice {
+                    let addr = self.get_a_reg_mut(reg);
+                    *addr = (*addr).wrapping_sub(size.in_bytes());
+                }
                 let addr = *self.get_a_reg_mut(reg);
                 self.set_address_sized(addr as Address, value, size)?;
             },
