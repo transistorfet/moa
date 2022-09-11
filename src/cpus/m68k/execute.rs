@@ -222,7 +222,7 @@ impl M68k {
             },
             Instruction::ANDtoSR(value) => {
                 self.require_supervisor()?;
-                self.state.sr = self.state.sr & value;
+                self.set_sr(self.state.sr & value);
             },
             Instruction::ASd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(count, size, Used::Once)? % 64;
@@ -437,7 +437,7 @@ impl M68k {
             },
             Instruction::EORtoSR(value) => {
                 self.require_supervisor()?;
-                self.state.sr = self.state.sr ^ value;
+                self.set_sr(self.state.sr ^ value);
             },
             Instruction::EXG(target1, target2) => {
                 let value1 = self.get_target_value(target1, Size::Long, Used::Twice)?;
@@ -513,11 +513,12 @@ impl M68k {
             },
             Instruction::MOVEtoSR(target) => {
                 self.require_supervisor()?;
-                self.state.sr = self.get_target_value(target, Size::Word, Used::Once)? as u16;
+                let value = self.get_target_value(target, Size::Word, Used::Once)? as u16;
+                self.set_sr(value);
             },
             Instruction::MOVEtoCCR(target) => {
                 let value = self.get_target_value(target, Size::Word, Used::Once)? as u16;
-                self.state.sr = (self.state.sr & 0xFF00) | (value & 0x00FF);
+                self.set_sr((self.state.sr & 0xFF00) | (value & 0x00FF));
             },
             Instruction::MOVEC(target, control_reg, dir) => {
                 self.require_supervisor()?;
@@ -625,11 +626,11 @@ impl M68k {
                 self.set_logic_flags(result, size);
             },
             Instruction::ORtoCCR(value) => {
-                self.state.sr = (self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) | (value as u16));
+                self.set_sr((self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) | (value as u16)));
             },
             Instruction::ORtoSR(value) => {
                 self.require_supervisor()?;
-                self.state.sr = self.state.sr | value;
+                self.set_sr(self.state.sr | value);
             },
             Instruction::PEA(target) => {
                 let value = self.get_target_address(target)?;
@@ -669,7 +670,8 @@ impl M68k {
             },
             Instruction::RTE => {
                 self.require_supervisor()?;
-                self.state.sr = self.pop_word()?;
+                let sr = self.pop_word()?;
+                self.set_sr(sr);
                 self.state.pc = self.pop_long()?;
                 if self.cputype >= M68kType::MC68010 {
                     let _ = self.pop_word()?;
@@ -693,7 +695,7 @@ impl M68k {
             },
             Instruction::STOP(flags) => {
                 self.require_supervisor()?;
-                self.state.sr = flags;
+                self.set_sr(flags);
                 self.state.status = Status::Stopped;
             },
             Instruction::SBCD(src, dest) => {
@@ -1146,6 +1148,11 @@ impl M68k {
         } else {
             Err(Error::processor(Exceptions::PrivilegeViolation as u32))
         }
+    }
+
+    fn set_sr(&mut self, value: u16) {
+        let mask = if self.cputype <= M68kType::MC68010 { 0xA71F } else { 0xF71F };
+        self.state.sr = value & mask;
     }
 
     #[inline(always)]
