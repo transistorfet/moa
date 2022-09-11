@@ -645,22 +645,35 @@ impl M68kDecoder {
 
     fn decode_extension_word(&mut self, memory: &mut dyn Addressable, areg: Option<u8>) -> Result<Target, Error> {
         let brief_extension = self.read_instruction_word(memory)?;
-        let use_full = (brief_extension & 0x0100) != 0;
+
+        let use_brief = (brief_extension & 0x0100) == 0;
 
         // Decode Index Register
         let xreg_num = ((brief_extension & 0x7000) >> 12) as u8;
         let xreg = if (brief_extension & 0x8000) == 0 { XRegister::DReg(xreg_num) } else { XRegister::AReg(xreg_num) };
         let size = if (brief_extension & 0x0800) == 0 { Size::Word } else { Size::Long };
-        let scale = ((brief_extension & 0x0600) >> 9) as u8;
-        let index_reg = IndexRegister { xreg, scale, size };
 
-        if !use_full {
+        if self.cputype <= M68kType::MC68010 {
+            let index_reg = IndexRegister { xreg, scale: 0, size };
             let displacement = sign_extend_to_long((brief_extension & 0x00FF) as u32, Size::Byte);
+
             match areg {
                 Some(areg) => Ok(Target::IndirectRegOffset(BaseRegister::AReg(areg), Some(index_reg), displacement)),
                 None => Ok(Target::IndirectRegOffset(BaseRegister::PC, Some(index_reg), displacement)),
             }
-        } else if self.cputype >= M68kType::MC68020 {
+        } else if use_brief {
+            let scale = ((brief_extension & 0x0600) >> 9) as u8;
+            let index_reg = IndexRegister { xreg, scale, size };
+            let displacement = sign_extend_to_long((brief_extension & 0x00FF) as u32, Size::Byte);
+
+            match areg {
+                Some(areg) => Ok(Target::IndirectRegOffset(BaseRegister::AReg(areg), Some(index_reg), displacement)),
+                None => Ok(Target::IndirectRegOffset(BaseRegister::PC, Some(index_reg), displacement)),
+            }
+        } else {
+            let scale = ((brief_extension & 0x0600) >> 9) as u8;
+            let index_reg = IndexRegister { xreg, scale, size };
+
             let use_base_reg = (brief_extension & 0x0080) == 0;
             let use_index = (brief_extension & 0x0040) == 0;
             let use_sub_indirect = (brief_extension & 0x0007) != 0;
@@ -680,8 +693,6 @@ impl M68kDecoder {
                 (true, true) => Ok(Target::IndirectMemoryPreindexed(opt_base_reg, opt_index_reg, base_disp, outer_disp)),
                 (true, false) => Ok(Target::IndirectMemoryPostindexed(opt_base_reg, opt_index_reg, base_disp, outer_disp)),
             }
-        } else {
-            Err(Error::processor(Exceptions::IllegalInstruction as u32))
         }
     }
 

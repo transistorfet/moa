@@ -272,11 +272,17 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
 
     let mut passed = 0;
     let mut failed = 0;
-    for case in cases {
+    for mut case in cases {
         if let Some(only) = args.only.as_ref() {
             if !case.name.ends_with(only) {
                 continue;
             }
+        }
+
+        // Sort the ram memory for debugging help
+        if args.debug {
+            case.initial_state.ram.sort_by_key(|(addr, _)| *addr);
+            case.final_state.ram.sort_by_key(|(addr, _)| *addr);
         }
 
         if !args.quiet {

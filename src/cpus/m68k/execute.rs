@@ -70,9 +70,9 @@ impl M68k {
             Status::Running => {
                 match self.cycle_one(system) {
                     Ok(diff) => Ok(diff),
-                    //Err(Error { err: ErrorType::Processor, native, .. }) => {
+                    Err(Error { err: ErrorType::Processor, native, .. }) => {
                     // TODO match arm conditional is temporary: illegal instructions generate a top level error in order to debug and fix issues with decode
-                    Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
+                    //Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
                         self.exception(native as u8, false)?;
                         Ok(4)
                     },
@@ -735,6 +735,7 @@ impl M68k {
             Instruction::SWAP(reg) => {
                 let value = self.state.d_reg[reg as usize];
                 self.state.d_reg[reg as usize] = ((value & 0x0000FFFF) << 16) | ((value & 0xFFFF0000) >> 16);
+                self.set_logic_flags(self.state.d_reg[reg as usize], Size::Long);
             },
             Instruction::TAS(target) => {
                 let value = self.get_target_value(target, Size::Byte, Used::Twice)?;
@@ -917,16 +918,11 @@ impl M68k {
                 self.get_address_sized(addr as Address, size)
             },
             Target::IndirectARegInc(reg) => {
-                let addr = *self.get_a_reg_mut(reg);
-                let result = self.get_address_sized(addr as Address, size);
-                if used != Used::Twice {
-                    *self.get_a_reg_mut(reg) += size.in_bytes();
-                }
-                result
+                let addr = self.post_increment_areg_target(reg, size, used);
+                self.get_address_sized(addr as Address, size)
             },
             Target::IndirectARegDec(reg) => {
-                *self.get_a_reg_mut(reg) -= size.in_bytes();
-                let addr = *self.get_a_reg_mut(reg);
+                let addr = self.pre_decrement_areg_target(reg, size, Used::Once);
                 self.get_address_sized(addr as Address, size)
             },
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
@@ -965,17 +961,11 @@ impl M68k {
                 self.set_address_sized(addr as Address, value, size)?;
             },
             Target::IndirectARegInc(reg) => {
-                let addr = *self.get_a_reg_mut(reg);
+                let addr = self.post_increment_areg_target(reg, size, Used::Once);
                 self.set_address_sized(addr as Address, value, size)?;
-                let addr = self.get_a_reg_mut(reg);
-                *addr = (*addr).wrapping_add(size.in_bytes());
             },
             Target::IndirectARegDec(reg) => {
-                if used != Used::Twice {
-                    let addr = self.get_a_reg_mut(reg);
-                    *addr = (*addr).wrapping_sub(size.in_bytes());
-                }
-                let addr = *self.get_a_reg_mut(reg);
+                let addr = self.pre_decrement_areg_target(reg, size, used);
                 self.set_address_sized(addr as Address, value, size)?;
             },
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
@@ -1029,6 +1019,33 @@ impl M68k {
             _ => return Err(Error::new(&format!("Invalid addressing target: {:?}", target))),
         };
         Ok(addr)
+    }
+
+    pub fn post_increment_areg_target(&mut self, reg: Register, mut size: Size, used: Used) -> u32 {
+        // If using A7 (the stack pointer) then increment by a minimum of 2 bytes to keep it word aligned
+        if reg == 7 && size == Size::Byte {
+            size = Size::Word;
+        }
+
+        let reg_addr = self.get_a_reg_mut(reg);
+        let addr = *reg_addr;
+        if used != Used::Twice {
+            *reg_addr = addr.wrapping_add(size.in_bytes());
+        }
+        addr
+    }
+
+    pub fn pre_decrement_areg_target(&mut self, reg: Register, mut size: Size, used: Used) -> u32 {
+        // If using A7 (the stack pointer) then decrement by a minimum of 2 bytes to keep it word aligned
+        if reg == 7 && size == Size::Byte {
+            size = Size::Word;
+        }
+
+        let reg_addr = self.get_a_reg_mut(reg);
+        if used != Used::Twice {
+            *reg_addr = (*reg_addr).wrapping_sub(size.in_bytes());
+        }
+        *reg_addr
     }
 
     pub fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, Error> {
