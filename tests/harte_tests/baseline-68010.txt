@@ -1,3 +1,7 @@
+This is the first run, but I had the CPU set to MC68010, and the tests
+are specifically for MC68000, where the trap instructions weren't passing
+because it was pushing the exception number on the stack (a 68010+ behaviour)
+
 Last run on 2022-09-09
 
 ABCD.json.gz completed: 150 passed, 7915 FAILED
