@@ -14,7 +14,7 @@ use serde_derive::Deserialize;
 use moa::error::Error;
 use moa::system::System;
 use moa::memory::{MemoryBlock, BusPort};
-use moa::devices::{Addressable, Steppable, wrap_transmutable};
+use moa::devices::{Address, Addressable, Steppable, wrap_transmutable};
 
 use moa::cpus::m68k::{M68k, M68kType};
 use moa::cpus::m68k::state::Status;
@@ -205,16 +205,18 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
     assert_value(cpu.state.sr, expected.sr, "sr")?;
     assert_value(cpu.state.pc, expected.pc, "pc")?;
 
+    let addr_mask = cpu.port.address_mask();
+
     // Load instructions into memory
     for (i, ins) in expected.prefetch.iter().enumerate() {
         let addr = expected.pc + (i as u32 * 2);
-        let actual = system.get_bus().read_beu16(addr as u64)?;
+        let actual = system.get_bus().read_beu16(addr as Address & addr_mask)?;
         assert_value(actual, *ins, &format!("prefetch at {}", addr))?;
     }
 
     // Load data bytes into memory
     for (addr, byte) in expected.ram.iter() {
-        let actual = system.get_bus().read_u8(*addr as u64)?;
+        let actual = system.get_bus().read_u8(*addr as Address & addr_mask)?;
         assert_value(actual, *byte, &format!("ram at {}", addr))?;
     }
 
