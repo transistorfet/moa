@@ -162,8 +162,8 @@ impl M68k {
         }
 
         let vector = self.state.vbr + offset as u32;
-        self.state.pc = self.port.read_beu32(vector as Address)?;
-        let result = self.start_request(vector, Size::Word, MemAccess::Read, MemType::Program);
+        let addr = self.port.read_beu32(vector as Address)?;
+        let result = self.set_pc(addr);
 
         // If BusError or AddressError, and another AddressError occurs, then halt
         if number == 2 || number == 3 {
@@ -258,10 +258,16 @@ impl M68k {
             },
             Instruction::ASd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(count, size, Used::Once)? % 64;
+
+                let mut overflow = false;
                 let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
-                let original = pair.0;
+                let mut previous_msb = get_msb(pair.0, size);
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, true);
+                    if get_msb(pair.0, size) != previous_msb {
+                        overflow = true;
+                    }
+                    previous_msb = get_msb(pair.0, size);
                 }
                 self.set_target_value(target, pair.0, size, Used::Twice)?;
 
@@ -272,27 +278,22 @@ impl M68k {
                     self.set_flag(Flags::Carry, true);
                     self.set_flag(Flags::Extend, true);
                 }
-                if get_msb(pair.0, size) != get_msb(original, size) {
-                    self.set_flag(Flags::Overflow, true);
-                }
+                self.set_flag(Flags::Overflow, overflow);
             },
             Instruction::Bcc(cond, offset) => {
                 let should_branch = self.get_current_condition(cond);
                 if should_branch {
-                    self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
-                    self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+                    self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32))?;
                 }
             },
             Instruction::BRA(offset) => {
-                self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
-                self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+                self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32))?;
             },
             Instruction::BSR(offset) => {
                 self.push_long(self.state.pc)?;
                 let sp = *self.get_stack_pointer_mut();
                 self.debugger.stack_tracer.push_return(sp);
-                self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
-                self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+                self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32))?;
             },
             Instruction::BCHG(bitnum, target, size) => {
                 let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
@@ -397,7 +398,7 @@ impl M68k {
                 let value = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
                 let existing = *self.get_a_reg_mut(reg);
                 let (result, carry) = overflowing_sub_sized(existing, value, Size::Long);
-                let overflow = get_sub_overflow(existing, value, result, size);
+                let overflow = get_sub_overflow(existing, value, result, Size::Long);
                 self.set_compare_flags(result, Size::Long, carry, overflow);
             },
             Instruction::DBcc(cond, reg, offset) => {
@@ -406,7 +407,7 @@ impl M68k {
                     let next = ((get_value_sized(self.state.d_reg[reg as usize], Size::Word) as u16) as i16).wrapping_sub(1);
                     set_value_sized(&mut self.state.d_reg[reg as usize], next as u32, Size::Word);
                     if next != -1 {
-                        self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
+                        self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32))?;
                     }
                 }
             },
@@ -491,16 +492,17 @@ impl M68k {
                 set_value_sized(&mut self.state.d_reg[reg as usize], result, to_size);
                 self.set_logic_flags(result, to_size);
             },
-            //Instruction::ILLEGAL => {
-            //},
+            Instruction::ILLEGAL => {
+                self.exception(Exceptions::IllegalInstruction as u8, false)?;
+            },
             Instruction::JMP(target) => {
-                self.state.pc = self.get_target_address(target)?;
-                self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+                let addr = self.get_target_address(target)?;
+                self.set_pc(addr)?;
             },
             Instruction::JSR(target) => {
                 let previous_pc = self.state.pc;
-                self.state.pc = self.get_target_address(target)?;
-                self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+                let addr = self.get_target_address(target)?;
+                self.set_pc(addr)?;
 
                 // If the address is good, then push the old PC onto the stack
                 self.push_long(previous_pc)?;
@@ -676,9 +678,10 @@ impl M68k {
                 let value = self.get_target_address(target)?;
                 self.push_long(value)?;
             },
-            //Instruction::RESET => {
-            //    self.require_supervisor()?;
-            //},
+            Instruction::RESET => {
+                self.require_supervisor()?;
+                // TODO this only resets external devices and not internal ones
+            },
             Instruction::ROd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(count, size, Used::Once)? % 64;
                 let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
@@ -712,16 +715,22 @@ impl M68k {
                 self.require_supervisor()?;
                 let sr = self.pop_word()?;
                 self.set_sr(sr);
-                self.state.pc = self.pop_long()?;
+                let addr = self.pop_long()?;
+                self.set_pc(addr)?;
                 if self.cputype >= M68kType::MC68010 {
                     let _ = self.pop_word()?;
                 }
             },
-            //Instruction::RTR => {
-            //},
+            Instruction::RTR => {
+                let ccr = self.pop_word()?;
+                self.set_sr((self.state.sr & 0xFF00) | (ccr & 0x00FF));
+                let addr = self.pop_long()?;
+                self.set_pc(addr)?;
+            },
             Instruction::RTS => {
                 self.debugger.stack_tracer.pop_return();
-                self.state.pc = self.pop_long()?;
+                let addr = self.pop_long()?;
+                self.set_pc(addr)?;
             },
             //Instruction::RTD(i16) => {
             //},
@@ -1144,6 +1153,12 @@ impl M68k {
         self.start_request(addr, Size::Long, MemAccess::Read, MemType::Data)?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
+    }
+
+    fn set_pc(&mut self, value: u32) -> Result<(), Error> {
+        self.state.pc = value;
+        self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+        Ok(())
     }
 
     pub fn get_bit_field_args(&self, offset: RegOrImmediate, width: RegOrImmediate) -> (u32, u32) {
