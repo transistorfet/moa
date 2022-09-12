@@ -3,7 +3,7 @@ use crate::system::System;
 use crate::error::{ErrorType, Error};
 use crate::devices::{ClockElapsed, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
-use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority};
+use super::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority, FunctionCode, MemType, MemAccess};
 use super::instructions::{
     Register,
     Size,
@@ -94,7 +94,6 @@ impl M68k {
         self.decode_next()?;
         self.execute_current()?;
         self.timer.cycle.end();
-
         //if (self.timer.cycle.events % 500) == 0 {
         //    println!("{}", self.timer);
         //}
@@ -134,12 +133,26 @@ impl M68k {
 
     pub fn exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), Error> {
         debug!("{}: raising exception {}", DEV_NAME, number);
+        let ins_word = self.decoder.instruction_word;
+        let extra_code = self.state.request.get_type_code();
+        let fault_address = self.state.request.address;
+
         let offset = (number as u16) << 2;
         if self.cputype >= M68kType::MC68010 {
             self.push_word(offset)?;
         }
-        self.push_long(self.state.pc)?;
-        self.push_word(self.state.sr)?;
+
+        // If BusError or AddressError
+        if number == 2 || number == 3 {
+            self.push_long(self.state.pc - 4)?;
+            self.push_word(self.state.sr)?;
+            self.push_word(ins_word)?;
+            self.push_long(fault_address)?;
+            self.push_word((ins_word & 0xFFF0) | extra_code)?;
+        } else {
+            self.push_long(self.state.pc)?;
+            self.push_word(self.state.sr)?;
+        }
 
         // Changes to the flags must happen after the previous value has been pushed to the stack
         self.set_flag(Flags::Supervisor, true);
@@ -148,7 +161,17 @@ impl M68k {
             self.state.sr = (self.state.sr & !(Flags::IntMask as u16)) | ((self.state.current_ipl as u16) << 8);
         }
 
-        self.state.pc = self.port.read_beu32((self.state.vbr + offset as u32) as Address)?;
+        let vector = self.state.vbr + offset as u32;
+        self.state.pc = self.port.read_beu32(vector as Address)?;
+        let result = self.start_request(vector, Size::Word, MemAccess::Read, MemType::Program);
+
+        // If BusError or AddressError, and another AddressError occurs, then halt
+        if number == 2 || number == 3 {
+            if let Err(err) = result {
+                self.state.status = Status::Stopped;
+                return Err(err);
+            }
+        }
 
         Ok(())
     }
@@ -157,6 +180,7 @@ impl M68k {
         self.timing.reset();
 
         self.timer.decode.start();
+        self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
         self.timer.decode.end();
 
@@ -248,16 +272,19 @@ impl M68k {
                 let should_branch = self.get_current_condition(cond);
                 if should_branch {
                     self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
+                    self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
                 }
             },
             Instruction::BRA(offset) => {
                 self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
+                self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
             },
             Instruction::BSR(offset) => {
                 self.push_long(self.state.pc)?;
                 let sp = *self.get_stack_pointer_mut();
                 self.debugger.stack_tracer.push_return(sp);
                 self.state.pc = (self.decoder.start + 2).wrapping_add(offset as u32);
+                self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
             },
             Instruction::BCHG(bitnum, target, size) => {
                 let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
@@ -460,12 +487,17 @@ impl M68k {
             //},
             Instruction::JMP(target) => {
                 self.state.pc = self.get_target_address(target)?;
+                self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
             },
             Instruction::JSR(target) => {
-                self.push_long(self.state.pc)?;
+                let previous_pc = self.state.pc;
+                self.state.pc = self.get_target_address(target)?;
+                self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+
+                // If the address is good, then push the old PC onto the stack
+                self.push_long(previous_pc)?;
                 let sp = *self.get_stack_pointer_mut();
                 self.debugger.stack_tracer.push_return(sp);
-                self.state.pc = self.get_target_address(target)?;
             },
             Instruction::LEA(target, reg) => {
                 let value = self.get_target_address(target)?;
@@ -884,32 +916,6 @@ impl M68k {
         Ok(addr)
     }
 
-    fn push_word(&mut self, value: u16) -> Result<(), Error> {
-        *self.get_stack_pointer_mut() -= 2;
-        let addr = *self.get_stack_pointer_mut();
-        self.port.write_beu16(addr as Address, value)
-    }
-
-    fn pop_word(&mut self) -> Result<u16, Error> {
-        let addr = *self.get_stack_pointer_mut();
-        let value = self.port.read_beu16(addr as Address)?;
-        *self.get_stack_pointer_mut() += 2;
-        Ok(value)
-    }
-
-    fn push_long(&mut self, value: u32) -> Result<(), Error> {
-        *self.get_stack_pointer_mut() -= 4;
-        let addr = *self.get_stack_pointer_mut();
-        self.port.write_beu32(addr as Address, value)
-    }
-
-    fn pop_long(&mut self) -> Result<u32, Error> {
-        let addr = *self.get_stack_pointer_mut();
-        let value = self.port.read_beu32(addr as Address)?;
-        *self.get_stack_pointer_mut() += 4;
-        Ok(value)
-    }
-
     pub fn get_target_value(&mut self, target: Target, size: Size, used: Used) -> Result<u32, Error> {
         match target {
             Target::Immediate(value) => Ok(value),
@@ -1050,7 +1056,24 @@ impl M68k {
         *reg_addr
     }
 
+    pub fn start_request(&mut self, addr: u32, size: Size, access: MemAccess, mtype: MemType) -> Result<u32, Error> {
+        self.state.request.code = match mtype {
+            MemType::Program => FunctionCode::program(self.state.sr),
+            MemType::Data => FunctionCode::data(self.state.sr),
+        };
+
+        self.state.request.access = access;
+        self.state.request.address = addr;
+
+        if size == Size::Byte || addr & 0x1 == 0 {
+            Ok(addr)
+        } else {
+            Err(Error::processor(Exceptions::AddressError as u32))
+        }
+    }
+
     pub fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, Error> {
+        self.start_request(addr as u32, size, MemAccess::Read, MemType::Data)?;
         match size {
             Size::Byte => self.port.read_u8(addr).map(|value| value as u32),
             Size::Word => self.port.read_beu16(addr).map(|value| value as u32),
@@ -1059,11 +1082,42 @@ impl M68k {
     }
 
     pub fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), Error> {
+        self.start_request(addr as u32, size, MemAccess::Write, MemType::Data)?;
         match size {
             Size::Byte => self.port.write_u8(addr, value as u8),
             Size::Word => self.port.write_beu16(addr, value as u16),
             Size::Long => self.port.write_beu32(addr, value),
         }
+    }
+
+    fn push_word(&mut self, value: u16) -> Result<(), Error> {
+        *self.get_stack_pointer_mut() -= 2;
+        let addr = *self.get_stack_pointer_mut();
+        self.start_request(addr, Size::Word, MemAccess::Write, MemType::Data)?;
+        self.port.write_beu16(addr as Address, value)
+    }
+
+    fn pop_word(&mut self) -> Result<u16, Error> {
+        let addr = *self.get_stack_pointer_mut();
+        let value = self.port.read_beu16(addr as Address)?;
+        self.start_request(addr, Size::Word, MemAccess::Read, MemType::Data)?;
+        *self.get_stack_pointer_mut() += 2;
+        Ok(value)
+    }
+
+    fn push_long(&mut self, value: u32) -> Result<(), Error> {
+        *self.get_stack_pointer_mut() -= 4;
+        let addr = *self.get_stack_pointer_mut();
+        self.start_request(addr, Size::Long, MemAccess::Write, MemType::Data)?;
+        self.port.write_beu32(addr as Address, value)
+    }
+
+    fn pop_long(&mut self) -> Result<u32, Error> {
+        let addr = *self.get_stack_pointer_mut();
+        let value = self.port.read_beu32(addr as Address)?;
+        self.start_request(addr, Size::Long, MemAccess::Read, MemType::Data)?;
+        *self.get_stack_pointer_mut() += 4;
+        Ok(value)
     }
 
     pub fn get_bit_field_args(&self, offset: RegOrImmediate, width: RegOrImmediate) -> (u32, u32) {
@@ -1238,7 +1292,6 @@ impl M68k {
         }
     }
 }
-
 
 fn overflowing_add_sized(operand1: u32, operand2: u32, size: Size) -> (u32, bool) {
     match size {

@@ -43,6 +43,7 @@ pub struct M68kDecoder {
     pub cputype: M68kType,
     pub start: u32,
     pub end: u32,
+    pub instruction_word: u16,
     pub instruction: Instruction,
 }
 
@@ -52,6 +53,7 @@ impl M68kDecoder {
             cputype,
             start: start,
             end: start,
+            instruction_word: 0,
             instruction: Instruction::NOP,
         }
     }
@@ -70,6 +72,7 @@ impl M68kDecoder {
 
     pub fn decode_one(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
         let ins = self.read_instruction_word(memory)?;
+        self.instruction_word = ins;
 
         match ((ins & 0xF000) >> 12) as u8 {
             OPCG_BIT_OPS => {
@@ -517,7 +520,7 @@ impl M68kDecoder {
                             let dest = get_high_reg(ins);
                             match (ins & 0x08) == 0 {
                                 true => Ok(Instruction::ADDX(Target::DirectDReg(src), Target::DirectDReg(dest), size)),
-                                false => Ok(Instruction::ADDX(Target::IndirectARegDec(src), Target::DirectDReg(dest), size)),
+                                false => Ok(Instruction::ADDX(Target::IndirectARegDec(src), Target::IndirectARegDec(dest), size)),
                             }
                         } else {
                             let target = self.decode_lower_effective_address(memory, ins, Some(size))?;
@@ -609,14 +612,14 @@ impl M68kDecoder {
         }
     }
 
-    fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Error> {
-        let word = device.read_beu16(self.end as Address)?;
+    fn read_instruction_word(&mut self, memory: &mut dyn Addressable) -> Result<u16, Error> {
+        let word = memory.read_beu16(self.end as Address)?;
         self.end += 2;
         Ok(word)
     }
 
-    fn read_instruction_long(&mut self, device: &mut dyn Addressable) -> Result<u32, Error> {
-        let word = device.read_beu32(self.end as Address)?;
+    fn read_instruction_long(&mut self, memory: &mut dyn Addressable) -> Result<u32, Error> {
+        let word = memory.read_beu32(self.end as Address)?;
         self.end += 4;
         Ok(word)
     }
