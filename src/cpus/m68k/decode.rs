@@ -435,7 +435,7 @@ impl M68kDecoder {
                             let dest = get_high_reg(ins);
                             match (ins & 0x08) == 0 {
                                 true => Ok(Instruction::SUBX(Target::DirectDReg(src), Target::DirectDReg(dest), size)),
-                                false => Ok(Instruction::SUBX(Target::IndirectARegDec(src), Target::DirectDReg(dest), size)),
+                                false => Ok(Instruction::SUBX(Target::IndirectARegDec(src), Target::IndirectARegDec(dest), size)),
                             }
                         } else {
                             let target = self.decode_lower_effective_address(memory, ins, Some(size))?;

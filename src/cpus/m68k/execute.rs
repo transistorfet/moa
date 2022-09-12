@@ -180,7 +180,7 @@ impl M68k {
         self.timing.reset();
 
         self.timer.decode.start();
-        self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+        self.start_instruction_request(self.state.pc)?;
         self.decoder.decode_at(&mut self.port, self.state.pc)?;
         self.timer.decode.end();
 
@@ -230,8 +230,16 @@ impl M68k {
                 let (result1, carry1) = overflowing_add_sized(existing, value, size);
                 let (result2, carry2) = overflowing_add_sized(result1, extend, size);
                 let overflow = get_add_overflow(existing, value, result2, size);
+
+                // Handle flags
+                let zero = self.get_flag(Flags::Zero);
                 self.set_compare_flags(result2, size, carry1 || carry2, overflow);
+                if self.get_flag(Flags::Zero) {
+                    // ADDX can only clear the zero flag, so if it's set, restore it to whatever it was before
+                    self.set_flag(Flags::Zero, zero);
+                }
                 self.set_flag(Flags::Extend, carry1 || carry2);
+
                 self.set_target_value(dest, result2, size, Used::Twice)?;
             },
             Instruction::AND(src, dest, size) => {
@@ -460,7 +468,7 @@ impl M68k {
                 self.set_logic_flags(result, size);
             },
             Instruction::EORtoCCR(value) => {
-                self.state.sr = (self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) ^ (value as u16));
+                self.set_sr((self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) ^ (value as u16)));
             },
             Instruction::EORtoSR(value) => {
                 self.require_supervisor()?;
@@ -762,8 +770,16 @@ impl M68k {
                 let (result1, carry1) = overflowing_sub_sized(existing, value, size);
                 let (result2, carry2) = overflowing_sub_sized(result1, extend, size);
                 let overflow = get_sub_overflow(existing, value, result2, size);
+
+                // Handle flags
+                let zero = self.get_flag(Flags::Zero);
                 self.set_compare_flags(result2, size, carry1 || carry2, overflow);
+                if self.get_flag(Flags::Zero) {
+                    // SUBX can only clear the zero flag, so if it's set, restore it to whatever it was before
+                    self.set_flag(Flags::Zero, zero);
+                }
                 self.set_flag(Flags::Extend, carry1 || carry2);
+
                 self.set_target_value(dest, result2, size, Used::Twice)?;
             },
             Instruction::SWAP(reg) => {
@@ -1056,7 +1072,17 @@ impl M68k {
         *reg_addr
     }
 
+    pub fn start_instruction_request(&mut self, addr: u32) -> Result<u32, Error> {
+        self.state.request.is_instruction = true;
+        self.state.request.code = FunctionCode::program(self.state.sr);
+        self.state.request.access = MemAccess::Read;
+        self.state.request.address = addr;
+
+        validate_address(addr)
+    }
+
     pub fn start_request(&mut self, addr: u32, size: Size, access: MemAccess, mtype: MemType) -> Result<u32, Error> {
+        self.state.request.is_instruction = false;
         self.state.request.code = match mtype {
             MemType::Program => FunctionCode::program(self.state.sr),
             MemType::Data => FunctionCode::data(self.state.sr),
@@ -1065,10 +1091,10 @@ impl M68k {
         self.state.request.access = access;
         self.state.request.address = addr;
 
-        if size == Size::Byte || addr & 0x1 == 0 {
+        if size == Size::Byte {
             Ok(addr)
         } else {
-            Err(Error::processor(Exceptions::AddressError as u32))
+            validate_address(addr)
         }
     }
 
@@ -1290,6 +1316,14 @@ impl M68k {
                 || (self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow))
                 || (!self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow)),
         }
+    }
+}
+
+fn validate_address(addr: u32) -> Result<u32, Error> {
+    if addr & 0x1 == 0 {
+        Ok(addr)
+    } else {
+        Err(Error::processor(Exceptions::AddressError as u32))
     }
 }
 

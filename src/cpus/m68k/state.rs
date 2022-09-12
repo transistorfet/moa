@@ -98,6 +98,7 @@ pub enum MemAccess {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct MemoryRequest {
+    pub is_instruction: bool,
     pub access: MemAccess,
     pub code: FunctionCode,
     pub size: Size,
@@ -180,11 +181,10 @@ impl M68k {
         println!("PC: {:#010x}", self.state.pc);
         println!("SR: {:#06x}", self.state.sr);
         for i in 0..7 {
-            println!("D{}: {:#010x}        A{}:  {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
+            println!("D{}: {:#010x}        A{}: {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
         }
-        println!("D7: {:#010x}", self.state.d_reg[7]);
-        println!("SSP: {:#010x}", self.state.ssp);
-        println!("USP: {:#010x}", self.state.usp);
+        println!("D7: {:#010x}       USP: {:#010x}", self.state.d_reg[7], self.state.ssp);
+        println!("                     SSP: {:#010x}", self.state.ssp);
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
         println!("");
@@ -229,6 +229,7 @@ impl FunctionCode {
 impl MemoryRequest {
     pub fn new() -> Self {
         Self {
+            is_instruction: false,
             access: MemAccess::Read,
             code: FunctionCode::Reserved0,
             size: Size::Word,
@@ -237,10 +238,9 @@ impl MemoryRequest {
     }
 
     pub fn get_type_code(&self) -> u16 {
-        let ins = match self.code {
-            // TODO this is wrong (should be opposite results), but is a temporary hack
-            FunctionCode::SupervisorProgram | FunctionCode::UserProgram => 0x0008,
-            _ => 0x0000,
+        let ins = match self.is_instruction {
+            true => 0x0000,
+            false => 0x0008,
         };
 
         let rw = match self.access {
