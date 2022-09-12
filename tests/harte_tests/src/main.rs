@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 use std::fs::{self, File};
 
-use clap::Parser;
+use clap::{Parser, ArgEnum};
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 
@@ -18,6 +18,13 @@ use moa::devices::{Address, Addressable, Steppable, wrap_transmutable};
 
 use moa::cpus::m68k::{M68k, M68kType};
 use moa::cpus::m68k::state::Status;
+
+#[derive(Copy, Clone, PartialEq, Eq, ArgEnum)]
+enum Selection {
+    Include,
+    Exclude,
+    Only,
+}
 
 #[derive(Parser)]
 struct Args {
@@ -38,6 +45,8 @@ struct Args {
     /// Directory to the test suite to run
     #[clap(long, default_value = DEFAULT_HART_TESTS)]
     testsuite: String,
+    #[clap(long, short, arg_enum, default_value_t = Selection::Include)]
+    exceptions: Selection,
 }
 
 fn main() {
@@ -115,6 +124,11 @@ impl TestCase {
         println!("final:");
         self.final_state.dump();
         println!("cycles: {}", self.length);
+    }
+
+    pub fn is_exception_case(&self) -> bool {
+        // If the supervisor stack changes by 6 or more bytes, then it's likely expected to be caused by an exception
+        self.initial_state.ssp.saturating_sub(self.final_state.ssp) >= 6
     }
 }
 
@@ -279,6 +293,13 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
             if !case.name.ends_with(only) {
                 continue;
             }
+        }
+
+        // Only run the test if it's selected by the exceptions flag
+        if case.is_exception_case() && args.exceptions == Selection::Exclude {
+            continue;
+        } else if !case.is_exception_case() && args.exceptions == Selection::Only {
+            continue;
         }
 
         // Sort the ram memory for debugging help
