@@ -381,8 +381,20 @@ impl M68k {
             },
             //Instruction::BKPT(u8) => {
             //},
-            //Instruction::CHK(Target, Size) => {
-            //},
+            Instruction::CHK(target, reg, size) => {
+                let upper_bound = sign_extend_to_long(self.get_target_value(target, size, Used::Once)?, size) as i32;
+                let dreg = sign_extend_to_long(self.state.d_reg[reg as usize], size) as i32;
+
+                self.set_sr(self.state.sr & 0xFFF0);
+                if dreg < 0 || dreg > upper_bound {
+                    if dreg < 0 {
+                        self.set_flag(Flags::Negative, true);
+                    } else if dreg > upper_bound {
+                        self.set_flag(Flags::Negative, false);
+                    }
+                    self.exception(Exceptions::ChkInstruction as u8, false)?;
+                }
+            },
             Instruction::CLR(target, size) => {
                 self.set_target_value(target, 0, size, Used::Once)?;
                 // Clear flags except Zero flag
@@ -652,8 +664,24 @@ impl M68k {
                 self.set_compare_flags(result, size, carry, overflow);
                 self.set_flag(Flags::Extend, carry);
             },
-            //Instruction::NEGX(Target, Size) => {
-            //},
+            Instruction::NEGX(dest, size) => {
+                let existing = self.get_target_value(dest, size, Used::Twice)?;
+                let extend = self.get_flag(Flags::Extend) as u32;
+                let (result1, carry1) = overflowing_sub_sized(0, existing, size);
+                let (result2, carry2) = overflowing_sub_sized(result1, extend, size);
+                let overflow = get_sub_overflow(0, existing, result2, size);
+
+                // Handle flags
+                let zero = self.get_flag(Flags::Zero);
+                self.set_compare_flags(result2, size, carry1 || carry2, overflow);
+                if self.get_flag(Flags::Zero) {
+                    // NEGX can only clear the zero flag, so if it's set, restore it to whatever it was before
+                    self.set_flag(Flags::Zero, zero);
+                }
+                self.set_flag(Flags::Extend, carry1 || carry2);
+
+                self.set_target_value(dest, result2, size, Used::Twice)?;
+            },
             Instruction::NOP => { },
             Instruction::NOT(target, size) => {
                 let mut value = self.get_target_value(target, size, Used::Twice)?;

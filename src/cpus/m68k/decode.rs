@@ -179,11 +179,9 @@ impl M68kDecoder {
                     if (ins & 0x040) == 0 {
                         let size = match get_size(ins) {
                             Some(Size::Word) => Size::Word,
-                            // TODO 2021-12-14: the docs for the 68000 show the size field, even though it says it only operates on words
-                            //                  and according to some other sources, it seems they are parsed and executed on the 68000, so
-                            //                  I'm removing the check that only allows this on the MC68020
-                            //Some(Size::Long) if self.cputype >= M68kType::MC68020 => Size::Long,
-                            Some(Size::Long) => Size::Long,
+                            Some(Size::Long) if self.cputype >= M68kType::MC68020 => Size::Long,
+                            // On the 68000, long words in CHK are not supported, but the opcode maps to the word size instruction
+                            Some(Size::Long) => Size::Word,
                             _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         };
 

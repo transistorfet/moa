@@ -1,4 +1,4 @@
-Last run on 2022-09-12 at commit 5a55aa7f63834a24aae1db195a0d3aa7d8943fb9
+Last run on 2022-09-12 at commit 9ff528c4638b7b5757d110ba87c10ab60aa33557
 
 ABCD.json completed: 301 passed, 7764 FAILED
 ADD.b.json completed, all passed!
@@ -26,7 +26,7 @@ BSET.json completed, all passed!
 BSR.json completed: 4085 passed, 3980 FAILED
 BTST.json completed: 8052 passed, 13 FAILED
 Bcc.json completed: 5865 passed, 2200 FAILED
-CHK.json completed: 0 passed, 8065 FAILED
+CHK.json completed: 7744 passed, 321 FAILED
 CLR.b.json completed, all passed!
 CLR.l.json completed: 6882 passed, 1183 FAILED
 CLR.w.json completed: 6862 passed, 1203 FAILED
@@ -77,9 +77,9 @@ NBCD.json completed: 0 passed, 8065 FAILED
 NEG.b.json completed, all passed!
 NEG.l.json completed: 7552 passed, 513 FAILED
 NEG.w.json completed: 7531 passed, 534 FAILED
-NEGX.b.json completed: 0 passed, 8065 FAILED
-NEGX.l.json completed: 0 passed, 8065 FAILED
-NEGX.w.json completed: 0 passed, 8065 FAILED
+NEGX.b.json completed, all passed!
+NEGX.l.json completed: 7520 passed, 545 FAILED
+NEGX.w.json completed: 7510 passed, 555 FAILED
 NOP.json completed, all passed!
 NOT.b.json completed, all passed!
 NOT.l.json completed: 7512 passed, 553 FAILED
@@ -125,5 +125,5 @@ TST.l.json completed, all passed!
 TST.w.json completed, all passed!
 UNLINK.json completed, all passed!
 
-passed: 860483, failed: 139577, total 86%
-completed in 16m 38s
+passed: 891322, failed: 108738, total 89%
+completed in 13m 52s
