@@ -11,7 +11,7 @@ use moa::error::Error;
 use moa::system::System;
 use moa::devices::Clock;
 use moa::host::traits::{Host, HostData, ControllerUpdater, KeyboardUpdater, WindowUpdater, Audio};
-use moa::host::controllers::{ControllerDevice};
+use moa::host::controllers::ControllerDevice;
 
 use moa_common::audio::{AudioOutput, AudioMixer, AudioSource};
 
@@ -183,7 +183,7 @@ impl MiniFrontend {
             controller,
             keyboard,
             audio: None,
-            mixer: mixer,
+            mixer,
         }
     }
 
