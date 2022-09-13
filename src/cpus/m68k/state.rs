@@ -239,8 +239,8 @@ impl MemoryRequest {
 
     pub fn get_type_code(&self) -> u16 {
         let ins = match self.is_instruction {
-            true => 0x0000,
-            false => 0x0008,
+            false => 0x0000,
+            true => 0x0008,
         };
 
         let rw = match self.access {

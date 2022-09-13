@@ -1,129 +1,129 @@
-Last run on 2022-09-11 at commit 1a098bde6f1cde7510be227ee0dc1188af8edcbf
+Last run on 2022-09-12 at commit 5a55aa7f63834a24aae1db195a0d3aa7d8943fb9
 
 ABCD.json completed: 301 passed, 7764 FAILED
 ADD.b.json completed, all passed!
-ADD.l.json completed: 5143 passed, 2922 FAILED
-ADD.w.json completed: 5117 passed, 2948 FAILED
-ADDA.l.json completed: 5372 passed, 2693 FAILED
-ADDA.w.json completed: 5431 passed, 2634 FAILED
+ADD.l.json completed: 7736 passed, 329 FAILED
+ADD.w.json completed: 7712 passed, 353 FAILED
+ADDA.l.json completed, all passed!
+ADDA.w.json completed, all passed!
 ADDX.b.json completed, all passed!
 ADDX.l.json completed: 5472 passed, 2593 FAILED
-ADDX.w.json completed: 5465 passed, 2600 FAILED
+ADDX.w.json completed, all passed!
 AND.b.json completed, all passed!
-AND.l.json completed: 4745 passed, 3320 FAILED
-AND.w.json completed: 4668 passed, 3397 FAILED
+AND.l.json completed: 7779 passed, 286 FAILED
+AND.w.json completed: 7764 passed, 301 FAILED
 ANDItoCCR.json completed, all passed!
 ANDItoSR.json completed, all passed!
 ASL.b.json completed: 7205 passed, 860 FAILED
 ASL.l.json completed: 6446 passed, 1619 FAILED
-ASL.w.json completed: 6230 passed, 1835 FAILED
+ASL.w.json completed: 7035 passed, 1030 FAILED
 ASR.b.json completed: 6316 passed, 1749 FAILED
 ASR.l.json completed: 7007 passed, 1058 FAILED
-ASR.w.json completed: 5988 passed, 2077 FAILED
+ASR.w.json completed: 6740 passed, 1325 FAILED
 BCHG.json completed, all passed!
 BCLR.json completed, all passed!
 BSET.json completed, all passed!
-BSR.json completed, all passed!
+BSR.json completed: 4085 passed, 3980 FAILED
 BTST.json completed: 8052 passed, 13 FAILED
-Bcc.json completed, all passed!
+Bcc.json completed: 5865 passed, 2200 FAILED
 CHK.json completed: 0 passed, 8065 FAILED
 CLR.b.json completed, all passed!
-CLR.l.json completed: 4903 passed, 3162 FAILED
-CLR.w.json completed: 4896 passed, 3169 FAILED
+CLR.l.json completed: 6882 passed, 1183 FAILED
+CLR.w.json completed: 6862 passed, 1203 FAILED
 CMP.b.json completed, all passed!
-CMP.l.json completed: 5034 passed, 3031 FAILED
-CMP.w.json completed: 5024 passed, 3041 FAILED
-CMPA.l.json completed: 5450 passed, 2615 FAILED
-CMPA.w.json completed: 5360 passed, 2705 FAILED
-DBcc.json completed, all passed!
-DIVS.json completed: 612 passed, 7453 FAILED
-DIVU.json completed: 1267 passed, 6798 FAILED
+CMP.l.json completed, all passed!
+CMP.w.json completed, all passed!
+CMPA.l.json completed, all passed!
+CMPA.w.json completed, all passed!
+DBcc.json completed: 6101 passed, 1964 FAILED
+DIVS.json completed: 3685 passed, 4380 FAILED
+DIVU.json completed: 4368 passed, 3697 FAILED
 EOR.b.json completed, all passed!
-EOR.l.json completed: 4904 passed, 3161 FAILED
-EOR.w.json completed: 4930 passed, 3135 FAILED
+EOR.l.json completed: 7519 passed, 546 FAILED
+EOR.w.json completed: 7525 passed, 540 FAILED
 EORItoCCR.json completed, all passed!
 EORItoSR.json completed, all passed!
 EXG.json completed, all passed!
 EXT.l.json completed, all passed!
 EXT.w.json completed, all passed!
-JMP.json completed, all passed!
-JSR.json completed, all passed!
+JMP.json completed: 4259 passed, 3806 FAILED
+JSR.json completed: 4183 passed, 3882 FAILED
 LEA.json completed, all passed!
 LINK.json completed: 7060 passed, 1005 FAILED
 LSL.b.json completed: 7774 passed, 291 FAILED
 LSL.l.json completed: 7017 passed, 1048 FAILED
-LSL.w.json completed: 6727 passed, 1338 FAILED
+LSL.w.json completed: 7494 passed, 571 FAILED
 LSR.b.json completed: 7797 passed, 268 FAILED
 LSR.l.json completed: 7044 passed, 1021 FAILED
-LSR.w.json completed: 6768 passed, 1297 FAILED
+LSR.w.json completed: 7512 passed, 553 FAILED
 MOVE.b.json completed, all passed!
-MOVE.l.json completed: 3270 passed, 4795 FAILED
+MOVE.l.json completed: 5827 passed, 2238 FAILED
 MOVE.q.json completed, all passed!
-MOVE.w.json completed: 3368 passed, 4697 FAILED
-MOVEA.l.json completed: 5379 passed, 2686 FAILED
-MOVEA.w.json completed: 5322 passed, 2743 FAILED
-MOVEM.l.json completed: 4099 passed, 3966 FAILED
-MOVEM.w.json completed: 4169 passed, 3896 FAILED
+MOVE.w.json completed: 5855 passed, 2210 FAILED
+MOVEA.l.json completed, all passed!
+MOVEA.w.json completed, all passed!
+MOVEM.l.json completed: 6035 passed, 2030 FAILED
+MOVEM.w.json completed: 6431 passed, 1634 FAILED
 MOVEP.l.json completed: 4036 passed, 4029 FAILED
 MOVEP.w.json completed: 4046 passed, 4019 FAILED
-MOVEfromSR.json completed: 5017 passed, 3048 FAILED
+MOVEfromSR.json completed: 6896 passed, 1169 FAILED
 MOVEfromUSP.json completed, all passed!
-MOVEtoCCR.json completed: 4958 passed, 3107 FAILED
-MOVEtoSR.json completed: 4938 passed, 3127 FAILED
+MOVEtoCCR.json completed, all passed!
+MOVEtoSR.json completed, all passed!
 MOVEtoUSP.json completed, all passed!
-MULS.json completed: 2548 passed, 5517 FAILED
-MULU.json completed: 4992 passed, 3073 FAILED
+MULS.json completed: 5670 passed, 2395 FAILED
+MULU.json completed, all passed!
 NBCD.json completed: 0 passed, 8065 FAILED
 NEG.b.json completed, all passed!
-NEG.l.json completed: 5031 passed, 3034 FAILED
-NEG.w.json completed: 4911 passed, 3154 FAILED
+NEG.l.json completed: 7552 passed, 513 FAILED
+NEG.w.json completed: 7531 passed, 534 FAILED
 NEGX.b.json completed: 0 passed, 8065 FAILED
 NEGX.l.json completed: 0 passed, 8065 FAILED
 NEGX.w.json completed: 0 passed, 8065 FAILED
 NOP.json completed, all passed!
 NOT.b.json completed, all passed!
-NOT.l.json completed: 4924 passed, 3141 FAILED
-NOT.w.json completed: 4957 passed, 3108 FAILED
+NOT.l.json completed: 7512 passed, 553 FAILED
+NOT.w.json completed: 7530 passed, 535 FAILED
 OR.b.json completed, all passed!
-OR.l.json completed: 4730 passed, 3335 FAILED
-OR.w.json completed: 4650 passed, 3415 FAILED
+OR.l.json completed: 7756 passed, 309 FAILED
+OR.w.json completed: 7765 passed, 300 FAILED
 ORItoCCR.json completed, all passed!
 ORItoSR.json completed, all passed!
 PEA.json completed, all passed!
 RESET.json completed, all passed!
 ROL.b.json completed, all passed!
 ROL.l.json completed, all passed!
-ROL.w.json completed: 7135 passed, 930 FAILED
+ROL.w.json completed: 7882 passed, 183 FAILED
 ROR.b.json completed, all passed!
 ROR.l.json completed, all passed!
-ROR.w.json completed: 7141 passed, 924 FAILED
+ROR.w.json completed: 7907 passed, 158 FAILED
 ROXL.b.json completed: 8039 passed, 26 FAILED
 ROXL.l.json completed: 8029 passed, 36 FAILED
-ROXL.w.json completed: 7114 passed, 951 FAILED
+ROXL.w.json completed: 7892 passed, 173 FAILED
 ROXR.b.json completed: 8037 passed, 28 FAILED
 ROXR.l.json completed: 8022 passed, 43 FAILED
-ROXR.w.json completed: 7141 passed, 924 FAILED
-RTE.json completed: 4103 passed, 3962 FAILED
-RTR.json completed, all passed!
-RTS.json completed, all passed!
+ROXR.w.json completed: 7880 passed, 185 FAILED
+RTE.json completed: 2047 passed, 6018 FAILED
+RTR.json completed: 4038 passed, 4027 FAILED
+RTS.json completed: 4008 passed, 4057 FAILED
 SBCD.json completed: 884 passed, 7181 FAILED
 SUB.b.json completed, all passed!
-SUB.l.json completed: 5093 passed, 2972 FAILED
-SUB.w.json completed: 5121 passed, 2944 FAILED
-SUBA.l.json completed: 5329 passed, 2736 FAILED
-SUBA.w.json completed: 5386 passed, 2679 FAILED
+SUB.l.json completed: 7747 passed, 318 FAILED
+SUB.w.json completed: 7716 passed, 349 FAILED
+SUBA.l.json completed, all passed!
+SUBA.w.json completed, all passed!
 SUBX.b.json completed, all passed!
 SUBX.l.json completed: 5481 passed, 2584 FAILED
-SUBX.w.json completed: 5387 passed, 2678 FAILED
+SUBX.w.json completed, all passed!
 SWAP.json completed, all passed!
 Scc.json completed, all passed!
 TAS.json completed, all passed!
 TRAP.json completed, all passed!
 TRAPV.json completed, all passed!
 TST.b.json completed, all passed!
-TST.l.json completed: 4963 passed, 3102 FAILED
-TST.w.json completed: 4928 passed, 3137 FAILED
+TST.l.json completed, all passed!
+TST.w.json completed, all passed!
 UNLINK.json completed, all passed!
 
-passed: 769388, failed: 230672, total 77%
-completed in 23m 22s
+passed: 860483, failed: 139577, total 86%
+completed in 16m 38s

@@ -135,6 +135,7 @@ impl M68k {
         debug!("{}: raising exception {}", DEV_NAME, number);
         let ins_word = self.decoder.instruction_word;
         let extra_code = self.state.request.get_type_code();
+        let fault_size = self.state.request.size.in_bytes();
         let fault_address = self.state.request.address;
 
         let offset = (number as u16) << 2;
@@ -144,7 +145,7 @@ impl M68k {
 
         // If BusError or AddressError
         if number == 2 || number == 3 {
-            self.push_long(self.state.pc - 4)?;
+            self.push_long(self.state.pc - fault_size)?;
             self.push_word(self.state.sr)?;
             self.push_word(ins_word)?;
             self.push_long(fault_address)?;
