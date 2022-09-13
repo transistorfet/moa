@@ -10,5 +10,5 @@ default-run = "moa-genesis"
 moa = { path = "../../" }
 moa-common = { path = "../moa-common/", features = ["audio"] }
 minifb = "0.19"
-clap = "3.0.0-beta.5"
+clap = "3.2.20"
 

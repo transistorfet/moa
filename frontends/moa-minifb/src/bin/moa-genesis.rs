@@ -1,10 +1,13 @@
 
+use clap::Arg;
+
 use moa_minifb;
 use moa::machines::genesis::{build_genesis, SegaGenesisOptions};
 
 fn main() {
     let matches = moa_minifb::new("Sega Genesis/Mega Drive Emulator")
-        .arg("<ROM>        'ROM file to load (must be flat binary)'")
+        .arg(Arg::new("ROM")
+            .help("ROM file to load (must be flat binary)"))
         .get_matches();
 
     let mut options = SegaGenesisOptions::new();

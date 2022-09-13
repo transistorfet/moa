@@ -83,7 +83,7 @@ Macintosh:
 
     * check all instructions in the docs
 
-    * unimplemented:  BFFFO, BFINS, CHK, ILLEGAL, NBCD, NEGX, RTR, RTD
+    * unimplemented:  BFFFO, BFINS, NBCD, RTD
     * >=MC68020 undecoded & unimplemented: BKPT, CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
 
     * add support for MMU

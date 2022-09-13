@@ -5,7 +5,7 @@ use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
 use minifb::{self, Key};
-use clap::{App, ArgMatches};
+use clap::{App, Arg, ArgMatches};
 
 use moa::error::Error;
 use moa::system::System;
@@ -28,11 +28,28 @@ const HEIGHT: u32 = 224;
 
 pub fn new(name: &str) -> App {
     App::new(name)
-        .arg("-s, --scale=[1,2,4]    'Scale the screen'")
-        .arg("-t, --threaded         'Run the simulation in a separate thread'")
-        .arg("-x, --speed=[]         'Adjust the speed of the simulation'")
-        .arg("-d, --debugger         'Start the debugger before running machine'")
-        .arg("-a, --disable-audio    'Disable audio output'")
+        .arg(Arg::new("scale")
+            .short('s')
+            .long("scale")
+            .takes_value(true)
+            .help("Scale the screen"))
+        .arg(Arg::new("threaded")
+            .short('t')
+            .long("threaded")
+            .help("Run the simulation in a separate thread"))
+        .arg(Arg::new("speed")
+            .short('x')
+            .long("speed")
+            .takes_value(true)
+            .help("Adjust the speed of the simulation"))
+        .arg(Arg::new("debugger")
+            .short('d')
+            .long("debugger")
+            .help("Start the debugger before running machine"))
+        .arg(Arg::new("disable-audio")
+            .short('a')
+            .long("disable-audio")
+            .help("Disable audio output"))
 }
 
 pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
@@ -184,6 +201,7 @@ impl MiniFrontend {
             Some(1) => minifb::Scale::X1,
             Some(2) => minifb::Scale::X2,
             Some(4) => minifb::Scale::X4,
+            Some(8) => minifb::Scale::X8,
             _ => minifb::Scale::X2,
         };
 
