@@ -448,7 +448,7 @@ impl M68k {
                 } else {
                     self.set_flag(Flags::Carry, true);
                     self.set_flag(Flags::Overflow, true);
-                    self.set_flag(Flags::Negative, quotient < 0);
+                    self.set_flag(Flags::Negative, (quotient as i32) < 0);
                 }
             },
             Instruction::DIVL(src, dest_h, dest_l, sign) => {
@@ -1118,6 +1118,24 @@ impl M68k {
         *reg_addr
     }
 
+    pub fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, Error> {
+        self.start_request(addr as u32, size, MemAccess::Read, MemType::Data)?;
+        match size {
+            Size::Byte => self.port.read_u8(addr).map(|value| value as u32),
+            Size::Word => self.port.read_beu16(addr).map(|value| value as u32),
+            Size::Long => self.port.read_beu32(addr),
+        }
+    }
+
+    pub fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), Error> {
+        self.start_request(addr as u32, size, MemAccess::Write, MemType::Data)?;
+        match size {
+            Size::Byte => self.port.write_u8(addr, value as u8),
+            Size::Word => self.port.write_beu16(addr, value as u16),
+            Size::Long => self.port.write_beu32(addr, value),
+        }
+    }
+
     pub fn start_instruction_request(&mut self, addr: u32) -> Result<u32, Error> {
         self.state.request.is_instruction = true;
         self.state.request.code = FunctionCode::program(self.state.sr);
@@ -1141,24 +1159,6 @@ impl M68k {
             Ok(addr)
         } else {
             validate_address(addr)
-        }
-    }
-
-    pub fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, Error> {
-        self.start_request(addr as u32, size, MemAccess::Read, MemType::Data)?;
-        match size {
-            Size::Byte => self.port.read_u8(addr).map(|value| value as u32),
-            Size::Word => self.port.read_beu16(addr).map(|value| value as u32),
-            Size::Long => self.port.read_beu32(addr),
-        }
-    }
-
-    pub fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), Error> {
-        self.start_request(addr as u32, size, MemAccess::Write, MemType::Data)?;
-        match size {
-            Size::Byte => self.port.write_u8(addr, value as u8),
-            Size::Word => self.port.write_beu16(addr, value as u16),
-            Size::Long => self.port.write_beu32(addr, value),
         }
     }
 
