@@ -440,8 +440,16 @@ impl M68k {
                     Sign::Unsigned => (existing % value, existing / value),
                 };
 
-                self.set_compare_flags(quotient as u32, Size::Long, false, (quotient & 0xFFFF0000) != 0);
-                self.state.d_reg[dest as usize] = (remainder << 16) | (0xFFFF & quotient);
+
+                // Only update the register if the quotient was large than a 16-bit number
+                if (quotient & 0xFFFF0000) == 0 {
+                    self.set_compare_flags(quotient as u32, Size::Long, false, (quotient & 0xFFFF0000) != 0);
+                    self.state.d_reg[dest as usize] = (remainder << 16) | (0xFFFF & quotient);
+                } else {
+                    self.set_flag(Flags::Carry, true);
+                    self.set_flag(Flags::Overflow, true);
+                    self.set_flag(Flags::Negative, quotient < 0);
+                }
             },
             Instruction::DIVL(src, dest_h, dest_l, sign) => {
                 let value = self.get_target_value(src, Size::Long, Used::Once)?;
@@ -637,7 +645,7 @@ impl M68k {
                     Sign::Unsigned => existing as u64 * value as u64,
                 };
 
-                self.set_compare_flags(result as u32, Size::Long, false, (result & 0xFFFFFFFF00000000) != 0);
+                self.set_compare_flags(result as u32, Size::Long, false, false);
                 self.state.d_reg[dest as usize] = result as u32;
             },
             Instruction::MULL(src, dest_h, dest_l, sign) => {
