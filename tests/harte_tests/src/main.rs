@@ -23,6 +23,7 @@ use moa::cpus::m68k::state::Status;
 enum Selection {
     Include,
     Exclude,
+    ExcludeAddr,
     Only,
 }
 
@@ -129,6 +130,11 @@ impl TestCase {
     pub fn is_exception_case(&self) -> bool {
         // If the supervisor stack changes by 6 or more bytes, then it's likely expected to be caused by an exception
         self.initial_state.ssp.saturating_sub(self.final_state.ssp) >= 6
+    }
+
+    pub fn is_extended_exception_case(&self) -> bool {
+        // If the supervisor stack changes by 6 or more bytes, then it's likely expected to be caused by an exception
+        self.initial_state.ssp.saturating_sub(self.final_state.ssp) >= 10
     }
 }
 
@@ -296,7 +302,9 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
         }
 
         // Only run the test if it's selected by the exceptions flag
-        if case.is_exception_case() && args.exceptions == Selection::Exclude {
+        if case.is_extended_exception_case() && args.exceptions == Selection::ExcludeAddr {
+            continue;
+        } else if case.is_exception_case() && args.exceptions == Selection::Exclude {
             continue;
         } else if !case.is_exception_case() && args.exceptions == Selection::Only {
             continue;
