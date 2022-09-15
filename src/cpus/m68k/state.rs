@@ -183,7 +183,7 @@ impl M68k {
         for i in 0..7 {
             println!("D{}: {:#010x}        A{}: {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
         }
-        println!("D7: {:#010x}       USP: {:#010x}", self.state.d_reg[7], self.state.ssp);
+        println!("D7: {:#010x}       USP: {:#010x}", self.state.d_reg[7], self.state.usp);
         println!("                     SSP: {:#010x}", self.state.ssp);
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);

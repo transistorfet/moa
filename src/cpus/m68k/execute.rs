@@ -273,13 +273,18 @@ impl M68k {
                 self.set_target_value(target, pair.0, size, Used::Twice)?;
 
                 // Adjust flags
-                self.set_flag(Flags::Extend, false);
                 self.set_logic_flags(pair.0, size);
-                if pair.1 {
-                    self.set_flag(Flags::Carry, true);
-                    self.set_flag(Flags::Extend, true);
-                }
                 self.set_flag(Flags::Overflow, overflow);
+
+                if count != 0 {
+                    self.set_flag(Flags::Extend, false);
+                    if pair.1 {
+                        self.set_flag(Flags::Carry, true);
+                        self.set_flag(Flags::Extend, true);
+                    }
+                } else {
+                    self.set_flag(Flags::Carry, false);
+                }
             },
             Instruction::Bcc(cond, offset) => {
                 let should_branch = self.get_current_condition(cond);
@@ -536,12 +541,12 @@ impl M68k {
                 *addr = value;
             },
             Instruction::LINK(reg, offset) => {
-                let value = *self.get_a_reg_mut(reg);
-                self.push_long(value)?;
+                *self.get_stack_pointer_mut() -= 4;
                 let sp = *self.get_stack_pointer_mut();
-                let addr = self.get_a_reg_mut(reg);
-                *addr = sp;
-                *self.get_stack_pointer_mut() = sp.wrapping_add((offset as i32) as u32);
+                let value = *self.get_a_reg_mut(reg);
+                self.set_address_sized(sp as Address, value, Size::Long)?;
+                *self.get_a_reg_mut(reg) = sp;
+                *self.get_stack_pointer_mut() = (sp as i32).wrapping_add(offset as i32) as u32;
             },
             Instruction::LSd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(count, size, Used::Once)? % 64;
