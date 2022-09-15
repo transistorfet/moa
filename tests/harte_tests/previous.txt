@@ -1,4 +1,4 @@
-Last run on 2022-09-12 at commit 9ff528c4638b7b5757d110ba87c10ab60aa33557
+Last run on 2022-09-13 at commit 099b2fcb559afef16c91a65d084c00595a637597
 
 ABCD.json completed: 301 passed, 7764 FAILED
 ADD.b.json completed, all passed!
@@ -71,7 +71,7 @@ MOVEfromUSP.json completed, all passed!
 MOVEtoCCR.json completed, all passed!
 MOVEtoSR.json completed, all passed!
 MOVEtoUSP.json completed, all passed!
-MULS.json completed: 5670 passed, 2395 FAILED
+MULS.json completed, all passed!
 MULU.json completed, all passed!
 NBCD.json completed: 0 passed, 8065 FAILED
 NEG.b.json completed, all passed!
@@ -125,5 +125,5 @@ TST.l.json completed, all passed!
 TST.w.json completed, all passed!
 UNLINK.json completed, all passed!
 
-passed: 891322, failed: 108738, total 89%
-completed in 13m 52s
+passed: 893717, failed: 106343, total 89%
+completed in 14m 2s
