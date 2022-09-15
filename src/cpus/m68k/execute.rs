@@ -445,10 +445,9 @@ impl M68k {
                     Sign::Unsigned => (existing % value, existing / value),
                 };
 
-
                 // Only update the register if the quotient was large than a 16-bit number
                 if (quotient & 0xFFFF0000) == 0 {
-                    self.set_compare_flags(quotient as u32, Size::Long, false, (quotient & 0xFFFF0000) != 0);
+                    self.set_compare_flags(quotient as u32, Size::Word, false, false);
                     self.state.d_reg[dest as usize] = (remainder << 16) | (0xFFFF & quotient);
                 } else {
                     self.set_flag(Flags::Carry, true);
