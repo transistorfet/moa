@@ -277,11 +277,8 @@ impl M68k {
                 self.set_flag(Flags::Overflow, overflow);
 
                 if count != 0 {
-                    self.set_flag(Flags::Extend, false);
-                    if pair.1 {
-                        self.set_flag(Flags::Carry, true);
-                        self.set_flag(Flags::Extend, true);
-                    }
+                    self.set_flag(Flags::Extend, pair.1);
+                    self.set_flag(Flags::Carry, pair.1);
                 } else {
                     self.set_flag(Flags::Carry, false);
                 }
@@ -556,11 +553,13 @@ impl M68k {
                 self.set_target_value(target, pair.0, size, Used::Twice)?;
 
                 // Adjust flags
-                self.set_flag(Flags::Extend, false);
                 self.set_logic_flags(pair.0, size);
-                if pair.1 {
-                    self.set_flag(Flags::Carry, true);
-                    self.set_flag(Flags::Extend, true);
+                self.set_flag(Flags::Overflow, false);
+                if count != 0 {
+                    self.set_flag(Flags::Extend, pair.1);
+                    self.set_flag(Flags::Carry, pair.1);
+                } else {
+                    self.set_flag(Flags::Carry, false);
                 }
             },
             Instruction::MOVE(src, dest, size) => {
