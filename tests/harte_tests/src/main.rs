@@ -231,13 +231,13 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
     for (i, ins) in expected.prefetch.iter().enumerate() {
         let addr = expected.pc + (i as u32 * 2);
         let actual = system.get_bus().read_beu16(addr as Address & addr_mask)?;
-        assert_value(actual, *ins, &format!("prefetch at {}", addr))?;
+        assert_value(actual, *ins, &format!("prefetch at {:x}", addr))?;
     }
 
     // Load data bytes into memory
     for (addr, byte) in expected.ram.iter() {
         let actual = system.get_bus().read_u8(*addr as Address & addr_mask)?;
-        assert_value(actual, *byte, &format!("ram at {}", addr))?;
+        assert_value(actual, *byte, &format!("ram at {:x}", addr))?;
     }
 
     Ok(())

@@ -754,17 +754,19 @@ impl M68k {
             Instruction::RTE => {
                 self.require_supervisor()?;
                 let sr = self.pop_word()?;
-                self.set_sr(sr);
                 let addr = self.pop_long()?;
-                self.set_pc(addr)?;
+
                 if self.cputype >= M68kType::MC68010 {
                     let _ = self.pop_word()?;
                 }
+
+                self.set_sr(sr);
+                self.set_pc(addr)?;
             },
             Instruction::RTR => {
                 let ccr = self.pop_word()?;
-                self.set_sr((self.state.sr & 0xFF00) | (ccr & 0x00FF));
                 let addr = self.pop_long()?;
+                self.set_sr((self.state.sr & 0xFF00) | (ccr & 0x00FF));
                 self.set_pc(addr)?;
             },
             Instruction::RTS => {
