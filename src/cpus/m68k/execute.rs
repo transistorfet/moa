@@ -470,13 +470,12 @@ impl M68k {
                 };
 
                 // Only update the register if the quotient was large than a 16-bit number
-                if (quotient & 0xFFFF0000) == 0 {
+                if (quotient & 0xFFFF0000) != 0 {
                     self.set_compare_flags(quotient as u32, Size::Word, false, false);
                     self.state.d_reg[dest as usize] = (remainder << 16) | (0xFFFF & quotient);
                 } else {
-                    self.set_flag(Flags::Carry, true);
+                    self.set_flag(Flags::Carry, false);
                     self.set_flag(Flags::Overflow, true);
-                    self.set_flag(Flags::Negative, (quotient as i32) < 0);
                 }
             },
             Instruction::DIVL(src, dest_h, dest_l, sign) => {
