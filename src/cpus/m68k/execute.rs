@@ -133,6 +133,21 @@ impl M68k {
 
     pub fn exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), Error> {
         debug!("{}: raising exception {}", DEV_NAME, number);
+
+        if number == Exceptions::BusError as u8 || number == Exceptions::AddressError as u8 {
+            let result = self.setup_group0_exception(number);
+            if let Err(err) = result {
+                self.state.status = Status::Stopped;
+                return Err(err);
+            }
+        } else {
+            self.setup_normal_exception(number, is_interrupt)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn setup_group0_exception(&mut self, number: u8) -> Result<(), Error> {
         let ins_word = self.decoder.instruction_word;
         let extra_code = self.state.request.get_type_code();
         let fault_size = self.state.request.size.in_bytes();
@@ -143,17 +158,32 @@ impl M68k {
             self.push_word(offset)?;
         }
 
-        // If BusError or AddressError
-        if number == 2 || number == 3 {
-            self.push_long(self.state.pc - fault_size)?;
-            self.push_word(self.state.sr)?;
-            self.push_word(ins_word)?;
-            self.push_long(fault_address)?;
-            self.push_word((ins_word & 0xFFF0) | extra_code)?;
-        } else {
-            self.push_long(self.state.pc)?;
-            self.push_word(self.state.sr)?;
+        self.push_long(self.state.pc - fault_size)?;
+        self.push_word(self.state.sr)?;
+        self.push_word(ins_word)?;
+        self.push_long(fault_address)?;
+        self.push_word((ins_word & 0xFFF0) | extra_code)?;
+
+        // Changes to the flags must happen after the previous value has been pushed to the stack
+        self.set_flag(Flags::Supervisor, true);
+        self.set_flag(Flags::Tracing, false);
+
+        let vector = self.state.vbr + offset as u32;
+        let addr = self.port.read_beu32(vector as Address)?;
+        self.set_pc(addr)?;
+
+        Ok(())
+    }
+
+    pub fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), Error> {
+        self.state.request.i_n_bit = true;
+
+        let offset = (number as u16) << 2;
+        if self.cputype >= M68kType::MC68010 {
+            self.push_word(offset)?;
         }
+        self.push_long(self.state.pc)?;
+        self.push_word(self.state.sr)?;
 
         // Changes to the flags must happen after the previous value has been pushed to the stack
         self.set_flag(Flags::Supervisor, true);
@@ -164,15 +194,7 @@ impl M68k {
 
         let vector = self.state.vbr + offset as u32;
         let addr = self.port.read_beu32(vector as Address)?;
-        let result = self.set_pc(addr);
-
-        // If BusError or AddressError, and another AddressError occurs, then halt
-        if number == 2 || number == 3 {
-            if let Err(err) = result {
-                self.state.status = Status::Stopped;
-                return Err(err);
-            }
-        }
+        self.set_pc(addr)?;
 
         Ok(())
     }
@@ -398,7 +420,12 @@ impl M68k {
                 }
             },
             Instruction::CLR(target, size) => {
-                self.set_target_value(target, 0, size, Used::Once)?;
+                if self.cputype == M68kType::MC68000 {
+                    self.get_target_value(target, size, Used::Twice)?;
+                    self.set_target_value(target, 0, size, Used::Twice)?;
+                } else {
+                    self.set_target_value(target, 0, size, Used::Once)?;
+                }
                 // Clear flags except Zero flag
                 self.state.sr = (self.state.sr & 0xFFF0) | (Flags::Zero as u16);
             },
@@ -1142,7 +1169,7 @@ impl M68k {
     }
 
     pub fn start_instruction_request(&mut self, addr: u32) -> Result<u32, Error> {
-        self.state.request.is_instruction = true;
+        self.state.request.i_n_bit = false;
         self.state.request.code = FunctionCode::program(self.state.sr);
         self.state.request.access = MemAccess::Read;
         self.state.request.address = addr;
@@ -1151,7 +1178,7 @@ impl M68k {
     }
 
     pub fn start_request(&mut self, addr: u32, size: Size, access: MemAccess, mtype: MemType) -> Result<u32, Error> {
-        self.state.request.is_instruction = false;
+        self.state.request.i_n_bit = false;
         self.state.request.code = match mtype {
             MemType::Program => FunctionCode::program(self.state.sr),
             MemType::Data => FunctionCode::data(self.state.sr),

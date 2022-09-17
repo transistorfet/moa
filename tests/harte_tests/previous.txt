@@ -1,4 +1,4 @@
-Last run on 2022-09-13 at commit 099b2fcb559afef16c91a65d084c00595a637597
+Last run on 2022-09-14 at commit a3fbcc7c16f80dd7801ceacf1d4a22a7bf88e9e1
 
 ABCD.json completed: 301 passed, 7764 FAILED
 ADD.b.json completed, all passed!
@@ -14,12 +14,12 @@ AND.l.json completed: 7779 passed, 286 FAILED
 AND.w.json completed: 7764 passed, 301 FAILED
 ANDItoCCR.json completed, all passed!
 ANDItoSR.json completed, all passed!
-ASL.b.json completed: 7205 passed, 860 FAILED
-ASL.l.json completed: 6446 passed, 1619 FAILED
-ASL.w.json completed: 7035 passed, 1030 FAILED
-ASR.b.json completed: 6316 passed, 1749 FAILED
-ASR.l.json completed: 7007 passed, 1058 FAILED
-ASR.w.json completed: 6740 passed, 1325 FAILED
+ASL.b.json completed: 7238 passed, 827 FAILED
+ASL.l.json completed: 6471 passed, 1594 FAILED
+ASL.w.json completed: 7053 passed, 1012 FAILED
+ASR.b.json completed: 6347 passed, 1718 FAILED
+ASR.l.json completed: 7040 passed, 1025 FAILED
+ASR.w.json completed: 6763 passed, 1302 FAILED
 BCHG.json completed, all passed!
 BCLR.json completed, all passed!
 BSET.json completed, all passed!
@@ -37,7 +37,7 @@ CMPA.l.json completed, all passed!
 CMPA.w.json completed, all passed!
 DBcc.json completed: 6101 passed, 1964 FAILED
 DIVS.json completed: 3685 passed, 4380 FAILED
-DIVU.json completed: 4368 passed, 3697 FAILED
+DIVU.json completed: 5595 passed, 2470 FAILED
 EOR.b.json completed, all passed!
 EOR.l.json completed: 7519 passed, 546 FAILED
 EOR.w.json completed: 7525 passed, 540 FAILED
@@ -49,7 +49,7 @@ EXT.w.json completed, all passed!
 JMP.json completed: 4259 passed, 3806 FAILED
 JSR.json completed: 4183 passed, 3882 FAILED
 LEA.json completed, all passed!
-LINK.json completed: 7060 passed, 1005 FAILED
+LINK.json completed, all passed!
 LSL.b.json completed: 7774 passed, 291 FAILED
 LSL.l.json completed: 7017 passed, 1048 FAILED
 LSL.w.json completed: 7494 passed, 571 FAILED
@@ -125,5 +125,5 @@ TST.l.json completed, all passed!
 TST.w.json completed, all passed!
 UNLINK.json completed, all passed!
 
-passed: 893717, failed: 106343, total 89%
-completed in 14m 2s
+passed: 896112, failed: 103948, total 90%
+completed in 15m 7s

@@ -98,7 +98,7 @@ pub enum MemAccess {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct MemoryRequest {
-    pub is_instruction: bool,
+    pub i_n_bit: bool,
     pub access: MemAccess,
     pub code: FunctionCode,
     pub size: Size,
@@ -229,7 +229,7 @@ impl FunctionCode {
 impl MemoryRequest {
     pub fn new() -> Self {
         Self {
-            is_instruction: false,
+            i_n_bit: false,
             access: MemAccess::Read,
             code: FunctionCode::Reserved0,
             size: Size::Word,
@@ -238,7 +238,7 @@ impl MemoryRequest {
     }
 
     pub fn get_type_code(&self) -> u16 {
-        let ins = match self.is_instruction {
+        let ins = match self.i_n_bit {
             false => 0x0000,
             true => 0x0008,
         };
