@@ -148,10 +148,15 @@ impl M68k {
     }
 
     pub fn setup_group0_exception(&mut self, number: u8) -> Result<(), Error> {
+        let sr = self.state.sr;
         let ins_word = self.decoder.instruction_word;
         let extra_code = self.state.request.get_type_code();
         let fault_size = self.state.request.size.in_bytes();
         let fault_address = self.state.request.address;
+
+        // Changes to the flags must happen after the previous value has been pushed to the stack
+        self.set_flag(Flags::Supervisor, true);
+        self.set_flag(Flags::Tracing, false);
 
         let offset = (number as u16) << 2;
         if self.cputype >= M68kType::MC68010 {
@@ -159,14 +164,10 @@ impl M68k {
         }
 
         self.push_long(self.state.pc - fault_size)?;
-        self.push_word(self.state.sr)?;
+        self.push_word(sr)?;
         self.push_word(ins_word)?;
         self.push_long(fault_address)?;
         self.push_word((ins_word & 0xFFF0) | extra_code)?;
-
-        // Changes to the flags must happen after the previous value has been pushed to the stack
-        self.set_flag(Flags::Supervisor, true);
-        self.set_flag(Flags::Tracing, false);
 
         let vector = self.state.vbr + offset as u32;
         let addr = self.port.read_beu32(vector as Address)?;
@@ -178,19 +179,20 @@ impl M68k {
     pub fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), Error> {
         self.state.request.i_n_bit = true;
 
-        let offset = (number as u16) << 2;
-        if self.cputype >= M68kType::MC68010 {
-            self.push_word(offset)?;
-        }
-        self.push_long(self.state.pc)?;
-        self.push_word(self.state.sr)?;
-
         // Changes to the flags must happen after the previous value has been pushed to the stack
         self.set_flag(Flags::Supervisor, true);
         self.set_flag(Flags::Tracing, false);
         if is_interrupt {
             self.state.sr = (self.state.sr & !(Flags::IntMask as u16)) | ((self.state.current_ipl as u16) << 8);
         }
+
+        let sr = self.state.sr;
+        let offset = (number as u16) << 2;
+        if self.cputype >= M68kType::MC68010 {
+            self.push_word(offset)?;
+        }
+        self.push_long(self.state.pc)?;
+        self.push_word(sr)?;
 
         let vector = self.state.vbr + offset as u32;
         let addr = self.port.read_beu32(vector as Address)?;
@@ -460,16 +462,29 @@ impl M68k {
                 }
 
                 let existing = get_value_sized(self.state.d_reg[dest as usize], Size::Long);
-                let (remainder, quotient) = match sign {
+                let (remainder, quotient, overflow) = match sign {
                     Sign::Signed => {
+                        let existing = existing as i32;
                         let value = sign_extend_to_long(value, Size::Word) as i32;
-                        ((existing as i32 % value) as u32, (existing as i32 / value) as u32)
+                        let quotient = existing / value;
+                        (
+                            (existing % value) as u32,
+                            quotient as u32,
+                            quotient > i16::MAX as i32 || quotient < i16::MIN as i32
+                        )
                     },
-                    Sign::Unsigned => (existing % value, existing / value),
+                    Sign::Unsigned => {
+                        let quotient = existing / value;
+                        (
+                            existing % value,
+                            quotient,
+                            (quotient & 0xFFFF0000) != 0
+                        )
+                    },
                 };
 
                 // Only update the register if the quotient was large than a 16-bit number
-                if (quotient & 0xFFFF0000) != 0 {
+                if !overflow {
                     self.set_compare_flags(quotient as u32, Size::Word, false, false);
                     self.state.d_reg[dest as usize] = (remainder << 16) | (0xFFFF & quotient);
                 } else {
