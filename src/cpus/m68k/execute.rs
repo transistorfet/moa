@@ -801,18 +801,27 @@ impl M68k {
                 }
 
                 self.set_sr(sr);
-                self.set_pc(addr)?;
+                if let Err(err) = self.set_pc(addr) {
+                    self.state.pc -= 2;
+                    return Err(err);
+                }
             },
             Instruction::RTR => {
                 let ccr = self.pop_word()?;
                 let addr = self.pop_long()?;
                 self.set_sr((self.state.sr & 0xFF00) | (ccr & 0x00FF));
-                self.set_pc(addr)?;
+                if let Err(err) = self.set_pc(addr) {
+                    self.state.pc -= 2;
+                    return Err(err);
+                }
             },
             Instruction::RTS => {
                 self.debugger.stack_tracer.pop_return();
                 let addr = self.pop_long()?;
-                self.set_pc(addr)?;
+                if let Err(err) = self.set_pc(addr) {
+                    self.state.pc -= 2;
+                    return Err(err);
+                }
             },
             //Instruction::RTD(i16) => {
             //},
