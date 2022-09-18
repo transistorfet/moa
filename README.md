@@ -38,13 +38,16 @@ pixel, so it will now draw all the layers, including the window, sort out the
 priority of the pixels, and almost accurately implement the shadow and highlight
 colour modes.  Audio is not implemented yet.
 
-There are still some problems like the colour of Tails in the Sonic 2 title
+~~There are still some problems like the colour of Tails in the Sonic 2 title
 screen being off.  I'm not sure why that happens, but it could be trying to
 update the colours during the drawing of the frame, and since the code is
 drawing the entire frame at once when the vertical blanking period is reached,
-the on-the-fly changes don't have an affect.
+the on-the-fly changes don't have an affect.~~
+I've since fixed the colour issue with Tails by fixing some 68000 instruction
+behaviour with the help of
+[Tom Harte's test suite](https://github.com/TomHarte/ProcessorTests).
 
-![alt text](images/sega-genesis-sonic2-title.png)
+![alt text](images/sega-genesis-sonic2-title-fixed.png)
 
 The game play is mostly working but the time in the upper left corner doesn't
 seem to progress
