@@ -1,4 +1,4 @@
-Last run on 2022-09-16 at commit ef6fde2a4f7e79310a749d2e10e470bca435e90c
+Last run on 2022-09-17 at commit 914ddb17dd5179f14e61e95154c2a42a79717ec8
 
 ABCD.json completed: 301 passed, 7764 FAILED
 ADD.b.json completed, all passed!
@@ -36,8 +36,8 @@ CMP.w.json completed, all passed!
 CMPA.l.json completed, all passed!
 CMPA.w.json completed, all passed!
 DBcc.json completed: 6101 passed, 1964 FAILED
-DIVS.json completed: 3685 passed, 4380 FAILED
-DIVU.json completed: 5595 passed, 2470 FAILED
+DIVS.json completed: 6833 passed, 1232 FAILED
+DIVU.json completed: 8064 passed, 1 FAILED
 EOR.b.json completed, all passed!
 EOR.l.json completed: 7519 passed, 546 FAILED
 EOR.w.json completed: 7525 passed, 540 FAILED
@@ -125,5 +125,5 @@ TST.l.json completed, all passed!
 TST.w.json completed, all passed!
 UNLINK.json completed, all passed!
 
-passed: 899449, failed: 100611, total 90%
-completed in 14m 6s
+passed: 905066, failed: 94994, total 91%
+completed in 18m 56s

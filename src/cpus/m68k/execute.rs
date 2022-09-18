@@ -297,7 +297,6 @@ impl M68k {
                 // Adjust flags
                 self.set_logic_flags(pair.0, size);
                 self.set_flag(Flags::Overflow, overflow);
-
                 if count != 0 {
                     self.set_flag(Flags::Extend, pair.1);
                     self.set_flag(Flags::Carry, pair.1);
@@ -633,7 +632,7 @@ impl M68k {
             Instruction::MOVEP(dreg, areg, offset, size, dir) => {
                 match dir {
                     Direction::ToTarget => {
-                        let mut shift = (size.in_bytes() as i32 * 8) - 8;
+                        let mut shift = (size.in_bits() as i32) - 8;
                         let mut addr = ((*self.get_a_reg_mut(areg) as i32) + (offset as i32)) as Address;
                         while shift >= 0 {
                             let byte = (self.state.d_reg[dreg as usize] >> shift) as u8;
@@ -643,7 +642,7 @@ impl M68k {
                         }
                     },
                     Direction::FromTarget => {
-                        let mut shift = (size.in_bytes() as i32 * 8) - 8;
+                        let mut shift = (size.in_bits() as i32) - 8;
                         let mut addr = ((*self.get_a_reg_mut(areg) as i32) + (offset as i32)) as Address;
                         while shift >= 0 {
                             let byte = self.port.read_u8(addr)?;
@@ -1150,7 +1149,7 @@ impl M68k {
     }
 
     pub fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, Error> {
-        self.start_request(addr as u32, size, MemAccess::Read, MemType::Data)?;
+        self.start_request(addr as u32, size, MemAccess::Read, MemType::Data, false)?;
         match size {
             Size::Byte => self.port.read_u8(addr).map(|value| value as u32),
             Size::Word => self.port.read_beu16(addr).map(|value| value as u32),
@@ -1159,7 +1158,7 @@ impl M68k {
     }
 
     pub fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), Error> {
-        self.start_request(addr as u32, size, MemAccess::Write, MemType::Data)?;
+        self.start_request(addr as u32, size, MemAccess::Write, MemType::Data, false)?;
         match size {
             Size::Byte => self.port.write_u8(addr, value as u8),
             Size::Word => self.port.write_beu16(addr, value as u16),
@@ -1176,8 +1175,8 @@ impl M68k {
         validate_address(addr)
     }
 
-    pub fn start_request(&mut self, addr: u32, size: Size, access: MemAccess, mtype: MemType) -> Result<u32, Error> {
-        self.state.request.i_n_bit = false;
+    pub fn start_request(&mut self, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, Error> {
+        self.state.request.i_n_bit = i_n_bit;
         self.state.request.code = match mtype {
             MemType::Program => FunctionCode::program(self.state.sr),
             MemType::Data => FunctionCode::data(self.state.sr),
@@ -1196,14 +1195,14 @@ impl M68k {
     fn push_word(&mut self, value: u16) -> Result<(), Error> {
         *self.get_stack_pointer_mut() -= 2;
         let addr = *self.get_stack_pointer_mut();
-        self.start_request(addr, Size::Word, MemAccess::Write, MemType::Data)?;
+        self.start_request(addr, Size::Word, MemAccess::Write, MemType::Data, false)?;
         self.port.write_beu16(addr as Address, value)
     }
 
     fn pop_word(&mut self) -> Result<u16, Error> {
         let addr = *self.get_stack_pointer_mut();
         let value = self.port.read_beu16(addr as Address)?;
-        self.start_request(addr, Size::Word, MemAccess::Read, MemType::Data)?;
+        self.start_request(addr, Size::Word, MemAccess::Read, MemType::Data, false)?;
         *self.get_stack_pointer_mut() += 2;
         Ok(value)
     }
@@ -1211,21 +1210,21 @@ impl M68k {
     fn push_long(&mut self, value: u32) -> Result<(), Error> {
         *self.get_stack_pointer_mut() -= 4;
         let addr = *self.get_stack_pointer_mut();
-        self.start_request(addr, Size::Long, MemAccess::Write, MemType::Data)?;
+        self.start_request(addr, Size::Long, MemAccess::Write, MemType::Data, false)?;
         self.port.write_beu32(addr as Address, value)
     }
 
     fn pop_long(&mut self) -> Result<u32, Error> {
         let addr = *self.get_stack_pointer_mut();
         let value = self.port.read_beu32(addr as Address)?;
-        self.start_request(addr, Size::Long, MemAccess::Read, MemType::Data)?;
+        self.start_request(addr, Size::Long, MemAccess::Read, MemType::Data, false)?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }
 
     fn set_pc(&mut self, value: u32) -> Result<(), Error> {
         self.state.pc = value;
-        self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program)?;
+        self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program, true)?;
         Ok(())
     }
 
