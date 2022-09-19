@@ -3,6 +3,9 @@ Harte Tests:
     * for every failing test in MOVEfromSR, it's caused by an exception where at 0x7F3 it should be 0xF5, it's actually 0xE5, which is the READ/WRITE flag not set correctly (1 = READ)
 
 
+* you could refactor the instruction loop into a series of functions, and test if there's a performance difference with and without #[inline(always)]
+
+
 * make it possible to compile without audio support (minifb frontend requires it atm)
 
 * I need some better function for dealing with memory, like a function that copies data with a loop, or allows offset reading of

@@ -224,12 +224,24 @@ impl M68k {
         self.timer.execute.start();
         match self.decoder.instruction {
             Instruction::ABCD(src, dest) => {
-                let value = convert_from_bcd(self.get_target_value(src, Size::Byte, Used::Once)? as u8);
-                let existing = convert_from_bcd(self.get_target_value(dest, Size::Byte, Used::Twice)? as u8);
-                let result = existing.wrapping_add(value).wrapping_add(self.get_flag(Flags::Extend) as u8);
-                let carry = result > 99;
-                self.set_target_value(dest, convert_to_bcd(result) as u32, Size::Byte, Used::Twice)?;
+                let value = self.get_target_value(src, Size::Byte, Used::Once)?;
+                let existing = self.get_target_value(dest, Size::Byte, Used::Twice)?;
+
+                let extend_flag = self.get_flag(Flags::Extend) as u32;
+                let src_parts = get_nibbles_from_byte(value);
+                let dest_parts = get_nibbles_from_byte(existing);
+
+                let binary_result = value + existing + extend_flag;
+                let mut result = src_parts.1 + dest_parts.1 + extend_flag;
+                if result > 0x09 { result += 0x06 };
+                result += src_parts.0 + dest_parts.0;
+                if result > 0x99 { result += 0x60 };
+                let carry = (result & 0xFFFFFF00) != 0;
+
+                self.set_target_value(dest, result, Size::Byte, Used::Twice)?;
+                self.set_flag(Flags::Negative, get_msb(result, Size::Byte));
                 self.set_flag(Flags::Zero, result == 0);
+                self.set_flag(Flags::Overflow, (!binary_result & result & 0x80) != 0);
                 self.set_flag(Flags::Carry, carry);
                 self.set_flag(Flags::Extend, carry);
             },
@@ -723,8 +735,11 @@ impl M68k {
                 }
                 self.state.d_reg[dest_l as usize] = (result & 0x00000000FFFFFFFF) as u32;
             },
-            //Instruction::NBCD(Target) => {
-            //},
+            Instruction::NBCD(dest) => {
+                let existing = self.get_target_value(dest, Size::Byte, Used::Twice)?;
+                let result = self.execute_sbcd(existing, 0)?;
+                self.set_target_value(dest, result, Size::Byte, Used::Twice)?;
+            },
             Instruction::NEG(target, size) => {
                 let original = self.get_target_value(target, size, Used::Twice)?;
                 let (result, overflow) = overflowing_sub_signed_sized(0, original, size);
@@ -857,14 +872,10 @@ impl M68k {
                 self.state.status = Status::Stopped;
             },
             Instruction::SBCD(src, dest) => {
-                let value = convert_from_bcd(self.get_target_value(src, Size::Byte, Used::Once)? as u8);
-                let existing = convert_from_bcd(self.get_target_value(dest, Size::Byte, Used::Twice)? as u8);
-                let result = existing.wrapping_sub(value).wrapping_sub(self.get_flag(Flags::Extend) as u8);
-                let borrow = existing < value;
-                self.set_target_value(dest, convert_to_bcd(result) as u32, Size::Byte, Used::Twice)?;
-                self.set_flag(Flags::Zero, result == 0);
-                self.set_flag(Flags::Carry, borrow);
-                self.set_flag(Flags::Extend, borrow);
+                let value = self.get_target_value(src, Size::Byte, Used::Once)?;
+                let existing = self.get_target_value(dest, Size::Byte, Used::Twice)?;
+                let result = self.execute_sbcd(value, existing)?;
+                self.set_target_value(dest, result, Size::Byte, Used::Twice)?;
             },
             Instruction::SUB(src, dest, size) => {
                 let value = self.get_target_value(src, size, Used::Once)?;
@@ -945,6 +956,27 @@ impl M68k {
 
         self.timer.execute.end();
         Ok(())
+    }
+
+    fn execute_sbcd(&mut self, value: u32, existing: u32) -> Result<u32, Error> {
+        let extend_flag = self.get_flag(Flags::Extend) as u32;
+        let src_parts = get_nibbles_from_byte(value);
+        let dest_parts = get_nibbles_from_byte(existing);
+
+        let binary_result = existing.wrapping_sub(value).wrapping_sub(extend_flag);
+        let mut result = dest_parts.1.wrapping_sub(src_parts.1).wrapping_sub(extend_flag);
+        if (result & 0x1F) > 0x09 { result -= 0x06 };
+        result = result.wrapping_add(dest_parts.0.wrapping_sub(src_parts.0));
+        let carry = (result & 0x1FF) > 0x99;
+        if carry { result -= 0x60 };
+
+        self.set_flag(Flags::Negative, get_msb(result, Size::Byte));
+        self.set_flag(Flags::Zero, (result & 0xFF) == 0);
+        self.set_flag(Flags::Overflow, (binary_result & !result & 0x80) != 0);
+        self.set_flag(Flags::Carry, carry);
+        self.set_flag(Flags::Extend, carry);
+
+        Ok(result)
     }
 
     fn execute_movem(&mut self, target: Target, size: Size, dir: Direction, mask: u16) -> Result<(), Error> {
@@ -1532,12 +1564,8 @@ fn rotate_operation(value: u32, size: Size, dir: ShiftDirection, use_extend: Opt
     }
 }
 
-fn convert_from_bcd(value: u8) -> u8 {
-    (value >> 4) * 10 + (value & 0x0F)
-}
-
-fn convert_to_bcd(value: u8) -> u8 {
-    (((value / 10) & 0x0F) << 4) | ((value % 10) & 0x0F)
+fn get_nibbles_from_byte(value: u32) -> (u32, u32) {
+    (value & 0xF0, value & 0x0F)
 }
 
 fn get_value_sized(value: u32, size: Size) -> u32 {
