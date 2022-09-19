@@ -309,17 +309,26 @@ impl M68k {
             Instruction::Bcc(cond, offset) => {
                 let should_branch = self.get_current_condition(cond);
                 if should_branch {
-                    self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32))?;
+                    if let Err(err) = self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32)) {
+                        self.state.pc -= 2;
+                        return Err(err);
+                    }
                 }
             },
             Instruction::BRA(offset) => {
-                self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32))?;
+                if let Err(err) = self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32)) {
+                    self.state.pc -= 2;
+                    return Err(err);
+                }
             },
             Instruction::BSR(offset) => {
                 self.push_long(self.state.pc)?;
                 let sp = *self.get_stack_pointer_mut();
                 self.debugger.stack_tracer.push_return(sp);
-                self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32))?;
+                if let Err(err) = self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32)) {
+                    self.state.pc -= 2;
+                    return Err(err);
+                }
             },
             Instruction::BCHG(bitnum, target, size) => {
                 let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
@@ -450,7 +459,10 @@ impl M68k {
                     let next = ((get_value_sized(self.state.d_reg[reg as usize], Size::Word) as u16) as i16).wrapping_sub(1);
                     set_value_sized(&mut self.state.d_reg[reg as usize], next as u32, Size::Word);
                     if next != -1 {
-                        self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32))?;
+                        if let Err(err) = self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32)) {
+                            self.state.pc -= 2;
+                            return Err(err);
+                        }
                     }
                 }
             },
@@ -559,12 +571,18 @@ impl M68k {
             },
             Instruction::JMP(target) => {
                 let addr = self.get_target_address(target)?;
-                self.set_pc(addr)?;
+                if let Err(err) = self.set_pc(addr) {
+                    self.state.pc -= 2;
+                    return Err(err);
+                }
             },
             Instruction::JSR(target) => {
                 let previous_pc = self.state.pc;
                 let addr = self.get_target_address(target)?;
-                self.set_pc(addr)?;
+                if let Err(err) = self.set_pc(addr) {
+                    self.state.pc -= 2;
+                    return Err(err);
+                }
 
                 // If the address is good, then push the old PC onto the stack
                 self.push_long(previous_pc)?;
