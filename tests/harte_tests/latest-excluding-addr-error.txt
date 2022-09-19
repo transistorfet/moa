@@ -1,4 +1,6 @@
-ABCD.json completed: 301 passed, 7764 FAILED
+Last run on 2022-09-18 at commit 94d3e1d3894e6588ff6daa55f0ba82473b1e74c7
+
+ABCD.json completed: 7993 passed, 72 FAILED
 ADD.b.json completed, all passed!
 ADD.l.json completed, all passed!
 ADD.w.json completed, all passed!
@@ -15,9 +17,9 @@ ANDItoSR.json completed, all passed!
 ASL.b.json completed: 7238 passed, 827 FAILED
 ASL.l.json completed: 6471 passed, 1594 FAILED
 ASL.w.json completed: 6248 passed, 830 FAILED
-ASR.b.json completed: 6347 passed, 1718 FAILED
-ASR.l.json completed: 7040 passed, 1025 FAILED
-ASR.w.json completed: 6011 passed, 1137 FAILED
+ASR.b.json completed: 7547 passed, 518 FAILED
+ASR.l.json completed: 7092 passed, 973 FAILED
+ASR.w.json completed: 6761 passed, 387 FAILED
 BCHG.json completed, all passed!
 BCLR.json completed, all passed!
 BSET.json completed, all passed!
@@ -71,7 +73,7 @@ MOVEtoSR.json completed, all passed!
 MOVEtoUSP.json completed, all passed!
 MULS.json completed, all passed!
 MULU.json completed, all passed!
-NBCD.json completed: 0 passed, 8065 FAILED
+NBCD.json completed: 8037 passed, 28 FAILED
 NEG.b.json completed, all passed!
 NEG.l.json completed, all passed!
 NEG.w.json completed, all passed!
@@ -104,7 +106,7 @@ ROXR.w.json completed: 7141 passed, 30 FAILED
 RTE.json completed, all passed!
 RTR.json completed, all passed!
 RTS.json completed, all passed!
-SBCD.json completed: 884 passed, 7181 FAILED
+SBCD.json completed: 6809 passed, 1256 FAILED
 SUB.b.json completed, all passed!
 SUB.l.json completed, all passed!
 SUB.w.json completed, all passed!
@@ -123,6 +125,5 @@ TST.l.json completed, all passed!
 TST.w.json completed, all passed!
 UNLINK.json completed, all passed!
 
-passed: 787242, failed: 42232, total 95%
-completed in 15m 58s
-
+passed: 810898, failed: 18576, total 98%
+completed in 22m 8s

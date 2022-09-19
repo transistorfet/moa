@@ -295,9 +295,10 @@ impl M68k {
             },
             Instruction::ASd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(count, size, Used::Once)? % 64;
+                let value = self.get_target_value(target, size, Used::Twice)?;
 
                 let mut overflow = false;
-                let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
+                let mut pair = (value, false);
                 let mut previous_msb = get_msb(pair.0, size);
                 for _ in 0..count {
                     pair = shift_operation(pair.0, size, shift_dir, true);
@@ -308,12 +309,17 @@ impl M68k {
                 }
                 self.set_target_value(target, pair.0, size, Used::Twice)?;
 
+                let carry = match shift_dir {
+                    ShiftDirection::Left => pair.1,
+                    ShiftDirection::Right => if count < size.in_bits() { pair.1 } else { false }
+                };
+
                 // Adjust flags
                 self.set_logic_flags(pair.0, size);
                 self.set_flag(Flags::Overflow, overflow);
                 if count != 0 {
-                    self.set_flag(Flags::Extend, pair.1);
-                    self.set_flag(Flags::Carry, pair.1);
+                    self.set_flag(Flags::Extend, carry);
+                    self.set_flag(Flags::Carry, carry);
                 } else {
                     self.set_flag(Flags::Carry, false);
                 }

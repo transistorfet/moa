@@ -34,7 +34,7 @@ CMP.w.json completed, all passed!
 CMPA.l.json completed, all passed!
 CMPA.w.json completed, all passed!
 DBcc.json completed, all passed!
-DIVS.json completed: 3760 passed, 1232 FAILED
+DIVS.json completed, all passed!
 DIVU.json completed: 4963 passed, 1 FAILED
 EOR.b.json completed, all passed!
 EOR.l.json completed, all passed!
@@ -101,8 +101,8 @@ ROXL.w.json completed: 7114 passed, 16 FAILED
 ROXR.b.json completed: 8037 passed, 28 FAILED
 ROXR.l.json completed: 8022 passed, 43 FAILED
 ROXR.w.json completed: 7141 passed, 30 FAILED
-RTE.json completed: 4011 passed, 4054 FAILED
-RTR.json completed: 4038 passed, 4027 FAILED
+RTE.json completed, all passed!
+RTR.json completed, all passed!
 RTS.json completed, all passed!
 SBCD.json completed: 884 passed, 7181 FAILED
 SUB.b.json completed, all passed!
@@ -123,6 +123,6 @@ TST.l.json completed, all passed!
 TST.w.json completed, all passed!
 UNLINK.json completed, all passed!
 
-passed: 777929, failed: 51545, total 94%
-completed in 10m 3s
+passed: 787242, failed: 42232, total 95%
+completed in 15m 58s
 

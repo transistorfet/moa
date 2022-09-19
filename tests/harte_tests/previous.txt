@@ -1,4 +1,4 @@
-Last run on 2022-09-17 at commit 914ddb17dd5179f14e61e95154c2a42a79717ec8
+Last run on 2022-09-18 at commit 1a65f50ba0fe4b7ad361f6e5c33fe82b1aee3459
 
 ABCD.json completed: 301 passed, 7764 FAILED
 ADD.b.json completed, all passed!
@@ -36,7 +36,7 @@ CMP.w.json completed, all passed!
 CMPA.l.json completed, all passed!
 CMPA.w.json completed, all passed!
 DBcc.json completed: 6101 passed, 1964 FAILED
-DIVS.json completed: 6833 passed, 1232 FAILED
+DIVS.json completed, all passed!
 DIVU.json completed: 8064 passed, 1 FAILED
 EOR.b.json completed, all passed!
 EOR.l.json completed: 7519 passed, 546 FAILED
@@ -103,9 +103,9 @@ ROXL.w.json completed: 7892 passed, 173 FAILED
 ROXR.b.json completed: 8037 passed, 28 FAILED
 ROXR.l.json completed: 8022 passed, 43 FAILED
 ROXR.w.json completed: 7880 passed, 185 FAILED
-RTE.json completed: 4011 passed, 4054 FAILED
-RTR.json completed: 4038 passed, 4027 FAILED
-RTS.json completed: 4008 passed, 4057 FAILED
+RTE.json completed, all passed!
+RTR.json completed, all passed!
+RTS.json completed, all passed!
 SBCD.json completed: 884 passed, 7181 FAILED
 SUB.b.json completed, all passed!
 SUB.l.json completed: 7747 passed, 318 FAILED
@@ -125,5 +125,5 @@ TST.l.json completed, all passed!
 TST.w.json completed, all passed!
 UNLINK.json completed, all passed!
 
-passed: 905066, failed: 94994, total 91%
-completed in 18m 56s
+passed: 918436, failed: 81624, total 92%
+completed in 19m 21s
