@@ -113,7 +113,8 @@ mod decode_tests {
                 assert_eq!(cpu.decoder.instruction, ins.clone());
             },
             None => {
-                assert_eq!(cpu.decode_next().is_err(), true);
+println!("{:?}", cpu.decoder.instruction);
+                assert!(cpu.decode_next().is_err());
             },
         }
     }
@@ -501,7 +502,8 @@ mod execute_tests {
     use crate::devices::{Address, Addressable, Steppable, wrap_transmutable};
 
     use crate::cpus::m68k::{M68k, M68kType};
-    use crate::cpus::m68k::state::{M68kState};
+    use crate::cpus::m68k::state::M68kState;
+    use crate::cpus::m68k::execute::Used;
     use crate::cpus::m68k::instructions::{Instruction, Target, Size, Sign, ShiftDirection, Direction, Condition};
 
     const INIT_STACK: Address = 0x00002000;
@@ -1183,7 +1185,7 @@ mod execute_tests {
         let target = Target::DirectDReg(1);
 
         cpu.state.d_reg[1] = expected;
-        let result = cpu.get_target_value(target, size).unwrap();
+        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
         assert_eq!(result, expected);
     }
 
@@ -1196,7 +1198,7 @@ mod execute_tests {
         let target = Target::DirectAReg(2);
 
         cpu.state.a_reg[2] = expected;
-        let result = cpu.get_target_value(target, size).unwrap();
+        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
         assert_eq!(result, expected);
     }
 
@@ -1210,7 +1212,7 @@ mod execute_tests {
         cpu.port.write_beu32(INIT_ADDR, expected).unwrap();
 
         cpu.state.a_reg[2] = INIT_ADDR as u32;
-        let result = cpu.get_target_value(target, size).unwrap();
+        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
         assert_eq!(result, expected);
     }
 
@@ -1224,7 +1226,7 @@ mod execute_tests {
         cpu.port.write_beu32(INIT_ADDR, expected).unwrap();
 
         cpu.state.a_reg[2] = INIT_ADDR as u32;
-        let result = cpu.get_target_value(target, size).unwrap();
+        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
         assert_eq!(result, expected);
         assert_eq!(cpu.state.a_reg[2], (INIT_ADDR as u32) + 4);
     }
@@ -1239,7 +1241,7 @@ mod execute_tests {
         cpu.port.write_beu32(INIT_ADDR, expected).unwrap();
 
         cpu.state.a_reg[2] = (INIT_ADDR as u32) + 4;
-        let result = cpu.get_target_value(target, size).unwrap();
+        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
         assert_eq!(result, expected);
         assert_eq!(cpu.state.a_reg[2], INIT_ADDR as u32);
     }
@@ -1254,7 +1256,7 @@ mod execute_tests {
 
         let target = Target::Immediate(expected);
 
-        let result = cpu.get_target_value(target, size).unwrap();
+        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
         assert_eq!(result, expected);
     }
 }
