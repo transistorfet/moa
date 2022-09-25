@@ -24,7 +24,7 @@ Sega Genesis/MegaDrive
 
 From the project root, run the following:
 ```
-cargo run -p moa-minifb --release --bin moa-genesis -- <ROM FILE>
+cargo run -p moa_minifb --release --bin moa-genesis -- <ROM FILE>
 ```
 
 The Genesis emulator is slowly coming along.  It can play a decent number of
@@ -74,7 +74,7 @@ For Computie, it can do everything the 68k-SMT board can do, including run the
 monitor program and load the Computie OS kernel and boot it from the
 CompactFlash card.  To run it:
 ```
-cargo run -p moa-console --bin moa-computie
+cargo run -p moa_console --bin moa-computie
 ```
 It will open two PTYs: one for the serial terminal, and one for the SLIP
 connection.  Once open, it will try to launch both `pyserial-miniterm` as a
@@ -95,7 +95,7 @@ Genesis emulator.  The frontend uses the
 [`minifb`](https://github.com/emoon/rust_minifb) rust crate to open a window
 and render the characters to screen, as well as accept input from the keyboard.
 ```
-cargo run -p moa-minifb --release --bin moa-trs-80
+cargo run -p moa_minifb --release --bin moa-trs80
 ```
 By default it will start Level I Basic.  To use the other rom, add the option
 `--rom binaries/trs80/level2.rom`
