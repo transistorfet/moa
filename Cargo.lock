@@ -412,7 +412,8 @@ version = "0.1.0"
 dependencies = [
  "clap 3.2.20",
  "flate2",
- "moa",
+ "moa_core",
+ "moa_m68k",
  "serde",
  "serde_derive",
  "serde_json",
@@ -620,34 +621,131 @@ dependencies = [
 ]
 
 [[package]]
-name = "moa"
-version = "0.1.0"
-
-[[package]]
-name = "moa-common"
+name = "moa_common"
 version = "0.1.0"
 dependencies = [
  "cpal",
- "moa",
+ "moa_core",
  "nix 0.23.0",
 ]
 
 [[package]]
-name = "moa-console"
+name = "moa_computie"
 version = "0.1.0"
 dependencies = [
- "moa",
- "moa-common",
+ "moa_core",
+ "moa_m68k",
+ "moa_peripherals_generic",
+ "moa_peripherals_motorola",
 ]
 
 [[package]]
-name = "moa-minifb"
+name = "moa_console"
+version = "0.1.0"
+dependencies = [
+ "moa_common",
+ "moa_computie",
+ "moa_core",
+ "moa_genesis",
+ "moa_m68k",
+ "moa_peripherals_generic",
+ "moa_peripherals_motorola",
+]
+
+[[package]]
+name = "moa_core"
+version = "0.1.0"
+
+[[package]]
+name = "moa_genesis"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+ "moa_m68k",
+ "moa_peripherals_yamaha",
+ "moa_z80",
+]
+
+[[package]]
+name = "moa_m68k"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+]
+
+[[package]]
+name = "moa_macintosh"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+ "moa_m68k",
+ "moa_peripherals_mos",
+ "moa_peripherals_zilog",
+]
+
+[[package]]
+name = "moa_minifb"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.20",
  "minifb",
- "moa",
- "moa-common",
+ "moa_common",
+ "moa_computie",
+ "moa_core",
+ "moa_genesis",
+ "moa_macintosh",
+ "moa_peripherals_yamaha",
+ "moa_trs80",
+]
+
+[[package]]
+name = "moa_peripherals_generic"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+]
+
+[[package]]
+name = "moa_peripherals_mos"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+]
+
+[[package]]
+name = "moa_peripherals_motorola"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+]
+
+[[package]]
+name = "moa_peripherals_yamaha"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+]
+
+[[package]]
+name = "moa_peripherals_zilog"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+]
+
+[[package]]
+name = "moa_trs80"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+ "moa_z80",
+]
+
+[[package]]
+name = "moa_z80"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
 ]
 
 [[package]]

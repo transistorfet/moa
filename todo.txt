@@ -4,6 +4,7 @@ Harte Tests:
 
 
 * you could refactor the instruction loop into a series of functions, and test if there's a performance difference with and without #[inline(always)]
+* use the log crate instead of your own
 
 
 * make it possible to compile without audio support (minifb frontend requires it atm)

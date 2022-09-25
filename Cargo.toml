@@ -1,10 +1,9 @@
-[package]
-name = "moa"
-version = "0.1.0"
-edition = "2018"
-
 [workspace]
-members = [".", "frontends/moa-common", "frontends/moa-console", "frontends/moa-minifb", "tests/harte_tests"]
-default-members = ["frontends/moa-console"]
-
-[dependencies]
+members = [
+    "emulator/core",
+    "emulator/frontends/common",
+    "emulator/frontends/console",
+    "emulator/frontends/minifb",
+    "tests/harte_tests"
+]
+default-members = ["emulator/frontends/minifb"]

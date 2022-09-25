@@ -11,13 +11,10 @@ use clap::{Parser, ArgEnum};
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 
-use moa::error::Error;
-use moa::system::System;
-use moa::memory::{MemoryBlock, BusPort};
-use moa::devices::{Address, Addressable, Steppable, wrap_transmutable};
+use moa_core::{System, Error, MemoryBlock, BusPort, Address, Addressable, Steppable, wrap_transmutable};
 
-use moa::cpus::m68k::{M68k, M68kType};
-use moa::cpus::m68k::state::Status;
+use moa_m68k::{M68k, M68kType};
+use moa_m68k::state::Status;
 
 #[derive(Copy, Clone, PartialEq, Eq, ArgEnum)]
 enum Selection {

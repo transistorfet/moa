@@ -1,0 +1,10 @@
+[package]
+name = "moa_computie"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+moa_core = { path = "../../core" }
+moa_m68k = { path = "../../cpus/m68k" }
+moa_peripherals_generic = { path = "../../peripherals/generic" }
+moa_peripherals_motorola = { path = "../../peripherals/motorola" }

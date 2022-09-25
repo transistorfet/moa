@@ -1,0 +1,11 @@
+[package]
+name = "moa_genesis"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+moa_core = { path = "../../core" }
+moa_peripherals_yamaha = { path = "../../peripherals/yamaha" }
+moa_m68k = { path = "../../cpus/m68k" }
+moa_z80 = { path = "../../cpus/z80" }
+

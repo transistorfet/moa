@@ -1,0 +1,10 @@
+[package]
+name = "moa_macintosh"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+moa_core = { path = "../../core" }
+moa_m68k = { path = "../../cpus/m68k" }
+moa_peripherals_mos = { path = "../../peripherals/mos" }
+moa_peripherals_zilog = { path = "../../peripherals/zilog" }
