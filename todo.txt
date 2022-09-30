@@ -1,10 +1,28 @@
 
+Web Assembly:
+* the frame rate is pretty bad.  It's definitely faster with a smaller window
+* can you limit the size of the window that pixels generates?
+* can you automatically adjust the speed based on the calculated framerate (if you moved that to Rust)
+* can you limit the frame rate in pixels so that you if it were to run too fast, it would limit it to 60Hz
+* the system run is taking 40 to 50ms per frame in web assembly.  Can you cut that by 4 times?
+
+* add sound to web assembly
+* add run/stop and ability to change speed through the web interface
+* can you make the web interface nicer with like... a picture of a genesis or something
+
+
+* EarthwormJim, Mortal Kombat 2, and a few others, that were working are now not working, possibly due to the tests (it fixed some things and broke others)
+  It's possible that some of the errors are coming from the Z80 and coprocessor interactions.  Try running tests agains Z80
+* fix audio, and/or make it possible to disable audio processing/simulation for one or both sound chips (might be nice to have sn76489 but not ym2612)
+
+
 Harte Tests:
     * for every failing test in MOVEfromSR, it's caused by an exception where at 0x7F3 it should be 0xF5, it's actually 0xE5, which is the READ/WRITE flag not set correctly (1 = READ)
 
 
 * you could refactor the instruction loop into a series of functions, and test if there's a performance difference with and without #[inline(always)]
 * use the log crate instead of your own
+* move parser into its own
 
 
 * make it possible to compile without audio support (minifb frontend requires it atm)

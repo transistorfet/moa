@@ -1,6 +1,8 @@
 
+use std::mem;
 use std::sync::{Arc, Mutex};
 
+use crate::Error;
 use crate::host::traits::{WindowUpdater, BlitableSurface};
 
 
@@ -75,6 +77,13 @@ impl WindowUpdater for FrameUpdateWrapper {
         }
     }
 
+    fn get_frame(&mut self) -> Result<Frame, Error> {
+        let mut current = self.0.lock().map_err(|_| Error::new("Lock error"))?;
+        let mut frame = Frame::new(current.width, current.height);
+        mem::swap(&mut *current, &mut frame);
+        Ok(frame)
+    }
+
     fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
         if let Ok(frame) = self.0.lock() {
             for y in 0..frame.height {
@@ -122,6 +131,13 @@ impl WindowUpdater for FrameSwapper {
         } else {
             (0, 0)
         }
+    }
+
+    fn get_frame(&mut self) -> Result<Frame, Error> {
+        let mut previous = self.previous.lock().map_err(|_| Error::new("Lock error"))?;
+        let mut frame = Frame::new(previous.width, previous.height);
+        mem::swap(&mut *previous, &mut frame);
+        Ok(frame)
     }
 
     fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {

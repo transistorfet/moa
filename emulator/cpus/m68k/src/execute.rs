@@ -176,6 +176,7 @@ impl M68k {
     }
 
     pub fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), Error> {
+        let sr = self.state.sr;
         self.state.request.i_n_bit = true;
 
         // Changes to the flags must happen after the previous value has been pushed to the stack
@@ -185,7 +186,6 @@ impl M68k {
             self.state.sr = (self.state.sr & !(Flags::IntMask as u16)) | ((self.state.current_ipl as u16) << 8);
         }
 
-        let sr = self.state.sr;
         let offset = (number as u16) << 2;
         if self.cputype >= M68kType::MC68010 {
             self.push_word(offset)?;
