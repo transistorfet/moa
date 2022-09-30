@@ -42,6 +42,10 @@ impl MemoryBlock {
     pub fn read_only(&mut self) {
         self.read_only = true;
     }
+
+    pub fn resize(&mut self, new_size: usize) {
+        self.contents.resize(new_size, 0);
+    }
 }
 
 impl Addressable for MemoryBlock {

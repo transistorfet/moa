@@ -1,4 +1,9 @@
 
+* make the keys easier to config...
+
+* add log crate to core
+* can you make the debugger more accessible, so a web interface could access the data and display it, in light of the fact that println isn't available in wasm
+
 Web Assembly:
 * the frame rate is pretty bad.  It's definitely faster with a smaller window
 * can you limit the size of the window that pixels generates?
@@ -11,8 +16,6 @@ Web Assembly:
 * can you make the web interface nicer with like... a picture of a genesis or something
 
 
-* EarthwormJim, Mortal Kombat 2, and a few others, that were working are now not working, possibly due to the tests (it fixed some things and broke others)
-  It's possible that some of the errors are coming from the Z80 and coprocessor interactions.  Try running tests agains Z80
 * fix audio, and/or make it possible to disable audio processing/simulation for one or both sound chips (might be nice to have sn76489 but not ym2612)
 
 

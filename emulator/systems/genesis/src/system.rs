@@ -11,6 +11,7 @@ use moa_z80::{Z80, Z80Type};
 use moa_peripherals_yamaha::Ym2612;
 use moa_peripherals_yamaha::Sn76489;
 
+use crate::utils;
 use crate::peripherals::ym7101::Ym7101;
 use crate::peripherals::controllers::GenesisControllers;
 use crate::peripherals::coprocessor::{CoprocessorCoordinator, CoprocessorBankRegister, CoprocessorBankArea};
@@ -33,12 +34,13 @@ impl SegaGenesisOptions {
 pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> Result<System, Error> {
     let mut system = System::new();
 
-    let rom = if options.rom_data.is_some() {
-        let data = mem::take(&mut options.rom_data).unwrap();
-        MemoryBlock::new(data)
+    let rom_data = if options.rom_data.is_some() {
+        mem::take(&mut options.rom_data).unwrap()
     } else {
-        MemoryBlock::load(&options.rom).unwrap()
+        utils::load_rom_file(&options.rom)?
     };
+
+    let rom = MemoryBlock::new(rom_data);
     //let mut rom = MemoryBlock::load("binaries/genesis/GenTestV3.0.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/HDRV_Genesis_Test_v1_4.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/ComradeOj's tiny demo.bin").unwrap();
@@ -58,8 +60,8 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     let rom_end = rom.len();
     system.add_addressable_device(0x00000000, wrap_transmutable(rom)).unwrap();
 
-    let nvram = MemoryBlock::new(vec![0; 0x00010000]);
-    system.add_addressable_device(rom_end as Address, wrap_transmutable(nvram)).unwrap();
+    let cartridge_nvram = MemoryBlock::new(vec![0; 0x400000 - rom_end]);
+    system.add_addressable_device(rom_end as Address, wrap_transmutable(cartridge_nvram)).unwrap();
 
     let ram = MemoryBlock::new(vec![0; 0x00010000]);
     system.add_addressable_device(0x00ff0000, wrap_transmutable(ram)).unwrap();
