@@ -1,4 +1,5 @@
 
+use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -17,20 +18,27 @@ use crate::peripherals::coprocessor::{CoprocessorCoordinator, CoprocessorBankReg
 
 pub struct SegaGenesisOptions {
     pub rom: String,
+    pub rom_data: Option<Vec<u8>>,
 }
 
 impl SegaGenesisOptions {
     pub fn new() -> Self {
         Self {
             rom: "".to_string(),
+            rom_data: None,
         }
     }
 }
 
-pub fn build_genesis<H: Host>(host: &mut H, options: SegaGenesisOptions) -> Result<System, Error> {
+pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> Result<System, Error> {
     let mut system = System::new();
 
-    let rom = MemoryBlock::load(&options.rom).unwrap();
+    let rom = if options.rom_data.is_some() {
+        let data = mem::take(&mut options.rom_data).unwrap();
+        MemoryBlock::new(data)
+    } else {
+        MemoryBlock::load(&options.rom).unwrap()
+    };
     //let mut rom = MemoryBlock::load("binaries/genesis/GenTestV3.0.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/HDRV_Genesis_Test_v1_4.bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/ComradeOj's tiny demo.bin").unwrap();

@@ -1,7 +1,7 @@
 [package]
 name = "moa_common"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [features]
 tty = ["nix"]
@@ -9,6 +9,6 @@ audio = ["cpal"]
 
 [dependencies]
 moa_core = { path = "../../core" }
-nix = { version = "0.23", optional = true }
-cpal = { version = "0.13", optional = true }
+nix = { version = "0.25", optional = true }
+cpal = { version = "0.14", optional = true }
 

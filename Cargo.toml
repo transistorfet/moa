@@ -6,4 +6,8 @@ members = [
     "emulator/frontends/minifb",
     "tests/harte_tests"
 ]
+exclude = [
+    "emulator/frontends/pixels",
+    "emulator/frontends/macroquad",
+]
 default-members = ["emulator/frontends/minifb"]

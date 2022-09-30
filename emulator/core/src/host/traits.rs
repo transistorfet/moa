@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::error::Error;
 use crate::host::keys::Key;
+use crate::host::gfx::Frame;
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
 
 pub trait Host {
@@ -36,6 +37,7 @@ pub trait Tty {
 
 pub trait WindowUpdater: Send {
     fn get_size(&mut self) -> (u32, u32);
+    fn get_frame(&mut self) -> Result<Frame, Error>;
     fn update_frame(&mut self, width: u32, height: u32, bitmap: &mut [u32]);
 }
 
@@ -83,5 +85,21 @@ impl<T: Copy> HostData<T> {
     pub fn get(&mut self) -> T {
         *(self.0.lock().unwrap())
     }
+}
+
+pub struct DummyAudio();
+
+impl Audio for DummyAudio {
+    fn samples_per_second(&self) -> usize {
+        48000
+    }
+
+    fn space_available(&self) -> usize {
+        4800
+    }
+
+    fn write_samples(&mut self, _buffer: &[f32]) {}
+
+    fn flush(&mut self) {}
 }
 
