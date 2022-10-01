@@ -1,8 +1,8 @@
 
 use std::thread;
 use std::str::FromStr;
-use std::time::Duration;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use minifb::{self, Key};
 use clap::{App, Arg, ArgMatches};
@@ -162,7 +162,6 @@ impl Host for MiniFrontendBuilder {
 
 
 pub struct MiniFrontend {
-    pub buffer: Vec<u32>,
     pub modifiers: u16,
     pub window: Option<Box<dyn WindowUpdater>>,
     pub controller: Option<Box<dyn ControllerUpdater>>,
@@ -174,7 +173,6 @@ pub struct MiniFrontend {
 impl MiniFrontend {
     pub fn new(window: Option<Box<dyn WindowUpdater>>, controller: Option<Box<dyn ControllerUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>, mixer: HostData<AudioMixer>) -> Self {
         Self {
-            buffer: vec![0; (WIDTH * HEIGHT) as usize],
             modifiers: 0,
             window,
             controller,
@@ -210,8 +208,7 @@ impl MiniFrontend {
 
         let mut size = (WIDTH, HEIGHT);
         if let Some(updater) = self.window.as_mut() {
-            size = updater.get_size();
-            self.buffer = vec![0; (size.0 * size.1) as usize];
+            size = updater.max_size();
         }
 
         let mut window = minifb::Window::new(
@@ -251,8 +248,9 @@ impl MiniFrontend {
             }
 
             if let Some(updater) = self.window.as_mut() {
-                updater.update_frame(size.0, size.1, &mut self.buffer);
-                window.update_with_buffer(&self.buffer, size.0 as usize, size.1 as usize).unwrap();
+                if let Ok(frame) = updater.take_frame() {
+                    window.update_with_buffer(&frame.bitmap, frame.width as usize, frame.height as usize).unwrap();
+                }
             }
         }
     }

@@ -1,7 +1,9 @@
 
 use std::mem;
 use std::sync::{Arc, Mutex};
+use std::collections::VecDeque;
 
+use crate::Clock;
 use crate::Error;
 use crate::host::traits::{WindowUpdater, BlitableSurface};
 
@@ -22,10 +24,6 @@ impl Frame {
 
     pub fn new_shared(width: u32, height: u32) -> Arc<Mutex<Frame>> {
         Arc::new(Mutex::new(Frame::new(width, height)))
-    }
-
-    pub fn new_updater(frame: Arc<Mutex<Frame>>) -> Box<dyn WindowUpdater> {
-        Box::new(FrameUpdateWrapper(frame))
     }
 }
 
@@ -67,35 +65,6 @@ impl BlitableSurface for Frame {
     }
 }
 
-pub struct FrameUpdateWrapper(Arc<Mutex<Frame>>);
-
-impl WindowUpdater for FrameUpdateWrapper {
-    fn get_size(&mut self) -> (u32, u32) {
-        match self.0.lock() {
-            Ok(frame) => (frame.width, frame.height),
-            _ => (0, 0),
-        }
-    }
-
-    fn get_frame(&mut self) -> Result<Frame, Error> {
-        let mut current = self.0.lock().map_err(|_| Error::new("Lock error"))?;
-        let mut frame = Frame::new(current.width, current.height);
-        mem::swap(&mut *current, &mut frame);
-        Ok(frame)
-    }
-
-    fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
-        if let Ok(frame) = self.0.lock() {
-            for y in 0..frame.height {
-                for x in 0..frame.width {
-                    bitmap[(x + (y * width)) as usize] = frame.bitmap[(x + (y * frame.width)) as usize];
-                }
-            }
-        }
-    }
-}
-
-
 #[derive(Clone)]
 pub struct FrameSwapper {
     pub current: Arc<Mutex<Frame>>,
@@ -125,29 +94,50 @@ impl FrameSwapper {
 }
 
 impl WindowUpdater for FrameSwapper {
-    fn get_size(&mut self) -> (u32, u32) {
-        if let Ok(frame) = self.current.lock() {
-            (frame.width, frame.height)
-        } else {
-            (0, 0)
-        }
+    fn max_size(&mut self) -> (u32, u32) {
+        let frame = self.current.lock().unwrap();
+        (frame.width, frame.height)
     }
 
-    fn get_frame(&mut self) -> Result<Frame, Error> {
+    fn take_frame(&mut self) -> Result<Frame, Error> {
         let mut previous = self.previous.lock().map_err(|_| Error::new("Lock error"))?;
         let mut frame = Frame::new(previous.width, previous.height);
         mem::swap(&mut *previous, &mut frame);
         Ok(frame)
     }
+}
 
-    fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
-        if let Ok(frame) = self.previous.lock() {
-            for y in 0..frame.height {
-                for x in 0..frame.width {
-                    bitmap[(x + (y * width)) as usize] = frame.bitmap[(x + (y * frame.width)) as usize];
-                }
-            }
+
+#[derive(Clone)]
+pub struct FrameQueue {
+    max_size: (u32, u32),
+    queue: Arc<Mutex<VecDeque<(Clock, Frame)>>>,
+}
+
+impl FrameQueue {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self {
+            max_size: (width, height),
+            queue: Arc::new(Mutex::new(VecDeque::new())),
         }
+    }
+
+    pub fn add(&self, clock: Clock, frame: Frame) {
+        self.queue.lock().unwrap().push_back((clock, frame));
+    }
+
+    pub fn latest(&self) -> Option<(Clock, Frame)> {
+        self.queue.lock().unwrap().drain(..).last()
+    }
+}
+
+impl WindowUpdater for FrameQueue {
+    fn max_size(&mut self) -> (u32, u32) {
+        self.max_size
+    }
+
+    fn take_frame(&mut self) -> Result<Frame, Error> {
+        self.latest().map(|(_, f)| f).ok_or_else(|| Error::new("No frame available"))
     }
 }
 

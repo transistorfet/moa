@@ -1,25 +1,24 @@
 
-use std::sync::{Arc, Mutex};
-
 use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::gfx::Frame;
+use moa_core::host::gfx::{Frame, FrameQueue};
 use moa_core::host::{Host, BlitableSurface};
 
 
-const SCRN_BASE: u32    = 0x07A700;
+const SCRN_BASE: u32        = 0x07A700;
+const SCRN_SIZE: (u32, u32) = (512, 342);
 
 pub struct MacVideo {
-    frame: Arc<Mutex<Frame>>,
+    frame_queue: FrameQueue,
 }
 
 impl MacVideo {
     pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let frame = Frame::new_shared(512, 342);
+        let frame_queue = FrameQueue::new(SCRN_SIZE.0, SCRN_SIZE.1);
 
-        host.add_window(Frame::new_updater(frame.clone()))?;
+        host.add_window(Box::new(frame_queue.clone()))?;
 
         Ok(Self {
-            frame,
+            frame_queue,
         })
     }
 }
@@ -60,13 +59,15 @@ impl Iterator for BitIter {
 impl Steppable for MacVideo {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         let mut memory = system.get_bus();
-        let mut frame = self.frame.lock().unwrap();
-        for y in 0..342 {
-            for x in 0..(512 / 16) {
-                let word = memory.read_beu16((SCRN_BASE + (x * 2) + (y * (512 / 8))) as Address)?;
+        let mut frame = Frame::new(SCRN_SIZE.0, SCRN_SIZE.1);
+        for y in 0..SCRN_SIZE.1 {
+            for x in 0..(SCRN_SIZE.0 / 16) {
+                let word = memory.read_beu16((SCRN_BASE + (x * 2) + (y * (SCRN_SIZE.0 / 8))) as Address)?;
                 frame.blit(x * 16, y, BitIter::new(word), 16, 1);
             }
         }
+
+        self.frame_queue.add(system.clock, frame);
         Ok(16_600_000)
     }
 }

@@ -2,7 +2,7 @@
 use moa_core::{debug, warning, error};
 use moa_core::{System, Error, EdgeSignal, Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
 use moa_core::host::{Host, BlitableSurface, HostData};
-use moa_core::host::gfx::{Frame, FrameSwapper};
+use moa_core::host::gfx::{Frame, FrameQueue};
 
 
 const REG_MODE_SET_1: usize             = 0x00;
@@ -647,10 +647,10 @@ impl Steppable for Ym7101 {
                 system.get_interrupt_controller().set(true, 6, 30)?;
             }
 
-            self.swapper.swap();
             if (self.state.mode_1 & MODE1_BF_DISABLE_DISPLAY) == 0 {
-                let mut frame = self.swapper.current.lock().unwrap();
+                let mut frame = Frame::new(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8);
                 self.state.draw_frame(&mut frame);
+                self.queue.add(system.clock, frame);
             }
 
             self.frame_complete.signal();
@@ -669,9 +669,8 @@ impl Steppable for Ym7101 {
 }
 
 
-
 pub struct Ym7101 {
-    swapper: FrameSwapper,
+    queue: FrameQueue,
     state: Ym7101State,
     sn_sound: TransmutableBox,
 
@@ -681,12 +680,11 @@ pub struct Ym7101 {
 
 impl Ym7101 {
     pub fn new<H: Host>(host: &mut H, external_interrupt: HostData<bool>, sn_sound: TransmutableBox) -> Ym7101 {
-        let swapper = FrameSwapper::new(320, 224);
-
-        host.add_window(FrameSwapper::to_boxed(swapper.clone())).unwrap();
+        let queue = FrameQueue::new(320, 224);
+        host.add_window(Box::new(queue.clone())).unwrap();
 
         Ym7101 {
-            swapper,
+            queue,
             state: Ym7101State::new(),
             sn_sound,
             external_interrupt,
@@ -707,7 +705,6 @@ impl Ym7101 {
             REG_MODE_SET_2 => {
                 self.state.mode_2 = data;
                 self.state.update_screen_size();
-                self.swapper.set_size(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8);
             },
             REG_SCROLL_A_ADDR => { self.state.scroll_a_addr = (data as usize) << 10; },
             REG_WINDOW_ADDR => { self.state.window_addr = (data as usize) << 10; },
@@ -719,7 +716,6 @@ impl Ym7101 {
             REG_MODE_SET_4 => {
                 self.state.mode_4 = data;
                 self.state.update_screen_size();
-                self.swapper.set_size(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8);
             },
             REG_HSCROLL_ADDR => { self.state.hscroll_addr = (data as usize) << 10; },
             REG_AUTO_INCREMENT => { self.state.memory.transfer_auto_inc = data as u32; },
