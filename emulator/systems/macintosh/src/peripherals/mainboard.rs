@@ -2,7 +2,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Bus, Error, Observable, Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
+use moa_core::{System, Bus, Error, Observable, Clock, ClockElapsed, Address, Addressable, AddressRepeater, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 use moa_peripherals_mos::Mos6522;
 use moa_peripherals_zilog::Z8530;
@@ -45,16 +45,16 @@ impl Mainboard {
             if (port.data & 0x10) == 0 {
                 println!("{}: overlay is 0 (normal)", DEV_NAME);
                 lower_bus.borrow_mut().clear_all_bus_devices();
-                lower_bus.borrow_mut().insert(0x000000, wrap_transmutable(AddressRepeater::new(ram.clone(), 32)));
-                lower_bus.borrow_mut().insert(0x400000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
-                lower_bus.borrow_mut().insert(0x600000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
+                lower_bus.borrow_mut().insert(0x000000, wrap_transmutable(AddressRepeater::new(ram.clone(), 0x400000)));
+                lower_bus.borrow_mut().insert(0x400000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x600000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
             } else {
                 println!("{}: overlay is 1 (startup)", DEV_NAME);
                 lower_bus.borrow_mut().clear_all_bus_devices();
-                lower_bus.borrow_mut().insert(0x000000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
-                lower_bus.borrow_mut().insert(0x200000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
-                lower_bus.borrow_mut().insert(0x400000, wrap_transmutable(AddressRepeater::new(rom.clone(), 16)));
-                lower_bus.borrow_mut().insert(0x600000, wrap_transmutable(AddressRepeater::new(ram.clone(), 16)));
+                lower_bus.borrow_mut().insert(0x000000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x200000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x400000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x600000, wrap_transmutable(AddressRepeater::new(ram.clone(), 0x200000)));
             }
         });
 
@@ -161,45 +161,6 @@ impl Addressable for PhaseRead {
     fn write(&mut self, _addr: Address, _data: &[u8]) -> Result<(), Error> {
         // TODO I'm not sure how this is supposed to work
         Ok(())
-    }
-}
-
-
-
-pub struct AddressRepeater {
-    subdevice: TransmutableBox,
-    repeat: u8,
-}
-
-impl AddressRepeater {
-    pub fn new(subdevice: TransmutableBox, repeat: u8) -> Self {
-        Self {
-            subdevice,
-            repeat,
-        }
-    }
-}
-
-impl Addressable for AddressRepeater {
-    fn len(&self) -> usize {
-        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len();
-        len * self.repeat as usize
-    }
-
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len() as Address;
-        self.subdevice.borrow_mut().as_addressable().unwrap().read(addr % len, data)
-    }
-
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len() as Address;
-        self.subdevice.borrow_mut().as_addressable().unwrap().write(addr % len, data)
-    }
-}
-
-impl Transmutable for AddressRepeater {
-    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
-        Some(self)
     }
 }
 

@@ -79,12 +79,12 @@ impl Transmutable for MemoryBlock {
 }
 
 
-pub struct AddressAdapter {
+pub struct AddressRightShifter {
     subdevice: TransmutableBox,
     shift: u8,
 }
 
-impl AddressAdapter {
+impl AddressRightShifter {
     pub fn new(subdevice: TransmutableBox, shift: u8) -> Self {
         Self {
             subdevice,
@@ -93,7 +93,7 @@ impl AddressAdapter {
     }
 }
 
-impl Addressable for AddressAdapter {
+impl Addressable for AddressRightShifter {
     fn len(&self) -> usize {
         let len = self.subdevice.borrow_mut().as_addressable().unwrap().len();
         len << self.shift
@@ -108,7 +108,44 @@ impl Addressable for AddressAdapter {
     }
 }
 
-impl Transmutable for AddressAdapter {
+impl Transmutable for AddressRightShifter {
+    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        Some(self)
+    }
+}
+
+
+pub struct AddressRepeater {
+    subdevice: TransmutableBox,
+    range: Address,
+}
+
+impl AddressRepeater {
+    pub fn new(subdevice: TransmutableBox, range: Address) -> Self {
+        Self {
+            subdevice,
+            range,
+        }
+    }
+}
+
+impl Addressable for AddressRepeater {
+    fn len(&self) -> usize {
+        self.range as usize
+    }
+
+    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len() as Address;
+        self.subdevice.borrow_mut().as_addressable().unwrap().read(addr % len, data)
+    }
+
+    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len() as Address;
+        self.subdevice.borrow_mut().as_addressable().unwrap().write(addr % len, data)
+    }
+}
+
+impl Transmutable for AddressRepeater {
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         Some(self)
     }

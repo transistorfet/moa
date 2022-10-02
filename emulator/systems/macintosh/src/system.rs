@@ -46,7 +46,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     system.add_addressable_device(0x00BFFFF0, wrap_transmutable(scc2))?;
 
     let iwm = IWM::new();
-    let adapter = AddressAdapter::new(wrap_transmutable(iwm), 9);
+    let adapter = AddressRightShifter::new(wrap_transmutable(iwm), 9);
     system.add_addressable_device(0x00DFE1FF, wrap_transmutable(adapter))?;
 
     //let via = wrap_transmutable(Mos6522::new());
@@ -54,7 +54,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     system.add_addressable_device(0x00000000, mainboard.bus.clone())?;
     let mainboard_boxed = wrap_transmutable(mainboard);
     system.add_device("via", mainboard_boxed.clone())?;
-    let adapter = AddressAdapter::new(mainboard_boxed, 9);
+    let adapter = AddressRightShifter::new(mainboard_boxed, 9);
     system.add_addressable_device(0x00EFE000, wrap_transmutable(adapter))?;
     */
 
