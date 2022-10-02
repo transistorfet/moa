@@ -1,4 +1,8 @@
 
+* test the Z80 more, add tests
+* double check the functioning of the banked areas and register settings for Z80 coprocessor
+* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
+
 * make the keys easier to config...
 
 * add log crate to core
@@ -17,6 +21,7 @@ Web Assembly:
 
 
 * fix audio, and/or make it possible to disable audio processing/simulation for one or both sound chips (might be nice to have sn76489 but not ym2612)
+* should you have a separate attenuation value for each input in the mixer so that you can make one chip quieter (the sn76489 is pretty loud, and I added a fixed offset to the attenuation for now)
 
 
 Harte Tests:

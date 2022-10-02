@@ -40,7 +40,7 @@ impl ToneGenerator {
     }
 
     pub fn get_sample(&mut self) -> f32 {
-        self.wave.next().unwrap() / self.attenuation
+        self.wave.next().unwrap() / (self.attenuation + 1.0)
     }
 }
 
@@ -115,23 +115,18 @@ impl Steppable for Sn76489 {
             let mut buffer = vec![0.0; samples];
             for i in 0..samples {
                 let mut sample = 0.0;
-                let mut count = 0;
 
                 for ch in 0..3 {
                     if self.tones[ch].on {
                         sample += self.tones[ch].get_sample();
-                        count += 1;
                     }
                 }
 
                 if self.noise.on {
                     sample += self.noise.get_sample();
-                    count += 1;
                 }
 
-                if count > 0 {
-                    buffer[i] = sample / count as f32;
-                }
+                buffer[i] = sample.clamp(-1.0, 1.0);
             }
             self.source.write_samples(&buffer);
         } else {

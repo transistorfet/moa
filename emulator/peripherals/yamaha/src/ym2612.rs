@@ -1,5 +1,6 @@
 
 use std::num::NonZeroU8;
+use std::collections::VecDeque;
 
 use moa_core::{debug, warning};
 use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable};
@@ -154,6 +155,9 @@ pub struct Ym2612 {
 
     pub channels: Vec<Channel>,
     pub channel_frequencies: [(u8, u16); CHANNELS],
+
+    pub dac_enabled: bool,
+    pub dac: VecDeque<u8>,
 }
 
 impl Ym2612 {
@@ -166,6 +170,8 @@ impl Ym2612 {
             selected_reg_1: None,
             channels: vec![Channel::new(sample_rate); 8],
             channel_frequencies: [(0, 0); CHANNELS],
+            dac_enabled: false,
+            dac: VecDeque::with_capacity(100),
         })
     }
 
@@ -175,6 +181,14 @@ impl Ym2612 {
             self.channels[ch].on = data >> 4;
             self.channels[ch].reset();
             println!("Note: {}: {:x}", ch, self.channels[ch].on);
+        } else if reg == 0x2a {
+            if self.dac_enabled {
+                for _ in 0..3 {
+                    self.dac.push_back(data);
+                }
+            }
+        } else if reg == 0x2b {
+            self.dac_enabled = data & 0x80 != 0;
         } else if (reg & 0xF0) == 0x30 {
             let (ch, op) = get_ch_op(bank, reg);
             let multiplier = if data == 0 { 0.5 } else { (data & 0x0F) as f32 };
@@ -249,18 +263,22 @@ impl Steppable for Ym2612 {
             let mut buffer = vec![0.0; samples];
             for i in 0..samples {
                 let mut sample = 0.0;
-                let mut count = 0;
 
-                for ch in 0..7 {
+                for ch in 0..6 {
                     if self.channels[ch].on != 0 {
                         sample += self.channels[ch].get_sample();
-                        count += 1;
                     }
                 }
 
-                if count > 0 {
-                    buffer[i] = sample / count as f32;
+                if self.dac_enabled {
+                    if let Some(data) = self.dac.pop_front() {
+                        sample += data as f32 / 255.0;
+                    }
+                } else if self.channels[6].on != 0 {
+                    sample += self.channels[6].get_sample();
                 }
+
+                buffer[i] = sample.clamp(-1.0, 1.0);
             }
             self.source.write_samples(&buffer);
         //}

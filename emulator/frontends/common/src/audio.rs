@@ -58,7 +58,7 @@ impl AudioSource {
             self.sequence_num = mixer_sequence_num;
 
             for i in 0..locked_mixer.buffer.len() {
-                locked_mixer.buffer[i] += self.buffer.next().unwrap_or(0.0);
+                locked_mixer.buffer[i] = (locked_mixer.buffer[i] + self.buffer.next().unwrap_or(0.0)).clamp(-1.0, 1.0);
             }
 
             self.frame_size = locked_mixer.frame_size();
