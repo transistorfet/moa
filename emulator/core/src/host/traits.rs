@@ -1,7 +1,8 @@
 
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::error::Error;
+use crate::{Clock, Error};
 use crate::host::keys::Key;
 use crate::host::gfx::Frame;
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
@@ -95,6 +96,24 @@ impl<T: Copy> HostData<T> {
         *(self.0.lock().unwrap())
     }
 }
+
+#[derive(Clone)]
+pub struct ClockedQueue<T>(Arc<Mutex<VecDeque<(Clock, T)>>>);
+
+impl<T: Clone> ClockedQueue<T> {
+    pub fn new() -> Self {
+        Self(Arc::new(Mutex::new(VecDeque::new())))
+    }
+
+    pub fn push(&self, clock: Clock, data: T) {
+        self.0.lock().unwrap().push_back((clock, data));
+    }
+
+    pub fn pop_latest(&self) -> Option<(Clock, T)> {
+        self.0.lock().unwrap().drain(..).last()
+    }
+}
+
 
 pub struct DummyAudio();
 

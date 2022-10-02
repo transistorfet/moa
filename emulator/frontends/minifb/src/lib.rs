@@ -9,6 +9,7 @@ use clap::{App, Arg, ArgMatches};
 
 use moa_core::{System, Error, Clock};
 use moa_core::host::{Host, HostData, ControllerUpdater, KeyboardUpdater, WindowUpdater, Audio, ControllerDevice};
+use moa_core::host::gfx::Frame;
 
 use moa_common::audio::{AudioOutput, AudioMixer, AudioSource};
 
@@ -226,6 +227,7 @@ impl MiniFrontend {
 
         let mut average_time = 0;
         let mut update_timer = Instant::now();
+        let mut last_frame = Frame::new(size.0, size.1);
         while window.is_open() && !window.is_key_down(Key::Escape) {
             let frame_time = update_timer.elapsed().as_micros();
             update_timer = Instant::now();
@@ -259,8 +261,9 @@ impl MiniFrontend {
 
             if let Some(updater) = self.window.as_mut() {
                 if let Ok(frame) = updater.take_frame() {
-                    window.update_with_buffer(&frame.bitmap, frame.width as usize, frame.height as usize).unwrap();
+                    last_frame = frame
                 }
+                window.update_with_buffer(&last_frame.bitmap, last_frame.width as usize, last_frame.height as usize).unwrap();
             }
         }
     }

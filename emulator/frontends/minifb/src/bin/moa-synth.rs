@@ -4,8 +4,8 @@ use std::sync::mpsc;
 use moa_minifb;
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
-use moa_core::host::gfx::Frame;
-use moa_core::host::{Host, KeyboardUpdater, Key};
+use moa_core::host::gfx::{Frame, FrameQueue};
+use moa_core::host::{Host, WindowUpdater, KeyboardUpdater, Key};
 use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 
@@ -18,12 +18,14 @@ impl KeyboardUpdater for SynthControlsUpdater {
 }
 
 struct SynthControl {
+    queue: FrameQueue,
     receiver: mpsc::Receiver<(Key, bool)>,
 }
 
 impl SynthControl {
-    pub fn new(receiver: mpsc::Receiver<(Key, bool)>) -> Self {
+    pub fn new(queue: FrameQueue, receiver: mpsc::Receiver<(Key, bool)>) -> Self {
         Self {
+            queue,
             receiver,
         }
     }
@@ -49,7 +51,11 @@ impl Steppable for SynthControl {
             }
         }
 
-        Ok(1_000_000)
+        let size = self.queue.max_size();
+        let frame = Frame::new(size.0, size.1);
+        self.queue.add(system.clock, frame);
+
+        Ok(33_000_000)
     }
 }
 
@@ -88,8 +94,9 @@ fn main() {
     moa_minifb::run(matches, |host| {
         let mut system = System::new();
 
+        let queue = FrameQueue::new(384, 128);
         let (sender, receiver) = mpsc::channel();
-        let control = wrap_transmutable(SynthControl::new(receiver));
+        let control = wrap_transmutable(SynthControl::new(queue.clone(), receiver));
         system.add_device("control", control)?;
 
         let ym_sound = wrap_transmutable(Ym2612::create(host)?);
@@ -99,8 +106,7 @@ fn main() {
         let sn_sound = wrap_transmutable(Sn76489::create(host)?);
         system.add_addressable_device(0x10, sn_sound)?;
 
-        let frame = Frame::new_shared(384, 128);
-        host.add_window(Frame::new_updater(frame.clone()))?;
+        host.add_window(Box::new(queue.clone()))?;
         host.register_keyboard(Box::new(SynthControlsUpdater(sender)))?;
 
         Ok(system)

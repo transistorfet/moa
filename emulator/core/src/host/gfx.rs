@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 
 use crate::Clock;
 use crate::Error;
-use crate::host::traits::{WindowUpdater, BlitableSurface};
+use crate::host::traits::{WindowUpdater, BlitableSurface, ClockedQueue};
 
 
 pub const MASK_COLOUR: u32 = 0xFFFFFFFF;
@@ -111,23 +111,23 @@ impl WindowUpdater for FrameSwapper {
 #[derive(Clone)]
 pub struct FrameQueue {
     max_size: (u32, u32),
-    queue: Arc<Mutex<VecDeque<(Clock, Frame)>>>,
+    queue: ClockedQueue<Frame>,
 }
 
 impl FrameQueue {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
             max_size: (width, height),
-            queue: Arc::new(Mutex::new(VecDeque::new())),
+            queue: ClockedQueue::new(),
         }
     }
 
     pub fn add(&self, clock: Clock, frame: Frame) {
-        self.queue.lock().unwrap().push_back((clock, frame));
+        self.queue.push(clock, frame);
     }
 
     pub fn latest(&self) -> Option<(Clock, Frame)> {
-        self.queue.lock().unwrap().drain(..).last()
+        self.queue.pop_latest()
     }
 }
 
