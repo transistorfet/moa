@@ -1,0 +1,11 @@
+serve package: (build package)
+    miniserve --index index.html ./dist/{{package}}/
+
+build package:
+    mkdir -p ./dist/{{package}}/
+    cp ./assets/{{package}}/* ./dist/{{package}}/
+    cargo build --release --target wasm32-unknown-unknown
+    wasm-bindgen --target web --no-typescript --out-dir ./dist/{{package}}/ ./target/wasm32-unknown-unknown/release/{{package}}.wasm
+
+clean package:
+    rm -rf ./dist/{{package}}/ 
