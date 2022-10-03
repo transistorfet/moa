@@ -5,25 +5,31 @@ use moa_minifb;
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
 use moa_core::host::gfx::{Frame, FrameQueue};
-use moa_core::host::{Host, WindowUpdater, KeyboardUpdater, Key};
+use moa_core::host::{Host, WindowUpdater, KeyboardUpdater, Key, KeyEvent, MouseUpdater, MouseState, MouseEvent};
 use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 
-pub struct SynthControlsUpdater(mpsc::Sender<(Key, bool)>);
+pub struct SynthControlsUpdater(mpsc::Sender<KeyEvent>);
 
 impl KeyboardUpdater for SynthControlsUpdater {
-    fn update_keyboard(&mut self, key: Key, state: bool) {
-        self.0.send((key, state)).unwrap();
+    fn update_keyboard(&mut self, event: KeyEvent) {
+        self.0.send(event).unwrap();
     }
 }
 
+//impl MouseUpdater for SynthControlsUpdater {
+//    fn update_mouse(&mut self, event: MouseEvent) {
+//        self.0.send(event).unwrap();
+//    }
+//}
+
 struct SynthControl {
     queue: FrameQueue,
-    receiver: mpsc::Receiver<(Key, bool)>,
+    receiver: mpsc::Receiver<KeyEvent>,
 }
 
 impl SynthControl {
-    pub fn new(queue: FrameQueue, receiver: mpsc::Receiver<(Key, bool)>) -> Self {
+    pub fn new(queue: FrameQueue, receiver: mpsc::Receiver<KeyEvent>) -> Self {
         Self {
             queue,
             receiver,
@@ -33,18 +39,18 @@ impl SynthControl {
 
 impl Steppable for SynthControl {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        if let Ok((key, state)) = self.receiver.try_recv() {
+        if let Ok(event) = self.receiver.try_recv() {
 
-            match key {
+            match event.key {
                 Key::Enter => {
                     system.get_bus().write_u8(0x00, 0x28)?;
-                    system.get_bus().write_u8(0x01, if state { 0xF0 } else { 0x00 })?;
+                    system.get_bus().write_u8(0x01, if event.state { 0xF0 } else { 0x00 })?;
                 },
 
                 Key::A => {
                     system.get_bus().write_u8(0x10, 0x84)?;
                     system.get_bus().write_u8(0x10, 0x0F)?;
-                    system.get_bus().write_u8(0x10, if state { 0x90 } else { 0x9F })?;
+                    system.get_bus().write_u8(0x10, if event.state { 0x90 } else { 0x9F })?;
                 },
 
                 _ => { },
@@ -108,6 +114,7 @@ fn main() {
 
         host.add_window(Box::new(queue.clone()))?;
         host.register_keyboard(Box::new(SynthControlsUpdater(sender)))?;
+        //host.register_mouse(Box::new(SynthControlsUpdater(sender)))?;
 
         Ok(system)
     });

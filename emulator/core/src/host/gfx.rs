@@ -1,7 +1,6 @@
 
 use std::mem;
 use std::sync::{Arc, Mutex};
-use std::collections::VecDeque;
 
 use crate::Clock;
 use crate::Error;

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, debug, warning};
 use moa_core::host::gfx::{Frame, FrameQueue};
-use moa_core::host::{Host, BlitableSurface, KeyboardUpdater, Key};
+use moa_core::host::{Host, BlitableSurface, KeyboardUpdater, KeyEvent};
 
 use super::keymap;
 use super::charset::CharacterGenerator;
@@ -37,9 +37,9 @@ impl Model1Peripherals {
 pub struct Model1KeyboardUpdater(Arc<Mutex<[u8; 8]>>);
 
 impl KeyboardUpdater for Model1KeyboardUpdater {
-    fn update_keyboard(&mut self, key: Key, state: bool) {
-        println!(">>> {:?}", key);
-        keymap::record_key_press(&mut self.0.lock().unwrap(), key, state);
+    fn update_keyboard(&mut self, event: KeyEvent) {
+        println!(">>> {:?}", event.key);
+        keymap::record_key_press(&mut self.0.lock().unwrap(), event.key, event.state);
     }
 }
 

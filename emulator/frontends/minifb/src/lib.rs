@@ -4,11 +4,11 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use minifb::{self, Key};
+use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
 use moa_core::{System, Error, Clock};
-use moa_core::host::{Host, HostData, ControllerUpdater, KeyboardUpdater, WindowUpdater, Audio, ControllerDevice};
+use moa_core::host::{Host, HostData, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice};
 use moa_core::host::gfx::Frame;
 
 use moa_common::audio::{AudioOutput, AudioMixer, AudioSource};
@@ -98,6 +98,7 @@ pub struct MiniFrontendBuilder {
     pub window: Option<Box<dyn WindowUpdater>>,
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
+    pub mouse: Option<Box<dyn MouseUpdater>>,
     pub mixer: Option<HostData<AudioMixer>>,
     pub finalized: bool,
 }
@@ -108,6 +109,7 @@ impl MiniFrontendBuilder {
             window: None,
             controller: None,
             keyboard: None,
+            mouse: None,
             mixer: Some(AudioMixer::new_default()),
             finalized: false,
         }
@@ -121,8 +123,9 @@ impl MiniFrontendBuilder {
         let window = std::mem::take(&mut self.window);
         let controller = std::mem::take(&mut self.controller);
         let keyboard = std::mem::take(&mut self.keyboard);
+        let mouse = std::mem::take(&mut self.mouse);
         let mixer = std::mem::take(&mut self.mixer);
-        MiniFrontend::new(window, controller, keyboard, mixer.unwrap())
+        MiniFrontend::new(window, controller, keyboard, mouse, mixer.unwrap())
     }
 }
 
@@ -155,6 +158,14 @@ impl Host for MiniFrontendBuilder {
         Ok(())
     }
 
+    fn register_mouse(&mut self, input: Box<dyn MouseUpdater>) -> Result<(), Error> {
+        if self.mouse.is_some() {
+            return Err(Error::new("A mouse updater has already been registered with the frontend"));
+        }
+        self.mouse = Some(input);
+        Ok(())
+    }
+
     fn create_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
         let source = AudioSource::new(self.mixer.as_ref().unwrap().clone());
         Ok(Box::new(source))
@@ -164,20 +175,30 @@ impl Host for MiniFrontendBuilder {
 
 pub struct MiniFrontend {
     pub modifiers: u16,
+    pub mouse_state: MouseState,
     pub window: Option<Box<dyn WindowUpdater>>,
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
+    pub mouse: Option<Box<dyn MouseUpdater>>,
     pub audio: Option<AudioOutput>,
     pub mixer: HostData<AudioMixer>,
 }
 
 impl MiniFrontend {
-    pub fn new(window: Option<Box<dyn WindowUpdater>>, controller: Option<Box<dyn ControllerUpdater>>, keyboard: Option<Box<dyn KeyboardUpdater>>, mixer: HostData<AudioMixer>) -> Self {
+    pub fn new(
+        window: Option<Box<dyn WindowUpdater>>,
+        controller: Option<Box<dyn ControllerUpdater>>,
+        keyboard: Option<Box<dyn KeyboardUpdater>>,
+        mouse: Option<Box<dyn MouseUpdater>>,
+        mixer: HostData<AudioMixer>,
+    ) -> Self {
         Self {
             modifiers: 0,
+            mouse_state: Default::default(),
             window,
             controller,
             keyboard,
+            mouse,
             audio: None,
             mixer,
         }
@@ -259,6 +280,20 @@ impl MiniFrontend {
                 }
             }
 
+            if let Some(updater) = self.mouse.as_mut() {
+                if let Some((x, y)) = window.get_mouse_pos(MouseMode::Clamp) {
+                    let left = window.get_mouse_down(MouseButton::Left);
+                    let right = window.get_mouse_down(MouseButton::Right);
+                    let middle = window.get_mouse_down(MouseButton::Middle);
+
+                    let next_state = MouseState::with(left, right, middle, x as u32, y as u32);
+                    self.mouse_state
+                        .to_events(next_state)
+                        .into_iter()
+                        .for_each(|event| updater.update_mouse(event));
+                }
+            }
+
             if let Some(updater) = self.window.as_mut() {
                 if let Ok(frame) = updater.take_frame() {
                     last_frame = frame
@@ -270,7 +305,7 @@ impl MiniFrontend {
 
     fn check_key(&mut self, key: Key, state: bool) {
         if let Some(updater) = self.keyboard.as_mut() {
-            updater.update_keyboard(map_key(key), state);
+            updater.update_keyboard(KeyEvent::new(map_key(key), state));
         }
 
         if let Some(updater) = self.controller.as_mut() {

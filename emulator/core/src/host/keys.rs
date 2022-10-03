@@ -110,3 +110,17 @@ pub enum Key {
     Unknown,
 }
 
+pub struct KeyEvent {
+    pub key: Key,
+    pub state: bool,
+}
+
+impl KeyEvent {
+    pub fn new(key: Key, state: bool) -> Self {
+        Self {
+            key,
+            state,
+        }
+    }
+}
+

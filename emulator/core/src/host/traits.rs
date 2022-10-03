@@ -3,9 +3,10 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{Clock, Error};
-use crate::host::keys::Key;
 use crate::host::gfx::Frame;
+use crate::host::keys::KeyEvent;
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
+use crate::host::mouse::MouseEvent;
 
 pub trait Host {
     fn create_pty(&self) -> Result<Box<dyn Tty>, Error> {
@@ -22,6 +23,10 @@ pub trait Host {
 
     fn register_keyboard(&mut self, _input: Box<dyn KeyboardUpdater>) -> Result<(), Error> {
         Err(Error::new("This frontend doesn't support the keyboard"))
+    }
+
+    fn register_mouse(&mut self, _input: Box<dyn MouseUpdater>) -> Result<(), Error> {
+        Err(Error::new("This frontend doesn't support the mouse"))
     }
 
     fn create_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
@@ -56,7 +61,11 @@ pub trait ControllerUpdater: Send {
 }
 
 pub trait KeyboardUpdater: Send {
-    fn update_keyboard(&mut self, key: Key, state: bool);
+    fn update_keyboard(&mut self, event: KeyEvent);
+}
+
+pub trait MouseUpdater: Send {
+    fn update_mouse(&mut self, event: MouseEvent);
 }
 
 pub trait Audio {

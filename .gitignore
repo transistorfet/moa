@@ -1,6 +1,6 @@
 Cargo.lock
 .*.sw?
-/target
+target
 *.vim
 junk/
 
@@ -9,3 +9,4 @@ perf.data.old
 
 binaries/*/*.asm
 binaries/*/*.bin
+binaries/*/*.smd
