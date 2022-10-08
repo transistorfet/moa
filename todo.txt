@@ -1,11 +1,15 @@
 
+* fix ym2612 sound generation
+* fix glitching (possibly due to borrowing) in the audio mixer
 * can you get audio working without the need to lock during an update?  Use the ClockedQueue like frames do... but should the queue be used for the mixer-to-output,
   the sources to mixer, or both?
-* add mouse support, particularly to allow the synth system to have buttons and keys that can be clicked
+* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
+
+* the pixel format idea didn't work because of window resizing and the fact that the frame needs to be adjusted in size because the window can't always be resized...
+* add mouse support to synth app
 
 * test the Z80 more, add tests
 * double check the functioning of the banked areas and register settings for Z80 coprocessor
-* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
 
 * make the keys easier to config...
 
