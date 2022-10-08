@@ -272,7 +272,15 @@ Audio
   check before the audio devices write only account for one channel of audio instead of two, so the
   buffer was over filling.  Dividing the available buffer size by 2 fixed it
 
-
+2022-10-08
+- I replaced the circular buffer with queues of audio frames, which might be less able to handle time
+  dialation, but which uses fewer locks for less time, which seems to improve the occasional dropout
+  glitches.  The next frame is also assembled by whichever sim audio source that pushes data sees
+  the queue is empty (audio frame taken by the output callback), so it then assembles the next frame
+  and pushes it to the queue.  It definitely works better, but there are still some timing issues
+- the PCM data in ym2612, looking at the recording of the waveform, shows it's offset by a bias, which
+  probably shouldn't be.  The other audio sounds distorted but still sort of sounds like what it should,
+  so I don't think it's too far off
 
 
 

@@ -5,14 +5,13 @@ use cpal::{Sample, Stream, SampleRate, SampleFormat, StreamConfig, traits::{Devi
 
 use moa_core::Clock;
 use moa_core::host::{HostData, Audio, ClockedQueue};
-use crate::circularbuf::CircularBuffer;
 
 const SAMPLE_RATE: usize = 48000;
 
 
 #[derive(Clone)]
 pub struct AudioFrame {
-    data: Vec<f32>,
+    data: Vec<(f32, f32)>,
 }
 
 pub struct AudioSource {
@@ -21,7 +20,6 @@ pub struct AudioSource {
     frame_size: usize,
     sequence_num: usize,
     mixer: Arc<Mutex<AudioMixer>>,
-    buffer: CircularBuffer<f32>,
     queue: ClockedQueue<AudioFrame>,
 }
 
@@ -37,7 +35,6 @@ impl AudioSource {
                 mixer.frame_size(),
             )
         };
-        let buffer = CircularBuffer::new(frame_size * 2, 0.0);
 
         Self {
             id,
@@ -45,29 +42,24 @@ impl AudioSource {
             frame_size,
             sequence_num: 0,
             mixer,
-            buffer,
             queue,
         }
     }
 
     pub fn space_available(&self) -> usize {
-        //self.buffer.free_space() / 2
         self.frame_size / 2
     }
 
     pub fn fill_with(&mut self, clock: Clock, buffer: &[f32]) {
         let mut data = vec![];
-        //if self.buffer.free_space() > buffer.len() * 2 {
-            for sample in buffer.iter() {
-                // TODO this is here to keep it quiet for testing, but should be removed later
-                let sample = 0.5 * *sample;
-                data.push(sample);
-                data.push(sample);
-            }
-        //}
+        for sample in buffer.iter() {
+            // TODO this is here to keep it quiet for testing, but should be removed later
+            let sample = 0.5 * *sample;
+            data.push((sample, sample));
+        }
 
         let frame = AudioFrame {
-            data, //: Vec::from(buffer)
+            data,
         };
 
 //println!("synthesized {}: {:?}", self.id, frame.data);
@@ -79,7 +71,6 @@ impl AudioSource {
     pub fn flush(&mut self) {
         self.mixer.lock().unwrap().check_next_frame();
     }
-
 
     /*
     pub fn fill_with(&mut self, buffer: &[f32]) {
@@ -119,12 +110,6 @@ impl AudioSource {
     */
 }
 
-// could have the audio source use the circular buffer and then publish to its queue, and then call the mixer to flush if possible,
-// and have the mixer (from the sim thread effectively) build the frame and publish it to its output.  Frames in the source queues
-// could even be 1ms, and the assembler could just fetch multiple frames, adjusting for sim time
-
-
-// you could either only use the circular buffer, or only use the source queue
 
 impl Audio for AudioSource {
     fn samples_per_second(&self) -> usize {
@@ -144,8 +129,6 @@ impl Audio for AudioSource {
     }
 }
 
-use moa_core::host::audio::SquareWave;
-
 #[derive(Clone)]
 pub struct AudioMixer {
     sample_rate: usize,
@@ -155,7 +138,6 @@ pub struct AudioMixer {
     sources: Vec<ClockedQueue<AudioFrame>>,
     buffer_underrun: bool,
     output: Arc<Mutex<AudioOutput>>,
-    test: SquareWave,
 }
 
 impl AudioMixer {
@@ -168,7 +150,6 @@ impl AudioMixer {
             sources: vec![],
             buffer_underrun: false,
             output: AudioOutput::new(),
-            test: SquareWave::new(600.0, sample_rate),
         }))
     }
 
@@ -194,7 +175,6 @@ impl AudioMixer {
     }
 
     pub fn frame_size(&self) -> usize {
-        //self.buffer.len()
         self.frame_size
     }
 
@@ -203,9 +183,6 @@ impl AudioMixer {
     }
 
     pub fn resize_frame(&mut self, newlen: usize) {
-        //if self.buffer.len() != newlen {
-        //    self.buffer = vec![0.0; newlen];
-        //}
         self.frame_size = newlen;
     }
 
@@ -219,7 +196,7 @@ impl AudioMixer {
         self.frame_size = self.output.lock().unwrap().frame_size;
 
         let nanos_per_sample = self.nanos_per_sample();
-        let mut data: Vec<f32> = vec![0.0; self.frame_size];
+        let mut data: Vec<(f32, f32)> = vec![(0.0, 0.0); self.frame_size];
 
         if self.buffer_underrun {
             self.buffer_underrun = false;
@@ -229,14 +206,6 @@ impl AudioMixer {
             self.output.lock().unwrap().add_frame(empty_frame);
             return;
         }
-
-        /*
-        for i in (0..data.len()).step_by(2) {
-            let sample = self.test.next().unwrap() * 0.5;
-            data[i] = sample;
-            data[i + 1] = sample;
-        }
-        */
 
         let lowest_clock = self.sources
             .iter()
@@ -260,18 +229,28 @@ impl AudioMixer {
 
 //println!("clock: {} - {} = {}", clock, self.clock, clock - self.clock);
                 //if clock > self.clock {
-                let start = ((2 * (clock - self.clock) / nanos_per_sample) as usize).min(data.len() - 1);
+                let start = (((clock - self.clock) / nanos_per_sample) as usize).min(data.len() - 1);
                 let length = frame.data.len().min(data.len() - start);
 //println!("source: {}, clock: {}, start: {}, end: {}, length: {}", id, clock, start, start + length, length);
-                data[start..start + length].iter_mut().zip(frame.data[..length].iter()).for_each(|(d, s)| *d = (*d + s).clamp(-1.0, 1.0));
+
+                data[start..start + length].iter_mut()
+                    .zip(frame.data[..length].iter())
+                    .for_each(|(d, s)|
+                        *d = (
+                            (d.0 + s.0).clamp(-1.0, 1.0),
+                            (d.1 + s.1).clamp(-1.0, 1.0)
+                        )
+                    );
+//println!("{} {} {} {}", i, start, length, frame.data.len());
                 if length < frame.data.len() {
-                    let adjusted_clock = clock + nanos_per_sample * (length / 2) as Clock;
-                    //println!("unpopping {} {}", clock, adjusted_clock);
+                    let adjusted_clock = clock + nanos_per_sample * length as Clock;
+                    //println!("unpopping at clock {}, length {}", adjusted_clock, frame.data.len() - length);
                     source.unpop(adjusted_clock, AudioFrame { data: frame.data[length..].to_vec() });
                 }
                 //}
                 // TODO we need to handle the opposite case
-                i += length;
+                i = start + length;
+//println!("{}", i);
             }
         }
         self.clock += nanos_per_sample * data.len() as Clock;
@@ -279,79 +258,6 @@ impl AudioMixer {
 //println!("{:?}", data);
         self.output.lock().unwrap().add_frame(AudioFrame { data });
     }
-
-/*
-    pub fn assembly_frame(&mut self, data: &mut [f32]) {
-        self.resize_frame(data.len());
-        println!("assemble audio frame {}", self.sequence_num);
-
-        //for i in 0..data.len() {
-        //    data[i] = Sample::from(&self.buffer[i]);
-        //    self.buffer[i] = 0.0;
-        //}
-
-        //self.sources
-        //    .iter()
-        //    .filter_map(|queue| queue.pop_latest())
-        //    .fold(data, |data, frame| {
-        //        data.iter_mut()
-        //            .zip(frame.1.data.iter())
-        //            .for_each(|(d, s)| *d = (*d + s).clamp(-1.0, 1.0));
-        //        data
-        //    });
-
-        if let Some((_, last)) = self.output.pop_latest() {
-            self.last_frame = Some(last);
-        }
-        if let Some(last) = &self.last_frame {
-            data.copy_from_slice(&last.data);
-        }
-
-        println!("frame {} sent", self.sequence_num);
-        self.sequence_num = self.sequence_num.wrapping_add(1); 
-
-/*
-        let mut buffer = vec![0.0; data.len()];
-
-        for source in &self.sources {
-            let mut locked_source = source.lock();
-            // TODO these are quick hacks to delay or shrink the buffer if it's too small or big
-            if locked_source.used_space() < data.len() {
-                continue;
-            }
-            let excess = locked_source.used_space() - (data.len() * 2);
-            if excess > 0 {
-                locked_source.drop_next(excess);
-            }
-
-            for addr in buffer.iter_mut() {
-                *addr += locked_source.next().unwrap_or(0.0);
-            }
-        }
-
-        for i in 0..data.len() {
-            let sample = buffer[i] / self.sources.len() as f32;
-            data[i] = Sample::from(&sample);
-        }
-*/
-
-/*
-        let mut locked_source = self.sources[1].lock();
-        for i in 0..data.len() {
-            let sample = locked_source.next().unwrap_or(0.0);
-            data[i] = Sample::from(&sample);
-        }
-*/
-    }
-*/
-    // TODO you need a way to add data to the mixer... the question is do you need to keep track of real time
-    // If you have a counter that calculates the amount of time until the next sample based on the size of
-    // the buffer given to the data_callback, then when submitting data, the audio sources can know that they
-    // the next place to write to is a given position in the mixer buffer (maybe not the start of the buffer).
-
-    // But what do you do if there needs to be some skipping.  If the source is generating data in 1 to 10 ms
-    // chunks according to simulated time, there might be a case where it tries to write too much data because
-    // it's running fast. (If it's running slow, you can insert silence)
 }
 
 #[allow(dead_code)]
@@ -365,7 +271,7 @@ pub struct AudioOutput {
 impl AudioOutput {
     pub fn new() -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
-            frame_size: 1280,
+            frame_size: 0,
             sequence_num: 0,
             last_frame: None,
             output: VecDeque::with_capacity(2),
@@ -414,19 +320,19 @@ impl CpalAudioOutput {
 
         let data_callback = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
             let result = if let Ok(mut output) = output.lock() {
-                output.frame_size = data.len();
+                output.frame_size = data.len() / 2;
                 output.pop_next()
             } else {
                 return;
             };
 
             if let Some(frame) = result {
-//println!("needs {}, gets {}", data.len(), frame.data.len());
-//println!("{:?}", frame.data);
-                let length = frame.data.len().min(data.len());
-                data[..length].copy_from_slice(&frame.data[..length]);
+                let (start, middle, end) = unsafe { frame.data.align_to::<f32>() };
+                //assert!(start.len() == 0 && end.len() == 0);
+                let length = middle.len().min(data.len());
+                data[..length].copy_from_slice(&middle[..length]);
             } else {
-                println!("missed a frame");
+                println!("missed an audio frame");
             }
         };
 
@@ -444,56 +350,5 @@ impl CpalAudioOutput {
             stream,
         }
     }
-
-
-    /*
-    pub fn create_audio_output2(mut updater: Box<dyn AudioUpdater>) -> AudioOutput {
-        let device = cpal::default_host()
-            .default_output_device()
-            .expect("No sound output device available");
-
-        let config: StreamConfig = device
-            .supported_output_configs()
-            .expect("error while querying configs")
-            .find(|config| config.sample_format() == SampleFormat::F32 && config.channels() == 2)
-            .expect("no supported config?!")
-            .with_sample_rate(SampleRate(SAMPLE_RATE as u32))
-            .into();
-
-        let channels = config.channels as usize;
-        let mixer = AudioMixer::new(SAMPLE_RATE);
-
-        let data_callback = {
-            let mixer = mixer.clone();
-            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                let samples = data.len() / 2;
-                let mut buffer = vec![0.0; samples];
-                updater.update_audio_frame(samples, mixer.lock().sample_rate(), &mut buffer);
-
-                for (i, channels) in data.chunks_mut(2).enumerate() {
-                    let sample = Sample::from(&buffer[i]);
-                    channels[0] = sample;
-                    channels[1] = sample;
-                }
-            }
-        };
-
-        let stream = device.build_output_stream(
-            &config,
-            data_callback,
-            move |err| {
-                // react to errors here.
-                println!("ERROR");
-            },
-        ).unwrap();
-
-        stream.play().unwrap();
-
-        AudioOutput {
-            stream,
-            mixer,
-        }
-    }
-    */
 }
 
