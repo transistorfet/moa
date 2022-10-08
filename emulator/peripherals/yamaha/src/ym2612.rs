@@ -272,7 +272,7 @@ impl Steppable for Ym2612 {
 
                 if self.dac_enabled {
                     if let Some(data) = self.dac.pop_front() {
-                        sample += data as f32 / 255.0;
+                        sample += ((data as f32 - 128.0) / 255.0) * 2.0;
                     }
                 } else if self.channels[6].on != 0 {
                     sample += self.channels[6].get_sample();
