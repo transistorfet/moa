@@ -105,7 +105,7 @@ impl Sn76489 {
 }
 
 impl Steppable for Sn76489 {
-    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         let rate = self.source.samples_per_second();
         let available = self.source.space_available();
         let samples = if available < rate / 1000 { available } else { rate / 1000 };
@@ -128,7 +128,7 @@ impl Steppable for Sn76489 {
 
                 buffer[i] = sample.clamp(-1.0, 1.0);
             }
-            self.source.write_samples(&buffer);
+            self.source.write_samples(system.clock, &buffer);
         } else {
             self.source.flush();
         }

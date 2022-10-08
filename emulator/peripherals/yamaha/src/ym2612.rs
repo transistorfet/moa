@@ -239,7 +239,7 @@ pub fn get_ch_op(bank: usize, reg: usize) -> (usize, usize) {
 
 
 impl Steppable for Ym2612 {
-    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         // TODO since you expect this step function to be called every 1ms of simulated time
         //      you could assume that you should produce (sample_rate / 1000) samples
 
@@ -280,7 +280,8 @@ impl Steppable for Ym2612 {
 
                 buffer[i] = sample.clamp(-1.0, 1.0);
             }
-            self.source.write_samples(&buffer);
+//println!("synthesized: {:?}", buffer);
+            self.source.write_samples(system.clock, &buffer);
         //}
 
         Ok(1_000_000)          // Every 1ms of simulated time

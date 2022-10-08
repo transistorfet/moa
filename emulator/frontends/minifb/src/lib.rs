@@ -8,10 +8,10 @@ use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
 use moa_core::{System, Error, Clock};
-use moa_core::host::{Host, HostData, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice};
+use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice};
 use moa_core::host::gfx::Frame;
 
-use moa_common::audio::{AudioOutput, AudioMixer, AudioSource};
+use moa_common::audio::{AudioOutput, AudioMixer, AudioSource, CpalAudioOutput};
 
 mod keys;
 mod controllers;
@@ -99,7 +99,7 @@ pub struct MiniFrontendBuilder {
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
     pub mouse: Option<Box<dyn MouseUpdater>>,
-    pub mixer: Option<HostData<AudioMixer>>,
+    pub mixer: Option<Arc<Mutex<AudioMixer>>>,
     pub finalized: bool,
 }
 
@@ -110,7 +110,7 @@ impl MiniFrontendBuilder {
             controller: None,
             keyboard: None,
             mouse: None,
-            mixer: Some(AudioMixer::new_default()),
+            mixer: Some(AudioMixer::with_default_rate()),
             finalized: false,
         }
     }
@@ -180,8 +180,8 @@ pub struct MiniFrontend {
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
     pub mouse: Option<Box<dyn MouseUpdater>>,
-    pub audio: Option<AudioOutput>,
-    pub mixer: HostData<AudioMixer>,
+    pub audio: Option<CpalAudioOutput>,
+    pub mixer: Arc<Mutex<AudioMixer>>,
 }
 
 impl MiniFrontend {
@@ -190,7 +190,7 @@ impl MiniFrontend {
         controller: Option<Box<dyn ControllerUpdater>>,
         keyboard: Option<Box<dyn KeyboardUpdater>>,
         mouse: Option<Box<dyn MouseUpdater>>,
-        mixer: HostData<AudioMixer>,
+        mixer: Arc<Mutex<AudioMixer>>,
     ) -> Self {
         Self {
             modifiers: 0,
@@ -210,7 +210,7 @@ impl MiniFrontend {
         }
 
         if matches.occurrences_of("disable-audio") <= 0 {
-            self.audio = Some(AudioOutput::create_audio_output(self.mixer.clone()));
+            self.audio = Some(CpalAudioOutput::create_audio_output(self.mixer.lock().unwrap().get_sink()));
         }
 
         let mut options = minifb::WindowOptions::default();
@@ -250,18 +250,19 @@ impl MiniFrontend {
         let mut update_timer = Instant::now();
         let mut last_frame = Frame::new(size.0, size.1);
         while window.is_open() && !window.is_key_down(Key::Escape) {
-            let frame_time = update_timer.elapsed().as_micros();
+            let frame_time = update_timer.elapsed();
             update_timer = Instant::now();
-            println!("new frame after {:?}us", frame_time);
+            println!("new frame after {:?}us", frame_time.as_micros());
 
             let run_timer = Instant::now();
             if let Some(system) = system.as_mut() {
-                system.run_for(nanoseconds_per_frame).unwrap();
+                //system.run_for(nanoseconds_per_frame).unwrap();
+                system.run_for(frame_time.as_nanos() as u64).unwrap();
                 //system.run_until_break().unwrap();
             }
             let sim_time = run_timer.elapsed().as_micros();
             average_time = (average_time + sim_time) / 2;
-            println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", nanoseconds_per_frame / 1_000, sim_time, average_time);
+            println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_nanos() / 1_000, sim_time, average_time);
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::No) {
                 for key in keys {

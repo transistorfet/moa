@@ -71,7 +71,7 @@ pub trait MouseUpdater: Send {
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
     fn space_available(&self) -> usize;
-    fn write_samples(&mut self, buffer: &[f32]);
+    fn write_samples(&mut self, clock: Clock, buffer: &[f32]);
     fn flush(&mut self);
 }
 
@@ -118,8 +118,20 @@ impl<T: Clone> ClockedQueue<T> {
         self.0.lock().unwrap().push_back((clock, data));
     }
 
+    pub fn pop_next(&self) -> Option<(Clock, T)> {
+        self.0.lock().unwrap().pop_front()
+    }
+
     pub fn pop_latest(&self) -> Option<(Clock, T)> {
         self.0.lock().unwrap().drain(..).last()
+    }
+
+    pub fn unpop(&mut self, clock: Clock, data: T) {
+        self.0.lock().unwrap().push_front((clock, data));
+    }
+
+    pub fn peek_clock(&self) -> Option<Clock> {
+        self.0.lock().unwrap().front().map(|(clock, _)| *clock)
     }
 }
 
@@ -135,7 +147,7 @@ impl Audio for DummyAudio {
         4800
     }
 
-    fn write_samples(&mut self, _buffer: &[f32]) {}
+    fn write_samples(&mut self, _clock: Clock, _buffer: &[f32]) {}
 
     fn flush(&mut self) {}
 }
