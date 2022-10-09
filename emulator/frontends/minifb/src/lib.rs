@@ -7,11 +7,11 @@ use std::time::{Duration, Instant};
 use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
-use moa_core::{System, Error, Clock};
+use moa_core::{System, Error};
 use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice};
 use moa_core::host::gfx::Frame;
 
-use moa_common::audio::{AudioOutput, AudioMixer, AudioSource, CpalAudioOutput};
+use moa_common::audio::{AudioMixer, AudioSource, CpalAudioOutput};
 
 mod keys;
 mod controllers;
@@ -226,7 +226,6 @@ impl MiniFrontend {
             Some(x) => f32::from_str(x).unwrap(),
             None => 1.0,
         };
-        let nanoseconds_per_frame = (16_600_000 as f32 * speed) as Clock;
 
         let mut size = (WIDTH, HEIGHT);
         if let Some(updater) = self.window.as_mut() {
@@ -254,13 +253,13 @@ impl MiniFrontend {
             update_timer = Instant::now();
             //println!("new frame after {:?}us", frame_time.as_micros());
 
-            let run_timer = Instant::now();
+            //let run_timer = Instant::now();
             if let Some(system) = system.as_mut() {
                 //system.run_for(nanoseconds_per_frame).unwrap();
-                system.run_for(frame_time.as_nanos() as u64).unwrap();
+                system.run_for((frame_time.as_nanos() as f32 * speed) as u64).unwrap();
                 //system.run_until_break().unwrap();
             }
-            let sim_time = run_timer.elapsed().as_micros();
+            //let sim_time = run_timer.elapsed().as_micros();
             //average_time = (average_time + sim_time) / 2;
             //println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_nanos() / 1_000, sim_time, average_time);
 

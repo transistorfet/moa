@@ -1,10 +1,10 @@
 
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
-use cpal::{Sample, Stream, SampleRate, SampleFormat, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait}};
 
-use moa_core::Clock;
-use moa_core::host::{HostData, Audio, ClockedQueue};
+use moa_core::{Clock, warning, error};
+use moa_core::host::{Audio, ClockedQueue};
 
 const SAMPLE_RATE: usize = 48000;
 
@@ -18,7 +18,6 @@ pub struct AudioSource {
     id: usize,
     sample_rate: usize,
     frame_size: usize,
-    sequence_num: usize,
     mixer: Arc<Mutex<AudioMixer>>,
     queue: ClockedQueue<AudioFrame>,
 }
@@ -40,10 +39,13 @@ impl AudioSource {
             id,
             sample_rate,
             frame_size,
-            sequence_num: 0,
             mixer,
             queue,
         }
+    }
+
+    pub fn id(&self) -> usize {
+        self.id
     }
 
     pub fn space_available(&self) -> usize {
@@ -62,8 +64,6 @@ impl AudioSource {
             data,
         };
 
-//println!("synthesized {}: {:?}", self.id, frame.data);
-
         self.queue.push(clock, frame);
         self.flush();
     }
@@ -71,43 +71,6 @@ impl AudioSource {
     pub fn flush(&mut self) {
         self.mixer.lock().unwrap().check_next_frame();
     }
-
-    /*
-    pub fn fill_with(&mut self, buffer: &[f32]) {
-        if self.buffer.free_space() > buffer.len() * 2 {
-            for sample in buffer.iter() {
-                // TODO this is here to keep it quiet for testing, but should be removed later
-                let sample = 0.5 * *sample;
-                self.buffer.insert(sample);
-                self.buffer.insert(sample);
-            }
-        }
-
-        self.flush();
-    }
-
-    pub fn flush(&mut self) {
-        if self.buffer.used_space() >= self.frame_size {
-            let mut locked_mixer = self.mixer.lock();
-
-            let mixer_sequence_num = locked_mixer.sequence_num();
-            if mixer_sequence_num == self.sequence_num {
-                println!("repeated seq");
-                return;
-            }
-            self.sequence_num = mixer_sequence_num;
-            println!("flushing to audio mixer {}", self.sequence_num);
-
-            //for i in 0..locked_mixer.buffer.len() {
-            //    locked_mixer.buffer[i] = (locked_mixer.buffer[i] + self.buffer.next().unwrap_or(0.0)).clamp(-1.0, 1.0);
-            //}
-            self.queue.push(0, AudioFrame { data: (0..self.frame_size).map(|_| self.buffer.next().unwrap()).collect() });
-
-            self.frame_size = locked_mixer.frame_size();
-            self.buffer.resize(self.frame_size * 2);
-        }
-    }
-    */
 }
 
 
@@ -215,7 +178,7 @@ impl AudioMixer {
                     .map_or(lowest_clock, |c| c.min(lowest_clock)));
         self.clock = self.clock.min(lowest_clock);
 
-        for (id, source) in self.sources.iter_mut().enumerate() {
+        for source in &mut self.sources {
             let mut i = 0;
             while i < data.len() {
                 let (clock, frame) = match source.pop_next() {
@@ -227,11 +190,8 @@ impl AudioMixer {
                     },
                 };
 
-//println!("clock: {} - {} = {}", clock, self.clock, clock - self.clock);
-                //if clock > self.clock {
                 let start = (((clock - self.clock) / nanos_per_sample) as usize).min(data.len() - 1);
                 let length = frame.data.len().min(data.len() - start);
-//println!("source: {}, clock: {}, start: {}, end: {}, length: {}", id, clock, start, start + length, length);
 
                 data[start..start + length].iter_mut()
                     .zip(frame.data[..length].iter())
@@ -241,21 +201,16 @@ impl AudioMixer {
                             (d.1 + s.1).clamp(-1.0, 1.0)
                         )
                     );
-//println!("{} {} {} {}", i, start, length, frame.data.len());
                 if length < frame.data.len() {
                     let adjusted_clock = clock + nanos_per_sample * length as Clock;
                     //println!("unpopping at clock {}, length {}", adjusted_clock, frame.data.len() - length);
                     source.unpop(adjusted_clock, AudioFrame { data: frame.data[length..].to_vec() });
                 }
-                //}
-                // TODO we need to handle the opposite case
                 i = start + length;
-//println!("{}", i);
             }
         }
         self.clock += nanos_per_sample * data.len() as Clock;
 
-//println!("{:?}", data);
         self.output.lock().unwrap().add_frame(AudioFrame { data });
     }
 }
@@ -328,11 +283,13 @@ impl CpalAudioOutput {
 
             if let Some(frame) = result {
                 let (start, middle, end) = unsafe { frame.data.align_to::<f32>() };
-                //assert!(start.len() == 0 && end.len() == 0);
+                if start.len() != 0 || end.len() != 0 {
+                    warning!("audio: frame wasn't aligned");
+                }
                 let length = middle.len().min(data.len());
                 data[..length].copy_from_slice(&middle[..length]);
             } else {
-                println!("missed an audio frame");
+                warning!("missed an audio frame");
             }
         };
 
@@ -340,7 +297,7 @@ impl CpalAudioOutput {
             &config,
             data_callback,
             move |err| {
-                println!("ERROR: {:?}", err);
+                error!("ERROR: {:?}", err);
             },
         ).unwrap();
 
