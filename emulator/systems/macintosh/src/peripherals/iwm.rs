@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, info, warning};
+use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, info, warn};
 
 
 //const CA0: u8           = 0x01;
@@ -71,7 +71,7 @@ impl Addressable for IWM {
                 panic!("");
             },
             _ => {
-                warning!("{}: !!! unhandled read of {:0x} with state {:x}", DEV_NAME, addr, self.state);
+                warn!("{}: !!! unhandled read of {:0x} with state {:x}", DEV_NAME, addr, self.state);
             },
         }
         info!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
@@ -93,7 +93,7 @@ impl Addressable for IWM {
                 self.mode = data[i] & 0x1f;
             },
             _ => {
-                warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+                warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
             },
         }
         Ok(())

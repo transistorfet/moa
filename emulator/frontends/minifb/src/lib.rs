@@ -205,6 +205,11 @@ impl MiniFrontend {
     }
 
     pub fn start(&mut self, matches: ArgMatches, mut system: Option<System>) {
+        simple_logger::SimpleLogger::new()
+            .with_level(log::Level::Warn.to_level_filter())
+            .without_timestamps()
+            .init().unwrap();
+
         if matches.occurrences_of("debugger") > 0 {
             system.as_mut().map(|system| system.enable_debugging());
         }

@@ -2,7 +2,7 @@
 use std::num::NonZeroU8;
 use std::collections::VecDeque;
 
-use moa_core::{debug, warning};
+use moa_core::{debug, warn};
 use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio};
 use moa_core::host::audio::{SineWave};
@@ -198,6 +198,7 @@ impl Ym2612 {
     }
 
     pub fn set_register(&mut self, bank: usize, reg: usize, data: u8) {
+        warn!("{}: set reg {}{:x} to {:x}", DEV_NAME, bank, reg, data);
         match reg {
             0x24 => {
                 self.timer_a = (self.timer_a & 0x3) | ((data as u16) << 2);
@@ -271,7 +272,7 @@ impl Ym2612 {
             },
 
             _ => {
-                warning!("{}: !!! unhandled write to register {:0x} with {:0x}", DEV_NAME, reg, data);
+                warn!("{}: !!! unhandled write to register {:0x} with {:0x}", DEV_NAME, reg, data);
             },
         }
     }
@@ -352,7 +353,7 @@ impl Addressable for Ym2612 {
                 data[0] = 0 | ((self.timer_a_overflow as u8) << 1) | (self.timer_b_overflow as u8);
             }
             _ => {
-                warning!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+                warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
             },
         }
         debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
@@ -379,7 +380,7 @@ impl Addressable for Ym2612 {
                 }
             },
             _ => {
-                warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+                warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
             },
         }
         Ok(())

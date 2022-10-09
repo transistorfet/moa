@@ -1,5 +1,5 @@
 
-use moa_core::{info, warning, debug};
+use moa_core::{info, warn, debug};
 use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio};
 use moa_core::host::audio::{SquareWave};
@@ -143,13 +143,13 @@ impl Addressable for Sn76489 {
     }
 
     fn read(&mut self, _addr: Address, _data: &mut [u8]) -> Result<(), Error> {
-        warning!("{}: !!! device can't be read", DEV_NAME);
+        warn!("{}: !!! device can't be read", DEV_NAME);
         Ok(())
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         if addr != 0 {
-            warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+            warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
             return Ok(());
         }
 

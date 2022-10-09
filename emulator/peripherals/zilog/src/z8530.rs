@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, warning, debug};
+use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, warn, debug};
 
 const DEV_NAME: &'static str = "z8530";
 
@@ -23,7 +23,7 @@ impl Addressable for Z8530 {
     fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             _ => {
-                warning!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+                warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
             },
         }
         debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
@@ -34,7 +34,7 @@ impl Addressable for Z8530 {
         debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             _ => {
-                warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+                warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
             },
         }
         Ok(())

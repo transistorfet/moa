@@ -1,5 +1,5 @@
 
-use moa_core::{Error, System, ClockElapsed, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable, debug, warning};
+use moa_core::{Error, System, ClockElapsed, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable, debug, warn};
 
 
 const REG_OUTPUT_B: Address     = 0x00;
@@ -66,7 +66,7 @@ impl Addressable for Mos6522 {
             REG_INT_FLAGS => { data[0] = self.interrupt_flags; },
             REG_INT_ENABLE => { data[0] = self.interrupt_enable | 0x80; },
             _ => {
-                warning!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+                warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
             },
         }
         debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
@@ -91,7 +91,7 @@ impl Addressable for Mos6522 {
             },
             REG_OUTPUT_A_NHS => { self.port_a.borrow_mut().data = data[0]; self.port_a.notify(); },
             _ => {
-                warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+                warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
             },
         }
         Ok(())

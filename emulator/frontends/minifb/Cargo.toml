@@ -5,10 +5,13 @@ edition = "2021"
 default-run = "moa-genesis"
 
 [dependencies]
-moa_core = { path = "../../core" }
-moa_common = { path = "../common", features = ["audio"] }
+log = "0.4"
 minifb = "0.19"
 clap = "3.2.20"
+simple_logger = "2.3.0"
+
+moa_core = { path = "../../core" }
+moa_common = { path = "../common", features = ["audio"] }
 
 moa_genesis = { path = "../../systems/genesis" }
 moa_computie = { path = "../../systems/computie" }

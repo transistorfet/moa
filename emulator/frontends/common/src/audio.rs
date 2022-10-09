@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait}};
 
-use moa_core::{Clock, warning, error};
+use moa_core::{Clock, warn, error};
 use moa_core::host::{Audio, ClockedQueue};
 
 const SAMPLE_RATE: usize = 48000;
@@ -236,11 +236,11 @@ impl AudioOutput {
     pub fn add_frame(&mut self, frame: AudioFrame) {
         self.output.push_back(frame);
         self.sequence_num = self.sequence_num.wrapping_add(1);
-        println!("added frame {}", self.sequence_num);
+        //println!("added frame {}", self.sequence_num);
     }
 
     pub fn pop_next(&mut self) -> Option<AudioFrame> {
-        println!("frame {} sent", self.sequence_num);
+        //println!("frame {} sent", self.sequence_num);
         self.output.pop_front()
     }
 
@@ -284,12 +284,12 @@ impl CpalAudioOutput {
             if let Some(frame) = result {
                 let (start, middle, end) = unsafe { frame.data.align_to::<f32>() };
                 if start.len() != 0 || end.len() != 0 {
-                    warning!("audio: frame wasn't aligned");
+                    warn!("audio: frame wasn't aligned");
                 }
                 let length = middle.len().min(data.len());
                 data[..length].copy_from_slice(&middle[..length]);
             } else {
-                warning!("missed an audio frame");
+                warn!("missed an audio frame");
             }
         };
 

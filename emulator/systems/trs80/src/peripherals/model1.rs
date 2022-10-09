@@ -1,7 +1,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, debug, warning};
+use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, debug, warn};
 use moa_core::host::gfx::{Frame, FrameQueue};
 use moa_core::host::{Host, BlitableSurface, KeyboardUpdater, KeyEvent};
 
@@ -80,7 +80,7 @@ impl Addressable for Model1Peripherals {
         } else if addr >= 0x420 && addr <= 0x820 {
             data[0] = self.video_mem[addr as usize - 0x420];
         } else {
-            warning!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+            warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
         }
         debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
         Ok(())
@@ -91,7 +91,7 @@ impl Addressable for Model1Peripherals {
         if addr >= 0x420 && addr < 0x820 {
             self.video_mem[addr as usize - 0x420] = data[0];
         } else {
-            warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+            warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
         }
         Ok(())
     }

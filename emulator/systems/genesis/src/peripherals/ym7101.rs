@@ -1,5 +1,5 @@
 
-use moa_core::{debug, warning, error};
+use moa_core::{debug, warn, error};
 use moa_core::{System, Error, EdgeSignal, Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
 use moa_core::host::{Host, BlitableSurface, HostData};
 use moa_core::host::gfx::{Frame, FrameQueue};
@@ -257,7 +257,7 @@ impl Ym7101Memory {
                         self.transfer_remain -= 1;
                     }
                 },
-                _ => { warning!("{}: !!! error unexpected transfer mode {:x}", DEV_NAME, self.transfer_type); },
+                _ => { warn!("{}: !!! error unexpected transfer mode {:x}", DEV_NAME, self.transfer_type); },
             }
 
             self.set_dma_mode(DmaType::None);
@@ -831,7 +831,7 @@ impl Addressable for Ym7101 {
                 self.sn_sound.borrow_mut().as_addressable().unwrap().write(0, data)?;
             },
 
-            _ => { warning!("{}: !!! unhandled write to {:x} with {:?}", DEV_NAME, addr, data); },
+            _ => { warn!("{}: !!! unhandled write to {:x} with {:?}", DEV_NAME, addr, data); },
         }
         Ok(())
     }

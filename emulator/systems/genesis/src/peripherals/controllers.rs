@@ -1,5 +1,5 @@
 
-use moa_core::{warning, info};
+use moa_core::{warn, info};
 use moa_core::{System, Error, Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, ControllerUpdater, HostData, ControllerDevice, ControllerEvent};
 
@@ -169,7 +169,7 @@ impl Addressable for GenesisControllers {
             REG_S_CTRL1 => { data[i] = self.port_1.s_ctrl | 0x02; },
             REG_S_CTRL2 => { data[i] = self.port_2.s_ctrl | 0x02; },
             REG_S_CTRL3 => { data[i] = self.expansion.s_ctrl | 0x02; },
-            _ => { warning!("{}: !!! unhandled reading from {:0x}", DEV_NAME, addr); },
+            _ => { warn!("{}: !!! unhandled reading from {:0x}", DEV_NAME, addr); },
         }
         info!("{}: read from register {:x} the value {:x}", DEV_NAME, addr, data[0]);
         Ok(())
@@ -189,7 +189,7 @@ impl Addressable for GenesisControllers {
             REG_S_CTRL1 => { self.port_1.s_ctrl = data[0] & 0xF8; },
             REG_S_CTRL2 => { self.port_2.s_ctrl = data[0] & 0xF8; },
             REG_S_CTRL3 => { self.expansion.s_ctrl = data[0] & 0xF8; },
-            _ => { warning!("{}: !!! unhandled write of {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+            _ => { warn!("{}: !!! unhandled write of {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
         Ok(())
     }

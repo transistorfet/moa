@@ -2,7 +2,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{warning, info};
+use moa_core::{warn, info};
 use moa_core::{Bus, Signal, Error, Address, Addressable, Transmutable};
 
 
@@ -33,7 +33,7 @@ impl Addressable for CoprocessorCoordinator {
             0x100 => {
                 data[0] = if self.bus_request.get() && self.reset.get() { 0x01 } else { 0x00 };
             },
-            _ => { warning!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr); },
+            _ => { warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr); },
         }
         info!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
         Ok(())
@@ -49,7 +49,7 @@ impl Addressable for CoprocessorCoordinator {
             0x200 => {
                 self.reset.set(data[0] == 0);
             },
-            _ => { warning!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+            _ => { warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
         Ok(())
     }

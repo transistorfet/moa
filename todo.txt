@@ -1,4 +1,8 @@
 
+* add log crate to core
+
+* need to re-add a mechanism for audio frame dialation, either based on speed, or somehow automatic
+
 * fix ym2612 sound generation
 * fix glitching (possibly due to borrowing) in the audio mixer
 * can you get audio working without the need to lock during an update?  Use the ClockedQueue like frames do... but should the queue be used for the mixer-to-output,
@@ -13,7 +17,6 @@
 
 * make the keys easier to config...
 
-* add log crate to core
 * can you make the debugger more accessible, so a web interface could access the data and display it, in light of the fact that println isn't available in wasm
 
 Web Assembly:

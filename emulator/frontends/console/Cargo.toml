@@ -1,10 +1,13 @@
 [package]
 name = "moa_console"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 default-run = "moa-computie"
 
 [dependencies]
+log = "0.4"
+simple_logger = "2.3.0"
+
 moa_core = { path = "../../core" }
 moa_common = { path = "../common", features = ["tty"] }
 

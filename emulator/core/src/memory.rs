@@ -3,6 +3,7 @@ use std::fs;
 use std::rc::Rc;
 use std::cell::RefCell;
 
+use crate::info;
 use crate::error::Error;
 use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, read_beu16};
 
