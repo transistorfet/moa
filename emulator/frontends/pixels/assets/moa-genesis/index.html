@@ -3,37 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <style type="text/css">
-      body {
-        background-color: #000;
-        margin: 0;
-        overflow: hidden;
-      }
-
-      #config {
-        background-color: #888;
-      }
-
-      #metrics {
-        float: right;
-        color: #DDD;
-        background-color: #000;
-      }
-
-      #metrics input {
-        width: 2em;
-        color: #DDD;
-        background-color: #000;
-      }
-
-    </style>
-    <title>Hello Pixels + Web</title>
+    <link rel="stylesheet" href="style.css">
+    <title>Sega Genesis - Moa</title>
+    <script type="module" src="./interface.js"></script>
   </head>
   <body>
     <div id="config">
       <label>ROM File (only .bin format)</label>
       <input type="file" id="rom-file" accept=".bin,.smd,.md" />
       <input type="button" id="reset" value="Reset" />
+      <input type="button" id="power" value="Power" />
       <input type="text" id="speed" value="4.0" />
     </div>
 
@@ -42,74 +21,8 @@
       <input type="text" id="frame-rate" disabled />
     </div>
 
-    <script type="module">
-      import init from "./moa-genesis.js";
-      import {
-        set_rom_data,
-        request_reset,
-        get_frames_since,
-        smd_to_bin,
-        set_speed,
-      } from "./moa-genesis.js";
-
-      var reader = new FileReader();
-      reader.onloadend = function (e) {
-        var data = new Uint8Array(reader.result);
-        // If the SMD file magic number is present, then convert it before loading
-        if (data[8] == 0xAA && data[9] == 0xBB)
-          data = smd_to_bin(data);
-        set_rom_data(data);
-      };
-
-      var file_input = document.getElementById("rom-file");
-      file_input.addEventListener("change", e => {
-        reader.readAsArrayBuffer(file_input.files[0])
-      });
-
-      document.getElementById("reset").addEventListener("click", () => {
-        request_reset();
-      });
-
-      document.getElementById("speed").addEventListener("change", (e) => {
-        console.log(e.target.value);
-        set_speed(e.target.value);
-      });
-
-      var file_input = document.getElementById("rom-file");
-      var frame_rate_el = document.getElementById("frame-rate");
-      var frame_rate = setInterval(function () {
-        frame_rate_el.value = get_frames_since();
-      }, 1000);
-
-      /*
-      var last_update = performance.now();
-      window.requestIdleCallback(function () {
-        var current = performance.now();
-        var diff = current - last_update;
-        last_update = current;
-
-        try {
-          run_system_for(diff * 1000000);
-        } catch (e) {
-          console.error(e);
-        }
-      }, { timeout: 100 });
-
-      setInterval(function () {
-        run_system_for(66_000_000);
-      }, 66);
-      */
-
-      window.addEventListener("load", () => {
-        init();
-      });
-
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-      const sample_size = audioContext.sampleRate / 100;
-      const audioBuffer = audioContext.createBuffer(2, sample_size, audioContext.sampleRate);
-
-
-    </script>
+    <div id="video-screen">
+      <canvas id="video" tabindex="0" draw-raw-handle="1" style="width: 640px; height: 448px;" width="640" height="448" />
+    </div>
   </body>
 </html> 

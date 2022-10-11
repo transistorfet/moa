@@ -1,0 +1,21 @@
+body {
+    background-color: #000;
+    margin: 0;
+    overflow: hidden;
+}
+
+#config {
+    background-color: #888;
+}
+
+#metrics {
+    float: right;
+    color: #DDD;
+    background-color: #000;
+}
+
+#metrics input {
+    width: 2em;
+    color: #DDD;
+    background-color: #000;
+}

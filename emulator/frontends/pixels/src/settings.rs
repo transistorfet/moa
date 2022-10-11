@@ -6,7 +6,6 @@ static EMULATOR_OPTIONS: Mutex<EmulatorSettings> = Mutex::new(EmulatorSettings::
 pub struct EmulatorSettings {
     pub rom_data: Vec<u8>,
     pub run: bool,
-    pub reset: bool,
     pub speed: f32,
     pub frames_since: usize,
 }
@@ -15,8 +14,7 @@ impl EmulatorSettings {
     const fn new() -> Self {
         Self {
             rom_data: vec![],
-            run: true,
-            reset: false,
+            run: false,
             speed: 4.0,
             frames_since: 0,
         }
@@ -42,16 +40,12 @@ pub fn increment_frames() {
     get().frames_since += 1;
 }
 
-pub fn request_reset() {
-    get().reset = true;
+pub fn request_stop() {
+    get().run = false;
 }
 
 pub fn toggle_run() {
     let mut options = get();
     options.run = !options.run;
-}
-
-pub fn set_speed(speed: f32) {
-    get().speed = speed;
 }
 

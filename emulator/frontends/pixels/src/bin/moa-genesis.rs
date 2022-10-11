@@ -18,10 +18,18 @@ fn main() {
 mod web {
     use wasm_bindgen::prelude::*;
     use moa_genesis::utils;
+    use moa_pixels::LoadSystemFnHandle;
+
+    use super::load_system;
 
     #[wasm_bindgen]
     pub fn smd_to_bin(input: Vec<u8>) -> Vec<u8> {
         utils::smd_to_bin(input).unwrap()
+    }
+
+    #[wasm_bindgen]
+    pub fn get_load_system_fn() -> LoadSystemFnHandle {
+        LoadSystemFnHandle::new(load_system)
     }
 }
 
