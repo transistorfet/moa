@@ -10,5 +10,9 @@ audio = ["cpal"]
 [dependencies]
 moa_core = { path = "../../core" }
 nix = { version = "0.25", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 cpal = { version = "0.14", optional = true }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cpal = { version = "0.14", optional = true, features = ["wasm-bindgen"] }

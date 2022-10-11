@@ -250,7 +250,6 @@ impl MiniFrontend {
         // Limit to max ~60 fps update rate
         window.limit_update_rate(Some(Duration::from_micros(16600)));
 
-        //let mut average_time = 0;
         let mut update_timer = Instant::now();
         let mut last_frame = Frame::new(size.0, size.1);
         while window.is_open() && !window.is_key_down(Key::Escape) {
@@ -265,8 +264,7 @@ impl MiniFrontend {
                 //system.run_until_break().unwrap();
             }
             //let sim_time = run_timer.elapsed().as_micros();
-            //average_time = (average_time + sim_time) / 2;
-            //println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_nanos() / 1_000, sim_time, average_time);
+            //println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_micros(), sim_time, frame_time.as_micros() as f64 / sim_time as f64);
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::No) {
                 for key in keys {

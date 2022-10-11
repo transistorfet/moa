@@ -198,7 +198,7 @@ impl Ym2612 {
     }
 
     pub fn set_register(&mut self, bank: usize, reg: usize, data: u8) {
-        warn!("{}: set reg {}{:x} to {:x}", DEV_NAME, bank, reg, data);
+        //warn!("{}: set reg {}{:x} to {:x}", DEV_NAME, bank, reg, data);
         match reg {
             0x24 => {
                 self.timer_a = (self.timer_a & 0x3) | ((data as u16) << 2);
@@ -218,7 +218,6 @@ impl Ym2612 {
                 let ch = (data as usize) & 0x07;
                 self.channels[ch].on = data >> 4;
                 self.channels[ch].reset();
-                println!("Note: {}: {:x}", ch, self.channels[ch].on);
             },
 
             0x2a => {

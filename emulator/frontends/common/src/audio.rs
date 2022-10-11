@@ -52,7 +52,7 @@ impl AudioSource {
         self.frame_size / 2
     }
 
-    pub fn fill_with(&mut self, clock: Clock, buffer: &[f32]) {
+    pub fn add_frame(&mut self, clock: Clock, buffer: &[f32]) {
         let mut data = vec![];
         for sample in buffer.iter() {
             // TODO this is here to keep it quiet for testing, but should be removed later
@@ -65,7 +65,6 @@ impl AudioSource {
         };
 
         self.queue.push(clock, frame);
-        self.flush();
     }
 
     pub fn flush(&mut self) {
@@ -84,11 +83,12 @@ impl Audio for AudioSource {
     }
 
     fn write_samples(&mut self, clock: Clock, buffer: &[f32]) {
-        self.fill_with(clock, buffer);
+        self.add_frame(clock, buffer);
+        self.flush();
     }
 
     fn flush(&mut self) {
-        self.flush();
+        self.mixer.lock().unwrap().check_next_frame();
     }
 }
 

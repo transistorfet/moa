@@ -1,13 +1,14 @@
 
-* add log crate to core
-
-* need to re-add a mechanism for audio frame dialation, either based on speed, or somehow automatic
+* can you somehow speed up the memory accessing through the sim?  The dyn Addressable is causing a fair amount of overhead
+* can you somehow make devices have two step functions for running things at different times? (I'm thinking ym2612 audio gen vs timers)
+* should you rename devices.rs traits.rs?
+* you could refactor the instruction loop into a series of functions, and test if there's a performance difference with and without #[inline(always)]
+* move parser into its own utils/ or /libs/ directory
 
 * fix ym2612 sound generation
-* fix glitching (possibly due to borrowing) in the audio mixer
-* can you get audio working without the need to lock during an update?  Use the ClockedQueue like frames do... but should the queue be used for the mixer-to-output,
-  the sources to mixer, or both?
-* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
+* need to re-add a mechanism for audio frame dialation, either based on speed, or somehow automatic
+* sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
+
 
 * the pixel format idea didn't work because of window resizing and the fact that the frame needs to be adjusted in size because the window can't always be resized...
 * add mouse support to synth app
@@ -20,31 +21,22 @@
 * can you make the debugger more accessible, so a web interface could access the data and display it, in light of the fact that println isn't available in wasm
 
 Web Assembly:
-* the frame rate is pretty bad.  It's definitely faster with a smaller window
-* can you limit the size of the window that pixels generates?
-* can you automatically adjust the speed based on the calculated framerate (if you moved that to Rust)
-* can you limit the frame rate in pixels so that you if it were to run too fast, it would limit it to 60Hz
-* the system run is taking 40 to 50ms per frame in web assembly.  Can you cut that by 4 times?
+    * the frame rate is pretty bad.  It's definitely faster with a smaller window
+    * can you limit the size of the window that pixels generates?
+    * can you automatically adjust the speed based on the calculated framerate (if you moved that to Rust)
+    * can you limit the frame rate in pixels so that you if it were to run too fast, it would limit it to 60Hz
+    * the system run is taking 40 to 50ms per frame in web assembly.  Can you cut that by 4 times?
 
-* add sound to web assembly
-* add run/stop and ability to change speed through the web interface
-* can you make the web interface nicer with like... a picture of a genesis or something
+    * add sound to web assembly
+    * add run/stop and ability to change speed through the web interface
+    * can you make the web interface nicer with like... a picture of a genesis or something
 
 
-* fix audio, and/or make it possible to disable audio processing/simulation for one or both sound chips (might be nice to have sn76489 but not ym2612)
+* add ability to disable one or the other audio chips in the genesis
+* make it possible to disable audio in browser
+* make it possible to compile without audio support (minifb frontend requires it atm)
 * should you have a separate attenuation value for each input in the mixer so that you can make one chip quieter (the sn76489 is pretty loud, and I added a fixed offset to the attenuation for now)
 
-
-Harte Tests:
-    * for every failing test in MOVEfromSR, it's caused by an exception where at 0x7F3 it should be 0xF5, it's actually 0xE5, which is the READ/WRITE flag not set correctly (1 = READ)
-
-
-* you could refactor the instruction loop into a series of functions, and test if there's a performance difference with and without #[inline(always)]
-* use the log crate instead of your own
-* move parser into its own
-
-
-* make it possible to compile without audio support (minifb frontend requires it atm)
 
 * I need some better function for dealing with memory, like a function that copies data with a loop, or allows offset reading of
   a fixed piece of data..., the trick is what function are the most common.  You can use generics
@@ -52,25 +44,18 @@ Harte Tests:
 * there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
   stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
 
-* go through the testcases.rs file and make sure they were decoded correctly
-
-* should you rename devices.rs traits.rs?
-
 
 Audio:
-    * for the mixer, it might be easier to have a buffer for each source, but then you'd need to have a list of all sources, even though
-      each source has a copy of the mixer as well... Likely there'd be a sub object in Source which is the buffer and anything else needed
-      by the mixer
+    * address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
 
-    * I'm leaning towards having an object that data is written to by the device.  The device can decide how often to update.  The issue is
-      knowing what data to exclude or insert when mixing the incoming buffers
+    * should you represent audio as frequencies rather than amplitude so that time dilation is more accurate?  Would possible require less
+      accurate simulation of the audio
+
     * Removing at a sample-level granularity would compress or lengthen the waveforms, so it would be better to mix/drop a whole chunk at
       once (either predetermined by the audio system or determined by each device by the amount of samples it writes at once).  The chunk
       size could either be specified by the device in microseconds or something, or can be inferred by the sample_rate and the size of the
       chunk.
 
-    * how do you know how big an audio frame should be?  How do other emulators do audio without stretching or compressing the waveforms, and
-      can/should I do mixing as well, given that I have 2 sources, and at least for those two, they should be connected to the same output
     * you could make the sound device be an object that is passed back to the simulation section like SimplePty.  You need to either register
       a callback with the frontend sound system that is called when it needs data, or you write to a shared buffer which is passed back to the
       frontend when it needs it, or it has a copy it can use directly
