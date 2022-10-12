@@ -116,14 +116,15 @@ pub fn create_window<T>(event_loop: &EventLoop<T>) -> Rc<Window> {
         WindowBuilder::new()
             .with_canvas(Some(canvas))
             .with_title("Hello Pixels + Web")
-            .with_inner_size(size)
-            .with_min_inner_size(size)
+            //.with_inner_size(size)
+            //.with_min_inner_size(size)
             .build(event_loop)
             .expect("WindowBuilder error")
     };
 
     let window = Rc::new(window);
 
+    /*
     // Retrieve current width and height dimensions of browser client window
     let get_window_size = || {
         let client_window = web_sys::window().unwrap();
@@ -133,10 +134,9 @@ pub fn create_window<T>(event_loop: &EventLoop<T>) -> Rc<Window> {
         )
     };
 
-    let window = Rc::clone(&window);
-
     // Initialize winit window with current dimensions of browser client
     window.set_inner_size(get_window_size());
+    */
 
     let client_window = web_sys::window().unwrap();
 
@@ -155,6 +155,7 @@ pub fn create_window<T>(event_loop: &EventLoop<T>) -> Rc<Window> {
         .expect("couldn't append canvas to document body");
     */
 
+    /*
     {
         let window = window.clone();
         // Listen for resize event on browser client. Adjust winit window dimensions
@@ -168,6 +169,7 @@ pub fn create_window<T>(event_loop: &EventLoop<T>) -> Rc<Window> {
             .unwrap();
         closure.forget();
     }
+    */
 
     /*
     let mut update_timer = Instant::now();

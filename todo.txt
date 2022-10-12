@@ -21,15 +21,12 @@
 * can you make the debugger more accessible, so a web interface could access the data and display it, in light of the fact that println isn't available in wasm
 
 Web Assembly:
-    * the frame rate is pretty bad.  It's definitely faster with a smaller window
+    * can you make the web interface nicer with like... a picture of a genesis or something
+    * would a different pixel format help at all?
+
     * can you limit the size of the window that pixels generates?
     * can you automatically adjust the speed based on the calculated framerate (if you moved that to Rust)
-    * can you limit the frame rate in pixels so that you if it were to run too fast, it would limit it to 60Hz
-    * the system run is taking 40 to 50ms per frame in web assembly.  Can you cut that by 4 times?
-
-    * add sound to web assembly
-    * add run/stop and ability to change speed through the web interface
-    * can you make the web interface nicer with like... a picture of a genesis or something
+    * enable sound in web assembly
 
 
 * add ability to disable one or the other audio chips in the genesis
@@ -38,11 +35,7 @@ Web Assembly:
 * should you have a separate attenuation value for each input in the mixer so that you can make one chip quieter (the sn76489 is pretty loud, and I added a fixed offset to the attenuation for now)
 
 
-* I need some better function for dealing with memory, like a function that copies data with a loop, or allows offset reading of
-  a fixed piece of data..., the trick is what function are the most common.  You can use generics
 
-* there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
-  stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
 
 
 Audio:
@@ -89,12 +82,11 @@ Debugger:
 
 Genesis/Mega Drive:
 
+    * there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
+      stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
+
     * implement sn76489 and ym2612 for audio
-    * in some games the controller doesn't seem to work at all (Earthworm Jim, and Mortal Kombat)
-    * refactor to print line by line, so that colour palette changes have an effect
     * there's a bug when Sonic 2 goes to the demo screen, it's all corrupted (could it be a dma copy error)
-    * colours are still broken in Sonic1
-    * sonic3 needs some kind of nvram to run
 
     * the 68000/Z80 bank switching is probably buggy
     * the H/V counters are not accurate because it seems to count at different speeds in the blanking period (time vs return value numbers don't divide properly)
@@ -111,8 +103,6 @@ Macintosh:
 
 68000:
 
-    * check all instructions in the docs
-
     * unimplemented:  BFFFO, BFINS, NBCD, RTD
     * >=MC68020 undecoded & unimplemented: BKPT, CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK
 
@@ -120,15 +110,11 @@ Macintosh:
     * add support for FPU
     * Coprocessor instructions: cpBcc, cpDBcc, cpGEN, cpScc, cpTRAPcc
 
-    * add more m68k tests and try to test against a working impl (m68k-test-suite project)
-
 
 Z80:
     * add instruction timings to Z80
     * unimplemented: CPD, CPDR, CPI, CPIR, DAA, IND, INDR, INI, INIR, INic, INx, OTDR, OTIR, OUTD, OUTI, OUTic, OUTx, RETI, RETN, RLD, RRD
 
 
-* work on mac128/512
-* work on sega genesis
 * can you eventually make the system connections all configurable via a config file?
 
