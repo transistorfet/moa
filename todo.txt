@@ -1,4 +1,8 @@
 
+* can you refactor the update timeout to put it in rust?  Would that make it faster? (the tricky part is the closure)
+* re-enable sound on webassembly, see if it works (it does not. Very lagged and jittery with what sounds like repeated frames)
+
+
 * can you somehow speed up the memory accessing through the sim?  The dyn Addressable is causing a fair amount of overhead
 * can you somehow make devices have two step functions for running things at different times? (I'm thinking ym2612 audio gen vs timers)
 * should you rename devices.rs traits.rs?

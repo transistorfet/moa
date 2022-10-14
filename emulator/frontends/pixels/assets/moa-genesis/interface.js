@@ -9,23 +9,15 @@ function initialize_emulator() {
     setTimeout(function refreshFrame() {
         let current = performance.now();
         let diff = current - last_update;
-let realdiff = current - last_update;
         //let remaining = Math.max((16 * Emulator.get_speed()) - diff, 0);
         last_update = current;
 
         let runtime = Emulator.run_system_for(system, diff * 1_000_000);
         if (Emulator.is_running()) {
             let remaining = Math.max(diff - runtime - (diff * 0.1), 1);
-            console.log(realdiff, diff, runtime, remaining);
             setTimeout(refreshFrame, remaining);
         }
     }, 0);
-    /*
-    setTimeout(function refreshFrame() {
-        let run_time = run_system_for(system, 66_000_000);
-        setTimeout(refreshFrame, 66 - run_time);
-    }, 0);
-    */
 
     Emulator.host_run_loop(host);
 }
