@@ -39,8 +39,8 @@ for the 68000, and expand the implementation from there.  Once we've created a w
 passage of time for the CPUs and I/O devices, we'll implement a simple serial port controller which
 will act as our primary I/O device.  From there we'll make all of our simulated devices, represented
 as `struct` objects in Rust, look the same so that we can treat them the same, regardless of what
-they represent internally.  We'll then be able to package them up into single working system and set
-them in motion to run the Computie software from binaries images.
+they represent internally.  We'll then be able to package them up into a single working system and
+set them in motion to run the Computie software from binary images.
 
 * [The Computer](#the-computer)
 * [The 68000](#the-68000)
@@ -66,7 +66,7 @@ and an MC68681 dual serial port controller, which handles most of the I/O.  (The
 minor fixes which won't affect us here.  I'll mostly be referring to the common aspects of both
 processors).  One of the serial connections is used as a TTY to interact with either the unix-like
 Computie OS, or the monitor software that's normally stored in the flash chip.  It also supports a
-CompactFlash card and SLIP connection over the other serial port for internet access, but we wont
+CompactFlash card and SLIP connection over the other serial port for internet access, but we won't
 cover those here.  In order to get a working emulator, we'll focus on just the CPU, memory, and
 MC68681 controller.
 
@@ -112,7 +112,7 @@ first address contains the value to be loaded into the Supervisor stack register
 remaining addresses are the value loaded into the program counter when a given exception occurs.
 This table cannot be relocated on the 68000, but it can be changed after reset on the 68010.
 Computie uses the 68010 for this exact feature, so that the OS can put the vector table in RAM, but
-the monitor software doesn't use interrupts.  We wont cover interrupts here so this feature isn't
+the monitor software doesn't use interrupts.  We won't cover interrupts here so this feature isn't
 needed for now and we can focus only on emulating the 68000.  As for the vector table, we just need
 to simulate how the processor starts up on power on or after a reset, in which case the vector table
 is always at address 0, and the first two long words are the stack pointer and initial program
@@ -160,7 +160,7 @@ I went through a few different iterations of this, especially for the `.read()` 
 returned an iterator over the data starting at the address given, which works well for simulated
 memory, but reading from an I/O device could return data that is unique to when it was read.  For
 example, when reading the next byte of data from a serial port, the data will be removed from the
-device's internal FIFO and returned, and since at that point it wont be stored anywhere, we can't
+device's internal FIFO and returned, and since at that point it won't be stored anywhere, we can't
 have a reference to it.  We need the data (of variable length) to be owned by the caller when the
 method returns, and passing in a reference to a mutable array to hold that data is a simple way to
 do that.
@@ -202,7 +202,7 @@ pub fn write_beu16(data: &mut [u8], value: u16) -> &mut [u8] {
 
 Now for some simulated ram that implements our trait.  (I'm leaving out the `.new()` methods for
 most of the code snippets because they are pretty straight-forward, but you can assume they exist,
-and take the their field values as arguments, or set their fields to 0).
+and take their field values as arguments, or set their fields to 0).
 
 ```rust
 pub struct MemoryBlock {
@@ -514,7 +514,7 @@ that our `Clock` value will be the number of nanoseconds from the start of the s
 a `u64` here so that we can keep track of simulation time in nanoseconds for approximately 584 which
 *should* be enough.  Keeping track of the time will allow us to later limit how much time passes
 (either speeding up or slowing down the execution relative to real-time).  With this, we can get a
-somewhat accurate count when simulating the timer in the serial controller chip.  That said, we wont
+somewhat accurate count when simulating the timer in the serial controller chip.  That said, we won't
 worry about simulating CPU execution times, which varies quite a bit based on each instruction and
 it's operands, so can add a lot of complexity.
 
@@ -635,7 +635,7 @@ the serial port controller (`MC68681`).  The CPU implements the `Steppable` trai
 implements the `Addressable` trait, and the controller implements both.  That last one is a problem
 because we can't have two mutable references to both the `Addressable` and `Steppable` trait objects
 of the controller at the same time, and rust doesn't yet support trait objects implementing multiple
-traits under these conditions.  Generics wont work either because we need to store the
+traits under these conditions.  Generics won't work either because we need to store the
 `Addressable`s in some kind of list, and items in a list must have the same type, so we need some
 other way of getting a reference to one of the trait objects only when we need to use it.  If we
 weren't so adamant about making this flexible and configurable, we could possibly keep this simpler,
