@@ -1,11 +1,9 @@
-
 use std::mem;
 use std::sync::{Arc, Mutex};
 
+use crate::host::traits::{BlitableSurface, ClockedQueue, WindowUpdater};
 use crate::Clock;
 use crate::Error;
-use crate::host::traits::{WindowUpdater, BlitableSurface, ClockedQueue};
-
 
 pub const MASK_COLOUR: u32 = 0xFFFFFFFF;
 
@@ -18,14 +16,17 @@ pub struct Frame {
 
 impl Frame {
     pub fn new(width: u32, height: u32) -> Self {
-        Self { width, height, bitmap: vec![0; (width * height) as usize] }
+        Self {
+            width,
+            height,
+            bitmap: vec![0; (width * height) as usize],
+        }
     }
 
     pub fn new_shared(width: u32, height: u32) -> Arc<Mutex<Frame>> {
         Arc::new(Mutex::new(Frame::new(width, height)))
     }
 }
-
 
 impl BlitableSurface for Frame {
     fn set_size(&mut self, width: u32, height: u32) {
@@ -36,21 +37,37 @@ impl BlitableSurface for Frame {
 
     fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32) {
         match pixel {
-            MASK_COLOUR => { },
+            MASK_COLOUR => {}
             value if pos_x < self.width && pos_y < self.height => {
                 self.bitmap[(pos_x + (pos_y * self.width)) as usize] = value;
-            },
-            _ => { },
+            }
+            _ => {}
         }
     }
 
-    fn blit<B: Iterator<Item=u32>>(&mut self, pos_x: u32, pos_y: u32, mut bitmap: B, width: u32, height: u32) {
+    fn blit<B: Iterator<Item = u32>>(&mut self, pos_x: u32, pos_y: u32, mut bitmap: B, width: u32, height: u32) {
+        /*
+                (pos_y..(pos_y + height))
+                    .for_each(|y| {
+                        self.bitmap[(y * self.width) as usize .. (y * self.width + self.width) as usize]
+                            .iter_mut()
+                            .for_each(|pixel|
+                                match bitmap.next().unwrap() {
+                                    MASK_COLOUR => {},
+                                    value => *pixel = value,
+                                }
+                            )
+                    });
+        */
+
         for y in pos_y..(pos_y + height) {
             for x in pos_x..(pos_x + width) {
                 match bitmap.next().unwrap() {
-                    MASK_COLOUR => { },
-                    value if x < self.width && y < self.height => { self.bitmap[(x + (y * self.width)) as usize] = value; },
-                    _ => { },
+                    MASK_COLOUR => {}
+                    value if x < self.width && y < self.height => {
+                        self.bitmap[(x + (y * self.width)) as usize] = value;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -58,9 +75,7 @@ impl BlitableSurface for Frame {
 
     fn clear(&mut self, value: u32) {
         let value = if value == MASK_COLOUR { 0 } else { value };
-        for i in 0..((self.width as usize) * (self.height as usize)) {
-            self.bitmap[i] = value;
-        }
+        self.bitmap.iter_mut().for_each(|pixel| *pixel = value);
     }
 }
 
@@ -106,7 +121,6 @@ impl WindowUpdater for FrameSwapper {
     }
 }
 
-
 #[derive(Clone)]
 pub struct FrameQueue {
     max_size: (u32, u32),
@@ -136,7 +150,8 @@ impl WindowUpdater for FrameQueue {
     }
 
     fn take_frame(&mut self) -> Result<Frame, Error> {
-        self.latest().map(|(_, f)| f).ok_or_else(|| Error::new("No frame available"))
+        self.latest()
+            .map(|(_, f)| f)
+            .ok_or_else(|| Error::new("No frame available"))
     }
 }
-

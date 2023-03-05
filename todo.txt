@@ -1,4 +1,7 @@
 
+* if index access always does a bounds check, you should try to convert some of the copy loops to use iterators
+  instead, such as frame updating, audio copying, etc
+
 * can you refactor the update timeout to put it in rust?  Would that make it faster? (the tricky part is the closure)
 * re-enable sound on webassembly, see if it works (it does not. Very lagged and jittery with what sounds like repeated frames)
 

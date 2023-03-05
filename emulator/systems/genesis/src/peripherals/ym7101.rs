@@ -545,17 +545,17 @@ impl Ym7101State {
                 _                     => [ pixel_sprite, pixel_a,      pixel_b,      bg_colour ],
             };
 
-            for i in 0..pixels.len() {
-                if pixels[i].1 != 0 || i == pixels.len() - 1 {
-                    let mode = if pixels[i] == (3, 14) {
+            for (i, pixel) in pixels.iter().enumerate() {
+                if pixel.1 != 0 || i == pixels.len() - 1 {
+                    let mode = if *pixel == (3, 14) {
                         ColourMode::Highlight
-                    } else if (!priority_a && !priority_b) || pixels[i] == (3, 15) {
+                    } else if (!priority_a && !priority_b) || *pixel == (3, 15) {
                         ColourMode::Shadow
                     } else {
                         ColourMode::Normal
                     };
 
-                    frame.set_pixel(x as u32, y as u32, self.get_palette_colour(pixels[i].0, pixels[i].1, mode));
+                    frame.set_pixel(x as u32, y as u32, self.get_palette_colour(pixel.0, pixel.1, mode));
                     break;
                 }
             }

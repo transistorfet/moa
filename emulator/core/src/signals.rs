@@ -1,9 +1,10 @@
-
-use std::rc::Rc;
 use std::cell::{Cell, RefCell, RefMut};
+use std::rc::Rc;
 
 pub trait Observable<T> {
-    fn set_observer<F>(&self, f: F) where F: Fn(&T) + 'static;
+    fn set_observer<F>(&self, f: F)
+    where
+        F: Fn(&T) + 'static;
     fn notify(&self);
 }
 
@@ -15,7 +16,6 @@ type Output<T> = Signal<T>;
 type Input<T> = Signal<T>;
 #[allow(dead_code)]
 type TriState<T> = Signal<T>;
-
 
 #[derive(Clone, Debug)]
 pub struct Signal<T: Copy>(Rc<Cell<T>>);
@@ -33,7 +33,6 @@ impl<T: Copy> Signal<T> {
         self.0.get()
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct EdgeSignal(Signal<bool>);
@@ -54,7 +53,6 @@ impl EdgeSignal {
     }
 }
 
-
 #[derive(Clone)]
 pub struct ObservableSignal<T>(Rc<RefCell<(T, Option<Box<dyn Fn(&T)>>)>>);
 
@@ -69,7 +67,10 @@ impl<T> ObservableSignal<T> {
 }
 
 impl<T> Observable<T> for ObservableSignal<T> {
-    fn set_observer<F>(&self, f: F) where F: Fn(&T) + 'static {
+    fn set_observer<F>(&self, f: F)
+    where
+        F: Fn(&T) + 'static,
+    {
         self.0.borrow_mut().1 = Some(Box::new(f));
     }
 
@@ -80,7 +81,6 @@ impl<T> Observable<T> for ObservableSignal<T> {
         }
     }
 }
-
 
 pub struct ObservableEdgeSignal(ObservableSignal<bool>);
 
@@ -103,7 +103,10 @@ impl ObservableEdgeSignal {
 }
 
 impl Observable<bool> for ObservableEdgeSignal {
-    fn set_observer<F>(&self, f: F) where F: Fn(&bool) + 'static {
+    fn set_observer<F>(&self, f: F)
+    where
+        F: Fn(&bool) + 'static,
+    {
         self.0.set_observer(f)
     }
 
@@ -111,5 +114,3 @@ impl Observable<bool> for ObservableEdgeSignal {
         self.0.notify()
     }
 }
-
-
