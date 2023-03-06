@@ -431,7 +431,7 @@ impl Ym7101State {
 
     #[inline(always)]
     fn get_pattern_addr(&self, cell_table: usize, cell_x: usize, cell_y: usize) -> usize {
-        cell_table + ((cell_x + (cell_y * self.scroll_size.0 as usize)) << 1)
+        cell_table + ((cell_x + (cell_y * self.scroll_size.0)) << 1)
     }
 
     fn build_sprites_lists(&mut self) {

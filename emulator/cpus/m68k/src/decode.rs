@@ -129,7 +129,7 @@ impl M68kDecoder {
                 } else {
                     let size = get_size(ins);
                     let data = match size {
-                        Some(Size::Byte) => (self.read_instruction_word(memory)? as u32 & 0xFF),
+                        Some(Size::Byte) => self.read_instruction_word(memory)? as u32 & 0xFF,
                         Some(Size::Word) => self.read_instruction_word(memory)? as u32,
                         Some(Size::Long) => self.read_instruction_long(memory)?,
                         None => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),

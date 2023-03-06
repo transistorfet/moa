@@ -385,7 +385,7 @@ impl M68kAssembler {
             [AssemblyOperand::Register(_), AssemblyOperand::Register(_)] => {
                 let bit_reg = expect_data_register(lineno, &args[0])?;
                 let reg = expect_data_register(lineno, &args[1])?;
-                self.output.push(opcode | ((bit_reg as u16) << 9) | direction | encode_size(operation_size) | (0b1 << 5) | reg);
+                self.output.push(opcode | (bit_reg << 9) | direction | encode_size(operation_size) | (0b1 << 5) | reg);
             },
             //[_] => {
             //    let (effective_address, additional_words) = convert_target(lineno, &args[0], Size::Word, Disallow::NoRegsImmediateOrPC)?;

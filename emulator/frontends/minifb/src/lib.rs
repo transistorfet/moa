@@ -73,7 +73,7 @@ pub fn run_threaded<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFr
     {
         let frontend = frontend.clone();
         thread::spawn(move || {
-            let mut system = init(&mut *(frontend.lock().unwrap())).unwrap();
+            let mut system = init(&mut frontend.lock().unwrap()).unwrap();
             frontend.lock().unwrap().finalize();
             system.run_loop();
         });

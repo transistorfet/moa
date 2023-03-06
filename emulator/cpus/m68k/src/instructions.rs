@@ -433,7 +433,7 @@ impl fmt::Display for Instruction {
             Instruction::DBcc(cond, reg, offset) => write!(f, "db{}\t%d{}, {}", cond, reg, offset),
             Instruction::DIVW(src, dest, sign) => write!(f, "div{}w\t{}, %d{}", sign, src, dest),
             Instruction::DIVL(src, desth, destl, sign) => {
-                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or_else(|| "".to_string());
+                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or_default();
                 write!(f, "div{}l\t{}, {}%d{}", sign, src, opt_reg, destl)
             },
 
@@ -478,7 +478,7 @@ impl fmt::Display for Instruction {
             },
             Instruction::MULW(src, dest, sign) => write!(f, "mul{}w\t{}, %d{}", sign, src, dest),
             Instruction::MULL(src, desth, destl, sign) => {
-                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or_else(|| "".to_string());
+                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or_default();
                 write!(f, "mul{}l\t{}, {}%d{}", sign, src, opt_reg, destl)
             },
 

@@ -433,8 +433,8 @@ impl M68k {
             //Instruction::BKPT(u8) => {
             //},
             Instruction::CHK(target, reg, size) => {
-                let upper_bound = sign_extend_to_long(self.get_target_value(target, size, Used::Once)?, size) as i32;
-                let dreg = sign_extend_to_long(self.state.d_reg[reg as usize], size) as i32;
+                let upper_bound = sign_extend_to_long(self.get_target_value(target, size, Used::Once)?, size);
+                let dreg = sign_extend_to_long(self.state.d_reg[reg as usize], size);
 
                 self.set_sr(self.state.sr & 0xFFF0);
                 if dreg < 0 || dreg > upper_bound {
@@ -494,7 +494,7 @@ impl M68k {
                 let (remainder, quotient, overflow) = match sign {
                     Sign::Signed => {
                         let dest_val = dest_val as i32;
-                        let src_val = sign_extend_to_long(src_val, Size::Word) as i32;
+                        let src_val = sign_extend_to_long(src_val, Size::Word);
                         let quotient = dest_val / src_val;
                         (
                             (dest_val % src_val) as u32,
@@ -514,7 +514,7 @@ impl M68k {
 
                 // Only update the register if the quotient was large than a 16-bit number
                 if !overflow {
-                    self.set_compare_flags(quotient as u32, Size::Word, false, false);
+                    self.set_compare_flags(quotient, Size::Word, false, false);
                     self.state.d_reg[dest as usize] = (remainder << 16) | (0xFFFF & quotient);
                 } else {
                     self.set_flag(Flags::Carry, false);
@@ -617,7 +617,7 @@ impl M68k {
                 let value = *self.get_a_reg_mut(reg);
                 self.set_address_sized(sp as Address, value, Size::Long)?;
                 *self.get_a_reg_mut(reg) = sp;
-                *self.get_stack_pointer_mut() = (sp as i32).wrapping_add(offset as i32) as u32;
+                *self.get_stack_pointer_mut() = (sp as i32).wrapping_add(offset) as u32;
             },
             Instruction::LSd(count, target, size, shift_dir) => {
                 let count = self.get_target_value(count, size, Used::Once)? % 64;
@@ -1540,7 +1540,7 @@ fn shift_operation(value: u32, size: Size, dir: ShiftDirection, arithmetic: bool
             match size {
                 Size::Byte => (((value as u8) << 1) as u32, bit),
                 Size::Word => (((value as u16) << 1) as u32, bit),
-                Size::Long => ((value << 1) as u32, bit),
+                Size::Long => (value << 1, bit),
             }
         },
         ShiftDirection::Right => {
@@ -1558,7 +1558,7 @@ fn rotate_operation(value: u32, size: Size, dir: ShiftDirection, use_extend: Opt
             match size {
                 Size::Byte => (mask | ((value as u8) << 1) as u32, bit),
                 Size::Word => (mask | ((value as u16) << 1) as u32, bit),
-                Size::Long => (mask | (value << 1) as u32, bit),
+                Size::Long => (mask | value << 1, bit),
             }
         },
         ShiftDirection::Right => {

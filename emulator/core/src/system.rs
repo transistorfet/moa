@@ -153,9 +153,8 @@ impl System {
 
     pub fn exit_error(&mut self) {
         for (_, dev) in self.devices.iter() {
-            match dev.borrow_mut().as_steppable() {
-                Some(dev) => dev.on_error(self),
-                None => { },
+            if let Some(dev) = dev.borrow_mut().as_steppable() {
+                dev.on_error(self);
             }
         }
     }

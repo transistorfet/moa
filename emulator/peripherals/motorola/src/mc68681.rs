@@ -109,13 +109,10 @@ impl MC68681Port {
         if self.rx_enabled && (self.status & SR_RX_READY) == 0 && self.tty.is_some() {
             let tty = self.tty.as_mut().unwrap();
             let result = tty.read();
-            match result {
-                Some(input) => {
-                    self.input = input;
-                    self.set_rx_status(true);
-                    return Ok(true);
-                },
-                None => { },
+            if let Some(input) = result {
+                self.input = input;
+                self.set_rx_status(true);
+                return Ok(true);
             }
         }
         Ok(false)
@@ -316,9 +313,8 @@ impl Addressable for MC68681 {
                 self.set_interrupt_flag(ISR_CH_A_TX_READY, false);
             },
             REG_CRA_WR => {
-                match self.port_a.handle_command(data[0]) {
-                    Some(value) => self.set_interrupt_flag(ISR_CH_A_TX_READY, value),
-                    None => { },
+                if let Some(value) = self.port_a.handle_command(data[0]) {
+                    self.set_interrupt_flag(ISR_CH_A_TX_READY, value);
                 }
             },
             REG_TBB_WR => {
@@ -327,9 +323,8 @@ impl Addressable for MC68681 {
                 self.set_interrupt_flag(ISR_CH_B_TX_READY, false);
             },
             REG_CRB_WR => {
-                match self.port_b.handle_command(data[0]) {
-                    Some(value) => self.set_interrupt_flag(ISR_CH_B_TX_READY, value),
-                    None => { },
+                if let Some(value) = self.port_b.handle_command(data[0]) {
+                    self.set_interrupt_flag(ISR_CH_B_TX_READY, value);
                 }
             },
             REG_CTUR_WR => {
