@@ -8,7 +8,7 @@ use moa_peripherals_mos::Mos6522;
 use moa_peripherals_zilog::Z8530;
 use crate::peripherals::iwm::IWM;
 
-const DEV_NAME: &'static str = "mac";
+const DEV_NAME: &str = "mac";
 
 
 pub struct Mainboard {
@@ -23,13 +23,13 @@ pub struct Mainboard {
 
 impl Mainboard {
     pub fn create(ram: TransmutableBox, rom: TransmutableBox) -> Result<Self, Error> {
-        let scc1 = Z8530::new();
-        let scc2 = Z8530::new();
-        let iwm = IWM::new();
-        let via = Mos6522::new();
-        let phase_read = PhaseRead::new();
+        let scc1 = Z8530::default();
+        let scc2 = Z8530::default();
+        let iwm = IWM::default();
+        let via = Mos6522::default();
+        let phase_read = PhaseRead::default();
 
-        let lower_bus = Rc::new(RefCell::new(Bus::new()));
+        let lower_bus = Rc::new(RefCell::new(Bus::default()));
 
         let mainboard = Self {
             lower_bus: lower_bus.clone(),
@@ -72,17 +72,17 @@ impl Addressable for Mainboard {
     fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         if addr < 0x800000 {
             self.lower_bus.borrow_mut().read(addr, data)
-        } else if addr >= 0x900000 && addr < 0xA00000 {
+        } else if (0x900000..0xA00000).contains(&addr) {
             self.scc1.read((addr >> 9) & 0x0F, data)
-        } else if addr >= 0xB00000 && addr < 0xC00000 {
+        } else if (0xB00000..0xC00000).contains(&addr) {
             self.scc2.read((addr >> 9) & 0x0F, data)
-        } else if addr >= 0xD00000 && addr < 0xE00000 {
+        } else if (0xD00000..0xE00000).contains(&addr) {
             self.iwm.read((addr >> 9) & 0x0F, data)
-        } else if addr >= 0xE80000 && addr < 0xF00000 {
+        } else if (0xE80000..0xF00000).contains(&addr) {
             self.via.read((addr >> 9) & 0x0F, data)
-        } else if addr >= 0xF00000 && addr < 0xF80000 {
+        } else if (0xF00000..0xF80000).contains(&addr) {
             self.phase_read.read(addr, data)
-        } else if addr >= 0xF80000 && addr < 0xF80010 {
+        } else if (0xF80000..0xF80010).contains(&addr) {
             // Debugger
             Ok(())
         } else {
@@ -93,15 +93,15 @@ impl Addressable for Mainboard {
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         if addr < 0x800000 {
             self.lower_bus.borrow_mut().write(addr, data)
-        } else if addr >= 0x900000 && addr < 0xA00000 {
+        } else if (0x900000..0xA00000).contains(&addr) {
             self.scc1.write((addr >> 9) & 0x0F, data)
-        } else if addr >= 0xB00000 && addr < 0xC00000 {
+        } else if (0xB00000..0xC00000).contains(&addr) {
             self.scc2.write((addr >> 9) & 0x0F, data)
-        } else if addr >= 0xD00000 && addr < 0xE00000 {
+        } else if (0xD00000..0xE00000).contains(&addr) {
             self.iwm.write((addr >> 9) & 0x0F, data)
-        } else if addr >= 0xE80000 && addr < 0xF00000 {
+        } else if (0xE80000..0xF00000).contains(&addr) {
             self.via.write((addr >> 9) & 0x0F, data)
-        } else if addr >= 0xF00000 && addr < 0xF80000 {
+        } else if (0xF00000..0xF80000).contains(&addr) {
             self.phase_read.write(addr, data)
         } else {
             Err(Error::new(&format!("Error writing address {:#010x}", addr)))
@@ -136,15 +136,9 @@ impl Transmutable for Mainboard {
 
 
 
+#[derive(Default)]
 pub struct PhaseRead {
 
-}
-
-impl PhaseRead {
-    pub fn new() -> Self {
-        Self {
-        }
-    }
 }
 
 impl Addressable for PhaseRead {

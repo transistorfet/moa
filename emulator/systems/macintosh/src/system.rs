@@ -9,7 +9,7 @@ use crate::peripherals::mainboard::Mainboard;
 
 
 pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
-    let mut system = System::new();
+    let mut system = System::default();
 
     /*
     use crate::peripherals::mos6522::Mos6522;

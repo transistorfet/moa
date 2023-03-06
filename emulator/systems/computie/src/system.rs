@@ -8,7 +8,7 @@ use moa_peripherals_motorola::MC68681;
 
 
 pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
-    let mut system = System::new();
+    let mut system = System::default();
 
     let monitor = MemoryBlock::load("binaries/computie/monitor.bin")?;
     system.add_addressable_device(0x00000000, wrap_transmutable(monitor))?;
@@ -17,11 +17,11 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     ram.load_at(0, "binaries/computie/kernel.bin")?;
     system.add_addressable_device(0x00100000, wrap_transmutable(ram))?;
 
-    let mut ata = AtaDevice::new();
+    let mut ata = AtaDevice::default();
     ata.load("binaries/computie/disk-with-partition-table.img")?;
     system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
-    let mut serial = MC68681::new();
+    let mut serial = MC68681::default();
     launch_terminal_emulator(serial.port_a.connect(host.create_pty()?)?);
     launch_slip_connection(serial.port_b.connect(host.create_pty()?)?);
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
@@ -46,7 +46,7 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
 }
 
 pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
-    let mut system = System::new();
+    let mut system = System::default();
 
     let monitor = MemoryBlock::load("binaries/computie/monitor-68030.bin")?;
     system.add_addressable_device(0x00000000, wrap_transmutable(monitor))?;
@@ -55,11 +55,11 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     ram.load_at(0, "binaries/computie/kernel-68030.bin")?;
     system.add_addressable_device(0x00100000, wrap_transmutable(ram))?;
 
-    let mut ata = AtaDevice::new();
+    let mut ata = AtaDevice::default();
     ata.load("binaries/computie/disk-with-partition-table.img")?;
     system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
-    let mut serial = MC68681::new();
+    let mut serial = MC68681::default();
     launch_terminal_emulator(serial.port_a.connect(host.create_pty()?)?);
     //launch_slip_connection(serial.port_b.connect(host.create_pty()?)?);
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;

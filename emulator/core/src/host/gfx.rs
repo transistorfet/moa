@@ -7,7 +7,7 @@ use crate::Error;
 
 pub const MASK_COLOUR: u32 = 0xFFFFFFFF;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Frame {
     pub width: u32,
     pub height: u32,
@@ -131,7 +131,7 @@ impl FrameQueue {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
             max_size: (width, height),
-            queue: ClockedQueue::new(),
+            queue: Default::default(),
         }
     }
 

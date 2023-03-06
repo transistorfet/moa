@@ -62,7 +62,7 @@ impl<'input> AssemblyParser<'input> {
                 let list = self.parse_list_of_words()?;
                 AssemblyLine::Directive(name, list)
             },
-            word if word.chars().nth(0).map(|ch| is_word(ch)).unwrap_or(false) => {
+            word if word.chars().next().map(is_word).unwrap_or(false) => {
                 let next = self.lexer.peek();
                 if next.is_some() && next.as_ref().unwrap() == ":" {
                     self.lexer.expect_next()?;
@@ -152,7 +152,7 @@ impl<'input> AssemblyParser<'input> {
                 Ok(AssemblyOperand::Immediate(number))
             },
             _ => {
-                if is_digit(token.chars().nth(0).unwrap()) {
+                if is_digit(token.chars().next().unwrap()) {
                     let number = parse_any_number(self.lexer.lineno(), &token)?;
                     Ok(AssemblyOperand::Immediate(number))
                 } else {
@@ -164,12 +164,12 @@ impl<'input> AssemblyParser<'input> {
 }
 
 fn parse_any_number(lineno: usize, string: &str) -> Result<usize, Error> {
-    let (radix, numeric) = if string.starts_with("0x") {
-        (16, &string[2..])
-    } else if string.starts_with("0b") {
-        (2, &string[2..])
-    } else if string.starts_with("0o") {
-        (8, &string[2..])
+    let (radix, numeric) = if let Some(s) = string.strip_prefix("0x") {
+        (16, s)
+    } else if let Some(s) = string.strip_prefix("0b") {
+        (2, s)
+    } else if let Some(s) = string.strip_prefix("0o") {
+        (8, s)
     } else {
         (10, string)
     };

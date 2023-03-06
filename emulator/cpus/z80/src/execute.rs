@@ -5,7 +5,7 @@ use crate::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, In
 use crate::state::{Z80, Status, Flags, Register};
 
 
-const DEV_NAME: &'static str = "z80-cpu";
+const DEV_NAME: &str = "z80-cpu";
 
 const FLAGS_NUMERIC: u8                 = 0xC0;
 const FLAGS_ARITHMETIC: u8              = 0x17;
@@ -337,10 +337,10 @@ impl Z80 {
                 let parity = if count != 0 { Flags::Parity as u8 } else { 0 };
                 self.set_flags(mask, parity);
 
-                if self.decoder.instruction == Instruction::LDIR || self.decoder.instruction == Instruction::LDDR {
-                    if count != 0 {
-                        self.state.pc -= 2;
-                    }
+                if (self.decoder.instruction == Instruction::LDIR || self.decoder.instruction == Instruction::LDDR)
+                    && count != 0
+                {
+                    self.state.pc -= 2;
                 }
             },
             Instruction::NEG => {
@@ -383,7 +383,7 @@ impl Z80 {
             },
             Instruction::RES(bit, target, opt_copy) => {
                 let mut value = self.get_target_value(target)?;
-                value = value & !(1 << bit);
+                value &= !(1 << bit);
                 self.set_target_value(target, value)?;
                 if let Some(target) = opt_copy {
                     self.set_target_value(target, value)?;
@@ -504,7 +504,7 @@ impl Z80 {
             },
             Instruction::SET(bit, target, opt_copy) => {
                 let mut value = self.get_target_value(target)?;
-                value = value | (1 << bit);
+                value |= 1 << bit;
                 self.set_target_value(target, value)?;
                 if let Some(target) = opt_copy {
                     self.set_target_value(target, value)?;
@@ -836,7 +836,7 @@ impl Z80 {
 
     #[inline(always)]
     fn set_flag(&mut self, flag: Flags, value: bool) {
-        self.state.reg[Register::F as usize] = self.state.reg[Register::F as usize] & !(flag as u8);
+        self.state.reg[Register::F as usize] &= !(flag as u8);
         if value {
             self.state.reg[Register::F as usize] |= flag as u8;
         }

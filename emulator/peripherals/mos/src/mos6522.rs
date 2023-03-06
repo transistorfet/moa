@@ -12,7 +12,7 @@ const REG_INT_ENABLE: Address   = 0x0E;
 const REG_OUTPUT_A_NHS: Address = 0x0F;
 
 
-const DEV_NAME: &'static str = "mos6522";
+const DEV_NAME: &str = "mos6522";
 
 
 pub struct Port {
@@ -20,8 +20,8 @@ pub struct Port {
     pub ddr: u8,
 }
 
-impl Port {
-    pub fn new() -> Self {
+impl Default for Port {
+    fn default() -> Self {
         Self {
             data: 0xff,
             ddr: 0,
@@ -39,11 +39,11 @@ pub struct Mos6522 {
     pub interrupt_enable: u8,
 }
 
-impl Mos6522 {
-    pub fn new() -> Self {
+impl Default for Mos6522 {
+    fn default() -> Self {
         Self {
-            port_a: ObservableSignal::new(Port::new()),
-            port_b: ObservableSignal::new(Port::new()),
+            port_a: ObservableSignal::new(Port::default()),
+            port_b: ObservableSignal::new(Port::default()),
             peripheral_ctrl: 0,
             interrupt: Signal::new(false),
             interrupt_flags: 0,

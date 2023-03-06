@@ -50,7 +50,7 @@ impl M68kDecoder {
     pub fn new(cputype: M68kType, start: u32) -> M68kDecoder {
         M68kDecoder {
             cputype,
-            start: start,
+            start,
             end: start,
             instruction_word: 0,
             instruction: Instruction::NOP,
@@ -85,7 +85,7 @@ impl M68kDecoder {
                                 0b0000 => Ok(Instruction::ORtoCCR(data as u8)),
                                 0b0010 => Ok(Instruction::ANDtoCCR(data as u8)),
                                 0b1010 => Ok(Instruction::EORtoCCR(data as u8)),
-                                _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
                         },
                         0b01 => {
@@ -94,10 +94,10 @@ impl M68kDecoder {
                                 0b0000 => Ok(Instruction::ORtoSR(data)),
                                 0b0010 => Ok(Instruction::ANDtoSR(data)),
                                 0b1010 => Ok(Instruction::EORtoSR(data)),
-                                _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
                         },
-                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else if (ins & 0x138) == 0x108 {
                     let dreg = get_high_reg(ins);
@@ -124,7 +124,7 @@ impl M68kDecoder {
                         0b01 => Ok(Instruction::BCHG(bitnum, target, size)),
                         0b10 => Ok(Instruction::BCLR(bitnum, target, size)),
                         0b11 => Ok(Instruction::BSET(bitnum, target, size)),
-                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else {
                     let size = get_size(ins);
@@ -143,7 +143,7 @@ impl M68kDecoder {
                         0b0110 => Ok(Instruction::ADD(Target::Immediate(data), target, size.unwrap())),
                         0b1010 => Ok(Instruction::EOR(Target::Immediate(data), target, size.unwrap())),
                         0b1100 => Ok(Instruction::CMP(Target::Immediate(data), target, size.unwrap())),
-                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 }
             },
@@ -221,7 +221,7 @@ impl M68kDecoder {
                             match get_size(ins) {
                                 Some(size) => Ok(Instruction::CLR(target, size)),
                                 None if self.cputype >= M68kType::MC68010 => Ok(Instruction::MOVEfromCCR(target)),
-                                None => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                                None => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
                         },
                         0b100 => {
@@ -236,7 +236,7 @@ impl M68kDecoder {
                                 None => Ok(Instruction::MOVEtoSR(target)),
                             }
                         },
-                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else if ins_0f00 == 0x800 || ins_0f00 == 0x900 {
                     let opmode = (ins & 0x01C0) >> 6;
@@ -269,7 +269,7 @@ impl M68kDecoder {
                         (0b111, 0b000) => {
                             Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Long))
                         },
-                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
                 } else if ins_0f00 == 0xA00 {
                     if (ins & 0x0FF) == 0xFC {
@@ -332,11 +332,11 @@ impl M68kDecoder {
                                 };
                                 Ok(Instruction::MOVEC(target, creg, dir))
                             },
-                            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         }
                     }
                 } else {
-                    return Err(Error::processor(Exceptions::IllegalInstruction as u32));
+                    Err(Error::processor(Exceptions::IllegalInstruction as u32))
                 }
             },
             OPCG_ADDQ_SUBQ => {
@@ -354,12 +354,10 @@ impl M68kDecoder {
                             } else {
                                 Ok(Instruction::SUBA(Target::Immediate(data), reg, size))
                             }
+                        } else if (ins & 0x0100) == 0 {
+                            Ok(Instruction::ADD(Target::Immediate(data), target, size))
                         } else {
-                            if (ins & 0x0100) == 0 {
-                                Ok(Instruction::ADD(Target::Immediate(data), target, size))
-                            } else {
-                                Ok(Instruction::SUB(Target::Immediate(data), target, size))
-                            }
+                            Ok(Instruction::SUB(Target::Immediate(data), target, size))
                         }
                     },
                     None => {
@@ -402,11 +400,7 @@ impl M68kDecoder {
             OPCG_DIV_OR => {
                 let size = get_size(ins);
 
-                if size.is_none() {
-                    let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
-                    let effective_addr = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
-                    Ok(Instruction::DIVW(effective_addr, get_high_reg(ins), sign))
-                } else if (ins & 0x1F0) == 0x100 {
+                if (ins & 0x1F0) == 0x100 {
                     let regx = get_high_reg(ins);
                     let regy = get_low_reg(ins);
 
@@ -414,11 +408,15 @@ impl M68kDecoder {
                         false => Ok(Instruction::SBCD(Target::DirectDReg(regy), Target::DirectDReg(regx))),
                         true => Ok(Instruction::SBCD(Target::IndirectARegDec(regy), Target::IndirectARegDec(regx))),
                     }
-                } else {
+                } else if let Some(size) = size {
                     let data_reg = Target::DirectDReg(get_high_reg(ins));
-                    let effective_addr = self.decode_lower_effective_address(memory, ins, size)?;
+                    let effective_addr = self.decode_lower_effective_address(memory, ins, Some(size))?;
                     let (from, to) = if (ins & 0x0100) == 0 { (effective_addr, data_reg) } else { (data_reg, effective_addr) };
-                    Ok(Instruction::OR(from, to, size.unwrap()))
+                    Ok(Instruction::OR(from, to, size))
+                } else {
+                    let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
+                    let effective_addr = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
+                    Ok(Instruction::DIVW(effective_addr, get_high_reg(ins), sign))
                 }
             },
             OPCG_SUB => {
@@ -472,7 +470,7 @@ impl M68kDecoder {
                         let target = self.decode_lower_effective_address(memory, ins, Some(size))?;
                         Ok(Instruction::CMPA(target, reg, size))
                     },
-                    _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                    _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                 }
             },
             OPCG_MUL_AND => {
@@ -486,24 +484,24 @@ impl M68kDecoder {
                         false => Ok(Instruction::ABCD(Target::DirectDReg(regy), Target::DirectDReg(regx))),
                         true => Ok(Instruction::ABCD(Target::IndirectARegDec(regy), Target::IndirectARegDec(regx))),
                     }
-                } else if (ins & 0b0001_0011_0000) == 0b0001_0000_0000 && !size.is_none() {
+                } else if (ins & 0b0001_0011_0000) == 0b0001_0000_0000 && size.is_some() {
                     let regx = get_high_reg(ins);
                     let regy = get_low_reg(ins);
                     match (ins & 0x00F8) >> 3 {
                         0b01000 => Ok(Instruction::EXG(Target::DirectDReg(regx), Target::DirectDReg(regy))),
                         0b01001 => Ok(Instruction::EXG(Target::DirectAReg(regx), Target::DirectAReg(regy))),
                         0b10001 => Ok(Instruction::EXG(Target::DirectDReg(regx), Target::DirectAReg(regy))),
-                        _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                     }
-                } else if size.is_none() {
+                } else if let Some(size) = size {
+                    let data_reg = Target::DirectDReg(get_high_reg(ins));
+                    let effective_addr = self.decode_lower_effective_address(memory, ins, Some(size))?;
+                    let (from, to) = if (ins & 0x0100) == 0 { (effective_addr, data_reg) } else { (data_reg, effective_addr) };
+                    Ok(Instruction::AND(from, to, size))
+                } else {
                     let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
                     let effective_addr = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
                     Ok(Instruction::MULW(effective_addr, get_high_reg(ins), sign))
-                } else {
-                    let data_reg = Target::DirectDReg(get_high_reg(ins));
-                    let effective_addr = self.decode_lower_effective_address(memory, ins, size)?;
-                    let (from, to) = if (ins & 0x0100) == 0 { (effective_addr, data_reg) } else { (data_reg, effective_addr) };
-                    Ok(Instruction::AND(from, to, size.unwrap()))
                 }
             },
             OPCG_ADD => {
@@ -552,7 +550,7 @@ impl M68kDecoder {
                             0b01 => Ok(Instruction::LSd(count, Target::DirectDReg(reg), size, dir)),
                             0b10 => Ok(Instruction::ROXd(count, Target::DirectDReg(reg), size, dir)),
                             0b11 => Ok(Instruction::ROd(count, Target::DirectDReg(reg), size, dir)),
-                            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                         }
                     },
                     None => {
@@ -564,7 +562,7 @@ impl M68kDecoder {
                                 0b01 => Ok(Instruction::LSd(count, target, Size::Word, dir)),
                                 0b10 => Ok(Instruction::ROXd(count, target, Size::Word, dir)),
                                 0b11 => Ok(Instruction::ROd(count, target, Size::Word, dir)),
-                                _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
                         } else if self.cputype > M68kType::MC68020 {
                             // Bitfield instructions (MC68020+)
@@ -591,10 +589,10 @@ impl M68kDecoder {
                                 0b111 => Ok(Instruction::BFINS(reg, target, offset, width)),
                                 0b110 => Ok(Instruction::BFSET(target, offset, width)),
                                 0b000 => Ok(Instruction::BFTST(target, offset, width)),
-                                _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
                             }
                         } else {
-                            return Err(Error::processor(Exceptions::IllegalInstruction as u32));
+                            Err(Error::processor(Exceptions::IllegalInstruction as u32))
                         }
                     },
                 }
@@ -605,7 +603,7 @@ impl M68kDecoder {
             OPCG_FLINE => {
                 Ok(Instruction::UnimplementedF(ins))
             },
-            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
         }
     }
 

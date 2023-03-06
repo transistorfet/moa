@@ -59,10 +59,10 @@ const MODE4_BF_SHADOW_HIGHLIGHT: u8     = 0x08;
 
 
 
-const DEV_NAME: &'static str = "ym7101";
+const DEV_NAME: &str = "ym7101";
 
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DmaType {
     None,
     Memory,
@@ -70,7 +70,7 @@ pub enum DmaType {
     Copy,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Memory {
     Vram,
     Cram,
@@ -97,8 +97,8 @@ pub struct Ym7101Memory {
     pub ctrl_port_buffer: Option<u16>,
 }
 
-impl Ym7101Memory {
-    pub fn new() -> Self {
+impl Default for Ym7101Memory {
+    fn default() -> Self {
         Self {
             vram: [0; 0x10000],
             cram: [0; 128],
@@ -119,8 +119,9 @@ impl Ym7101Memory {
             ctrl_port_buffer: None,
         }
     }
+}
 
-
+impl Ym7101Memory {
     #[inline(always)]
     fn read_beu16(&self, target: Memory, addr: usize) -> u16 {
         let addr = match target {
@@ -148,7 +149,7 @@ impl Ym7101Memory {
 
     pub fn setup_transfer(&mut self, first: u16, second: u16) {
         self.ctrl_port_buffer = None;
-        self.transfer_type = ((((first & 0xC000) >> 14) | ((second & 0x00F0) >> 2))) as u8;
+        self.transfer_type = (((first & 0xC000) >> 14) | ((second & 0x00F0) >> 2)) as u8;
         self.transfer_dest_addr = ((first & 0x3FFF) | ((second & 0x0003) << 14)) as u32;
         self.transfer_target = match self.transfer_type & 0x0E {
             0 => Memory::Vram,
@@ -268,14 +269,14 @@ impl Ym7101Memory {
 
 
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ColourMode {
     Normal,
     Shadow,
     Highlight,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Scroll {
     ScrollA,
     ScrollB,
@@ -314,11 +315,11 @@ pub struct Ym7101State {
     pub current_y: i32,
 }
 
-impl Ym7101State {
-    pub fn new() -> Self {
+impl Default for Ym7101State {
+    fn default() -> Self {
         Self {
             status: 0x3400 | STATUS_FIFO_EMPTY,
-            memory: Ym7101Memory::new(),
+            memory: Ym7101Memory::default(),
 
             mode_1: 0,
             mode_2: 0,
@@ -349,7 +350,9 @@ impl Ym7101State {
             current_y: 0,
         }
     }
+}
 
+impl Ym7101State {
     #[inline(always)]
     fn hsync_int_enabled(&self) -> bool {
         (self.mode_1 & MODE1_BF_HSYNC_INTERRUPT) != 0
@@ -470,13 +473,11 @@ impl Ym7101State {
 
         let offset = pattern_addr as usize + line * 4 + column;
         let second = x % 2 == 1;
-        let value = if (!h_rev && !second) || (h_rev && second) {
+        if (!h_rev && !second) || (h_rev && second) {
             (palette, self.memory.vram[offset] >> 4)
         } else {
             (palette, self.memory.vram[offset] & 0x0f)
-        };
-
-        value
+        }
     }
 
     pub fn draw_frame(&mut self, frame: &mut Frame) {
@@ -685,10 +686,10 @@ impl Ym7101 {
 
         Ym7101 {
             queue,
-            state: Ym7101State::new(),
+            state: Ym7101State::default(),
             sn_sound,
             external_interrupt,
-            frame_complete: EdgeSignal::new(),
+            frame_complete: EdgeSignal::default(),
         }
     }
 
@@ -779,8 +780,8 @@ impl Addressable for Ym7101 {
             // Read from Control Port
             0x04 | 0x05 | 0x06 | 0x07 => {
                 debug!("{}: read status byte {:x}", DEV_NAME, self.state.status);
-                for i in 0..data.len() {
-                    data[i] = if (addr % 2) == 0 {
+                for item in data {
+                    *item = if (addr % 2) == 0 {
                         (self.state.status >> 8) as u8
                     } else {
                         (self.state.status & 0x00FF) as u8
@@ -873,18 +874,18 @@ impl Inspectable for Ym7101 {
 
 impl Ym7101State {
     pub fn dump_state(&self) {
-        println!("");
+        println!();
         println!("Mode1: {:#04x}", self.mode_1);
         println!("Mode2: {:#04x}", self.mode_2);
         println!("Mode3: {:#04x}", self.mode_3);
         println!("Mode4: {:#04x}", self.mode_4);
-        println!("");
+        println!();
         println!("Scroll A : {:#06x}", self.scroll_a_addr);
         println!("Window   : {:#06x}", self.window_addr);
         println!("Scroll B : {:#06x}", self.scroll_b_addr);
         println!("HScroll  : {:#06x}", self.hscroll_addr);
         println!("Sprites  : {:#06x}", self.sprites_addr);
-        println!("");
+        println!();
         println!("DMA type  : {:?}", self.memory.transfer_type);
         println!("DMA Source: {:#06x}", self.memory.transfer_src_addr);
         println!("DMA Dest  : {:#06x}", self.memory.transfer_dest_addr);

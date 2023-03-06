@@ -25,23 +25,25 @@ pub struct System {
     pub break_signal: Option<EdgeSignal>,
 }
 
-impl System {
-    pub fn new() -> System {
-        System {
+impl Default for System {
+    fn default() -> Self {
+        Self {
             clock: 0,
             devices: HashMap::new(),
             event_queue: vec![],
 
             debug_enabled: Cell::new(false),
-            debugger: RefCell::new(Debugger::new()),
+            debugger: RefCell::new(Debugger::default()),
 
-            bus: Rc::new(RefCell::new(Bus::new())),
-            interrupt_controller: RefCell::new(InterruptController::new()),
+            bus: Rc::new(RefCell::new(Bus::default())),
+            interrupt_controller: RefCell::new(InterruptController::default()),
 
             break_signal: None,
         }
     }
+}
 
+impl System {
     pub fn get_bus(&self) -> RefMut<'_, Bus> {
         self.bus.borrow_mut()
     }
@@ -91,7 +93,7 @@ impl System {
     fn process_one_event(&mut self) -> Result<(), Error> {
         let mut event_device = self.event_queue.pop().unwrap();
         self.clock = event_device.next_clock;
-        let result = match event_device.device.borrow_mut().as_steppable().unwrap().step(&self) {
+        let result = match event_device.device.borrow_mut().as_steppable().unwrap().step(self) {
             Ok(diff) => {
                 event_device.next_clock = self.clock + diff;
                 Ok(())
@@ -152,7 +154,7 @@ impl System {
     pub fn exit_error(&mut self) {
         for (_, dev) in self.devices.iter() {
             match dev.borrow_mut().as_steppable() {
-                Some(dev) => dev.on_error(&self),
+                Some(dev) => dev.on_error(self),
                 None => { },
             }
         }
@@ -162,7 +164,7 @@ impl System {
         if self.debug_enabled.get() {
             let top = self.event_queue[self.event_queue.len() - 1].device.clone();
             if top.borrow_mut().as_debuggable().map(|debug| debug.debugging_enabled()).unwrap_or(false) {
-                if let Err(err) = self.debugger.borrow_mut().run_debugger(&self, top.clone()) {
+                if let Err(err) = self.debugger.borrow_mut().run_debugger(self, top.clone()) {
                     println!("Error: {:?}", err);
                 }
             }

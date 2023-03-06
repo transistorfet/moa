@@ -1,66 +1,66 @@
 
-use std::fmt;
+use std::fmt::{self, Write};
 
 
 pub type Register = u8;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Size {
     Byte,
     Word,
     Long,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Sign {
     Signed,
     Unsigned,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Direction {
     FromTarget,
     ToTarget,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ShiftDirection {
     Right,
     Left,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum XRegister {
     DReg(u8),
     AReg(u8),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum BaseRegister {
     None,
     PC,
     AReg(u8),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct IndexRegister {
     pub xreg: XRegister,
     pub scale: u8,
     pub size: Size,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RegOrImmediate {
     DReg(u8),
     Immediate(u8),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ControlRegister {
     VBR,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Condition {
     True,
     False,
@@ -80,7 +80,7 @@ pub enum Condition {
     LessThanOrEqual,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     Immediate(u32),
     DirectDReg(Register),
@@ -94,7 +94,7 @@ pub enum Target {
     IndirectMemory(u32, Size),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Instruction {
     ABCD(Target, Target),
     ADD(Target, Target, Size),
@@ -318,7 +318,7 @@ fn fmt_index_disp(index: &Option<IndexRegister>) -> String {
         Some(index) => {
             let mut result = format!(", %{}", index.xreg);
             if index.scale != 0 {
-                result += &format!("<< {}", index.scale);
+                write!(result, "<< {}", index.scale).unwrap();
             }
             result
         },
@@ -433,7 +433,7 @@ impl fmt::Display for Instruction {
             Instruction::DBcc(cond, reg, offset) => write!(f, "db{}\t%d{}, {}", cond, reg, offset),
             Instruction::DIVW(src, dest, sign) => write!(f, "div{}w\t{}, %d{}", sign, src, dest),
             Instruction::DIVL(src, desth, destl, sign) => {
-                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or("".to_string());
+                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or_else(|| "".to_string());
                 write!(f, "div{}l\t{}, {}%d{}", sign, src, opt_reg, destl)
             },
 
@@ -478,7 +478,7 @@ impl fmt::Display for Instruction {
             },
             Instruction::MULW(src, dest, sign) => write!(f, "mul{}w\t{}, %d{}", sign, src, dest),
             Instruction::MULL(src, desth, destl, sign) => {
-                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or("".to_string());
+                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or_else(|| "".to_string());
                 write!(f, "mul{}l\t{}, {}%d{}", sign, src, opt_reg, destl)
             },
 

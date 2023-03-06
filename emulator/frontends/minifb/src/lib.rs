@@ -59,7 +59,7 @@ pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBui
 }
 
 pub fn run_inline<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> {
-    let mut frontend = MiniFrontendBuilder::new();
+    let mut frontend = MiniFrontendBuilder::default();
     let system = init(&mut frontend).unwrap();
 
     frontend
@@ -68,7 +68,7 @@ pub fn run_inline<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFron
 }
 
 pub fn run_threaded<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
-    let frontend = Arc::new(Mutex::new(MiniFrontendBuilder::new()));
+    let frontend = Arc::new(Mutex::new(MiniFrontendBuilder::default()));
 
     {
         let frontend = frontend.clone();
@@ -88,7 +88,7 @@ pub fn run_threaded<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFr
 }
 
 fn wait_until_initialized(frontend: Arc<Mutex<MiniFrontendBuilder>>) {
-    while frontend.lock().unwrap().finalized == false {
+    while !frontend.lock().unwrap().finalized {
         thread::sleep(Duration::from_millis(10));
     }
 }
@@ -103,8 +103,8 @@ pub struct MiniFrontendBuilder {
     pub finalized: bool,
 }
 
-impl MiniFrontendBuilder {
-    pub fn new() -> Self {
+impl Default for MiniFrontendBuilder {
+    fn default() -> Self {
         Self {
             window: None,
             controller: None,
@@ -114,7 +114,9 @@ impl MiniFrontendBuilder {
             finalized: false,
         }
     }
+}
 
+impl MiniFrontendBuilder {
     pub fn finalize(&mut self) {
         self.finalized = true;
     }
@@ -211,20 +213,24 @@ impl MiniFrontend {
             .init().unwrap();
 
         if matches.occurrences_of("debugger") > 0 {
-            system.as_mut().map(|system| system.enable_debugging());
+            if let Some(system) = system.as_mut() {
+                system.enable_debugging();
+            }
         }
 
-        if matches.occurrences_of("disable-audio") <= 0 {
+        if matches.occurrences_of("disable-audio") == 0 {
             self.audio = Some(CpalAudioOutput::create_audio_output(self.mixer.lock().unwrap().get_sink()));
         }
 
-        let mut options = minifb::WindowOptions::default();
-        options.scale = match matches.value_of("scale").map(|s| u8::from_str_radix(s, 10).unwrap()) {
-            Some(1) => minifb::Scale::X1,
-            Some(2) => minifb::Scale::X2,
-            Some(4) => minifb::Scale::X4,
-            Some(8) => minifb::Scale::X8,
-            _ => minifb::Scale::X2,
+        let options = minifb::WindowOptions {
+            scale: match matches.value_of("scale").map(|s| s.parse::<u8>().unwrap()) {
+                Some(1) => minifb::Scale::X1,
+                Some(2) => minifb::Scale::X2,
+                Some(4) => minifb::Scale::X4,
+                Some(8) => minifb::Scale::X8,
+                _ => minifb::Scale::X2,
+            },
+            ..Default::default()
         };
 
         let speed = match matches.value_of("speed") {
@@ -271,9 +277,10 @@ impl MiniFrontend {
                     self.check_key(key, true);
 
                     // Process special keys
-                    match key {
-                        Key::D => { system.as_ref().map(|s| s.enable_debugging()); },
-                        _ => { },
+                    if let Key::D = key {
+                        if let Some(system) = system.as_ref() {
+                            system.enable_debugging();
+                        }
                     }
                 }
             }

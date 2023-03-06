@@ -1,11 +1,10 @@
 
 use std::sync::mpsc;
 
-use moa_minifb;
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
 use moa_core::host::gfx::{Frame, FrameQueue};
-use moa_core::host::{Host, WindowUpdater, KeyboardUpdater, Key, KeyEvent, MouseUpdater, MouseState, MouseEvent};
+use moa_core::host::{Host, WindowUpdater, KeyboardUpdater, Key, KeyEvent /*, MouseUpdater, MouseState, MouseEvent*/};
 use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 
@@ -98,7 +97,7 @@ fn main() {
         .get_matches();
 
     moa_minifb::run(matches, |host| {
-        let mut system = System::new();
+        let mut system = System::default();
 
         let queue = FrameQueue::new(384, 128);
         let (sender, receiver) = mpsc::channel();
@@ -112,7 +111,7 @@ fn main() {
         let sn_sound = wrap_transmutable(Sn76489::create(host)?);
         system.add_addressable_device(0x10, sn_sound)?;
 
-        host.add_window(Box::new(queue.clone()))?;
+        host.add_window(Box::new(queue))?;
         host.register_keyboard(Box::new(SynthControlsUpdater(sender)))?;
         //host.register_mouse(Box::new(SynthControlsUpdater(sender)))?;
 

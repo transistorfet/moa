@@ -7,7 +7,7 @@ use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Tra
 use moa_core::host::{Host, Audio};
 use moa_core::host::audio::{SineWave};
 
-const DEV_NAME: &'static str = "ym2612";
+const DEV_NAME: &str = "ym2612";
 
 const CHANNELS: usize = 8;
 
@@ -101,22 +101,19 @@ impl Channel {
             OperatorAlgorithm::A1 => {
                 let sample1 = self.operators[0].get_sample(0.0) + self.operators[1].get_sample(0.0);
                 let sample2 = self.operators[2].get_sample(sample1);
-                let sample3 = self.operators[3].get_sample(sample2);
-                sample3
+                self.operators[3].get_sample(sample2)
             },
             OperatorAlgorithm::A2 => {
                 let sample1 = self.operators[1].get_sample(0.0);
                 let sample2 = self.operators[2].get_sample(sample1);
                 let sample3 = self.operators[0].get_sample(0.0) + sample2;
-                let sample4 = self.operators[3].get_sample(sample3);
-                sample4
+                self.operators[3].get_sample(sample3)
             },
             OperatorAlgorithm::A3 => {
                 let sample1 = self.operators[0].get_sample(0.0);
                 let sample2 = self.operators[1].get_sample(sample1);
                 let sample3 = self.operators[2].get_sample(0.0);
-                let sample4 = self.operators[3].get_sample(sample2 + sample3);
-                sample4
+                self.operators[3].get_sample(sample2 + sample3)
             },
             OperatorAlgorithm::A4 => {
                 let sample1 = self.operators[0].get_sample(0.0);
@@ -127,8 +124,7 @@ impl Channel {
             },
             OperatorAlgorithm::A5 => {
                 let sample1 = self.operators[0].get_sample(0.0);
-                let sample2 = self.operators[1].get_sample(sample1) + self.operators[2].get_sample(sample1) + self.operators[3].get_sample(sample1);
-                sample2
+                self.operators[1].get_sample(sample1) + self.operators[2].get_sample(sample1) + self.operators[3].get_sample(sample1)
             },
             OperatorAlgorithm::A6 => {
                 let sample1 = self.operators[0].get_sample(0.0);
@@ -136,11 +132,10 @@ impl Channel {
                 sample2 + self.operators[2].get_sample(0.0) + self.operators[3].get_sample(0.0)
             },
             OperatorAlgorithm::A7 => {
-                let sample = self.operators[0].get_sample(0.0)
+                self.operators[0].get_sample(0.0)
                 + self.operators[1].get_sample(0.0)
                 + self.operators[2].get_sample(0.0)
-                + self.operators[3].get_sample(0.0);
-                sample
+                + self.operators[3].get_sample(0.0)
             },
         }
     }
@@ -240,7 +235,7 @@ impl Ym2612 {
                 self.channels[ch].operators[op].set_multiplier(frequency, multiplier)
             },
 
-            reg if reg >= 0xA0 && reg <= 0xA2 => {
+            reg if (0xA0..=0xA2).contains(&reg) => {
                 let ch = (reg & 0x07) + (bank * 3);
                 self.channel_frequencies[ch].1 = (self.channel_frequencies[ch].1 & 0xFF00) | data as u16;
 
@@ -249,13 +244,13 @@ impl Ym2612 {
                 self.channels[ch].set_frequency(frequency);
             },
 
-            reg if reg >= 0xA4 && reg <= 0xA6 => {
+            reg if (0xA4..=0xA6).contains(&reg) => {
                 let ch = (reg & 0x07) - 4 + (bank * 3);
                 self.channel_frequencies[ch].1 = (self.channel_frequencies[ch].1 & 0xFF) | ((data as u16) & 0x07) << 8;
                 self.channel_frequencies[ch].0 = (data & 0x38) >> 3;
             },
 
-            reg if reg >= 0xB0 && reg <= 0xB2 => {
+            reg if (0xB0..=0xB2).contains(&reg) => {
                 let ch = (reg & 0x07) + (bank * 3);
                 self.channels[ch].algorithm = match data & 0x07 {
                     0 => OperatorAlgorithm::A0,
@@ -279,7 +274,7 @@ impl Ym2612 {
 
 #[inline(always)]
 pub fn fnumber_to_frequency(fnumber: (u8, u16)) -> f32 {
-    (fnumber.1 as f32 * 0.0264) * (2 as u32).pow(fnumber.0 as u32) as f32
+    (fnumber.1 as f32 * 0.0264) * 2_u32.pow(fnumber.0 as u32) as f32
 }
 
 #[inline(always)]
@@ -313,7 +308,7 @@ impl Steppable for Ym2612 {
         let samples = if available < rate / 1000 { available } else { rate / 1000 };
         //if self.source.space_available() >= samples {
             let mut buffer = vec![0.0; samples];
-            for i in 0..samples {
+            for buffered_sample in buffer.iter_mut().take(samples) {
                 let mut sample = 0.0;
 
                 for ch in 0..6 {
@@ -330,9 +325,8 @@ impl Steppable for Ym2612 {
                     sample += self.channels[6].get_sample();
                 }
 
-                buffer[i] = sample.clamp(-1.0, 1.0);
+                *buffered_sample = sample.clamp(-1.0, 1.0);
             }
-//println!("synthesized: {:?}", buffer);
             self.source.write_samples(system.clock, &buffer);
         //}
 
@@ -349,7 +343,7 @@ impl Addressable for Ym2612 {
         match addr {
             0 | 1 | 2 | 3 => {
                 // Read the status byte (busy/overflow)
-                data[0] = 0 | ((self.timer_a_overflow as u8) << 1) | (self.timer_b_overflow as u8);
+                data[0] = ((self.timer_a_overflow as u8) << 1) | (self.timer_b_overflow as u8);
             }
             _ => {
                 warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);

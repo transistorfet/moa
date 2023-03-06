@@ -11,7 +11,7 @@ pub enum Z80Type {
     Z80,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     Init,
     Running,
@@ -19,7 +19,7 @@ pub enum Status {
 }
 
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum InterruptMode {
     Mode0,
     Mode01,
@@ -29,7 +29,7 @@ pub enum InterruptMode {
 
 #[repr(u8)]
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Flags {
     Carry       = 0x01,
     AddSubtract = 0x02,
@@ -42,7 +42,7 @@ pub enum Flags {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Register {
     B = 0,
     C = 1,
@@ -55,7 +55,7 @@ pub enum Register {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Z80State {
     pub status: Status,
     pub interrupts_enabled: bool,
@@ -73,8 +73,8 @@ pub struct Z80State {
     pub r: u8,
 }
 
-impl Z80State {
-    pub fn new() -> Self {
+impl Default for Z80State {
+    fn default() -> Self {
         Self {
             status: Status::Init,
             interrupts_enabled: false,
@@ -92,7 +92,9 @@ impl Z80State {
             r: 0,
         }
     }
+}
 
+impl Z80State {
     pub fn get_register(&mut self, reg: Register) -> u8 {
         self.reg[reg as usize]
     }
@@ -118,10 +120,10 @@ impl Z80 {
         Self {
             cputype,
             frequency,
-            state: Z80State::new(),
-            decoder: Z80Decoder::new(),
-            debugger: Z80Debugger::new(),
-            port: port,
+            state: Z80State::default(),
+            decoder: Z80Decoder::default(),
+            debugger: Z80Debugger::default(),
+            port,
             reset: Signal::new(false),
             bus_request: Signal::new(false),
         }
@@ -129,9 +131,9 @@ impl Z80 {
 
     #[allow(dead_code)]
     pub fn clear_state(&mut self) {
-        self.state = Z80State::new();
-        self.decoder = Z80Decoder::new();
-        self.debugger = Z80Debugger::new();
+        self.state = Z80State::default();
+        self.decoder = Z80Decoder::default();
+        self.debugger = Z80Debugger::default();
     }
 
     pub fn dump_state(&mut self) {
@@ -147,9 +149,9 @@ impl Z80 {
         println!("H: {:#04x}    L:  {:#04x}           H': {:#04x}    L':  {:#04x}", self.state.reg[Register::H as usize], self.state.reg[Register::L as usize], self.state.shadow_reg[Register::H as usize], self.state.shadow_reg[Register::L as usize]);
 
         println!("Current Instruction: {} {:?}", self.decoder.format_instruction_bytes(&mut self.port), self.decoder.instruction);
-        println!("");
+        println!();
         self.port.dump_memory(self.state.sp as Address, 0x40);
-        println!("");
+        println!();
     }
 }
 

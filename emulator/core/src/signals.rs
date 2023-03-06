@@ -37,11 +37,13 @@ impl<T: Copy> Signal<T> {
 #[derive(Clone, Debug)]
 pub struct EdgeSignal(Signal<bool>);
 
-impl EdgeSignal {
-    pub fn new() -> Self {
+impl Default for EdgeSignal {
+    fn default() -> Self {
         EdgeSignal(Signal::new(false))
     }
+}
 
+impl EdgeSignal {
     pub fn signal(&mut self) {
         self.0.set(true);
     }
@@ -53,8 +55,10 @@ impl EdgeSignal {
     }
 }
 
+type ObservableCallback<T> = Box<dyn Fn(&T)>;
+
 #[derive(Clone)]
-pub struct ObservableSignal<T>(Rc<RefCell<(T, Option<Box<dyn Fn(&T)>>)>>);
+pub struct ObservableSignal<T>(Rc<RefCell<(T, Option<ObservableCallback<T>>)>>);
 
 impl<T> ObservableSignal<T> {
     pub fn new(init: T) -> ObservableSignal<T> {
@@ -84,11 +88,13 @@ impl<T> Observable<T> for ObservableSignal<T> {
 
 pub struct ObservableEdgeSignal(ObservableSignal<bool>);
 
-impl ObservableEdgeSignal {
-    pub fn new() -> Self {
+impl Default for ObservableEdgeSignal {
+    fn default() -> Self {
         ObservableEdgeSignal(ObservableSignal::new(false))
     }
+}
 
+impl ObservableEdgeSignal {
     pub fn set(&mut self) {
         *self.0.borrow_mut() = true;
         self.0.notify();

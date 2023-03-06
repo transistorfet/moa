@@ -141,7 +141,7 @@ impl M68kAssembler {
                 self.labels.insert(label.clone(), self.output.len() - 1);
             },
             AssemblyLine::Instruction(name, list) => {
-                self.convert_instruction(lineno, &name, &list)?;
+                self.convert_instruction(lineno, name, list)?;
             },
         }
         Ok(())
@@ -255,7 +255,7 @@ impl M68kAssembler {
                 let (effective_address_left, additional_words_left) = convert_target(lineno, &args[0], operation_size, Disallow::None)?;
                 let (effective_address_right, additional_words_right) = convert_target(lineno, &args[1], operation_size, Disallow::None)?;
                 let effective_address_left = (effective_address_left >> 3) | (effective_address_left << 3);
-                self.output.push(0x0000 | encode_size_for_move(operation_size) | effective_address_left | effective_address_right);
+                self.output.push(encode_size_for_move(operation_size) | effective_address_left | effective_address_right);
                 self.output.extend(additional_words_left);
                 self.output.extend(additional_words_right);
             },
@@ -371,23 +371,23 @@ impl M68kAssembler {
         };
 
         match &args {
-            &[AssemblyOperand::Immediate(_), AssemblyOperand::Register(_)] => {
+            [AssemblyOperand::Immediate(_), AssemblyOperand::Register(_)] => {
                 let mut immediate = parser::expect_immediate(lineno, &args[0])?;
-                if immediate < 1 || immediate > 8 {
+                if !(1..=8).contains(&immediate) {
                     return Err(Error::new(&format!("error at line {}: immediate value must be between 1 and 8, found {:?}", lineno, args)));
                 } else if immediate == 8 {
                     immediate = 0;
                 }
 
                 let reg = expect_data_register(lineno, &args[1])?;
-                self.output.push(opcode | ((immediate as u16) << 9) | direction | encode_size(operation_size) | (0b0 << 5) | reg);
+                self.output.push(opcode | ((immediate as u16) << 9) | direction | encode_size(operation_size) /*(0b0 << 5)*/ | reg);
             },
-            &[AssemblyOperand::Register(_), AssemblyOperand::Register(_)] => {
+            [AssemblyOperand::Register(_), AssemblyOperand::Register(_)] => {
                 let bit_reg = expect_data_register(lineno, &args[0])?;
                 let reg = expect_data_register(lineno, &args[1])?;
                 self.output.push(opcode | ((bit_reg as u16) << 9) | direction | encode_size(operation_size) | (0b1 << 5) | reg);
             },
-            //&[_] => {
+            //[_] => {
             //    let (effective_address, additional_words) = convert_target(lineno, &args[0], Size::Word, Disallow::NoRegsImmediateOrPC)?;
             //    self.output.push(opcode | effective_address);
             //    self.output.extend(additional_words);
@@ -414,7 +414,7 @@ fn convert_target(lineno: usize, operand: &AssemblyOperand, size: Size, disallow
             disallow.check(lineno, Disallow::NoIndirectPost)?;
             if args.len() == 1 && operator == "+" {
                 if let AssemblyOperand::Register(name) = &args[0] {
-                    if name.starts_with("a") {
+                    if name.starts_with('a') {
                         let reg = expect_reg_num(lineno, name)?;
                         return Ok(((0b011 << 3) | reg, vec![]));
                     }
@@ -426,7 +426,7 @@ fn convert_target(lineno: usize, operand: &AssemblyOperand, size: Size, disallow
             disallow.check(lineno, Disallow::NoIndirectPre)?;
             if args.len() == 1 && operator == "-" {
                 if let AssemblyOperand::Register(name) = &args[0] {
-                    if name.starts_with("a") {
+                    if name.starts_with('a') {
                         let reg = expect_reg_num(lineno, name)?;
                         return Ok(((0b100 << 3) | reg, vec![]));
                     } else if name == "sp" {
@@ -442,12 +442,12 @@ fn convert_target(lineno: usize, operand: &AssemblyOperand, size: Size, disallow
 
 fn convert_register(lineno: usize, name: &str, disallow: Disallow) -> Result<(u16, Vec<u16>), Error> {
     match name {
-        name if name.starts_with("d") => {
+        name if name.starts_with('d') => {
             disallow.check(lineno, Disallow::NoDReg)?;
             let reg = expect_reg_num(lineno, name)?;
-            Ok(((0b000 << 3) | reg, vec![]))
+            Ok((/*(0b000 << 3)*/ reg, vec![]))
         },
-        name if name.starts_with("a") => {
+        name if name.starts_with('a') => {
             disallow.check(lineno, Disallow::NoAReg)?;
             let reg = expect_reg_num(lineno, name)?;
             Ok(((0b001 << 3) | reg, vec![]))
@@ -462,12 +462,12 @@ fn convert_register(lineno: usize, name: &str, disallow: Disallow) -> Result<(u1
 
 fn convert_indirect(lineno: usize, args: &[AssemblyOperand], disallow: Disallow) -> Result<(u16, Vec<u16>), Error> {
     match &args {
-        &[AssemblyOperand::Register(name)] => {
+        [AssemblyOperand::Register(name)] => {
             disallow.check(lineno, Disallow::NoIndirect)?;
             let reg = expect_address_reg_num(lineno, name)?;
             Ok(((0b010 << 3) | reg, vec![]))
         },
-        &[AssemblyOperand::Immediate(address)] => {
+        [AssemblyOperand::Immediate(address)] => {
             disallow.check(lineno, Disallow::NoIndirectImmediate)?;
             if *address < u16::MAX as usize {
                 Ok((0b111000, convert_immediate(lineno, *address, Size::Word)?))
@@ -475,7 +475,7 @@ fn convert_indirect(lineno: usize, args: &[AssemblyOperand], disallow: Disallow)
                 Ok((0b111001, convert_immediate(lineno, *address, Size::Long)?))
             }
         },
-        &[AssemblyOperand::Immediate(offset), AssemblyOperand::Register(name)] => {
+        [AssemblyOperand::Immediate(offset), AssemblyOperand::Register(name)] => {
             if name == "pc" {
                 disallow.check(lineno, Disallow::NoPCRelative)?;
                 Ok((0b111010, convert_immediate(lineno, *offset, Size::Word)?))
@@ -485,9 +485,9 @@ fn convert_indirect(lineno: usize, args: &[AssemblyOperand], disallow: Disallow)
                 Ok(((0b101 << 3) | reg, convert_immediate(lineno, *offset, Size::Word)?))
             }
         },
-        &[AssemblyOperand::Immediate(offset), AssemblyOperand::Register(name), AssemblyOperand::Register(index)] => {
+        [AssemblyOperand::Immediate(offset), AssemblyOperand::Register(name), AssemblyOperand::Register(index)] => {
             let index_reg = expect_reg_num(lineno, index)?;
-            let da_select = if index.starts_with("a") { 1 << 15 } else { 0 };
+            let da_select = if index.starts_with('a') { 1 << 15 } else { 0 };
             if name == "pc" {
                 disallow.check(lineno, Disallow::NoPCRelativeIndex)?;
                 Ok((0b111011, vec![da_select | (index_reg << 12) | ((*offset as u16) & 0xff)]))
@@ -504,13 +504,13 @@ fn convert_indirect(lineno: usize, args: &[AssemblyOperand], disallow: Disallow)
     }
 }
 
-fn convert_reg_and_other<'a>(lineno: usize, args: &'a [AssemblyOperand], _disallow: Disallow) -> Result<(u16, u16, &'a AssemblyOperand), Error> {
+fn convert_reg_and_other(lineno: usize, args: &[AssemblyOperand], _disallow: Disallow) -> Result<(u16, u16, &AssemblyOperand), Error> {
     match &args {
-        &[AssemblyOperand::Register(reg), effective_address] => {
-            Ok(((0b1 << 8), expect_reg_num(lineno, &reg)?, effective_address))
+        [AssemblyOperand::Register(reg), effective_address] => {
+            Ok(((0b1 << 8), expect_reg_num(lineno, reg)?, effective_address))
         },
-        &[effective_address, AssemblyOperand::Register(reg)] => {
-            Ok(((0b0 << 8), expect_reg_num(lineno, &reg)?, effective_address))
+        [effective_address, AssemblyOperand::Register(reg)] => {
+            Ok(((0b0 << 8), expect_reg_num(lineno, reg)?, effective_address))
         },
         _ => {
             Err(Error::new(&format!("error at line {}: expected register and effective address, but found {:?}", lineno, args)))
@@ -540,7 +540,7 @@ fn convert_immediate(lineno: usize, value: usize, size: Size) -> Result<Vec<u16>
 
 fn expect_data_register(lineno: usize, operand: &AssemblyOperand) -> Result<u16, Error> {
     if let AssemblyOperand::Register(name) = operand {
-        if name.starts_with("d") {
+        if name.starts_with('d') {
             return expect_reg_num(lineno, name);
         }
     }
@@ -549,7 +549,7 @@ fn expect_data_register(lineno: usize, operand: &AssemblyOperand) -> Result<u16,
 
 fn expect_address_register(lineno: usize, operand: &AssemblyOperand) -> Result<u16, Error> {
     if let AssemblyOperand::Register(name) = operand {
-        if name.starts_with("d") {
+        if name.starts_with('d') {
             return expect_reg_num(lineno, name);
         }
     }
@@ -557,7 +557,7 @@ fn expect_address_register(lineno: usize, operand: &AssemblyOperand) -> Result<u
 }
 
 fn expect_address_reg_num(lineno: usize, name: &str) -> Result<u16, Error> {
-    if name.starts_with("a") {
+    if name.starts_with('a') {
         return expect_reg_num(lineno, name);
     }
     Err(Error::new(&format!("error at line {}: expected an address register, but found {:?}", lineno, name)))

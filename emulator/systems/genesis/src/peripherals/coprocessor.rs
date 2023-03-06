@@ -6,7 +6,7 @@ use moa_core::{warn, info};
 use moa_core::{Bus, Signal, Error, Address, Addressable, Transmutable};
 
 
-const DEV_NAME: &'static str = "coprocessor";
+const DEV_NAME: &str = "coprocessor";
 
 pub struct CoprocessorCoordinator {
     bus_request: Signal<bool>,

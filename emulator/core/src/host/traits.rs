@@ -106,14 +106,10 @@ impl<T: Copy> HostData<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ClockedQueue<T>(Arc<Mutex<VecDeque<(Clock, T)>>>);
 
 impl<T: Clone> ClockedQueue<T> {
-    pub fn new() -> Self {
-        Self(Arc::new(Mutex::new(VecDeque::new())))
-    }
-
     pub fn push(&self, clock: Clock, data: T) {
         self.0.lock().unwrap().push_back((clock, data));
     }

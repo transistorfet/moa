@@ -1,7 +1,6 @@
 
 use clap::Arg;
 
-use moa_minifb;
 use moa_trs80::{build_trs80, Trs80Options};
 
 fn main() {
@@ -14,7 +13,7 @@ fn main() {
             .help("ROM file to load at the start of memory"))
         .get_matches();
 
-    let mut options = Trs80Options::new();
+    let mut options = Trs80Options::default();
     if let Some(filename) = matches.value_of("rom") {
         options.rom = filename.to_string();
     }

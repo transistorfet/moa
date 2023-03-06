@@ -6,6 +6,7 @@ use crate::system::System;
 use crate::devices::{Address, Addressable, Debuggable, TransmutableBox};
 
 
+#[derive(Default)]
 pub struct Debugger {
     last_command: Option<String>,
     repeat: u32,
@@ -14,14 +15,6 @@ pub struct Debugger {
 
 
 impl Debugger {
-    pub fn new() -> Self {
-        Self {
-            last_command: None,
-            repeat: 0,
-            trace_only: false,
-        }
-    }
-
     pub fn breakpoint_occurred(&mut self) {
         self.trace_only = false;
     }
@@ -60,7 +53,7 @@ impl Debugger {
     }
 
     pub fn run_debugger_command(&mut self, system: &System, debug_obj: &mut dyn Debuggable, args: &[&str]) -> Result<bool, Error> {
-        if args.len() == 0 {
+        if args.is_empty() {
             // The Default Command
             return Ok(true);
         }
@@ -202,7 +195,7 @@ impl Debugger {
 
     fn check_repeat_arg(&mut self, args: &[&str]) -> Result<(), Error> {
         if args.len() > 1 {
-            self.repeat = u32::from_str_radix(args[1], 10).map_err(|_| Error::new("Unable to parse repeat number"))?;
+            self.repeat = args[1].parse::<u32>().map_err(|_| Error::new("Unable to parse repeat number"))?;
             self.last_command = Some(args[0].to_string());
         }
         Ok(())

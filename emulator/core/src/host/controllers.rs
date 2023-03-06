@@ -1,5 +1,5 @@
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ControllerDevice {
     A,
     B,
@@ -7,7 +7,7 @@ pub enum ControllerDevice {
     D,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ControllerEvent {
     DpadUp(bool),
     DpadDown(bool),

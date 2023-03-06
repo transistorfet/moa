@@ -4,18 +4,12 @@ use moa_core::{System, Error, Address, Addressable, Debuggable};
 use super::state::M68k;
 use super::decode::M68kDecoder;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct StackTracer {
     pub calls: Vec<u32>,
 }
 
 impl StackTracer {
-    pub fn new() -> StackTracer {
-        StackTracer {
-            calls: vec![],
-        }
-    }
-
     pub fn push_return(&mut self, addr: u32) {
         self.calls.push(addr);
     }
@@ -26,25 +20,13 @@ impl StackTracer {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct M68kDebugger {
     pub enabled: bool,
     pub breakpoints: Vec<u32>,
     pub use_tracing: bool,
     pub step_until_return: Option<usize>,
     pub stack_tracer: StackTracer,
-}
-
-impl M68kDebugger {
-    pub fn new() -> M68kDebugger {
-        M68kDebugger {
-            enabled: false,
-            breakpoints: vec!(),
-            use_tracing: false,
-            step_until_return: None,
-            stack_tracer: StackTracer::new(),
-        }
-    }
 }
 
 impl Debuggable for M68k {

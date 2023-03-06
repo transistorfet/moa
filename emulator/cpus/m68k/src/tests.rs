@@ -143,7 +143,7 @@ mod decode_tests {
                             print!("FAILED");
                             print!("\nleft: {:?}, right: {:?}", data, case.data);
                         }
-                        println!("");
+                        println!();
                     },
                     Err(err) => {
                         println!("FAILED\n{:?}", err);
@@ -181,7 +181,7 @@ mod decode_tests {
                         print!("FAILED");
                         print!("\nleft: {:#06x}, right: {:#06x}", data[0], case.data[0]);
                     }
-                    println!("");
+                    println!();
                 },
                 Err(err) => {
                     println!("FAILED\n{:?}", err);
@@ -619,7 +619,7 @@ mod execute_tests {
                         print!("FAILED");
                         print!("\nleft: {:?}, right: {:?}", data, case.data);
                     }
-                    println!("");
+                    println!();
                 },
                 Err(err) => {
                     println!("FAILED\n{:?}", err);

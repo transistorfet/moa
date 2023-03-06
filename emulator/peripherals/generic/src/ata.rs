@@ -30,8 +30,9 @@ const ATA_ST_ERROR: u8                  = 0x01;
 
 const ATA_SECTOR_SIZE: u32              = 512;
 
-const DEV_NAME: &'static str = "ata";
+const DEV_NAME: &str = "ata";
 
+#[derive(Default)]
 pub struct AtaDevice {
     selected_sector: u32,
     selected_count: u32,
@@ -39,17 +40,7 @@ pub struct AtaDevice {
     contents: Vec<u8>,
 }
 
-
 impl AtaDevice {
-    pub fn new() -> Self {
-        AtaDevice {
-            selected_sector: 0,
-            selected_count: 0,
-            last_error: 0,
-            contents: vec![],
-        }
-    }
-
     pub fn load(&mut self, filename: &str) -> Result<(), Error> {
         match fs::read(filename) {
             Ok(contents) => {

@@ -4,19 +4,19 @@ use moa_core::{Error, Address, Addressable};
 use crate::state::{Register, InterruptMode};
 
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Direction {
     ToAcc,
     FromAcc,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Size {
     Byte,
     Word,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Condition {
     NotZero,
     Zero,
@@ -28,7 +28,7 @@ pub enum Condition {
     Negative,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RegisterPair {
     BC,
     DE,
@@ -39,13 +39,13 @@ pub enum RegisterPair {
     IY,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum IndexRegister {
     IX,
     IY,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum IndexRegisterHalf {
     IXH,
     IXL,
@@ -53,13 +53,13 @@ pub enum IndexRegisterHalf {
     IYL,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SpecialRegister {
     I,
     R,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Target {
     DirectReg(Register),
     DirectRegHalf(IndexRegisterHalf),
@@ -68,7 +68,7 @@ pub enum Target {
     Immediate(u8),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LoadTarget {
     DirectRegByte(Register),
     DirectRegHalfByte(IndexRegisterHalf),
@@ -85,7 +85,7 @@ pub enum LoadTarget {
 
 pub type UndocumentedCopy = Option<Target>;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Instruction {
     ADCa(Target),
     ADC16(RegisterPair, RegisterPair),
@@ -179,8 +179,8 @@ pub struct Z80Decoder {
     pub execution_time: u16,
 }
 
-impl Z80Decoder {
-    pub fn new() -> Self {
+impl Default for Z80Decoder {
+    fn default() -> Self {
         Self {
             start: 0,
             end: 0,

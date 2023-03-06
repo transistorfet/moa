@@ -5,7 +5,7 @@ use moa_core::host::{Host, Audio};
 use moa_core::host::audio::{SquareWave};
 
 
-const DEV_NAME: &'static str = "sn76489";
+const DEV_NAME: &str = "sn76489";
 
 #[derive(Clone)]
 pub struct ToneGenerator {
@@ -51,14 +51,16 @@ pub struct NoiseGenerator {
     attenuation: f32,
 }
 
-impl NoiseGenerator {
-    pub fn new() -> Self {
+impl Default for NoiseGenerator {
+    fn default() -> Self {
         Self {
             on: false,
             attenuation: 0.0,
         }
     }
+}
 
+impl NoiseGenerator {
     pub fn set_attenuation(&mut self, attenuation: u8) {
         if attenuation == 0x0F {
             self.on = false;
@@ -99,7 +101,7 @@ impl Sn76489 {
             first_byte: None,
             source,
             tones: vec![ToneGenerator::new(sample_rate); 3],
-            noise: NoiseGenerator::new(),
+            noise: NoiseGenerator::default(),
         })
     }
 }
@@ -113,7 +115,7 @@ impl Steppable for Sn76489 {
         if samples > 0 {
         //if available >= rate / 1000 {
             let mut buffer = vec![0.0; samples];
-            for i in 0..samples {
+            for buffered_sample in buffer.iter_mut().take(samples) {
                 let mut sample = 0.0;
 
                 for ch in 0..3 {
@@ -126,7 +128,7 @@ impl Steppable for Sn76489 {
                     sample += self.noise.get_sample();
                 }
 
-                buffer[i] = sample.clamp(-1.0, 1.0);
+                *buffered_sample = sample.clamp(-1.0, 1.0);
             }
             self.source.write_samples(system.clock, &buffer);
         } else {

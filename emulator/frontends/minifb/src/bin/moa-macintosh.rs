@@ -1,5 +1,4 @@
 
-use moa_minifb;
 use moa_macintosh::build_macintosh_512k;
 
 fn main() {

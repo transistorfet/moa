@@ -9,7 +9,7 @@ use moa_core::host::{Audio, ClockedQueue};
 const SAMPLE_RATE: usize = 48000;
 
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AudioFrame {
     data: Vec<(f32, f32)>,
 }
@@ -24,7 +24,7 @@ pub struct AudioSource {
 
 impl AudioSource {
     pub fn new(mixer: Arc<Mutex<AudioMixer>>) -> Self {
-        let queue = ClockedQueue::new();
+        let queue = ClockedQueue::default();
         let (id, sample_rate, frame_size) = {
             let mut mixer = mixer.lock().unwrap();
             let id = mixer.add_source(queue.clone());
@@ -283,7 +283,7 @@ impl CpalAudioOutput {
 
             if let Some(frame) = result {
                 let (start, middle, end) = unsafe { frame.data.align_to::<f32>() };
-                if start.len() != 0 || end.len() != 0 {
+                if !start.is_empty() || !end.is_empty() {
                     warn!("audio: frame wasn't aligned");
                 }
                 let length = middle.len().min(data.len());

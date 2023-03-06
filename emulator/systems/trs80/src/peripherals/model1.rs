@@ -9,7 +9,7 @@ use super::keymap;
 use super::charset::CharacterGenerator;
 
 
-const DEV_NAME: &'static str    = "model1";
+const DEV_NAME: &str    = "model1";
 const SCREEN_SIZE: (u32, u32)   = (384, 128);
 
 pub struct Model1Peripherals {
@@ -65,7 +65,7 @@ impl Addressable for Model1Peripherals {
     }
 
     fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        if addr >= 0x20 && addr <= 0xA0 {
+        if (0x20..=0xA0).contains(&addr) {
             let offset = addr - 0x20;
             data[0] = 0;
             if (offset & 0x01) != 0 { data[0] |= self.keyboard_mem.lock().unwrap()[0]; }
@@ -77,7 +77,7 @@ impl Addressable for Model1Peripherals {
             if (offset & 0x40) != 0 { data[0] |= self.keyboard_mem.lock().unwrap()[6]; }
             if (offset & 0x80) != 0 { data[0] |= self.keyboard_mem.lock().unwrap()[7]; }
             //info!("{}: read from keyboard {:x} of {:?}", DEV_NAME, addr, data);
-        } else if addr >= 0x420 && addr <= 0x820 {
+        } else if (0x420..=0x820).contains(&addr) {
             data[0] = self.video_mem[addr as usize - 0x420];
         } else {
             warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
@@ -88,7 +88,7 @@ impl Addressable for Model1Peripherals {
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
         debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
-        if addr >= 0x420 && addr < 0x820 {
+        if (0x420..0x820).contains(&addr) {
             self.video_mem[addr as usize - 0x420] = data[0];
         } else {
             warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);

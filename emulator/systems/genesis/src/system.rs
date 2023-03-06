@@ -3,7 +3,7 @@ use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Error, Signal, MemoryBlock, AddressRepeater, Bus, BusPort, Address, Addressable, Debuggable, wrap_transmutable};
+use moa_core::{System, Error, Signal, MemoryBlock, Bus, BusPort, Address, Addressable, Debuggable, wrap_transmutable};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -22,8 +22,8 @@ pub struct SegaGenesisOptions {
     pub rom_data: Option<Vec<u8>>,
 }
 
-impl SegaGenesisOptions {
-    pub fn new() -> Self {
+impl Default for SegaGenesisOptions {
+    fn default() -> Self {
         Self {
             rom: "".to_string(),
             rom_data: None,
@@ -32,7 +32,7 @@ impl SegaGenesisOptions {
 }
 
 pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> Result<System, Error> {
-    let mut system = System::new();
+    let mut system = System::default();
 
     let rom_data = if options.rom_data.is_some() {
         mem::take(&mut options.rom_data).unwrap()
@@ -75,14 +75,14 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     let coproc_register = wrap_transmutable(CoprocessorBankRegister::new(bank_register.clone()));
     let coproc_area = wrap_transmutable(CoprocessorBankArea::new(bank_register, system.bus.clone()));
 
-    let coproc_bus = Rc::new(RefCell::new(Bus::new()));
+    let coproc_bus = Rc::new(RefCell::new(Bus::default()));
     coproc_bus.borrow_mut().set_ignore_unmapped(true);
     coproc_bus.borrow_mut().insert(0x0000, coproc_ram.clone());
     coproc_bus.borrow_mut().insert(0x4000, coproc_ym_sound.clone());
     coproc_bus.borrow_mut().insert(0x6000, coproc_register.clone());
     coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
     coproc_bus.borrow_mut().insert(0x8000, coproc_area);
-    let mut coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus.clone()));
+    let mut coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus));
     coproc.set_debugging(true);
     let mut reset = coproc.reset.clone();
     let mut bus_request = coproc.bus_request.clone();

@@ -5,18 +5,10 @@ use crate::state::Z80;
 use crate::decode::Z80Decoder;
 
 
+#[derive(Default)]
 pub struct Z80Debugger {
     pub enabled: bool,
     pub breakpoints: Vec<u16>,
-}
-
-impl Z80Debugger {
-    pub fn new() -> Self {
-        Self {
-            enabled: false,
-            breakpoints: vec!(),
-        }
-    }
 }
 
 impl Debuggable for Z80 {
@@ -48,7 +40,7 @@ impl Debuggable for Z80 {
     }
 
     fn print_disassembly(&mut self, addr: Address, count: usize) {
-        let mut decoder = Z80Decoder::new();
+        let mut decoder = Z80Decoder::default();
         decoder.dump_disassembly(&mut self.port, addr as u16, count as u16);
     }
 

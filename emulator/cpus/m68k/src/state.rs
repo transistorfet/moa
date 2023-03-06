@@ -21,7 +21,7 @@ const FLAGS_ON_RESET: u16 = 0x2700;
 
 #[repr(u16)]
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Flags {
     Carry       = 0x0001,
     Overflow    = 0x0002,
@@ -36,7 +36,7 @@ pub enum Flags {
 
 #[repr(u8)]
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Exceptions {
     BusError            = 2,
     AddressError        = 3,
@@ -52,7 +52,7 @@ pub enum Exceptions {
 
 #[repr(u8)]
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum FunctionCode {
     Reserved0           = 0,
     UserData            = 1,
@@ -64,7 +64,7 @@ pub enum FunctionCode {
     CpuSpace            = 7,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     Init,
     Running,
@@ -72,7 +72,7 @@ pub enum Status {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum InterruptPriority {
     NoInterrupt = 0,
     Level1 = 1,
@@ -84,19 +84,19 @@ pub enum InterruptPriority {
     Level7 = 7,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MemType {
     Program,
     Data,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MemAccess {
     Read,
     Write,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MemoryRequest {
     pub i_n_bit: bool,
     pub access: MemAccess,
@@ -105,7 +105,7 @@ pub struct MemoryRequest {
     pub address: u32,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct M68kState {
     pub status: Status,
     pub request: MemoryRequest,
@@ -134,11 +134,11 @@ pub struct M68k {
     pub timer: CpuTimer,
 }
 
-impl M68kState {
-    pub fn new() -> M68kState {
+impl Default for M68kState {
+    fn default() -> M68kState {
         M68kState {
             status: Status::Init,
-            request: MemoryRequest::new(),
+            request: MemoryRequest::default(),
             current_ipl: InterruptPriority::NoInterrupt,
             pending_ipl: InterruptPriority::NoInterrupt,
 
@@ -159,21 +159,21 @@ impl M68k {
         M68k {
             cputype,
             frequency,
-            state: M68kState::new(),
+            state: M68kState::default(),
             decoder: M68kDecoder::new(cputype, 0),
             timing: M68kInstructionTiming::new(cputype, port.data_width()),
-            debugger: M68kDebugger::new(),
-            port: port,
-            timer: CpuTimer::new(),
+            debugger: M68kDebugger::default(),
+            port,
+            timer: CpuTimer::default(),
         }
     }
 
     #[allow(dead_code)]
     pub fn reset(&mut self) {
-        self.state = M68kState::new();
+        self.state = M68kState::default();
         self.decoder = M68kDecoder::new(self.cputype, 0);
         self.timing = M68kInstructionTiming::new(self.cputype, self.port.data_width());
-        self.debugger = M68kDebugger::new();
+        self.debugger = M68kDebugger::default();
     }
 
     pub fn dump_state(&mut self) {
@@ -187,9 +187,9 @@ impl M68k {
         println!("                     SSP: {:#010x}", self.state.ssp);
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
-        println!("");
+        println!();
         self.port.dump_memory(self.state.ssp as Address, 0x40);
-        println!("");
+        println!();
     }
 }
 
@@ -226,8 +226,8 @@ impl FunctionCode {
     }
 }
 
-impl MemoryRequest {
-    pub fn new() -> Self {
+impl Default for MemoryRequest {
+    fn default() -> Self {
         Self {
             i_n_bit: false,
             access: MemAccess::Read,
@@ -236,7 +236,9 @@ impl MemoryRequest {
             address: 0,
         }
     }
+}
 
+impl MemoryRequest {
     pub fn get_type_code(&self) -> u16 {
         let ins = match self.i_n_bit {
             false => 0x0000,

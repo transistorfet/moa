@@ -11,8 +11,8 @@ pub struct AverageTimer {
     pub start: Option<Instant>,
 }
 
-impl AverageTimer {
-    pub fn new() -> AverageTimer {
+impl Default for AverageTimer {
+    fn default() -> AverageTimer {
         AverageTimer {
             high: 0,
             average: 0.0,
@@ -21,7 +21,9 @@ impl AverageTimer {
             start: None,
         }
     }
+}
 
+impl AverageTimer {
     pub fn start(&mut self) {
         //self.start = Some(Instant::now())
     }
@@ -47,28 +49,18 @@ impl fmt::Display for AverageTimer {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CpuTimer {
     pub decode: AverageTimer,
     pub execute: AverageTimer,
     pub cycle: AverageTimer,
 }
 
-impl CpuTimer {
-    pub fn new() -> CpuTimer {
-        CpuTimer {
-            decode: AverageTimer::new(),
-            execute: AverageTimer::new(),
-            cycle: AverageTimer::new(),
-        }
-    }
-}
-
 impl fmt::Display for CpuTimer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Decode:  {}\n", self.decode)?;
-        write!(f, "Execute: {}\n", self.execute)?;
-        write!(f, "Cycle:   {}\n", self.cycle)?;
+        writeln!(f, "Decode:  {}", self.decode)?;
+        writeln!(f, "Execute: {}", self.execute)?;
+        writeln!(f, "Cycle:   {}", self.cycle)?;
         Ok(())
     }
 }

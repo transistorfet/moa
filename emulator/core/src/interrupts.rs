@@ -9,15 +9,17 @@ pub struct InterruptController {
     highest: u8,
 }
 
-impl InterruptController {
-    pub fn new() -> InterruptController {
+impl Default for InterruptController {
+    fn default() -> InterruptController {
         InterruptController {
             target: None,
             interrupts: vec![(false, 0); 7],
             highest: 0,
         }
     }
+}
 
+impl InterruptController {
     pub fn set_target(&mut self, dev: TransmutableBox) -> Result<(), Error> {
         if self.target.is_some() {
             return Err(Error::new("Interruptable device already set, and interrupt controller only supports one receiver"));

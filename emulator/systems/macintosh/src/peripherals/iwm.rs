@@ -11,8 +11,9 @@ const ENABLE: u8        = 0x10;
 const Q6: u8            = 0x40;
 const Q7: u8            = 0x80;
 
-const DEV_NAME: &'static str = "iwm";
+const DEV_NAME: &str = "iwm";
 
+#[derive(Default)]
 pub struct IWM {
     state: u8,
     mode: u8,
@@ -20,14 +21,6 @@ pub struct IWM {
 }
 
 impl IWM {
-    pub fn new() -> Self {
-        Self {
-            state: 0,
-            mode: 0,
-            handshake: 0,
-        }
-    }
-
     pub fn flip_switches(&mut self, addr: Address) {
         let mask = 1 << (addr >> 1);
 
@@ -102,8 +95,8 @@ impl Addressable for IWM {
 
 impl Steppable for IWM {
     fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
-
-        Ok(1_000_000_00)
+        // TODO implement
+        Ok(1_000_000_000)
     }
 }
 

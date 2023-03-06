@@ -65,8 +65,9 @@ const ISR_CH_A_RX_READY_FULL: u8 = 0x02;
 const ISR_CH_A_TX_READY: u8 = 0x01;
 
 
-const DEV_NAME: &'static str = "mc68681";
+const DEV_NAME: &str = "mc68681";
 
+#[derive(Default)]
 pub struct MC68681Port {
     tty: Option<Box<dyn Tty>>,
     status: u8,
@@ -78,18 +79,6 @@ pub struct MC68681Port {
 }
 
 impl MC68681Port {
-    pub fn new() -> MC68681Port {
-        MC68681Port {
-            tty: None,
-            status: 0,
-
-            tx_enabled: false,
-
-            rx_enabled: false,
-            input: 0,
-        }
-    }
-
     pub fn connect(&mut self, pty: Box<dyn Tty>) -> Result<String, Error> {
         let name = pty.device_name();
         println!("{}: opening pts {}", DEV_NAME, name);
@@ -180,12 +169,12 @@ pub struct MC68681 {
     output_state: u8,
 }
 
-impl MC68681 {
-    pub fn new() -> Self {
+impl Default for MC68681 {
+    fn default() -> Self {
         MC68681 {
             acr: 0,
-            port_a: MC68681Port::new(),
-            port_b: MC68681Port::new(),
+            port_a: MC68681Port::default(),
+            port_b: MC68681Port::default(),
 
             int_mask: 0,
             int_status: 0,
@@ -202,7 +191,9 @@ impl MC68681 {
             output_state: 0,
         }
     }
+}
 
+impl MC68681 {
     fn set_interrupt_flag(&mut self, flag: u8, value: bool) {
         self.int_status = (self.int_status & !flag) | (if value { flag } else { 0 });
     }

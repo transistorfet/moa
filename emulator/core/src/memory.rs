@@ -2,6 +2,7 @@
 use std::fs;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::fmt::Write;
 
 use crate::info;
 use crate::error::Error;
@@ -31,9 +32,7 @@ impl MemoryBlock {
     pub fn load_at(&mut self, addr: Address, filename: &str) -> Result<(), Error> {
         match fs::read(filename) {
             Ok(contents) => {
-                for i in 0..contents.len() {
-                    self.contents[(addr as usize) + i] = contents[i];
-                }
+                self.contents[(addr as usize)..(addr as usize) + contents.len()].copy_from_slice(&contents);
                 Ok(())
             },
             Err(_) => Err(Error::new(&format!("Error reading contents of {}", filename))),
@@ -55,9 +54,7 @@ impl Addressable for MemoryBlock {
     }
 
     fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        for i in 0..data.len() {
-            data[i] = self.contents[(addr as usize) + i];
-        }
+        data.copy_from_slice(&self.contents[(addr as usize)..(addr as usize) + data.len()]);
         Ok(())
     }
 
@@ -66,9 +63,7 @@ impl Addressable for MemoryBlock {
             return Err(Error::breakpoint(&format!("Attempt to write to read-only memory at {:x} with data {:?}", addr, data)));
         }
 
-        for i in 0..data.len() {
-            self.contents[(addr as usize) + i] = data[i];
-        }
+        self.contents[(addr as usize) .. (addr as usize) + data.len()].copy_from_slice(data);
         Ok(())
     }
 }
@@ -160,7 +155,7 @@ pub struct Block {
     pub dev: TransmutableBox,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Bus {
     blocks: Vec<Block>,
     ignore_unmapped: bool,
@@ -169,15 +164,6 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new() -> Bus {
-        Bus {
-            ignore_unmapped: false,
-            blocks: vec!(),
-            watchers: vec!(),
-            watcher_modified: false,
-        }
-    }
-
     pub fn set_ignore_unmapped(&mut self, ignore_unmapped: bool) {
         self.ignore_unmapped = ignore_unmapped;
     }
@@ -204,7 +190,7 @@ impl Bus {
                 }
             }
         }
-        return Err(Error::new(&format!("No segment found at {:#010x}", addr)));
+        Err(Error::new(&format!("No segment found at {:#010x}", addr)))
     }
 
     pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
@@ -218,7 +204,7 @@ impl Bus {
                     println!("{}", line);
                     return;
                 }
-                line += &format!("{:#06x} ", word.unwrap());
+                write!(line, "{:#06x} ", word.unwrap()).unwrap();
                 addr += 2;
                 count -= 2;
             }
@@ -264,7 +250,7 @@ impl Addressable for Bus {
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        if let Some(_) = self.watchers.iter().position(|a| *a == addr) {
+        if self.watchers.iter().any(|a| *a == addr) {
             println!("watch: writing to address {:#06x} with {:?}", addr, data);
             self.watcher_modified = true;
         }
@@ -352,7 +338,7 @@ pub fn dump_slice(data: &[u8], mut count: usize) {
         let to = if count < 16 { count / 2 } else { 8 };
         for _ in 0..to {
             let word = read_beu16(&data[addr..]);
-            line += &format!("{:#06x} ", word);
+            write!(line, "{:#06x} ", word).unwrap();
             addr += 2;
             count -= 2;
         }

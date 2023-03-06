@@ -16,7 +16,7 @@ const REG_S_CTRL2: Address      = 0x19;
 const REG_S_CTRL3: Address      = 0x1F;
 
 
-const DEV_NAME: &'static str = "genesis_controller";
+const DEV_NAME: &str = "genesis_controller";
 
 pub struct GenesisControllerPort {
     /// Data contains bits:
@@ -31,8 +31,8 @@ pub struct GenesisControllerPort {
     s_ctrl: u8,
 }
 
-impl GenesisControllerPort {
-    pub fn new() -> Self {
+impl Default for GenesisControllerPort {
+    fn default() -> Self {
         Self {
             buttons: HostData::new(0xffff),
             ctrl: 0,
@@ -41,7 +41,9 @@ impl GenesisControllerPort {
             s_ctrl: 0,
         }
     }
+}
 
+impl GenesisControllerPort {
     pub fn get_data(&mut self) -> u8 {
         let inputs = self.buttons.get();
         let th_state = (self.outputs & 0x40) != 0;
@@ -118,19 +120,21 @@ pub struct GenesisControllers {
     reset_timer: Clock,
 }
 
-impl GenesisControllers {
-    pub fn new() -> Self {
+impl Default for GenesisControllers {
+    fn default() -> Self {
         Self {
-            port_1: GenesisControllerPort::new(),
-            port_2: GenesisControllerPort::new(),
-            expansion: GenesisControllerPort::new(),
+            port_1: GenesisControllerPort::default(),
+            port_2: GenesisControllerPort::default(),
+            expansion: GenesisControllerPort::default(),
             interrupt: HostData::new(false),
             reset_timer: 0,
         }
     }
+}
 
+impl GenesisControllers {
     pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let controller = GenesisControllers::new();
+        let controller = GenesisControllers::default();
 
         let controller1 = Box::new(GenesisControllersUpdater(controller.port_1.buttons.clone(), controller.interrupt.clone()));
         host.register_controller(ControllerDevice::A, controller1)?;

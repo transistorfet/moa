@@ -1,7 +1,6 @@
 
 use clap::Arg;
 
-use moa_minifb;
 use moa_genesis::{build_genesis, SegaGenesisOptions};
 
 fn main() {
@@ -10,7 +9,7 @@ fn main() {
             .help("ROM file to load (must be flat binary)"))
         .get_matches();
 
-    let mut options = SegaGenesisOptions::new();
+    let mut options = SegaGenesisOptions::default();
     if let Some(filename) = matches.value_of("ROM") {
         options.rom = filename.to_string();
     }

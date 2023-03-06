@@ -21,7 +21,7 @@ use crate::instructions::{
 };
 
 
-const DEV_NAME: &'static str = "m68k-cpu";
+const DEV_NAME: &str = "m68k-cpu";
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Used {
@@ -358,14 +358,14 @@ impl M68k {
                 let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
                 let mut src_val = self.get_target_value(target, size, Used::Twice)?;
                 let mask = self.set_bit_test_flags(src_val, bitnum, size);
-                src_val = src_val & !mask;
+                src_val &= !mask;
                 self.set_target_value(target, src_val, size, Used::Twice)?;
             },
             Instruction::BSET(bitnum, target, size) => {
                 let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
                 let mut value = self.get_target_value(target, size, Used::Twice)?;
                 let mask = self.set_bit_test_flags(value, bitnum, size);
-                value = value | mask;
+                value |= mask;
                 self.set_target_value(target, value, size, Used::Twice)?;
             },
             Instruction::BTST(bitnum, target, size) => {
@@ -1562,7 +1562,7 @@ fn rotate_operation(value: u32, size: Size, dir: ShiftDirection, use_extend: Opt
             }
         },
         ShiftDirection::Right => {
-            let bit = if (value & 0x01) != 0 { true } else { false };
+            let bit = (value & 0x01) != 0;
             let mask = if use_extend.unwrap_or(bit) { get_msb_mask(0xffffffff, size) } else { 0x0 };
             ((value >> 1) | mask, bit)
         },

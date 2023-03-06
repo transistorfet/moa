@@ -3,7 +3,7 @@ use crate::M68kType;
 use crate::instructions::{Size, Sign, Direction, Target, Instruction};
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct M68kInstructionTiming {
     pub cputype: M68kType,
     pub bus_size: Size,
@@ -325,11 +325,12 @@ impl M68kInstructionTiming {
         }
     }
 
-    pub fn add_instruction_68020(&mut self, instruction: &Instruction) -> &mut Self {
-        match instruction {
-            // TODO implement
-            _ => self.add_internal(4),
-        }
+    pub fn add_instruction_68020(&mut self, _instruction: &Instruction) -> &mut Self {
+        //match instruction {
+        //    // TODO implement
+        //    _ => self.add_internal(4),
+        //}
+        self.add_internal(4)
     }
 
     pub fn calculate_clocks(&self, branched: bool, reps: u16) -> u16 {
