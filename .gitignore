@@ -10,3 +10,5 @@ perf.data.old
 binaries/*/*.asm
 binaries/*/*.bin
 binaries/*/*.smd
+
+emulator/frontends/pixels/dist/

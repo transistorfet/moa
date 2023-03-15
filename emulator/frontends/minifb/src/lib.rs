@@ -11,7 +11,8 @@ use moa_core::{System, Error};
 use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice};
 use moa_core::host::gfx::Frame;
 
-use moa_common::audio::{AudioMixer, AudioSource, CpalAudioOutput};
+use moa_common::{AudioMixer, AudioSource};
+use moa_common::CpalAudioOutput;
 
 mod keys;
 mod controllers;

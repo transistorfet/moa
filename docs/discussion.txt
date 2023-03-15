@@ -1,0 +1,74 @@
+ 
+2021/10/21:
+
+Frontend/Backend Interface
+--------------------------
+
+- need a way for the frontend window to be updated with graphics data from a backend device
+- also need access to input key and joystick presses; other interfaces can be used for audio, etc
+- it would be nice if it was possible to have multiple video output devices in a system
+  outputting to different windows (ie. one window per video device)
+
+
+- either the frontend calls a function in the backend to update the window, or the backend
+  calls an indirect function on the frontend to update the window
+
+- Frontend calling backend:
+    - Opt 1 - supply a callback and object separately, pass object to callback (no closure)
+        - older way but should work
+        - object needs to be Arc in order to share, but doesn't need to be wrapped in a tuple struct
+        - con: if object is device itself, would still need to use tuple struct wrapper for Addressable
+    - Opt 2 - supply a trait object with an update method
+        - frontend would store a Box<dyn Window>
+        - device would have to make a wrapper: `struct WindowWrapper(Arc<ActualDevice>)` and
+          impl Window on WindowWrapper, and `struct DeviceWrapper(Arc<ActualDevice>)` and impl
+          Addressable/Steppable on DeviceWrapper
+        - pro: in-sync on-demand rendering
+        - con: lots of complications and indirection
+    - Opt 3 - supply a common object that devices can update, and that then updates the window
+        - backend would define a Frame type object which would contain a rendered frame
+        - system thread would render to the Frame, ui thread would then copy the Frame to window
+        - con: lots of copying of pixel data
+        - con: out of sync rendering
+        - pro: ui can handle any scaling
+
+- Backend calling frontend:
+    - Opt 4 - host can produce a generic window object that satisfies Window trait
+        - the device struct which needs the window would have a type parameter for the window
+          object, and the system thread (step) would call an update function on the generic
+          window to copy the rendered frame to a ui buffer, which then copies again on ui thread
+        - window object can only have a buffer, but it can use a native format rather than internal format
+        - con: out of sync rendering
+    - Opt 5 - host can produce a Window trait object
+        - the device would just store the trait object so no need for a type param
+        - the frontend can't put the native window in the window object so it would need to be a buffer
+        - con: would need a wrapper if the frontend needs internal access to the common device
+        - this is 
+
+- Opt 3, 4, and 5 would all involve an intermediate buffer, but with Opt 4 or 5, that buffer can be native-compatible
+- Opt 3, 4, and 5 are out of sync updating
+
+- Opt 1 and 2 can be in-sync updating if the device object is supplied, but not if it uses an intermediate buffer
+
+- it seems like Opt 4 isn't working because you can't make an existential generic (can't return MiniWindow as W: Window)
+- it seems Opt 5 works, but is trying to update the screen waaay too much, and causing the sim to almost never move.
+  Even with a simple count limit, it seems to pause when it tries updating the screen, probably due to lock contention
+- Opt 1 is misleading because you still need a shared object, and it can't be a generic, so it's either a backend-specific
+  struct or a dyn trait object, so really it's the same as Opt 2, or Opt 3
+- it might be possible to have a common data struct that contains 2 frames, one that can only be updated by the sim, and one
+  that can only be read by in-sync update function, and they are swapped on update (if the writable one isn't locked), so
+  that the updating is still in sync in the ui thread, but the rendering is happening in another thread
+
+
+2021/12/07:
+
+Signals, Etc.
+-------------
+
+* think more about what kinds of signals are used:
+    - one setter with one or more passive listeners (bank_register, updated by writing to and used whenever a value is read)
+    - one or more setters and one listeners (reset, bus_request for the CPUs)
+    - one one-shot setter (no reset) with one active listener that resets the signal (certain interrupts, including a vsync interrupt)
+    - what about interrupt controller?
+
+

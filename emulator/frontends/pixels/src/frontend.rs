@@ -7,7 +7,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use moa_core::{System, Error};
 use moa_core::host::{Host, WindowUpdater, ControllerDevice, ControllerEvent, ControllerUpdater, Audio, DummyAudio};
 use moa_core::host::gfx::Frame;
-use moa_common::audio::{AudioMixer, AudioSource, CpalAudioOutput};
+use moa_common::{AudioMixer, AudioSource, CpalAudioOutput};
 
 use crate::settings;
 use crate::create_window;

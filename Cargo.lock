@@ -600,6 +600,7 @@ dependencies = [
 name = "moa_console"
 version = "0.1.0"
 dependencies = [
+ "clap 3.2.22",
  "log",
  "moa_common",
  "moa_computie",

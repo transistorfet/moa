@@ -5,7 +5,7 @@ use moa_core::{System, Error};
 use moa_genesis::{SegaGenesisOptions, build_genesis};
 
 fn load_system(host: &mut PixelsFrontend, rom_data: Vec<u8>) -> Result<System, Error> {
-    let mut options = SegaGenesisOptions::new();
+    let mut options = SegaGenesisOptions::default();
     options.rom_data = Some(rom_data);
     build_genesis(host, options)
 }

@@ -6,6 +6,7 @@ default-run = "moa-computie"
 
 [dependencies]
 log = "0.4"
+clap = "3.2.20"
 simple_logger = "2.3.0"
 
 moa_core = { path = "../../core" }
