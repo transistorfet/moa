@@ -1,4 +1,4 @@
- 
+
 import * as Emulator from './moa-genesis.js';
 
 function initialize_emulator() {
@@ -38,14 +38,17 @@ reader.onloadend = function (e) {
 
 var file_input = document.getElementById("rom-file");
 file_input.addEventListener("change", e => {
+    document.getElementById("video").focus();
     reader.readAsArrayBuffer(file_input.files[0])
 });
 
 document.getElementById("reset").addEventListener("click", () => {
+    document.getElementById("video").focus();
     Emulator.request_stop();
 });
 
 document.getElementById("power").addEventListener("click", () => {
+    document.getElementById("video").focus();
     if (Emulator.is_running())
         Emulator.request_stop();
     else
@@ -53,6 +56,7 @@ document.getElementById("power").addEventListener("click", () => {
 });
 
 document.getElementById("speed").addEventListener("change", (e) => {
+    document.getElementById("video").focus();
     Emulator.set_speed(e.target.value);
 });
 

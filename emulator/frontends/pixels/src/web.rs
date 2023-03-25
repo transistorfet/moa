@@ -43,7 +43,7 @@ pub fn is_running() -> bool {
 
 #[wasm_bindgen]
 pub fn set_speed(speed: f32) {
-    settings::get().speed = speed;
+    //settings::get().speed = speed;
 }
 
 #[wasm_bindgen]

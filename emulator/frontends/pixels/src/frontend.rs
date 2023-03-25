@@ -1,4 +1,6 @@
 
+use std::sync::{Arc, Mutex};
+
 use instant::Instant;
 use pixels::{Pixels, SurfaceTexture};
 use winit::event::{Event, VirtualKeyCode, WindowEvent, ElementState};
@@ -6,7 +8,7 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 use moa_core::{System, Error};
 use moa_core::host::{Host, WindowUpdater, ControllerDevice, ControllerEvent, ControllerUpdater, Audio, DummyAudio};
-use moa_core::host::gfx::Frame;
+use moa_core::host::gfx::{PixelEncoding, Frame};
 use moa_common::{AudioMixer, AudioSource, CpalAudioOutput};
 
 use crate::settings;
@@ -59,13 +61,17 @@ impl Host for PixelsFrontend {
         //let source = AudioSource::new(self.mixer.clone());
         //Ok(Box::new(source))
         Ok(Box::new(DummyAudio()))
-    }    
+    }
 }
 
 pub async fn run_loop(mut host: PixelsFrontend) {
     let event_loop = EventLoop::new();
 
     let window = create_window(&event_loop);
+
+    if let Some(updater) = host.updater.as_mut() {
+        updater.request_encoding(PixelEncoding::ABGR);
+    }
 
     let mut pixels = {
         let window_size = window.inner_size();
@@ -77,7 +83,7 @@ pub async fn run_loop(mut host: PixelsFrontend) {
     };
 
     let mut last_size = (WIDTH, HEIGHT);
-    let mut last_frame = Frame::new(WIDTH, HEIGHT);
+    let mut last_frame = Frame::new(WIDTH, HEIGHT, PixelEncoding::ABGR);
     //let mut update_timer = Instant::now();
     event_loop.run(move |event, _, control_flow| {
 
@@ -99,15 +105,7 @@ pub async fn run_loop(mut host: PixelsFrontend) {
                 }
 
                 let buffer = pixels.get_frame();
-                buffer
-                    .chunks_mut(4)
-                    .zip(last_frame.bitmap.iter())
-                    .for_each(|(dest, pixel)| {
-                        dest[0] = (pixel >> 16) as u8;
-                        dest[1] = (pixel >> 8) as u8;
-                        dest[2] = *pixel as u8;
-                        dest[3] = 255;
-                    });
+                buffer.copy_from_slice(unsafe { std::slice::from_raw_parts(last_frame.bitmap.as_ptr() as *const u8, last_frame.bitmap.len() * 4) });
             }
 
             if pixels

@@ -1,4 +1,3 @@
-use std::mem;
 use std::sync::{Arc, Mutex};
 
 use crate::host::traits::{BlitableSurface, ClockedQueue, WindowUpdater};
@@ -7,24 +6,61 @@ use crate::Error;
 
 pub const MASK_COLOUR: u32 = 0xFFFFFFFF;
 
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
+pub enum PixelEncoding {
+    #[default]
+    RGBA,
+    ARGB,
+    ABGR,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Pixel {
+    Rgb(u8, u8, u8),
+    Rgba(u8, u8, u8, u8),
+    Mask,
+}
+
+impl Pixel {
+    #[inline]
+    pub fn encode(self, encoding: PixelEncoding) -> u32 {
+        let (r, g, b, a) = match self {
+            Pixel::Rgb(r, g, b) => (r as u32, g as u32, b as u32, 255),
+            Pixel::Rgba(r, g, b, a) => (r as u32, g as u32, b as u32, a as u32),
+            Pixel::Mask => return MASK_COLOUR,
+        };
+
+        match encoding {
+            PixelEncoding::RGBA =>
+                ((r as u32) << 24) | ((g as u32) << 16) | ((b as u32) << 8) | (a as u32),
+            PixelEncoding::ARGB =>
+                ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32),
+            PixelEncoding::ABGR =>
+                ((a as u32) << 24) | ((b as u32) << 16) | ((g as u32) << 8) | (r as u32),
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Frame {
     pub width: u32,
     pub height: u32,
+    pub encoding: PixelEncoding,
     pub bitmap: Vec<u32>,
 }
 
 impl Frame {
-    pub fn new(width: u32, height: u32) -> Self {
+    pub fn new(width: u32, height: u32, encoding: PixelEncoding) -> Self {
         Self {
             width,
             height,
+            encoding,
             bitmap: vec![0; (width * height) as usize],
         }
     }
 
-    pub fn new_shared(width: u32, height: u32) -> Arc<Mutex<Frame>> {
-        Arc::new(Mutex::new(Frame::new(width, height)))
+    pub fn new_shared(width: u32, height: u32, encoding: PixelEncoding) -> Arc<Mutex<Frame>> {
+        Arc::new(Mutex::new(Frame::new(width, height, encoding)))
     }
 }
 
@@ -35,31 +71,28 @@ impl BlitableSurface for Frame {
         self.bitmap.resize((width * height) as usize, 0);
     }
 
-    fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32) {
+    fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: Pixel) {
         match pixel {
-            MASK_COLOUR => {}
+            Pixel::Mask => {}
             value if pos_x < self.width && pos_y < self.height => {
-                self.bitmap[(pos_x + (pos_y * self.width)) as usize] = value;
+                self.bitmap[(pos_x + (pos_y * self.width)) as usize] = value.encode(self.encoding);
             }
             _ => {}
         }
     }
 
-    fn blit<B: Iterator<Item = u32>>(&mut self, pos_x: u32, pos_y: u32, mut bitmap: B, width: u32, height: u32) {
-        /*
-                (pos_y..(pos_y + height))
-                    .for_each(|y| {
-                        self.bitmap[(y * self.width) as usize .. (y * self.width + self.width) as usize]
-                            .iter_mut()
-                            .for_each(|pixel|
-                                match bitmap.next().unwrap() {
-                                    MASK_COLOUR => {},
-                                    value => *pixel = value,
-                                }
-                            )
-                    });
-        */
+    #[inline]
+    fn set_encoded_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32) {
+        match pixel {
+            MASK_COLOUR => { },
+            value if pos_x < self.width && pos_y < self.height => {
+                self.bitmap[(pos_x + (pos_y * self.width)) as usize] = value;
+            },
+            _ => { },
+        }
+    }
 
+    fn blit<B: Iterator<Item = u32>>(&mut self, pos_x: u32, pos_y: u32, mut bitmap: B, width: u32, height: u32) {
         for y in pos_y..(pos_y + height) {
             for x in pos_x..(pos_x + width) {
                 match bitmap.next().unwrap() {
@@ -80,50 +113,9 @@ impl BlitableSurface for Frame {
 }
 
 #[derive(Clone)]
-pub struct FrameSwapper {
-    pub current: Arc<Mutex<Frame>>,
-    pub previous: Arc<Mutex<Frame>>,
-}
-
-impl FrameSwapper {
-    pub fn new(width: u32, height: u32) -> FrameSwapper {
-        FrameSwapper {
-            current: Arc::new(Mutex::new(Frame::new(width, height))),
-            previous: Arc::new(Mutex::new(Frame::new(width, height))),
-        }
-    }
-
-    pub fn to_boxed(swapper: FrameSwapper) -> Box<dyn WindowUpdater> {
-        Box::new(swapper)
-    }
-
-    pub fn swap(&mut self) {
-        std::mem::swap(&mut self.current.lock().unwrap().bitmap, &mut self.previous.lock().unwrap().bitmap);
-    }
-
-    pub fn set_size(&mut self, width: u32, height: u32) {
-        self.previous.lock().unwrap().set_size(width, height);
-        self.current.lock().unwrap().set_size(width, height);
-    }
-}
-
-impl WindowUpdater for FrameSwapper {
-    fn max_size(&mut self) -> (u32, u32) {
-        let frame = self.current.lock().unwrap();
-        (frame.width, frame.height)
-    }
-
-    fn take_frame(&mut self) -> Result<Frame, Error> {
-        let mut previous = self.previous.lock().map_err(|_| Error::new("Lock error"))?;
-        let mut frame = Frame::new(previous.width, previous.height);
-        mem::swap(&mut *previous, &mut frame);
-        Ok(frame)
-    }
-}
-
-#[derive(Clone)]
 pub struct FrameQueue {
     max_size: (u32, u32),
+    encoding: Arc<Mutex<PixelEncoding>>,
     queue: ClockedQueue<Frame>,
 }
 
@@ -131,8 +123,13 @@ impl FrameQueue {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
             max_size: (width, height),
+            encoding: Arc::new(Mutex::new(PixelEncoding::RGBA)),
             queue: Default::default(),
         }
+    }
+
+    pub fn encoding(&mut self) -> PixelEncoding {
+        *self.encoding.lock().unwrap()
     }
 
     pub fn add(&self, clock: Clock, frame: Frame) {
@@ -145,8 +142,12 @@ impl FrameQueue {
 }
 
 impl WindowUpdater for FrameQueue {
-    fn max_size(&mut self) -> (u32, u32) {
+    fn max_size(&self) -> (u32, u32) {
         self.max_size
+    }
+
+    fn request_encoding(&mut self, encoding: PixelEncoding) {
+        *self.encoding.lock().unwrap() = encoding;
     }
 
     fn take_frame(&mut self) -> Result<Frame, Error> {

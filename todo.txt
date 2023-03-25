@@ -1,6 +1,9 @@
 
-* if index access always does a bounds check, you should try to convert some of the copy loops to use iterators
-  instead, such as frame updating, audio copying, etc
+* improve performance
+* should it be possible to reschedule multiple events at different intervals to reduce the times a given step function is called?  Some have
+  multiple clocks, or multiple things at different clocks, and making them each an event would mean they could be smaller and faster, but at
+  the cost of having more events on the queue when re-scheduling.  There needs to be a mechanism to avoid the event queue ballooning due to
+  an error
 
 * can you refactor the update timeout to put it in rust?  Would that make it faster? (the tricky part is the closure)
 * re-enable sound on webassembly, see if it works (it does not. Very lagged and jittery with what sounds like repeated frames)

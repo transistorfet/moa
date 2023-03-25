@@ -59,7 +59,7 @@ impl Iterator for BitIter {
 impl Steppable for MacVideo {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
         let mut memory = system.get_bus();
-        let mut frame = Frame::new(SCRN_SIZE.0, SCRN_SIZE.1);
+        let mut frame = Frame::new(SCRN_SIZE.0, SCRN_SIZE.1, self.frame_queue.encoding());
         for y in 0..SCRN_SIZE.1 {
             for x in 0..(SCRN_SIZE.0 / 16) {
                 let word = memory.read_beu16((SCRN_BASE + (x * 2) + (y * (SCRN_SIZE.0 / 8))) as Address)?;

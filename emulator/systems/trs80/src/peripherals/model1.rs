@@ -45,7 +45,7 @@ impl KeyboardUpdater for Model1KeyboardUpdater {
 
 impl Steppable for Model1Peripherals {
     fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        let mut frame = Frame::new(SCREEN_SIZE.0, SCREEN_SIZE.1);
+        let mut frame = Frame::new(SCREEN_SIZE.0, SCREEN_SIZE.1, self.frame_queue.encoding());
         for y in 0..16 {
             for x in 0..64 {
                 let ch = self.video_mem[x + (y * 64)];

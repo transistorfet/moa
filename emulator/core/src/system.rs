@@ -177,8 +177,8 @@ impl System {
     }
 
     fn queue_device(&mut self, device_step: NextStep) {
-        for i in (0..self.event_queue.len()).rev() {
-            if self.event_queue[i].next_clock > device_step.next_clock {
+        for (i, event) in self.event_queue.iter().enumerate().rev() {
+            if event.next_clock > device_step.next_clock {
                 self.event_queue.insert(i + 1, device_step);
                 return;
             }

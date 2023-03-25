@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{Clock, Error};
-use crate::host::gfx::Frame;
+use crate::host::gfx::{PixelEncoding, Pixel, Frame};
 use crate::host::keys::KeyEvent;
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
 use crate::host::mouse::MouseEvent;
@@ -42,18 +42,9 @@ pub trait Tty {
 }
 
 pub trait WindowUpdater: Send {
-    fn max_size(&mut self) -> (u32, u32);
+    fn max_size(&self) -> (u32, u32);
+    fn request_encoding(&mut self, encoding: PixelEncoding);
     fn take_frame(&mut self) -> Result<Frame, Error>;
-
-    fn update_frame(&mut self, width: u32, _height: u32, bitmap: &mut [u32]) {
-        if let Ok(frame) = self.take_frame() {
-            for y in 0..frame.height {
-                for x in 0..frame.width {
-                    bitmap[(x + (y * width)) as usize] = frame.bitmap[(x + (y * frame.width)) as usize];
-                }
-            }
-        }
-    }
 }
 
 pub trait ControllerUpdater: Send {
@@ -77,7 +68,8 @@ pub trait Audio {
 
 pub trait BlitableSurface {
     fn set_size(&mut self, width: u32, height: u32);
-    fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32);
+    fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: Pixel);
+    fn set_encoded_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32);
     fn blit<B: Iterator<Item=u32>>(&mut self, pos_x: u32, pos_y: u32, bitmap: B, width: u32, height: u32);
     fn clear(&mut self, value: u32);
 }

@@ -2,7 +2,7 @@
 use moa_core::{debug, warn, error};
 use moa_core::{System, Error, EdgeSignal, Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
 use moa_core::host::{Host, BlitableSurface, HostData};
-use moa_core::host::gfx::{Frame, FrameQueue};
+use moa_core::host::gfx::{Pixel, PixelEncoding, Frame, FrameQueue};
 
 
 const REG_MODE_SET_1: usize             = 0x00;
@@ -63,7 +63,7 @@ const DEV_NAME: &str = "ym7101";
 
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum DmaType {
+enum DmaType {
     None,
     Memory,
     Fill,
@@ -71,30 +71,30 @@ pub enum DmaType {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Memory {
+enum Memory {
     Vram,
     Cram,
     Vsram,
 }
 
-pub struct Ym7101Memory {
-    pub vram: [u8; 0x10000],
-    pub cram: [u8; 128],
-    pub vsram: [u8; 80],
+struct Ym7101Memory {
+    vram: [u8; 0x10000],
+    cram: [u8; 128],
+    vsram: [u8; 80],
 
-    pub transfer_type: u8,
-    pub transfer_bits: u8,
-    pub transfer_count: u32,
-    pub transfer_remain: u32,
-    pub transfer_src_addr: u32,
-    pub transfer_dest_addr: u32,
-    pub transfer_auto_inc: u32,
-    pub transfer_fill_word: u16,
-    pub transfer_run: DmaType,
-    pub transfer_target: Memory,
-    pub transfer_dma_busy: bool,
+    transfer_type: u8,
+    transfer_bits: u8,
+    transfer_count: u32,
+    transfer_remain: u32,
+    transfer_src_addr: u32,
+    transfer_dest_addr: u32,
+    transfer_auto_inc: u32,
+    transfer_fill_word: u16,
+    transfer_run: DmaType,
+    transfer_target: Memory,
+    transfer_dma_busy: bool,
 
-    pub ctrl_port_buffer: Option<u16>,
+    ctrl_port_buffer: Option<u16>,
 }
 
 impl Default for Ym7101Memory {
@@ -132,7 +132,7 @@ impl Ym7101Memory {
         read_beu16(addr)
     }
 
-    pub fn set_dma_mode(&mut self, mode: DmaType) {
+    fn set_dma_mode(&mut self, mode: DmaType) {
         match mode {
             DmaType::None => {
                 //self.status &= !STATUS_DMA_BUSY;
@@ -147,7 +147,7 @@ impl Ym7101Memory {
         }
     }
 
-    pub fn setup_transfer(&mut self, first: u16, second: u16) {
+    fn setup_transfer(&mut self, first: u16, second: u16) {
         self.ctrl_port_buffer = None;
         self.transfer_type = (((first & 0xC000) >> 14) | ((second & 0x00F0) >> 2)) as u8;
         self.transfer_dest_addr = ((first & 0x3FFF) | ((second & 0x0003) << 14)) as u32;
@@ -166,7 +166,7 @@ impl Ym7101Memory {
         }
     }
 
-    pub fn get_transfer_target_mut(&mut self) -> &mut [u8] {
+    fn get_transfer_target_mut(&mut self) -> &mut [u8] {
         match self.transfer_target {
             Memory::Vram => &mut self.vram,
             Memory::Cram => &mut self.cram,
@@ -174,7 +174,7 @@ impl Ym7101Memory {
         }
     }
 
-    pub fn read_data_port(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read_data_port(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         {
             let addr = self.transfer_dest_addr;
             let target = self.get_transfer_target_mut();
@@ -187,7 +187,7 @@ impl Ym7101Memory {
         Ok(())
     }
 
-    pub fn write_data_port(&mut self, data: &[u8]) -> Result<(), Error> {
+    fn write_data_port(&mut self, data: &[u8]) -> Result<(), Error> {
         if (self.transfer_type & 0x30) == 0x20 {
             self.ctrl_port_buffer = None;
             self.transfer_fill_word = if data.len() >= 2 { read_beu16(data) } else { data[0] as u16 };
@@ -207,7 +207,7 @@ impl Ym7101Memory {
         Ok(())
     }
 
-    pub fn write_control_port(&mut self, data: &[u8]) -> Result<(), Error> {
+    fn write_control_port(&mut self, data: &[u8]) -> Result<(), Error> {
         let value = read_beu16(data);
         match (data.len(), self.ctrl_port_buffer) {
             (2, None) => { self.ctrl_port_buffer = Some(value) },
@@ -218,7 +218,7 @@ impl Ym7101Memory {
         Ok(())
     }
 
-    pub fn step_dma(&mut self, system: &System) -> Result<(), Error> {
+    fn step_dma(&mut self, system: &System) -> Result<(), Error> {
         if self.transfer_run != DmaType::None {
             // TODO we will just do the full dma transfer here, but it really should be stepped
 
@@ -270,49 +270,58 @@ impl Ym7101Memory {
 
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ColourMode {
+enum ColourMode {
     Normal,
     Shadow,
     Highlight,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Scroll {
+enum Scroll {
     ScrollA,
     ScrollB,
 }
 
-pub struct Ym7101State {
-    pub status: u16,
-    pub memory: Ym7101Memory,
 
-    pub mode_1: u8,
-    pub mode_2: u8,
-    pub mode_3: u8,
-    pub mode_4: u8,
-    pub h_int_lines: u8,
-    pub screen_size: (usize, usize),
-    pub scroll_size: (usize, usize),
-    pub window_pos: ((usize, usize), (usize, usize)),
-    pub window_values: (u8, u8),
-    pub background: u8,
-    pub scroll_a_addr: usize,
-    pub scroll_b_addr: usize,
-    pub window_addr: usize,
-    pub sprites_addr: usize,
-    pub hscroll_addr: usize,
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Priority {
+    Sprite,
+    ScrollA,
+    ScrollB,
+    Background,
+}
 
-    pub sprites: Vec<Sprite>,
-    pub sprites_by_line: Vec<Vec<usize>>,
+struct Ym7101State {
+    status: u16,
+    memory: Ym7101Memory,
 
-    pub last_clock: Clock,
-    pub p_clock: u32,
-    pub h_clock: u32,
-    pub v_clock: u32,
-    pub h_scanlines: u8,
+    mode_1: u8,
+    mode_2: u8,
+    mode_3: u8,
+    mode_4: u8,
+    h_int_lines: u8,
+    screen_size: (usize, usize),
+    scroll_size: (usize, usize),
+    window_pos: ((usize, usize), (usize, usize)),
+    window_values: (u8, u8),
+    background: u8,
+    scroll_a_addr: usize,
+    scroll_b_addr: usize,
+    window_addr: usize,
+    sprites_addr: usize,
+    hscroll_addr: usize,
 
-    pub current_x: i32,
-    pub current_y: i32,
+    sprites: Vec<Sprite>,
+    sprites_by_line: Vec<Vec<usize>>,
+
+    last_clock: Clock,
+    p_clock: u32,
+    h_clock: u32,
+    v_clock: u32,
+    h_scanlines: u8,
+
+    current_x: i32,
+    current_y: i32,
 }
 
 impl Default for Ym7101State {
@@ -368,13 +377,13 @@ impl Ym7101State {
         (self.mode_3 & MODE3_BF_EXTERNAL_INTERRUPT) != 0
     }
 
-    pub fn update_screen_size(&mut self) {
+    fn update_screen_size(&mut self) {
         let h_cells = if (self.mode_4 & MODE4_BF_H_CELL_MODE) == 0 { 32 } else { 40 };
         let v_cells = if (self.mode_2 & MODE2_BF_V_CELL_MODE) == 0 { 28 } else { 30 };
         self.screen_size = (h_cells, v_cells);
     }
 
-    pub fn update_window_position(&mut self) {
+    fn update_window_position(&mut self) {
         let win_h = ((self.window_values.0 & 0x1F) << 1) as usize;
         let win_v = (self.window_values.1 & 0x1F) as usize;
         let right = (self.window_values.0 & 0x80) != 0;
@@ -393,14 +402,14 @@ impl Ym7101State {
         x >= self.window_pos.0.0 && x <= self.window_pos.1.0 && y >= self.window_pos.0.1 && y <= self.window_pos.1.1
     }
 
-    fn get_palette_colour(&self, palette: u8, colour: u8, mode: ColourMode) -> u32 {
+    fn get_palette_colour(&self, palette: u8, colour: u8, mode: ColourMode, encoding: PixelEncoding) -> u32 {
         let shift_enabled = (self.mode_4 & MODE4_BF_SHADOW_HIGHLIGHT) != 0;
         let rgb = self.memory.read_beu16(Memory::Cram, (((palette * 16) + colour) * 2) as usize);
         if !shift_enabled || mode == ColourMode::Normal {
-            (((rgb & 0xF00) as u32) >> 4) | (((rgb & 0x0F0) as u32) << 8) | (((rgb & 0x00F) as u32) << 20)
+            Pixel::Rgb(((rgb & 0x00F) << 4) as u8, (rgb & 0x0F0) as u8, ((rgb & 0xF00) >> 4) as u8).encode(encoding)
         } else {
-            let offset = if mode == ColourMode::Highlight { 0x808080 } else { 0x00 };
-            (((rgb & 0xF00) as u32) >> 5) | (((rgb & 0x0F0) as u32) << 7) | (((rgb & 0x00F) as u32) << 19) | offset
+            let offset = if mode == ColourMode::Highlight { 0x80 } else { 0x00 };
+            Pixel::Rgb(((rgb & 0x00F) << 3) as u8 | offset, ((rgb & 0x0F0) >> 1) as u8 | offset, ((rgb & 0xF00) >> 5) as u8 | offset).encode(encoding)
         }
     }
 
@@ -480,7 +489,7 @@ impl Ym7101State {
         }
     }
 
-    pub fn draw_frame(&mut self, frame: &mut Frame) {
+    fn draw_frame(&mut self, frame: &mut Frame) {
         self.build_sprites_lists();
 
         for y in 0..(self.screen_size.1 * 8) {
@@ -488,7 +497,7 @@ impl Ym7101State {
         }
     }
 
-    pub fn draw_frame_line(&mut self, frame: &mut Frame, y: usize) {
+    fn draw_frame_line(&mut self, frame: &mut Frame, y: usize) {
         let bg_colour = ((self.background & 0x30) >> 4, self.background & 0x0f);
 
         let (hscrolling_a, hscrolling_b) = self.get_hscroll(y / 8, y % 8);
@@ -509,7 +518,7 @@ impl Ym7101State {
             let mut priority_a = (pattern_a_word & 0x8000) != 0;
             let mut pixel_a = self.get_pattern_pixel(pattern_a_word, pixel_a_x % 8, pixel_a_y % 8);
 
-            if self.window_addr != 0 && self.is_inside_window(x, y) { 
+            if self.window_addr != 0 && self.is_inside_window(x, y) {
                 let pixel_win_x = x - self.window_pos.0.0 * 8;
                 let pixel_win_y = y - self.window_pos.0.1 * 8;
                 let pattern_win_addr = self.get_pattern_addr(self.window_addr, pixel_win_x / 8, pixel_win_y / 8);
@@ -556,7 +565,7 @@ impl Ym7101State {
                         ColourMode::Normal
                     };
 
-                    frame.set_pixel(x as u32, y as u32, self.get_palette_colour(pixel.0, pixel.1, mode));
+                    frame.set_encoded_pixel(x as u32, y as u32, self.get_palette_colour(pixel.0, pixel.1, mode, frame.encoding));
                     break;
                 }
             }
@@ -564,16 +573,16 @@ impl Ym7101State {
     }
 }
 
-pub struct Sprite {
-    pub pos: (i16, i16),
-    pub size: (u16, u16),
-    pub rev: (bool, bool),
-    pub pattern: u16,
-    pub link: u8,
+struct Sprite {
+    pos: (i16, i16),
+    size: (u16, u16),
+    rev: (bool, bool),
+    pattern: u16,
+    link: u8,
 }
 
 impl Sprite {
-    pub fn new(sprite_data: &[u8]) -> Self {
+    fn new(sprite_data: &[u8]) -> Self {
         let v_pos = read_beu16(&sprite_data[0..]);
         let size = sprite_data[2];
         let link = sprite_data[3];
@@ -593,7 +602,7 @@ impl Sprite {
         }
     }
 
-    pub fn calculate_pattern(&self, cell_x: usize, cell_y: usize) -> u16 {
+    fn calculate_pattern(&self, cell_x: usize, cell_y: usize) -> u16 {
         let (h, v) = (if !self.rev.0 { cell_x } else { self.size.0 as usize - 1 - cell_x }, if !self.rev.1 { cell_y } else { self.size.1 as usize - 1 - cell_y });
         (self.pattern & 0xF800) | ((self.pattern & 0x07FF) + (h as u16 * self.size.1) + v as u16)
     }
@@ -649,7 +658,7 @@ impl Steppable for Ym7101 {
             }
 
             if (self.state.mode_1 & MODE1_BF_DISABLE_DISPLAY) == 0 {
-                let mut frame = Frame::new(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8);
+                let mut frame = Frame::new(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8, self.queue.encoding());
                 self.state.draw_frame(&mut frame);
                 self.queue.add(system.clock, frame);
             }

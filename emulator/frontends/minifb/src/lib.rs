@@ -9,7 +9,7 @@ use clap::{App, Arg, ArgMatches};
 
 use moa_core::{System, Error};
 use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice};
-use moa_core::host::gfx::Frame;
+use moa_core::host::gfx::{PixelEncoding, Frame};
 
 use moa_common::{AudioMixer, AudioSource};
 use moa_common::CpalAudioOutput;
@@ -242,6 +242,7 @@ impl MiniFrontend {
         let mut size = (WIDTH, HEIGHT);
         if let Some(updater) = self.window.as_mut() {
             size = updater.max_size();
+            updater.request_encoding(PixelEncoding::ARGB);
         }
 
         let mut window = minifb::Window::new(
@@ -258,7 +259,7 @@ impl MiniFrontend {
         window.limit_update_rate(Some(Duration::from_micros(16600)));
 
         let mut update_timer = Instant::now();
-        let mut last_frame = Frame::new(size.0, size.1);
+        let mut last_frame = Frame::new(size.0, size.1, PixelEncoding::ARGB);
         while window.is_open() && !window.is_key_down(Key::Escape) {
             let frame_time = update_timer.elapsed();
             update_timer = Instant::now();

@@ -240,9 +240,6 @@ before 2021-10-25
   to more properly implement the priority shadow/highlight modes
 
 
-Audio
------
-
 2021-12-12
 - this is when I committed the audio support, but I'm not sure when I started.  It was a little earlier
 - cpal uses a callback to get the next buffer of data, so the buffer needs to be assembled outside of
@@ -262,7 +259,8 @@ Audio
   of minor issues have turned up
 
 2022-01-18
-- some kind of buffer problem causing clicking, where the waveform resets, possibly related to circular buf
+- some kind of buffer problem causing clicking, where the waveform resets, possibly related to circular
+  buf
 - a quick attempt at fixing it shows that the audio source buffer is only copied to the mixer buffer
   when it's written to the buffer (and overfills).  Attempt to not write to the buffer means audio stops
   when the source buffer is full
@@ -282,6 +280,20 @@ Audio
   probably shouldn't be.  The other audio sounds distorted but still sort of sounds like what it should,
   so I don't think it's too far off
 
+
+2023-03-25
+- trying to improve the performance.  It seems to be at about 20 to 30 fps on firefox but 60 fps on
+  chrome and I'm not sure why the difference.
+- I tried a change that allows the frontend to request a pixel encoding format so it doesn't have to
+  change it after the fact, but that doesn't seem to help much, or possibly even hurt performance a
+  bit, but it's hard to know with just flamegraph.
+
+- without knowing the tricks that games might use, it's hard to really optimize the ym7101 code,
+  which is taking up the most time per loop.  The game might change the colour palette during the
+  update, for example.
+- that said, I'm actually just updating the whole frame at a time instead of drawing lines
+  individually, with steps in between so the game can do those tricks...  and I don't see a lot of
+  issues with colour glitches and stuff
 
 
 ---------------------------------------------------------------------------------------------------

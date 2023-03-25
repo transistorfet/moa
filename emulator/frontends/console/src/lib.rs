@@ -1,8 +1,6 @@
 
 use moa_core::Error;
-use moa_core::host::{Host, Tty, WindowUpdater, ControllerDevice, ControllerUpdater, Audio};
-
-use moa_common::audio::{AudioMixer, AudioSource};
+use moa_core::host::{Host, Tty, WindowUpdater, ControllerDevice, ControllerUpdater, Audio, DummyAudio};
 
 pub struct ConsoleFrontend;
 
@@ -24,8 +22,7 @@ impl Host for ConsoleFrontend {
 
     fn create_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
         println!("console: create_audio_source() is not supported from the console; returning dummy device...");
-        let source = AudioSource::new(AudioMixer::with_default_rate());
-        Ok(Box::new(source))
+        Ok(Box::new(DummyAudio()))
     }
 }
 
