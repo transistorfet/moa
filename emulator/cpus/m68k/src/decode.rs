@@ -424,7 +424,7 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_moveq(&mut self, memory: &mut dyn Addressable, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_moveq(&mut self, _memory: &mut dyn Addressable, ins: u16) -> Result<Instruction, Error> {
         if (ins & 0x0100) != 0 {
             return Err(Error::processor(Exceptions::IllegalInstruction as u32));
         }
@@ -731,7 +731,7 @@ impl M68kDecoder {
         }
     }
 
-    fn get_mode_as_target(&mut self, memory: &mut dyn Addressable, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
+    pub(super) fn get_mode_as_target(&mut self, memory: &mut dyn Addressable, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
         let value = match mode {
             0b000 => Target::DirectDReg(reg),
             0b001 => Target::DirectAReg(reg),

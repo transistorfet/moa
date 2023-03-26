@@ -137,7 +137,7 @@ impl TestCase {
 
 
 fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, System), Error> {
-    let mut system = System::new();
+    let mut system = System::default();
 
     // Insert basic initialization
     let data = vec![0; 0x01000000];

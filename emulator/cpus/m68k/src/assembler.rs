@@ -201,7 +201,6 @@ impl M68kAssembler {
     fn convert_sized_instruction(&mut self, lineno: usize, mneumonic: &str, args: &[AssemblyOperand]) -> Result<(), Error> {
         let operation_size = get_size_from_mneumonic(mneumonic).ok_or_else(|| Error::new(&format!("error at line {}: expected a size specifier (b/w/l)", lineno)));
         match &mneumonic[..mneumonic.len() - 1] {
-
             "addi" => {
                 self.convert_common_immediate_instruction(lineno, 0x0600, args, operation_size?, Disallow::NoARegImmediateOrPC)?;
             },
@@ -317,18 +316,21 @@ impl M68kAssembler {
     }
 
     fn convert_common_dreg_instruction(&mut self, lineno: usize, opcode: u16, args: &[AssemblyOperand], operation_size: Size, disallow: Disallow) -> Result<(), Error> {
-        self.convert_common_reg_instruction(lineno, opcode, args, operation_size, disallow, Disallow::NoAReg)
+        parser::expect_args(lineno, args, 2)?;
+        let (direction, reg, operand) = convert_reg_and_other(lineno, args, Disallow::NoAReg)?;
+        let (effective_address, additional_words) = convert_target(lineno, operand, operation_size, disallow)?;
+        self.output.push(opcode | encode_size(operation_size) | direction | (reg << 9) | effective_address);
+        self.output.extend(additional_words);
+        Ok(())
     }
 
     fn convert_common_areg_instruction(&mut self, lineno: usize, opcode: u16, args: &[AssemblyOperand], operation_size: Size, disallow: Disallow) -> Result<(), Error> {
-        self.convert_common_reg_instruction(lineno, opcode, args, operation_size, disallow, Disallow::NoDReg)
-    }
-
-    fn convert_common_reg_instruction(&mut self, lineno: usize, opcode: u16, args: &[AssemblyOperand], operation_size: Size, disallow: Disallow, disallow_reg: Disallow) -> Result<(), Error> {
+        let size_bit = expect_a_instruction_size(lineno, operation_size)?;
         parser::expect_args(lineno, args, 2)?;
-        let (direction, reg, operand) = convert_reg_and_other(lineno, args, disallow_reg)?;
-        let (effective_address, additional_words) = convert_target(lineno, operand, operation_size, disallow)?;
-        self.output.push(opcode | encode_size(operation_size) | direction | (reg << 9) | effective_address);
+        //let (_direction, reg, operand) = convert_reg_and_other(lineno, args, Disallow::NoDReg)?;
+        let reg = expect_address_register(lineno, &args[1])?;
+        let (effective_address, additional_words) = convert_target(lineno, &args[0], operation_size, disallow)?;
+        self.output.push(opcode | size_bit | (0b11 << 6) | (reg << 9) | effective_address);
         self.output.extend(additional_words);
         Ok(())
     }
@@ -549,7 +551,7 @@ fn expect_data_register(lineno: usize, operand: &AssemblyOperand) -> Result<u16,
 
 fn expect_address_register(lineno: usize, operand: &AssemblyOperand) -> Result<u16, Error> {
     if let AssemblyOperand::Register(name) = operand {
-        if name.starts_with('d') {
+        if name.starts_with('a') {
             return expect_reg_num(lineno, name);
         }
     }
@@ -570,6 +572,14 @@ fn expect_reg_num(lineno: usize, name: &str) -> Result<u16, Error> {
         }
     }
     Err(Error::new(&format!("error at line {}: no such register {:?}", lineno, name)))
+}
+
+fn expect_a_instruction_size(lineno: usize, size: Size) -> Result<u16, Error> {
+    match size {
+        Size::Word => Ok(0),
+        Size::Long => Ok(0b1 << 8),
+        _ => Err(Error::new(&format!("error at line {}: address instructions can only be word or long size", lineno))),
+    }
 }
 
 

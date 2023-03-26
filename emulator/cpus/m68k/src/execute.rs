@@ -1399,7 +1399,7 @@ impl M68k {
     }
 
 
-    fn get_target_value(&mut self, target: Target, size: Size, used: Used) -> Result<u32, Error> {
+    pub(super) fn get_target_value(&mut self, target: Target, size: Size, used: Used) -> Result<u32, Error> {
         match target {
             Target::Immediate(value) => Ok(value),
             Target::DirectDReg(reg) => Ok(get_value_sized(self.state.d_reg[reg as usize], size)),
@@ -1439,7 +1439,7 @@ impl M68k {
         }
     }
 
-    fn set_target_value(&mut self, target: Target, value: u32, size: Size, used: Used) -> Result<(), Error> {
+    pub(super) fn set_target_value(&mut self, target: Target, value: u32, size: Size, used: Used) -> Result<(), Error> {
         match target {
             Target::DirectDReg(reg) => {
                 set_value_sized(&mut self.state.d_reg[reg as usize], value, size);
