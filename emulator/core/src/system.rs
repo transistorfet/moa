@@ -74,7 +74,6 @@ impl System {
     }
 
     pub fn add_interruptable_device(&mut self, name: &str, device: TransmutableBox) -> Result<(), Error> {
-        self.interrupt_controller.borrow_mut().set_target(device.clone())?;
         self.try_queue_device(device.clone());
         self.devices.insert(name.to_string(), device);
         Ok(())

@@ -1,4 +1,11 @@
 
+* the interrupt controller stuff is really not good.  It should be more like busport, and connected to a device at startup (eg. create
+  interrupt controller, then create objects that use that controller and pass in values, maybe an option so that the controller doesn't
+  have to be hooked up, meaning hardware interrupts would not be used.
+
+* along with the interrupt stuff, I'm kind of thinking of packaging things a bit differently, like using a tuple struct for the rc refcell
+  transmutable abstraction, so that you can avoid the need for explicit borrows
+
 * improve performance
 * should it be possible to reschedule multiple events at different intervals to reduce the times a given step function is called?  Some have
   multiple clocks, or multiple things at different clocks, and making them each an event would mean they could be smaller and faster, but at

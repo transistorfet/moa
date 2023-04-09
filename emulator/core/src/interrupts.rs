@@ -4,7 +4,6 @@ use crate::devices::TransmutableBox;
 
 
 pub struct InterruptController {
-    target: Option<TransmutableBox>,
     interrupts: Vec<(bool, u8)>,
     highest: u8,
 }
@@ -12,7 +11,6 @@ pub struct InterruptController {
 impl Default for InterruptController {
     fn default() -> InterruptController {
         InterruptController {
-            target: None,
             interrupts: vec![(false, 0); 7],
             highest: 0,
         }
@@ -20,15 +18,6 @@ impl Default for InterruptController {
 }
 
 impl InterruptController {
-    pub fn set_target(&mut self, dev: TransmutableBox) -> Result<(), Error> {
-        if self.target.is_some() {
-            return Err(Error::new("Interruptable device already set, and interrupt controller only supports one receiver"));
-        }
-
-        self.target = Some(dev);
-        Ok(())
-    }
-
     pub fn set(&mut self, state: bool, priority: u8, number: u8) -> Result<(), Error> {
         self.interrupts[priority as usize].0 = state;
         self.interrupts[priority as usize].1 = number;

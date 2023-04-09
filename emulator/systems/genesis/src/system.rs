@@ -70,8 +70,8 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     // Build the Coprocessor's Bus
     let bank_register = Signal::new(0);
     let coproc_ram = wrap_transmutable(MemoryBlock::new(vec![0; 0x00002000]));
-    let coproc_ym_sound = wrap_transmutable(Ym2612::create(host)?);
-    let coproc_sn_sound = wrap_transmutable(Sn76489::create(host)?);
+    let coproc_ym_sound = wrap_transmutable(Ym2612::create(host, 7_670_454)?);
+    let coproc_sn_sound = wrap_transmutable(Sn76489::create(host, 3_579_545)?);
     let coproc_register = wrap_transmutable(CoprocessorBankRegister::new(bank_register.clone()));
     let coproc_area = wrap_transmutable(CoprocessorBankArea::new(bank_register, system.bus.clone()));
 

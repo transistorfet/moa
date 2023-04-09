@@ -8,14 +8,14 @@ use moa_core::host::audio::{SquareWave};
 const DEV_NAME: &str = "sn76489";
 
 #[derive(Clone)]
-pub struct ToneGenerator {
+struct ToneGenerator {
     on: bool,
     attenuation: f32,
     wave: SquareWave,
 }
 
 impl ToneGenerator {
-    pub fn new(sample_rate: usize) -> Self {
+    fn new(sample_rate: usize) -> Self {
         Self {
             on: false,
             attenuation: 0.0,
@@ -23,7 +23,7 @@ impl ToneGenerator {
         }
     }
 
-    pub fn set_attenuation(&mut self, attenuation: u8) {
+    fn set_attenuation(&mut self, attenuation: u8) {
         if attenuation == 0x0F {
             self.on = false;
         } else {
@@ -33,20 +33,20 @@ impl ToneGenerator {
         info!("set attenuation to {} {}", self.attenuation, self.on);
     }
 
-    pub fn set_counter(&mut self, count: usize) {
+    fn set_counter(&mut self, count: usize) {
         let frequency = 3_579_545.0 / (count as f32 * 32.0);
         self.wave.set_frequency(frequency);
         info!("set frequency to {}", frequency);
     }
 
-    pub fn get_sample(&mut self) -> f32 {
+    fn get_sample(&mut self) -> f32 {
         self.wave.next().unwrap() / (self.attenuation + 1.0)
     }
 }
 
 
 #[derive(Clone)]
-pub struct NoiseGenerator {
+struct NoiseGenerator {
     on: bool,
     attenuation: f32,
 }
@@ -61,7 +61,7 @@ impl Default for NoiseGenerator {
 }
 
 impl NoiseGenerator {
-    pub fn set_attenuation(&mut self, attenuation: u8) {
+    fn set_attenuation(&mut self, attenuation: u8) {
         if attenuation == 0x0F {
             self.on = false;
         } else {
@@ -71,13 +71,13 @@ impl NoiseGenerator {
         info!("set attenuation to {} {}", self.attenuation, self.on);
     }
 
-    pub fn set_control(&mut self, _bits: u8) {
+    fn set_control(&mut self, _bits: u8) {
         //let frequency = 3_579_545.0 / (count as f32 * 32.0);
         //self.wave.set_frequency(frequency);
         //debug!("set frequency to {}", frequency);
     }
 
-    pub fn get_sample(&mut self) -> f32 {
+    fn get_sample(&mut self) -> f32 {
         // TODO this isn't implemented yet
         0.0
     }
@@ -86,18 +86,20 @@ impl NoiseGenerator {
 
 
 pub struct Sn76489 {
-    pub first_byte: Option<u8>,
-    pub source: Box<dyn Audio>,
-    pub tones: Vec<ToneGenerator>,
-    pub noise: NoiseGenerator,
+    clock_frequency: u32,
+    first_byte: Option<u8>,
+    source: Box<dyn Audio>,
+    tones: Vec<ToneGenerator>,
+    noise: NoiseGenerator,
 }
 
 impl Sn76489 {
-    pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
+    pub fn create<H: Host>(host: &mut H, clock_frequency: u32) -> Result<Self, Error> {
         let source = host.create_audio_source()?;
         let sample_rate = source.samples_per_second();
 
         Ok(Self {
+            clock_frequency,
             first_byte: None,
             source,
             tones: vec![ToneGenerator::new(sample_rate); 3],
