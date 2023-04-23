@@ -2,7 +2,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::{Clock, Error};
+use crate::{ClockTime, Error};
 use crate::host::gfx::{PixelEncoding, Pixel, Frame};
 use crate::host::keys::KeyEvent;
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
@@ -62,7 +62,7 @@ pub trait MouseUpdater: Send {
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
     fn space_available(&self) -> usize;
-    fn write_samples(&mut self, clock: Clock, buffer: &[f32]);
+    fn write_samples(&mut self, clock: ClockTime, buffer: &[f32]);
     fn flush(&mut self);
 }
 
@@ -70,8 +70,8 @@ pub trait BlitableSurface {
     fn set_size(&mut self, width: u32, height: u32);
     fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: Pixel);
     fn set_encoded_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32);
-    fn blit<B: Iterator<Item=u32>>(&mut self, pos_x: u32, pos_y: u32, bitmap: B, width: u32, height: u32);
-    fn clear(&mut self, value: u32);
+    fn blit<B: Iterator<Item=Pixel>>(&mut self, pos_x: u32, pos_y: u32, bitmap: B, width: u32, height: u32);
+    fn clear(&mut self, value: Pixel);
 }
 
 
@@ -99,26 +99,26 @@ impl<T: Copy> HostData<T> {
 }
 
 #[derive(Clone, Default)]
-pub struct ClockedQueue<T>(Arc<Mutex<VecDeque<(Clock, T)>>>);
+pub struct ClockedQueue<T>(Arc<Mutex<VecDeque<(ClockTime, T)>>>);
 
 impl<T: Clone> ClockedQueue<T> {
-    pub fn push(&self, clock: Clock, data: T) {
+    pub fn push(&self, clock: ClockTime, data: T) {
         self.0.lock().unwrap().push_back((clock, data));
     }
 
-    pub fn pop_next(&self) -> Option<(Clock, T)> {
+    pub fn pop_next(&self) -> Option<(ClockTime, T)> {
         self.0.lock().unwrap().pop_front()
     }
 
-    pub fn pop_latest(&self) -> Option<(Clock, T)> {
+    pub fn pop_latest(&self) -> Option<(ClockTime, T)> {
         self.0.lock().unwrap().drain(..).last()
     }
 
-    pub fn unpop(&mut self, clock: Clock, data: T) {
+    pub fn unpop(&mut self, clock: ClockTime, data: T) {
         self.0.lock().unwrap().push_front((clock, data));
     }
 
-    pub fn peek_clock(&self) -> Option<Clock> {
+    pub fn peek_clock(&self) -> Option<ClockTime> {
         self.0.lock().unwrap().front().map(|(clock, _)| *clock)
     }
 }
@@ -135,7 +135,7 @@ impl Audio for DummyAudio {
         4800
     }
 
-    fn write_samples(&mut self, _clock: Clock, _buffer: &[f32]) {}
+    fn write_samples(&mut self, _clock: ClockTime, _buffer: &[f32]) {}
 
     fn flush(&mut self) {}
 }

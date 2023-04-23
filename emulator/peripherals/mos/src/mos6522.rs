@@ -1,5 +1,5 @@
 
-use moa_core::{Error, System, ClockElapsed, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable, debug, warn};
+use moa_core::{Error, System, ClockDuration, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable, debug, warn};
 
 
 const REG_OUTPUT_B: Address     = 0x00;
@@ -99,9 +99,9 @@ impl Addressable for Mos6522 {
 }
 
 impl Steppable for Mos6522 {
-    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
 
-        Ok(16_600_000)
+        Ok(ClockDuration::from_micros(16_600))
     }
 }
 

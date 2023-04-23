@@ -1,6 +1,6 @@
 
 use moa_core::{debug, warn, error};
-use moa_core::{System, Error, EdgeSignal, Clock, ClockElapsed, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
+use moa_core::{System, Error, EdgeSignal, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
 use moa_core::host::{Host, BlitableSurface, HostData};
 use moa_core::host::gfx::{Pixel, PixelEncoding, Frame, FrameQueue};
 
@@ -314,7 +314,7 @@ struct Ym7101State {
     sprites: Vec<Sprite>,
     sprites_by_line: Vec<Vec<usize>>,
 
-    last_clock: Clock,
+    last_clock: ClockTime,
     p_clock: u32,
     h_clock: u32,
     v_clock: u32,
@@ -349,7 +349,7 @@ impl Default for Ym7101State {
             sprites: vec![],
             sprites_by_line: vec![],
 
-            last_clock: 0,
+            last_clock: ClockTime::START,
             p_clock: 0,
             h_clock: 0,
             v_clock: 0,
@@ -609,8 +609,8 @@ impl Sprite {
 }
 
 impl Steppable for Ym7101 {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        let diff = (system.clock - self.state.last_clock) as u32;
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+        let diff = system.clock.duration_since(self.state.last_clock).as_nanos() as u32;
         self.state.last_clock = system.clock;
 
         if self.state.external_int_enabled() && self.external_interrupt.get() {
@@ -674,7 +674,7 @@ impl Steppable for Ym7101 {
             self.state.status = (self.state.status & !STATUS_DMA_BUSY) | (if self.state.memory.transfer_dma_busy { STATUS_DMA_BUSY } else { 0 });
         }
 
-        Ok((1_000_000_000 / 13_423_294) * 4)
+        Ok(Frequency::from_hz(13_423_294).period_duration() * 4)
     }
 }
 

@@ -1,4 +1,6 @@
 
+* the audio needs to not run if nothing is using it or there's constant buffer underruns
+
 * add a Duration-like clock type that records femto seconds
 * move parser to utils/ of some kind, or lib/
 

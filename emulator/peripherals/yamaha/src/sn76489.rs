@@ -1,6 +1,6 @@
 
 use moa_core::{info, warn, debug};
-use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable};
+use moa_core::{System, Error, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio};
 use moa_core::host::audio::{SquareWave};
 
@@ -86,7 +86,7 @@ impl NoiseGenerator {
 
 
 pub struct Sn76489 {
-    clock_frequency: u32,
+    clock_frequency: Frequency,
     first_byte: Option<u8>,
     source: Box<dyn Audio>,
     tones: Vec<ToneGenerator>,
@@ -94,7 +94,7 @@ pub struct Sn76489 {
 }
 
 impl Sn76489 {
-    pub fn create<H: Host>(host: &mut H, clock_frequency: u32) -> Result<Self, Error> {
+    pub fn create<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
         let source = host.create_audio_source()?;
         let sample_rate = source.samples_per_second();
 
@@ -109,7 +109,7 @@ impl Sn76489 {
 }
 
 impl Steppable for Sn76489 {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         let rate = self.source.samples_per_second();
         let available = self.source.space_available();
         let samples = if available < rate / 1000 { available } else { rate / 1000 };
@@ -137,7 +137,7 @@ impl Steppable for Sn76489 {
             self.source.flush();
         }
 
-        Ok(1_000_000)          // Every 1ms of simulated time
+        Ok(ClockDuration::from_millis(1))          // Every 1ms of simulated time
     }
 }
 

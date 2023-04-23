@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ErrorType, ClockElapsed, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
+use moa_core::{System, Error, ErrorType, ClockDuration, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
 use crate::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, IndexRegister, SpecialRegister, IndexRegisterHalf, Size, Direction};
 use crate::state::{Z80, Status, Flags, Register};
@@ -19,19 +19,16 @@ enum RotateType {
 
 
 impl Steppable for Z80 {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         let clocks = if self.reset.get() {
-//println!("RESET");
             self.reset()?
         } else if self.bus_request.get() {
-//println!("BUS REQ");
             4
         } else {
-//println!("RUNNING {:?}", self.decoder.instruction);
             self.step_internal(system)?
         };
 
-        Ok((1_000_000_000 / self.frequency as ClockElapsed) * clocks as ClockElapsed)
+        Ok(self.frequency.period_duration() * clocks as u64)
     }
 
     fn on_error(&mut self, _system: &System) {

@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, MemoryBlock, BusPort, Debuggable, wrap_transmutable};
+use moa_core::{System, Error, Frequency, MemoryBlock, BusPort, Debuggable, wrap_transmutable};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -69,7 +69,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     system.add_addressable_device(0x00000000, wrap_transmutable(mainboard))?;
 
 
-    let mut cpu = M68k::new(M68kType::MC68000, 7_833_600, BusPort::new(0, 24, 16, system.bus.clone()));
+    let mut cpu = M68k::new(M68kType::MC68000, Frequency::from_hz(7_833_600), BusPort::new(0, 24, 16, system.bus.clone()));
 
     //cpu.enable_tracing();
     //system.enable_debugging();

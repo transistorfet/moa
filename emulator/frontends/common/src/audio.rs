@@ -2,7 +2,7 @@
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 
-use moa_core::Clock;
+use moa_core::{ClockTime, ClockDuration};
 use moa_core::host::{Audio, ClockedQueue};
 
 
@@ -51,7 +51,7 @@ impl AudioSource {
         self.frame_size / 2
     }
 
-    pub fn add_frame(&mut self, clock: Clock, buffer: &[f32]) {
+    pub fn add_frame(&mut self, clock: ClockTime, buffer: &[f32]) {
         let mut data = vec![];
         for sample in buffer.iter() {
             // TODO this is here to keep it quiet for testing, but should be removed later
@@ -81,7 +81,7 @@ impl Audio for AudioSource {
         self.space_available()
     }
 
-    fn write_samples(&mut self, clock: Clock, buffer: &[f32]) {
+    fn write_samples(&mut self, clock: ClockTime, buffer: &[f32]) {
         self.add_frame(clock, buffer);
         self.flush();
     }
@@ -96,7 +96,7 @@ pub struct AudioMixer {
     sample_rate: usize,
     frame_size: usize,
     sequence_num: usize,
-    clock: Clock,
+    clock: ClockTime,
     sources: Vec<ClockedQueue<AudioFrame>>,
     buffer_underrun: bool,
     output: Arc<Mutex<AudioOutput>>,
@@ -108,7 +108,7 @@ impl AudioMixer {
             sample_rate,
             frame_size: 1280,
             sequence_num: 0,
-            clock: 0,
+            clock: ClockTime::START,
             sources: vec![],
             buffer_underrun: false,
             output: AudioOutput::new(),
@@ -132,8 +132,8 @@ impl AudioMixer {
         self.sample_rate
     }
 
-    pub fn nanos_per_sample(&self) -> Clock {
-        1_000_000_000 as Clock / self.sample_rate as Clock
+    pub fn sample_duration(&self) -> ClockDuration {
+        ClockDuration::from_secs(1) / self.sample_rate as u64
     }
 
     pub fn frame_size(&self) -> usize {
@@ -157,12 +157,12 @@ impl AudioMixer {
     pub fn assemble_frame(&mut self) {
         self.frame_size = self.output.lock().unwrap().frame_size;
 
-        let nanos_per_sample = self.nanos_per_sample();
+        let sample_duration = self.sample_duration();
         let mut data: Vec<(f32, f32)> = vec![(0.0, 0.0); self.frame_size];
 
         if self.buffer_underrun {
             self.buffer_underrun = false;
-            self.clock += nanos_per_sample * data.len() as Clock;
+            self.clock += sample_duration * data.len() as u64;
             let empty_frame = AudioFrame { data };
             self.output.lock().unwrap().add_frame(empty_frame.clone());
             self.output.lock().unwrap().add_frame(empty_frame);
@@ -189,7 +189,7 @@ impl AudioMixer {
                     },
                 };
 
-                let start = (((clock - self.clock) / nanos_per_sample) as usize).min(data.len() - 1);
+                let start = ((clock.duration_since(self.clock) / sample_duration) as usize).min(data.len() - 1);
                 let length = frame.data.len().min(data.len() - start);
 
                 data[start..start + length].iter_mut()
@@ -201,14 +201,14 @@ impl AudioMixer {
                         )
                     );
                 if length < frame.data.len() {
-                    let adjusted_clock = clock + nanos_per_sample * length as Clock;
+                    let adjusted_clock = clock + sample_duration * length as u64;
                     //println!("unpopping at clock {}, length {}", adjusted_clock, frame.data.len() - length);
                     source.unpop(adjusted_clock, AudioFrame { data: frame.data[length..].to_vec() });
                 }
                 i = start + length;
             }
         }
-        self.clock += nanos_per_sample * data.len() as Clock;
+        self.clock += sample_duration * data.len() as u64;
 
         self.output.lock().unwrap().add_frame(AudioFrame { data });
     }

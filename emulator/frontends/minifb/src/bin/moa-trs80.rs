@@ -14,7 +14,7 @@ fn main() {
         .get_matches();
 
     let mut options = Trs80Options::default();
-    if let Some(filename) = matches.value_of("rom") {
+    if let Some(filename) = matches.value_of("ROM") {
         options.rom = filename.to_string();
     }
 

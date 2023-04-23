@@ -2,7 +2,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Bus, Error, Observable, Clock, ClockElapsed, Address, Addressable, AddressRepeater, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
+use moa_core::{System, Bus, Error, Observable, ClockTime, ClockDuration, Address, Addressable, AddressRepeater, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 use moa_peripherals_mos::Mos6522;
 use moa_peripherals_zilog::Z8530;
@@ -18,7 +18,7 @@ pub struct Mainboard {
     iwm: IWM,
     via: Mos6522,
     phase_read: PhaseRead,
-    last_sec: Clock,
+    last_sec: ClockTime,
 }
 
 impl Mainboard {
@@ -38,7 +38,7 @@ impl Mainboard {
             iwm,
             via,
             phase_read,
-            last_sec: 0,
+            last_sec: ClockTime::START,
         };
 
         mainboard.via.port_a.set_observer(move |port| {
@@ -110,12 +110,12 @@ impl Addressable for Mainboard {
 }
 
 impl Steppable for Mainboard {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         let elapsed = self.via.step(system)?;
 
         // TODO should this be 1 second, or a multiple of 979_200, which is an 8th of the CPU clock
-        if self.last_sec + 1_000_000_000 > system.clock {
-            self.last_sec += 1_000_000_000;
+        if self.last_sec + ClockDuration::from_secs(1) > system.clock {
+            self.last_sec += ClockDuration::from_secs(1);
             //let port_a = self.via.port_a.borrow_mut();
             // TODO how will the ca1/ca2 cb1/cb2 pins work in the via
             system.get_interrupt_controller().set(true, 1, 25)?;

@@ -1,6 +1,6 @@
 
 use moa_core::{warn, info};
-use moa_core::{System, Error, Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable};
+use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, ControllerUpdater, HostData, ControllerDevice, ControllerEvent};
 
 
@@ -117,7 +117,7 @@ pub struct GenesisControllers {
     port_2: GenesisControllerPort,
     expansion: GenesisControllerPort,
     interrupt: HostData<bool>,
-    reset_timer: Clock,
+    reset_timer: ClockDuration,
 }
 
 impl Default for GenesisControllers {
@@ -127,7 +127,7 @@ impl Default for GenesisControllers {
             port_2: GenesisControllerPort::default(),
             expansion: GenesisControllerPort::default(),
             interrupt: HostData::new(false),
-            reset_timer: 0,
+            reset_timer: ClockDuration::ZERO,
         }
     }
 }
@@ -180,7 +180,7 @@ impl Addressable for GenesisControllers {
     }
 
     fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        self.reset_timer = 0;
+        self.reset_timer = ClockDuration::ZERO;
 
         info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
@@ -200,11 +200,11 @@ impl Addressable for GenesisControllers {
 }
 
 impl Steppable for GenesisControllers {
-    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
-        let duration = 100_000;     // Update every 100us
+    fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
+        let duration = ClockDuration::from_micros(100);     // Update every 100us
 
         self.reset_timer += duration;
-        if self.reset_timer >= 1_500_000 {
+        if self.reset_timer >= ClockDuration::from_micros(1_500) {
             self.port_1.reset_count();
             self.port_2.reset_count();
             self.expansion.reset_count();

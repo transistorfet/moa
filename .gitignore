@@ -6,6 +6,7 @@ junk/
 
 perf.data
 perf.data.old
+flamegraph*.svg
 
 binaries/*/*.asm
 binaries/*/*.bin

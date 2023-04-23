@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ClockElapsed, Address, Steppable, Addressable, Transmutable, debug};
+use moa_core::{System, Error, ClockDuration, Frequency, Address, Steppable, Addressable, Transmutable, debug};
 use moa_core::host::Tty;
 
 
@@ -147,6 +147,8 @@ impl MC68681Port {
 }
 
 pub struct MC68681 {
+    frequency: Frequency,
+
     acr: u8,
     pub port_a: MC68681Port,
     pub port_b: MC68681Port,
@@ -169,6 +171,8 @@ pub struct MC68681 {
 impl Default for MC68681 {
     fn default() -> Self {
         MC68681 {
+            frequency: Frequency::from_hz(3_686_400),
+
             acr: 0,
             port_a: MC68681Port::default(),
             port_b: MC68681Port::default(),
@@ -201,7 +205,7 @@ impl MC68681 {
 }
 
 impl Steppable for MC68681 {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         if self.port_a.check_rx()? {
             self.set_interrupt_flag(ISR_CH_A_RX_READY_FULL, true);
         }
@@ -237,7 +241,7 @@ impl Steppable for MC68681 {
             self.set_interrupt_flag(ISR_CH_B_TX_READY, true);
         }
 
-        Ok(1_000_000_000 / 3_686_400)
+        Ok(self.frequency.period_duration())
     }
 }
 

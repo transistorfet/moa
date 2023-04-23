@@ -4,13 +4,8 @@ use std::cell::RefCell;
 
 use crate::error::Error;
 use crate::system::System;
+use crate::clock::ClockDuration;
 
-
-/// The time in nanoseconds that have elapsed since the start of the simulation
-pub type Clock = u64;
-
-/// The time in nanoseconds until the `step()` method should be called again
-pub type ClockElapsed = u64;
 
 /// A universal memory address used by the Addressable trait
 pub type Address = u64;
@@ -21,7 +16,7 @@ pub type Address = u64;
 /// with any device, the `on_error()` method will be called to display any state
 /// information that might be helpful for debugging.
 pub trait Steppable {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error>;
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error>;
     fn on_error(&mut self, _system: &System) { }
 }
 
@@ -205,5 +200,13 @@ pub type TransmutableBox = Rc<RefCell<Box<dyn Transmutable>>>;
 
 pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox {
     Rc::new(RefCell::new(Box::new(value)))
+}
+
+
+#[derive(Clone)]
+pub struct Device(TransmutableBox);
+
+impl Device {
+
 }
 

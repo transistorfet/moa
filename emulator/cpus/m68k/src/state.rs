@@ -1,5 +1,5 @@
 
-use moa_core::{Address, BusPort};
+use moa_core::{Address, BusPort, Frequency};
 use moa_core::timers::CpuTimer;
 
 use crate::instructions::Size;
@@ -125,7 +125,7 @@ pub struct M68kState {
 #[derive(Clone)]
 pub struct M68k {
     pub cputype: M68kType,
-    pub frequency: u32,
+    pub frequency: Frequency,
     pub state: M68kState,
     pub decoder: M68kDecoder,
     pub timing: M68kInstructionTiming,
@@ -155,7 +155,7 @@ impl Default for M68kState {
 }
 
 impl M68k {
-    pub fn new(cputype: M68kType, frequency: u32, port: BusPort) -> M68k {
+    pub fn new(cputype: M68kType, frequency: Frequency, port: BusPort) -> M68k {
         M68k {
             cputype,
             frequency,

@@ -1,6 +1,6 @@
 
 use moa_core::debug;
-use moa_core::{System, Error, ErrorType, ClockElapsed, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
+use moa_core::{System, Error, ErrorType, ClockDuration, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
 use crate::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority, FunctionCode, MemType, MemAccess};
 use crate::instructions::{
@@ -30,7 +30,7 @@ pub enum Used {
 }
 
 impl Steppable for M68k {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         self.step_internal(system)
     }
 
@@ -62,7 +62,7 @@ impl M68k {
         self.state.status != Status::Stopped
     }
 
-    pub fn step_internal(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    pub fn step_internal(&mut self, system: &System) -> Result<ClockDuration, Error> {
         match self.state.status {
             Status::Init => self.init(),
             Status::Stopped => Err(Error::new("CPU stopped")),
@@ -73,7 +73,7 @@ impl M68k {
                     // TODO match arm conditional is temporary: illegal instructions generate a top level error in order to debug and fix issues with decode
                     //Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
                         self.exception(native as u8, false)?;
-                        Ok(4)
+                        Ok(self.frequency.period_duration() * 4)
                     },
                     Err(err) => Err(err),
                 }
@@ -81,14 +81,14 @@ impl M68k {
         }
     }
 
-    pub fn init(&mut self) -> Result<ClockElapsed, Error> {
+    pub fn init(&mut self) -> Result<ClockDuration, Error> {
         self.state.ssp = self.port.read_beu32(0)?;
         self.state.pc = self.port.read_beu32(4)?;
         self.state.status = Status::Running;
-        Ok(16)
+        Ok(self.frequency.period_duration() * 16)
     }
 
-    pub fn cycle_one(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    pub fn cycle_one(&mut self, system: &System) -> Result<ClockDuration, Error> {
         self.timer.cycle.start();
         self.decode_next()?;
         self.execute_current()?;
@@ -99,7 +99,7 @@ impl M68k {
 
         self.check_pending_interrupts(system)?;
         self.check_breakpoints(system);
-        Ok((1_000_000_000 / self.frequency as u64) * self.timing.calculate_clocks(false, 1) as ClockElapsed)
+        Ok(self.frequency.period_duration() * self.timing.calculate_clocks(false, 1) as u64)
     }
 
     pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), Error> {
@@ -115,7 +115,7 @@ impl M68k {
             let priority_mask = ((self.state.sr & Flags::IntMask as u16) >> 8) as u8;
 
             if (pending_ipl > priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
-                debug!("{} interrupt: {} @ {} ns", DEV_NAME, pending_ipl, system.clock);
+                debug!("{} interrupt: {} @ {} ns", DEV_NAME, pending_ipl, system.clock.as_duration().as_nanos());
                 self.state.current_ipl = self.state.pending_ipl;
                 let ack_num = system.get_interrupt_controller().acknowledge(self.state.current_ipl as u8)?;
                 self.exception(ack_num, true)?;

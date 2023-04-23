@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::host::traits::{BlitableSurface, ClockedQueue, WindowUpdater};
-use crate::Clock;
+use crate::ClockTime;
 use crate::Error;
 
 pub const MASK_COLOUR: u32 = 0xFFFFFFFF;
@@ -92,13 +92,13 @@ impl BlitableSurface for Frame {
         }
     }
 
-    fn blit<B: Iterator<Item = u32>>(&mut self, pos_x: u32, pos_y: u32, mut bitmap: B, width: u32, height: u32) {
+    fn blit<B: Iterator<Item = Pixel>>(&mut self, pos_x: u32, pos_y: u32, mut bitmap: B, width: u32, height: u32) {
         for y in pos_y..(pos_y + height) {
             for x in pos_x..(pos_x + width) {
                 match bitmap.next().unwrap() {
-                    MASK_COLOUR => {}
+                    Pixel::Mask => {}
                     value if x < self.width && y < self.height => {
-                        self.bitmap[(x + (y * self.width)) as usize] = value;
+                        self.bitmap[(x + (y * self.width)) as usize] = value.encode(self.encoding);
                     }
                     _ => {}
                 }
@@ -106,8 +106,8 @@ impl BlitableSurface for Frame {
         }
     }
 
-    fn clear(&mut self, value: u32) {
-        let value = if value == MASK_COLOUR { 0 } else { value };
+    fn clear(&mut self, value: Pixel) {
+        let value = value.encode(self.encoding);
         self.bitmap.iter_mut().for_each(|pixel| *pixel = value);
     }
 }
@@ -132,11 +132,11 @@ impl FrameQueue {
         *self.encoding.lock().unwrap()
     }
 
-    pub fn add(&self, clock: Clock, frame: Frame) {
+    pub fn add(&self, clock: ClockTime, frame: Frame) {
         self.queue.push(clock, frame);
     }
 
-    pub fn latest(&self) -> Option<(Clock, Frame)> {
+    pub fn latest(&self) -> Option<(ClockTime, Frame)> {
         self.queue.pop_latest()
     }
 }

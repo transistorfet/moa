@@ -1,7 +1,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, debug, warn};
+use moa_core::{System, Error, ClockDuration, Address, Addressable, Steppable, Transmutable, debug, warn};
 use moa_core::host::gfx::{Frame, FrameQueue};
 use moa_core::host::{Host, BlitableSurface, KeyboardUpdater, KeyEvent};
 
@@ -29,7 +29,7 @@ impl Model1Peripherals {
         Ok(Self {
             frame_queue,
             keyboard_mem,
-            video_mem: [0; 1024],
+            video_mem: [0x20; 1024],
         })
     }
 }
@@ -44,18 +44,18 @@ impl KeyboardUpdater for Model1KeyboardUpdater {
 }
 
 impl Steppable for Model1Peripherals {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         let mut frame = Frame::new(SCREEN_SIZE.0, SCREEN_SIZE.1, self.frame_queue.encoding());
         for y in 0..16 {
             for x in 0..64 {
                 let ch = self.video_mem[x + (y * 64)];
-                let iter = CharacterGenerator::new((ch - 0x20) % 64);
+                let iter = CharacterGenerator::new(ch.saturating_sub(0x20) % 64);
                 frame.blit((x * 6) as u32, (y * 8) as u32, iter, 6, 8);
             }
         }
         self.frame_queue.add(system.clock, frame);
 
-        Ok(16_630_000)
+        Ok(ClockDuration::from_micros(16_630))
     }
 }
 

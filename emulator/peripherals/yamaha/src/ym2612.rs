@@ -12,7 +12,7 @@ use std::num::NonZeroU8;
 use std::collections::VecDeque;
 
 use moa_core::{debug, warn};
-use moa_core::{System, Error, Clock, ClockElapsed, Address, Addressable, Steppable, Transmutable};
+use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio};
 use moa_core::host::audio::{SineWave, db_to_gain};
 
@@ -120,6 +120,8 @@ const OPERATORS: usize = 4;
 const MAX_ENVELOPE: u16 = 0xFFC;
 
 
+type EnvelopeClock = u64;
+
 #[repr(usize)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum EnvelopeState {
@@ -137,8 +139,8 @@ struct EnvelopeGenerator {
     rates: [usize; 4],
 
     envelope_state: EnvelopeState,
-    last_state_change: Clock,
-    last_envelope_clock: Clock,
+    last_state_change: ClockTime,
+    next_envelope_clock: EnvelopeClock,
     envelope: u16,
 }
 
@@ -151,8 +153,8 @@ impl EnvelopeGenerator {
             rates: [0; 4],
 
             envelope_state: EnvelopeState::Attack,
-            last_state_change: 0,
-            last_envelope_clock: 0,
+            last_state_change: ClockTime::START,
+            next_envelope_clock: 0,
             envelope: 0,
         }
     }
@@ -169,10 +171,10 @@ impl EnvelopeGenerator {
         self.rates[etype as usize] = rate;
     }
 
-    fn notify_state_change(&mut self, state: bool, envelope_clock: Clock) {
-        self.last_state_change = envelope_clock;
+    fn notify_state_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
+        //self.last_state_change = envelope_clock;
         if state {
-            self.last_envelope_clock = envelope_clock;
+            self.next_envelope_clock = envelope_clock;
             self.envelope_state = EnvelopeState::Attack;
             self.envelope = 0;
         } else {
@@ -180,14 +182,14 @@ impl EnvelopeGenerator {
         }
     }
 
-    fn update_envelope(&mut self, envelope_clock: Clock) {
-        for clock in (self.last_envelope_clock + 1)..=envelope_clock {
+    fn update_envelope(&mut self, envelope_clock: EnvelopeClock) {
+        for clock in self.next_envelope_clock..=envelope_clock {
             self.do_cycle(clock);
         }
-        self.last_envelope_clock = envelope_clock;
+        self.next_envelope_clock = envelope_clock + 1;
     }
 
-    fn do_cycle(&mut self, envelope_clock: Clock) {
+    fn do_cycle(&mut self, envelope_clock: EnvelopeClock) {
         if self.envelope_state == EnvelopeState::Decay && self.envelope >= self.sustain_level {
             self.envelope_state = EnvelopeState::Sustain;
         }
@@ -224,7 +226,7 @@ impl EnvelopeGenerator {
             self.envelope
         };
         let attenuation_10bit = (envelope + self.total_level).min(MAX_ENVELOPE);
-        envelope as f32 * 0.09375
+        attenuation_10bit as f32 * 0.09375
     }
 }
 
@@ -285,11 +287,11 @@ impl Operator {
         self.envelope.set_rate(etype, rate)
     }
 
-    fn notify_state_change(&mut self, state: bool, envelope_clock: Clock) {
+    fn notify_state_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
         self.envelope.notify_state_change(state, envelope_clock);
     }
 
-    fn get_sample(&mut self, modulator: f32, envelope_clock: Clock) -> f32 {
+    fn get_sample(&mut self, modulator: f32, envelope_clock: EnvelopeClock) -> f32 {
         self.wave.set_frequency((self.frequency * self.multiplier) + modulator);
         let sample = self.wave.next().unwrap();
 
@@ -300,9 +302,6 @@ impl Operator {
     }
 }
 
-fn rate_to_gain(rate: usize, envelope_clock: Clock) -> f32 {
-    envelope_clock as f32 * rate as f32
-}
 
 #[derive(Clone)]
 struct Channel {
@@ -339,12 +338,11 @@ impl Channel {
         }
     }
 
-    fn get_sample(&mut self, envelope_clock: Clock) -> f32 {
+    fn get_sample(&mut self, envelope_clock: EnvelopeClock) -> f32 {
         if self.on_state != self.next_on_state {
             self.on_state = self.next_on_state;
             for (i, operator) in self.operators.iter_mut().enumerate() {
                 operator.notify_state_change(((self.on_state >> i) & 0x01) != 0, envelope_clock);
-println!("notified at {}", envelope_clock);
             }
         }
 
@@ -355,7 +353,7 @@ println!("notified at {}", envelope_clock);
         }
     }
 
-    fn get_algorithm_sample(&mut self, envelope_clock: Clock) -> f32 {
+    fn get_algorithm_sample(&mut self, envelope_clock: EnvelopeClock) -> f32 {
         match self.algorithm {
             OperatorAlgorithm::A0 => {
                 let modulator0 = self.operators[0].get_sample(0.0, envelope_clock);
@@ -441,8 +439,8 @@ pub struct Ym2612 {
     selected_reg_0: Option<NonZeroU8>,
     selected_reg_1: Option<NonZeroU8>,
 
-    clock_frequency: u32,
-    envelope_clock_period: ClockElapsed,
+    clock_frequency: Frequency,
+    envelope_clock_period: ClockDuration,
     channels: Vec<Channel>,
     channel_frequencies: [(u8, u16); CHANNELS],
     dac: Dac,
@@ -461,7 +459,7 @@ pub struct Ym2612 {
 }
 
 impl Ym2612 {
-    pub fn create<H: Host>(host: &mut H, clock_frequency: u32) -> Result<Self, Error> {
+    pub fn create<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
         let source = host.create_audio_source()?;
         let sample_rate = source.samples_per_second();
         Ok(Self {
@@ -470,7 +468,7 @@ impl Ym2612 {
             selected_reg_1: None,
 
             clock_frequency,
-            envelope_clock_period: 351 * 1_000_000_000 / clock_frequency as ClockElapsed,  //3 * 144 * 1_000_000_000 / clock_frequency as ClockElapsed,
+            envelope_clock_period: clock_frequency.period_duration() * 351,  //3 * 144 * 1_000_000_000 / clock_frequency as ClockDuration,
             channels: (0..CHANNELS).map(|i| Channel::new(format!("ch {}", i), sample_rate)).collect(),
             channel_frequencies: [(0, 0); CHANNELS],
 
@@ -492,16 +490,16 @@ impl Ym2612 {
 }
 
 impl Steppable for Ym2612 {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         let rate = self.source.samples_per_second();
         let available = self.source.space_available();
         let samples = if available < rate / 1000 { available } else { rate / 1000 };
-        let nanos_per_sample = 1_000_000_000 / rate;
+        let sample_duration = ClockDuration::from_secs(1) / rate as u64;
 
         //if self.source.space_available() >= samples {
             let mut buffer = vec![0.0; samples];
             for (i, buffered_sample) in buffer.iter_mut().enumerate().take(samples) {
-                let envelope_clock = (system.clock + (i * nanos_per_sample) as Clock) / self.envelope_clock_period;
+                let envelope_clock = (system.clock.as_duration() + (sample_duration * i as u64)) / self.envelope_clock_period;
                 let mut sample = 0.0;
 
                 for ch in 0..(CHANNELS - 1) {
@@ -519,7 +517,7 @@ impl Steppable for Ym2612 {
             self.source.write_samples(system.clock, &buffer);
         //}
 
-        Ok(1_000_000)          // Every 1ms of simulated time
+        Ok(ClockDuration::from_millis(1))          // Every 1ms of simulated time
     }
 }
 
@@ -554,7 +552,6 @@ impl Ym2612 {
                         return;
                     },
                 };
-println!("ch {} is {}", ch, if data >> 4 != 0 { "on" } else { "off" });
                 self.channels[ch].next_on_state = data >> 4;
             },
 

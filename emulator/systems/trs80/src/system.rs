@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, MemoryBlock, BusPort, wrap_transmutable};
+use moa_core::{System, Error, Frequency, MemoryBlock, BusPort, wrap_transmutable};
 use moa_core::host::Host;
 
 use moa_z80::{Z80, Z80Type};
@@ -10,7 +10,7 @@ use crate::peripherals::model1::Model1Peripherals;
 pub struct Trs80Options {
     pub rom: String,
     pub memory: u16,
-    pub frequency: u32,
+    pub frequency: Frequency,
 }
 
 impl Default for Trs80Options {
@@ -18,7 +18,7 @@ impl Default for Trs80Options {
         Self {
             rom: "binaries/trs80/level2.rom".to_string(),
             memory: 0xC000,
-            frequency: 1_774_000,
+            frequency: Frequency::from_hz(1_774_000),
         }
     }
 }

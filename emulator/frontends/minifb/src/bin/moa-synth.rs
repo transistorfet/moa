@@ -3,9 +3,9 @@ use std::sync::mpsc;
 
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
-use moa_core::host::gfx::{Frame, FrameQueue};
+use moa_core::host::gfx::{Frame, FrameQueue, PixelEncoding};
 use moa_core::host::{Host, WindowUpdater, KeyboardUpdater, Key, KeyEvent /*, MouseUpdater, MouseState, MouseEvent*/};
-use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
+use moa_core::{System, Error, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 
 pub struct SynthControlsUpdater(mpsc::Sender<KeyEvent>);
@@ -37,7 +37,7 @@ impl SynthControl {
 }
 
 impl Steppable for SynthControl {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         if let Ok(event) = self.receiver.try_recv() {
 
             match event.key {
@@ -57,10 +57,10 @@ impl Steppable for SynthControl {
         }
 
         let size = self.queue.max_size();
-        let frame = Frame::new(size.0, size.1);
+        let frame = Frame::new(size.0, size.1, PixelEncoding::RGBA);
         self.queue.add(system.clock, frame);
 
-        Ok(33_000_000)
+        Ok(ClockDuration::from_millis(1))
     }
 }
 
@@ -104,11 +104,11 @@ fn main() {
         let control = wrap_transmutable(SynthControl::new(queue.clone(), receiver));
         system.add_device("control", control)?;
 
-        let ym_sound = wrap_transmutable(Ym2612::create(host)?);
+        let ym_sound = wrap_transmutable(Ym2612::create(host, Frequency::from_hz(7_670_454))?);
         initialize_ym(ym_sound.clone())?;
         system.add_addressable_device(0x00, ym_sound)?;
 
-        let sn_sound = wrap_transmutable(Sn76489::create(host)?);
+        let sn_sound = wrap_transmutable(Sn76489::create(host, Frequency::from_hz(3_579_545))?);
         system.add_addressable_device(0x10, sn_sound)?;
 
         host.add_window(Box::new(queue))?;

@@ -7,7 +7,7 @@ use winit::dpi::LogicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
-use moa_core::{Clock, System};
+use moa_core::{ClockDuration, System};
 
 use crate::settings;
 use crate::frontend::{self, PixelsFrontend, LoadSystemFn};
@@ -90,7 +90,7 @@ pub fn load_system(handle: &mut HostHandle, load: LoadSystemFnHandle) -> SystemH
 #[wasm_bindgen]
 pub fn run_system_for(handle: &mut SystemHandle, nanos: u32) -> usize {
     let run_timer = Instant::now();
-    let nanoseconds_per_frame = nanos as Clock;
+    let nanoseconds_per_frame = ClockDuration::from_nanos(nanos as u64);
     //let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as Clock;
     if let Err(err) = handle.0.run_for(nanoseconds_per_frame) {
         log::error!("{:?}", err);

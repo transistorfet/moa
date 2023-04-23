@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, info, warn};
+use moa_core::{System, Error, ClockDuration, Address, Addressable, Steppable, Transmutable, info, warn};
 
 
 //const CA0: u8           = 0x01;
@@ -94,9 +94,9 @@ impl Addressable for IWM {
 }
 
 impl Steppable for IWM {
-    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
         // TODO implement
-        Ok(1_000_000_000)
+        Ok(ClockDuration::from_secs(1))
     }
 }
 

@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, Debuggable, MemoryBlock, BusPort, wrap_transmutable};
+use moa_core::{System, Error, Frequency, Debuggable, MemoryBlock, BusPort, wrap_transmutable};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -27,7 +27,7 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
-    let mut cpu = M68k::new(M68kType::MC68010, 10_000_000, BusPort::new(0, 24, 16, system.bus.clone()));
+    let mut cpu = M68k::new(M68kType::MC68010, Frequency::from_hz(10_000_000), BusPort::new(0, 24, 16, system.bus.clone()));
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);
@@ -65,7 +65,7 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
-    let cpu = M68k::new(M68kType::MC68030, 10_000_000, BusPort::new(0, 32, 32, system.bus.clone()));
+    let cpu = M68k::new(M68kType::MC68030, Frequency::from_hz(10_000_000), BusPort::new(0, 32, 32, system.bus.clone()));
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
-use moa_core::{System, Error};
+use moa_core::{System, Error, ClockDuration};
 use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice};
 use moa_core::host::gfx::{PixelEncoding, Frame};
 
@@ -257,22 +257,23 @@ impl MiniFrontend {
 
         // Limit to max ~60 fps update rate
         window.limit_update_rate(Some(Duration::from_micros(16600)));
+        //let nanoseconds_per_frame = (16_600_000 as f32 * speed) as u64;
 
         let mut update_timer = Instant::now();
         let mut last_frame = Frame::new(size.0, size.1, PixelEncoding::ARGB);
         while window.is_open() && !window.is_key_down(Key::Escape) {
             let frame_time = update_timer.elapsed();
             update_timer = Instant::now();
-            //println!("new frame after {:?}us", frame_time.as_micros());
+            println!("new frame after {:?}us", frame_time.as_micros());
 
-            //let run_timer = Instant::now();
+            let run_timer = Instant::now();
             if let Some(system) = system.as_mut() {
                 //system.run_for(nanoseconds_per_frame).unwrap();
-                system.run_for((frame_time.as_nanos() as f32 * speed) as u64).unwrap();
+                system.run_for(ClockDuration::from_nanos((frame_time.as_nanos() as f32 * speed) as u64)).unwrap();
                 //system.run_until_break().unwrap();
             }
-            //let sim_time = run_timer.elapsed().as_micros();
-            //println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_micros(), sim_time, frame_time.as_micros() as f64 / sim_time as f64);
+            let sim_time = run_timer.elapsed().as_micros();
+            println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_micros(), sim_time, frame_time.as_micros() as f64 / sim_time as f64);
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::No) {
                 for key in keys {

@@ -3,7 +3,7 @@ use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Error, Signal, MemoryBlock, Bus, BusPort, Address, Addressable, Debuggable, wrap_transmutable};
+use moa_core::{System, Error, Frequency, Signal, MemoryBlock, Bus, BusPort, Address, Addressable, Debuggable, wrap_transmutable};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -70,8 +70,8 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     // Build the Coprocessor's Bus
     let bank_register = Signal::new(0);
     let coproc_ram = wrap_transmutable(MemoryBlock::new(vec![0; 0x00002000]));
-    let coproc_ym_sound = wrap_transmutable(Ym2612::create(host, 7_670_454)?);
-    let coproc_sn_sound = wrap_transmutable(Sn76489::create(host, 3_579_545)?);
+    let coproc_ym_sound = wrap_transmutable(Ym2612::create(host, Frequency::from_hz(7_670_454))?);
+    let coproc_sn_sound = wrap_transmutable(Sn76489::create(host, Frequency::from_hz(3_579_545))?);
     let coproc_register = wrap_transmutable(CoprocessorBankRegister::new(bank_register.clone()));
     let coproc_area = wrap_transmutable(CoprocessorBankArea::new(bank_register, system.bus.clone()));
 
@@ -82,7 +82,7 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     coproc_bus.borrow_mut().insert(0x6000, coproc_register.clone());
     coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
     coproc_bus.borrow_mut().insert(0x8000, coproc_area);
-    let mut coproc = Z80::new(Z80Type::Z80, 3_579_545, BusPort::new(0, 16, 8, coproc_bus));
+    let mut coproc = Z80::new(Z80Type::Z80, Frequency::from_hz(3_579_545), BusPort::new(0, 16, 8, coproc_bus));
     coproc.set_debugging(true);
     let mut reset = coproc.reset.clone();
     let mut bus_request = coproc.bus_request.clone();
@@ -109,7 +109,7 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     system.break_signal = Some(vdp.frame_complete.clone());
     system.add_peripheral("vdp", 0x00c00000, wrap_transmutable(vdp)).unwrap();
 
-    let cpu = M68k::new(M68kType::MC68000, 7_670_454, BusPort::new(0, 24, 16, system.bus.clone()));
+    let cpu = M68k::new(M68kType::MC68000, Frequency::from_hz(7_670_454), BusPort::new(0, 24, 16, system.bus.clone()));
     system.add_interruptable_device("cpu", wrap_transmutable(cpu)).unwrap();
 
     Ok(system)

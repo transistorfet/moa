@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ClockElapsed, Address, Addressable, Steppable, Transmutable, warn, debug};
+use moa_core::{System, Error, ClockDuration, Address, Addressable, Steppable, Transmutable, warn, debug};
 
 const DEV_NAME: &str = "z8530";
 
@@ -27,9 +27,9 @@ impl Addressable for Z8530 {
 }
 
 impl Steppable for Z8530 {
-    fn step(&mut self, _system: &System) -> Result<ClockElapsed, Error> {
+    fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
 
-        Ok(1_000_000_000)
+        Ok(ClockDuration::from_secs(1))
     }
 }
 

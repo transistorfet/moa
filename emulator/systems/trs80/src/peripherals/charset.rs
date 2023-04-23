@@ -650,6 +650,7 @@ const CHARACTERS: [[u8; 8]; 64] = [
 ];
 
 
+use moa_core::host::gfx::Pixel;
 
 pub struct CharacterGenerator {
     pub row: i8,
@@ -668,7 +669,7 @@ impl CharacterGenerator {
 }
 
 impl Iterator for CharacterGenerator {
-    type Item = u32;
+    type Item = Pixel;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.row >= 8 {
@@ -683,9 +684,9 @@ impl Iterator for CharacterGenerator {
             }
 
             if bit {
-                Some(0xC0C0C0)
+                Some(Pixel::Rgb(0xC0, 0xC0, 0xC0))
             } else {
-                Some(0)
+                Some(Pixel::Rgb(0, 0, 0))
             }
         }
     }

@@ -8,11 +8,12 @@ use crate::debugger::Debugger;
 use crate::signals::EdgeSignal;
 use crate::error::{Error, ErrorType};
 use crate::interrupts::InterruptController;
-use crate::devices::{Clock, ClockElapsed, Address, TransmutableBox};
+use crate::clock::{ClockTime, ClockDuration};
+use crate::devices::{Address, TransmutableBox};
 
 
 pub struct System {
-    pub clock: Clock,
+    pub clock: ClockTime,
     pub devices: HashMap<String, TransmutableBox>,
     pub event_queue: Vec<NextStep>,
 
@@ -28,7 +29,7 @@ pub struct System {
 impl Default for System {
     fn default() -> Self {
         Self {
-            clock: 0,
+            clock: ClockTime::START,
             devices: HashMap::new(),
             event_queue: vec![],
 
@@ -125,7 +126,7 @@ impl System {
         Ok(())
     }
 
-    pub fn run_for(&mut self, elapsed: ClockElapsed) -> Result<(), Error> {
+    pub fn run_for(&mut self, elapsed: ClockDuration) -> Result<(), Error> {
         let target = self.clock + elapsed;
 
         while self.clock < target {
@@ -147,7 +148,7 @@ impl System {
     }
 
     pub fn run_loop(&mut self) {
-        self.run_for(u64::MAX).unwrap();
+        self.run_for(ClockDuration::from_nanos(u64::MAX)).unwrap();
     }
 
     pub fn exit_error(&mut self) {
@@ -188,14 +189,14 @@ impl System {
 
 
 pub struct NextStep {
-    pub next_clock: Clock,
+    pub next_clock: ClockTime,
     pub device: TransmutableBox,
 }
 
 impl NextStep {
     pub fn new(device: TransmutableBox) -> Self {
         Self {
-            next_clock: 0,
+            next_clock: ClockTime::START,
             device,
         }
     }

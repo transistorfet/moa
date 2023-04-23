@@ -1,5 +1,5 @@
 
-use moa_core::{Address, BusPort, Signal};
+use moa_core::{Address, BusPort, Signal, Frequency};
 
 use crate::decode::Z80Decoder;
 use crate::debugger::Z80Debugger;
@@ -106,7 +106,7 @@ impl Z80State {
 
 pub struct Z80 {
     pub cputype: Z80Type,
-    pub frequency: u32,
+    pub frequency: Frequency,
     pub state: Z80State,
     pub decoder: Z80Decoder,
     pub debugger: Z80Debugger,
@@ -116,7 +116,7 @@ pub struct Z80 {
 }
 
 impl Z80 {
-    pub fn new(cputype: Z80Type, frequency: u32, port: BusPort) -> Self {
+    pub fn new(cputype: Z80Type, frequency: Frequency, port: BusPort) -> Self {
         Self {
             cputype,
             frequency,
