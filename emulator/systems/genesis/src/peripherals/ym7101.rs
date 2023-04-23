@@ -276,6 +276,7 @@ enum ColourMode {
     Highlight,
 }
 
+/*
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Scroll {
     ScrollA,
@@ -290,6 +291,7 @@ enum Priority {
     ScrollB,
     Background,
 }
+*/
 
 struct Ym7101State {
     status: u16,

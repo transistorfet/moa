@@ -105,13 +105,19 @@ impl ClockDuration {
     }
 
     #[inline]
-    pub fn checked_add(self, rhs: Self) -> Option<Self> {
-        self.femtos.checked_add(rhs.femtos).map(Self::from_femtos)
+    pub const fn checked_add(self, rhs: Self) -> Option<Self> {
+        match self.femtos.checked_add(rhs.femtos) {
+            Some(femtos) => Some(Self::from_femtos(femtos)),
+            None => None,
+        }
     }
 
     #[inline]
-    pub fn checked_sub(self, rhs: Self) -> Option<Self> {
-        self.femtos.checked_sub(rhs.femtos).map(Self::from_femtos)
+    pub const fn checked_sub(self, rhs: Self) -> Option<Self> {
+        match self.femtos.checked_sub(rhs.femtos) {
+            Some(femtos) => Some(Self::from_femtos(femtos)),
+            None => None,
+        }
     }
 }
 
@@ -119,13 +125,13 @@ impl Add for ClockDuration {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        self.checked_add(rhs).expect("clock duration overflow")
+        self.checked_add(rhs).expect("clock duration overflow during addition")
     }
 }
 
 impl AddAssign for ClockDuration {
     fn add_assign(&mut self, rhs: Self) {
-        *self = self.checked_add(rhs).expect("clock duration overflow");
+        *self = *self + rhs;
     }
 }
 
@@ -133,13 +139,13 @@ impl Sub for ClockDuration {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        self.checked_sub(rhs).expect("clock duration overflow")
+        self.checked_sub(rhs).expect("clock duration overflow during subtraction")
     }
 }
 
 impl SubAssign for ClockDuration {
     fn sub_assign(&mut self, rhs: Self) {
-        *self = self.checked_sub(rhs).expect("clock duration overflow");
+        *self = *self - rhs;
     }
 }
 
@@ -191,12 +197,22 @@ pub struct ClockTime(ClockDuration);
 impl ClockTime {
     pub const START: Self = Self(ClockDuration::ZERO);
 
+    #[inline]
     pub const fn as_duration(self) -> ClockDuration {
         self.0
     }
 
+    #[inline]
     pub fn duration_since(self, other: Self) -> ClockDuration {
         self.0 - other.0
+    }
+
+    #[inline]
+    pub const fn checked_add(self, duration: ClockDuration) -> Option<Self> {
+        match self.0.checked_add(duration) {
+            Some(duration) => Some(Self(duration)),
+            None => None,
+        }
     }
 }
 

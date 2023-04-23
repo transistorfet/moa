@@ -133,6 +133,7 @@ enum EnvelopeState {
 
 #[derive(Clone)]
 struct EnvelopeGenerator {
+    #[allow(dead_code)]
     debug_name: String,
     total_level: u16,
     sustain_level: u16,
@@ -245,6 +246,7 @@ enum OperatorAlgorithm {
 
 #[derive(Clone)]
 struct Operator {
+    #[allow(dead_code)]
     debug_name: String,
     wave: SineWave,
     frequency: f32,
@@ -265,10 +267,6 @@ impl Operator {
 
     fn set_frequency(&mut self, frequency: f32) {
         self.frequency = frequency;
-    }
-
-    fn reset(&mut self) {
-        self.wave.reset();
     }
 
     fn set_multiplier(&mut self, _frequency: f32, multiplier: f32) {
@@ -305,6 +303,7 @@ impl Operator {
 
 #[derive(Clone)]
 struct Channel {
+    #[allow(dead_code)]
     debug_name: String,
     operators: Vec<Operator>,
     on_state: u8,
@@ -329,12 +328,6 @@ impl Channel {
         self.base_frequency = frequency;
         for operator in self.operators.iter_mut() {
             operator.set_frequency(frequency);
-        }
-    }
-
-    fn reset(&mut self) {
-        for operator in self.operators.iter_mut() {
-            operator.reset();
         }
     }
 
@@ -468,7 +461,7 @@ impl Ym2612 {
             selected_reg_1: None,
 
             clock_frequency,
-            envelope_clock_period: clock_frequency.period_duration() * 351,  //3 * 144 * 1_000_000_000 / clock_frequency as ClockDuration,
+            envelope_clock_period: clock_frequency.period_duration() * 351,
             channels: (0..CHANNELS).map(|i| Channel::new(format!("ch {}", i), sample_rate)).collect(),
             channel_frequencies: [(0, 0); CHANNELS],
 
@@ -590,8 +583,7 @@ impl Ym2612 {
                 || is_reg_range(reg, 0x80)
                 || is_reg_range(reg, 0x90)
             => {
-                let (ch, op) = get_ch_op(bank, reg);
-                self.update_rates(ch, op);
+                self.update_rates(bank, reg & 0x0F);
             },
 
             reg if (0xA0..=0xA2).contains(&reg) => {
@@ -630,8 +622,9 @@ impl Ym2612 {
         }
     }
 
-    fn update_rates(&mut self, ch: usize, op: usize) {
-        let index = get_index(ch, op);
+    fn update_rates(&mut self, bank: u8, reg: u8) {
+        let index = bank as usize * 256 + reg as usize;
+        let (ch, op) = get_ch_op(bank, reg);
         let keycode = self.registers[0xA0 + get_ch_index(ch)] >> 1;
         let rate_scaling = self.registers[0x50 + index] & 0xC0 >> 6;
         let attack_rate = self.registers[0x50 + index] & 0x1F;
@@ -681,12 +674,6 @@ fn get_ch_op(bank: u8, reg: u8) -> (usize, usize) {
     let ch = ((reg as usize) & 0x03) + ((bank as usize) * 3);
     let op = ((reg as usize) & 0x0C) >> 2;
     (ch, op)
-}
-
-#[inline]
-fn get_index(ch: usize, op: usize) -> usize {
-    let (bank, ch_l) = if ch < 3 { (0, ch) } else { (1, ch - 3) };
-    (bank << 8) | op << 2 | ch
 }
 
 #[inline]

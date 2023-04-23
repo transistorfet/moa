@@ -264,16 +264,16 @@ impl MiniFrontend {
         while window.is_open() && !window.is_key_down(Key::Escape) {
             let frame_time = update_timer.elapsed();
             update_timer = Instant::now();
-            println!("new frame after {:?}us", frame_time.as_micros());
+            //println!("new frame after {:?}us", frame_time.as_micros());
 
-            let run_timer = Instant::now();
+            //let run_timer = Instant::now();
             if let Some(system) = system.as_mut() {
                 //system.run_for(nanoseconds_per_frame).unwrap();
                 system.run_for(ClockDuration::from_nanos((frame_time.as_nanos() as f32 * speed) as u64)).unwrap();
                 //system.run_until_break().unwrap();
             }
-            let sim_time = run_timer.elapsed().as_micros();
-            println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_micros(), sim_time, frame_time.as_micros() as f64 / sim_time as f64);
+            //let sim_time = run_timer.elapsed().as_micros();
+            //println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_micros(), sim_time, frame_time.as_micros() as f64 / sim_time as f64);
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::No) {
                 for key in keys {

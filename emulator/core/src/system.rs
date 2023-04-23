@@ -95,7 +95,7 @@ impl System {
         self.clock = event_device.next_clock;
         let result = match event_device.device.borrow_mut().as_steppable().unwrap().step(self) {
             Ok(diff) => {
-                event_device.next_clock = self.clock + diff;
+                event_device.next_clock = self.clock.checked_add(diff).unwrap();
                 Ok(())
             },
             Err(err) => Err(err),

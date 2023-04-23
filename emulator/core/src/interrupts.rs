@@ -1,6 +1,5 @@
 
 use crate::error::Error;
-use crate::devices::TransmutableBox;
 
 
 pub struct InterruptController {
