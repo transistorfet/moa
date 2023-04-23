@@ -115,9 +115,9 @@ const RATE_TABLE: &[u16] = &[
 
 const DEV_NAME: &str = "ym2612";
 
-const CHANNELS: usize = 8;
+const CHANNELS: usize = 6;
+const OPERATORS: usize = 4;
 const MAX_ENVELOPE: u16 = 0xFFC;
-const SSG_CENTER: u16 = 0x800;
 
 
 #[repr(usize)]
@@ -132,7 +132,7 @@ enum EnvelopeState {
 #[derive(Clone)]
 struct EnvelopeGenerator {
     debug_name: String,
-    total_level: f32,
+    total_level: u16,
     sustain_level: u16,
     rates: [usize; 4],
 
@@ -146,7 +146,7 @@ impl EnvelopeGenerator {
     fn new(debug_name: String) -> Self {
         Self {
             debug_name,
-            total_level: 0.0,
+            total_level: 0,
             sustain_level: 0,
             rates: [0; 4],
 
@@ -157,8 +157,8 @@ impl EnvelopeGenerator {
         }
     }
 
-    fn set_total_level(&mut self, db: f32) {
-        self.total_level = db_to_gain(db);
+    fn set_total_level(&mut self, level: u16) {
+        self.total_level = level;
     }
 
     fn set_sustain_level(&mut self, level: u16) {
@@ -172,6 +172,7 @@ impl EnvelopeGenerator {
     fn notify_state_change(&mut self, state: bool, envelope_clock: Clock) {
         self.last_state_change = envelope_clock;
         if state {
+            self.last_envelope_clock = envelope_clock;
             self.envelope_state = EnvelopeState::Attack;
             self.envelope = 0;
         } else {
@@ -180,7 +181,7 @@ impl EnvelopeGenerator {
     }
 
     fn update_envelope(&mut self, envelope_clock: Clock) {
-        for clock in self.last_envelope_clock..=envelope_clock {
+        for clock in (self.last_envelope_clock + 1)..=envelope_clock {
             self.do_cycle(clock);
         }
         self.last_envelope_clock = envelope_clock;
@@ -218,10 +219,11 @@ impl EnvelopeGenerator {
 
     fn get_db_at(&mut self) -> f32 {
         let envelope = if self.envelope_state == EnvelopeState::Attack {
-            !self.envelope
+            !self.envelope & 0x3FF
         } else {
             self.envelope
         };
+        let attenuation_10bit = (envelope + self.total_level).min(MAX_ENVELOPE);
         envelope as f32 * 0.09375
     }
 }
@@ -271,8 +273,8 @@ impl Operator {
         self.multiplier = multiplier;
     }
 
-    fn set_total_level(&mut self, db: f32) {
-        self.envelope.set_total_level(db)
+    fn set_total_level(&mut self, level: u16) {
+        self.envelope.set_total_level(level)
     }
 
     fn set_sustain_level(&mut self, level: u16) {
@@ -284,7 +286,7 @@ impl Operator {
     }
 
     fn notify_state_change(&mut self, state: bool, envelope_clock: Clock) {
-        self.envelope.notify_state_change(state, envelope_clock)
+        self.envelope.notify_state_change(state, envelope_clock);
     }
 
     fn get_sample(&mut self, modulator: f32, envelope_clock: Clock) -> f32 {
@@ -293,7 +295,6 @@ impl Operator {
 
         self.envelope.update_envelope(envelope_clock);
         let gain = db_to_gain(self.envelope.get_db_at());
-        //let gain = self.envelope.total_level;
 
         sample / gain
     }
@@ -317,7 +318,7 @@ impl Channel {
     fn new(debug_name: String, sample_rate: usize) -> Self {
         Self {
             debug_name: debug_name.clone(),
-            operators: (0..4).map(|i| Operator::new(format!("{}, op {}", debug_name, i), sample_rate)).collect(),
+            operators: (0..OPERATORS).map(|i| Operator::new(format!("{}, op {}", debug_name, i), sample_rate)).collect(),
             on_state: 0,
             next_on_state: 0,
             base_frequency: 0.0,
@@ -343,6 +344,7 @@ impl Channel {
             self.on_state = self.next_on_state;
             for (i, operator) in self.operators.iter_mut().enumerate() {
                 operator.notify_state_change(((self.on_state >> i) & 0x01) != 0, envelope_clock);
+println!("notified at {}", envelope_clock);
             }
         }
 
@@ -469,7 +471,7 @@ impl Ym2612 {
 
             clock_frequency,
             envelope_clock_period: 351 * 1_000_000_000 / clock_frequency as ClockElapsed,  //3 * 144 * 1_000_000_000 / clock_frequency as ClockElapsed,
-            channels: (0..6).map(|i| Channel::new(format!("ch {}", i), sample_rate)).collect(),
+            channels: (0..CHANNELS).map(|i| Channel::new(format!("ch {}", i), sample_rate)).collect(),
             channel_frequencies: [(0, 0); CHANNELS],
 
             dac: Dac::default(),
@@ -502,14 +504,14 @@ impl Steppable for Ym2612 {
                 let envelope_clock = (system.clock + (i * nanos_per_sample) as Clock) / self.envelope_clock_period;
                 let mut sample = 0.0;
 
-                for ch in 0..5 {
+                for ch in 0..(CHANNELS - 1) {
                     sample += self.channels[ch].get_sample(envelope_clock);
                 }
 
                 if self.dac.enabled {
                     sample += self.dac.get_sample();
                 } else {
-                    sample += self.channels[5].get_sample(envelope_clock);
+                    sample += self.channels[CHANNELS - 1].get_sample(envelope_clock);
                 }
 
                 *buffered_sample = sample.clamp(-1.0, 1.0);
@@ -552,8 +554,8 @@ impl Ym2612 {
                         return;
                     },
                 };
+println!("ch {} is {}", ch, if data >> 4 != 0 { "on" } else { "off" });
                 self.channels[ch].next_on_state = data >> 4;
-                self.channels[ch].reset();
             },
 
             0x2a => {
@@ -578,8 +580,11 @@ impl Ym2612 {
 
             reg if is_reg_range(reg, 0x40) => {
                 let (ch, op) = get_ch_op(bank, reg);
-                // 0-127 is the attenuation, where 0 is the highest volume and 127 is the lowest, in 0.75 dB intervals
-                self.channels[ch].operators[op].set_total_level((data & 0x7F) as f32 * 0.75);
+                // The total level (attenuation) is 0-127, where 0 is the highest volume and 127
+                // is the lowest, in 0.75 dB intervals.  The 7-bit value is multiplied by 8 to
+                // convert it to a 10-bit attenuation for the envelope generator, which is an
+                // attenuation value in 0.09375 dB intervals
+                self.channels[ch].operators[op].set_total_level((data & 0x7F) as u16 * 8);
             },
 
             reg if is_reg_range(reg, 0x50)
