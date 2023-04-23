@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 
 use moa_core::Error;
-use moa_core::parser::{self, AssemblyLine, AssemblyOperand, AssemblyParser};
+use moa_parsing::{self as parser, AssemblyLine, AssemblyOperand, AssemblyParser};
 
 use super::state::M68kType;
 use super::instructions::Size;

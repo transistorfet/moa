@@ -2,7 +2,7 @@
 use std::str::Chars;
 use std::iter::Peekable;
 
-use crate::error::Error;
+use moa_core::Error;
 
 
 #[derive(Debug)]
