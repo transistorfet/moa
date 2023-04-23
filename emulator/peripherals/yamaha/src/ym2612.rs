@@ -1,3 +1,12 @@
+/// Emulate the YM2612 FM Sound Synthesizer (used by the Sega Genesis)
+///
+/// This implementation is mostly based on online references to the YM2612's registers and their
+/// function, forum posts that describe the details of operation of the chip, and looking at
+/// source code that emulates the chip.  It is still very much a work in progress
+///
+/// Resources:
+/// - Registers: https://www.smspower.org/maxim/Documents/YM2612
+/// - Envelope and rates: http://gendev.spritesmind.net/forum/viewtopic.php?p=5716#5716
 
 use std::num::NonZeroU8;
 use std::collections::VecDeque;
@@ -7,16 +16,214 @@ use moa_core::{System, Error, Clock, ClockElapsed, Address, Addressable, Steppab
 use moa_core::host::{Host, Audio};
 use moa_core::host::audio::{SineWave, db_to_gain};
 
+
+/// Table of shift values for each possible rate angle
+///
+/// The value here is used to shift a bit to get the number of global cycles between each increment
+/// of the envelope attenuation, based on the rate that's currently active
+const COUNTER_SHIFT_VALUES: &[u16] = &[
+    11, 11, 11, 11,
+    10, 10, 10, 10,
+     9,  9,  9,  9,
+     8,  8,  8,  8,
+     7,  7,  7,  7,
+     6,  6,  6,  6,
+     5,  5,  5,  5,
+     4,  4,  4,  4,
+     3,  3,  3,  3,
+     2,  2,  2,  2,
+     1,  1,  1,  1,
+     0,  0,  0,  0,
+     0,  0,  0,  0,
+     0,  0,  0,  0,
+     0,  0,  0,  0,
+     0,  0,  0,  0,
+];
+
+/// Table of attenuation increments for each possible rate angle
+///
+/// The envelope rates (Attack, Decay, Sustain, and Release) are expressed as an "angle" rather
+/// than attenuation, and the values will always be below 64.  This table maps each of the 64
+/// possible angle values to a sequence of 8 cycles, and the amount to increment the attenuation
+/// at each point in that cycle
+const RATE_TABLE: &[u16] = &[
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    0, 1, 0, 1, 0, 1, 0, 1,
+    0, 1, 0, 1, 1, 1, 0, 1,
+    0, 1, 1, 1, 0, 1, 1, 1,
+    0, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 2, 1, 1, 1, 2,
+    1, 2, 1, 2, 1, 2, 1, 2,
+    1, 2, 2, 2, 1, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 4, 2, 2, 2, 4,
+    2, 4, 2, 4, 2, 4, 2, 4,
+    2, 4, 4, 4, 2, 4, 4, 4,
+    4, 4, 4, 4, 4, 4, 4, 4,
+    4, 4, 4, 8, 4, 4, 4, 8,
+    4, 8, 4, 8, 4, 8, 4, 8,
+    4, 8, 8, 8, 4, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8,
+];
+
 const DEV_NAME: &str = "ym2612";
 
 const CHANNELS: usize = 8;
+const MAX_ENVELOPE: u16 = 0xFFC;
+const SSG_CENTER: u16 = 0x800;
 
-#[derive(Copy, Clone, Debug)]
+
+#[repr(usize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum EnvelopeState {
     Attack,
-    Decay1,
-    Decay2,
+    Decay,
+    Sustain,
     Release,
+}
+
+#[derive(Clone)]
+struct EnvelopeGenerator {
+    debug_name: String,
+    total_level: f32,
+    sustain_level: u16,
+    rates: [usize; 4],
+
+    envelope_state: EnvelopeState,
+    last_state_change: Clock,
+    last_envelope_clock: Clock,
+    envelope: u16,
+}
+
+impl EnvelopeGenerator {
+    fn new(debug_name: String) -> Self {
+        Self {
+            debug_name,
+            total_level: 0.0,
+            sustain_level: 0,
+            rates: [0; 4],
+
+            envelope_state: EnvelopeState::Attack,
+            last_state_change: 0,
+            last_envelope_clock: 0,
+            envelope: 0,
+        }
+    }
+
+    fn set_total_level(&mut self, db: f32) {
+        self.total_level = db_to_gain(db);
+    }
+
+    fn set_sustain_level(&mut self, level: u16) {
+        self.sustain_level = level;
+    }
+
+    fn set_rate(&mut self, etype: EnvelopeState, rate: usize) {
+        self.rates[etype as usize] = rate;
+    }
+
+    fn notify_state_change(&mut self, state: bool, envelope_clock: Clock) {
+        self.last_state_change = envelope_clock;
+        if state {
+            self.envelope_state = EnvelopeState::Attack;
+            self.envelope = 0;
+        } else {
+            self.envelope_state = EnvelopeState::Release;
+        }
+    }
+
+    fn update_envelope(&mut self, envelope_clock: Clock) {
+        for clock in self.last_envelope_clock..=envelope_clock {
+            self.do_cycle(clock);
+        }
+        self.last_envelope_clock = envelope_clock;
+    }
+
+    fn do_cycle(&mut self, envelope_clock: Clock) {
+        if self.envelope_state == EnvelopeState::Decay && self.envelope >= self.sustain_level {
+            self.envelope_state = EnvelopeState::Sustain;
+        }
+
+        let rate = self.rates[self.envelope_state as usize];
+        let counter_shift = COUNTER_SHIFT_VALUES[rate];
+        if envelope_clock % (1 << counter_shift) == 0 {
+            let update_cycle = (envelope_clock >> counter_shift) & 0x07;
+            let increment = RATE_TABLE[rate * 8 + update_cycle as usize];
+
+            match self.envelope_state {
+                EnvelopeState::Attack => {
+                    let new_envelope = self.envelope + increment * (((1024 - self.envelope) / 16) + 1);
+                    if new_envelope < MAX_ENVELOPE {
+                        self.envelope = new_envelope;
+                    } else {
+                        self.envelope_state = EnvelopeState::Decay;
+                        self.envelope = 0;
+                    }
+                },
+                EnvelopeState::Decay |
+                EnvelopeState::Sustain |
+                EnvelopeState::Release => {
+                    self.envelope = (self.envelope + increment).min(MAX_ENVELOPE);
+                },
+            }
+        }
+    }
+
+    fn get_db_at(&mut self) -> f32 {
+        let envelope = if self.envelope_state == EnvelopeState::Attack {
+            !self.envelope
+        } else {
+            self.envelope
+        };
+        envelope as f32 * 0.09375
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -34,78 +241,26 @@ enum OperatorAlgorithm {
 
 #[derive(Clone)]
 struct Operator {
+    debug_name: String,
     wave: SineWave,
     frequency: f32,
     multiplier: f32,
-    total_level: f32,
-
-    attack_rate: usize,
-    first_decay_rate: usize,
-    first_decay_level: usize,
-    second_decay_rate: usize,
-    release_rate: usize,
-
-    envelope_state: EnvelopeState,
-    last_event: Clock,
-    envelope_gain: f32,
+    envelope: EnvelopeGenerator,
 }
 
 impl Operator {
-    fn new(sample_rate: usize) -> Self {
+    fn new(debug_name: String, sample_rate: usize) -> Self {
         Self {
+            debug_name: debug_name.clone(),
             wave: SineWave::new(400.0, sample_rate),
             frequency: 400.0,
             multiplier: 1.0,
-            total_level: 0.0,
-
-            attack_rate: 0,
-            first_decay_rate: 0,
-            first_decay_level: 0,
-            second_decay_rate: 0,
-            release_rate: 0,
-
-            envelope_state: EnvelopeState::Attack,
-            last_event: 0,
-            envelope_gain: 0.0,
+            envelope: EnvelopeGenerator::new(debug_name),
         }
     }
 
     fn set_frequency(&mut self, frequency: f32) {
         self.frequency = frequency;
-    }
-
-    fn set_total_level(&mut self, db: f32) {
-        self.total_level = db_to_gain(db);
-    }
-
-    fn set_attack_rate(&mut self, rate: usize) {
-        self.attack_rate = rate;
-    }
-
-    fn set_first_decay_rate(&mut self, rate: usize) {
-        self.first_decay_rate = rate;
-    }
-
-    fn set_first_decay_level(&mut self, rate: usize) {
-        self.first_decay_level = rate;
-    }
-
-    fn set_second_decay_rate(&mut self, rate: usize) {
-        self.second_decay_rate = rate;
-    }
-
-    fn set_release_rate(&mut self, rate: usize) {
-        self.release_rate = rate;
-    }
-
-    fn notify_state_change(&mut self, state: bool, event_clock: Clock) {
-        self.last_event = event_clock;
-        if state {
-            self.envelope_state = EnvelopeState::Attack;
-            self.envelope_gain = 0.0;
-        } else {
-            self.envelope_state = EnvelopeState::Release;
-        }
     }
 
     fn reset(&mut self) {
@@ -116,47 +271,41 @@ impl Operator {
         self.multiplier = multiplier;
     }
 
-    fn get_sample(&mut self, modulator: f32, event_clock: Clock) -> f32 {
+    fn set_total_level(&mut self, db: f32) {
+        self.envelope.set_total_level(db)
+    }
+
+    fn set_sustain_level(&mut self, level: u16) {
+        self.envelope.set_sustain_level(level)
+    }
+
+    fn set_rate(&mut self, etype: EnvelopeState, rate: usize) {
+        self.envelope.set_rate(etype, rate)
+    }
+
+    fn notify_state_change(&mut self, state: bool, envelope_clock: Clock) {
+        self.envelope.notify_state_change(state, envelope_clock)
+    }
+
+    fn get_sample(&mut self, modulator: f32, envelope_clock: Clock) -> f32 {
         self.wave.set_frequency((self.frequency * self.multiplier) + modulator);
         let sample = self.wave.next().unwrap();
 
-        /*
-        let time_since_last = event_clock - self.last_event;
-        match self.envelope_state {
-            EnvelopeState::Attack => {
-                let gain = rate_to_gain(self.attack_rate, time_since_last).min(self.total_level);
-                if gain == self.total_level {
-                    self.envelope_state = EnvelopeState::Decay1;
-                }
-                sample / gain
-            },
-            EnvelopeState::Decay1 => {
-                let gain = (self.total_level - rate_to_gain(self.first_decay_rate, time_since_last)).max(self.total_level / 2.0);
-                if gain == self.total_level / 2.0 {
-                    self.envelope_state = EnvelopeState::Decay2;
-                }
-                sample / gain
-            },
-            EnvelopeState::Decay2 => {
-                let gain = (self.total_level / 2.0 - rate_to_gain(self.second_decay_rate, time_since_last)).max(0.0);
-                sample / gain
-            },
-            EnvelopeState::Release => {
-                let gain = (self.total_level / 2.0 - rate_to_gain(self.release_rate, time_since_last)).max(0.0);
-                sample / gain
-            },
-        }
-        */
-        sample
+        self.envelope.update_envelope(envelope_clock);
+        let gain = db_to_gain(self.envelope.get_db_at());
+        //let gain = self.envelope.total_level;
+
+        sample / gain
     }
 }
 
-fn rate_to_gain(rate: usize, event_clock: Clock) -> f32 {
-    event_clock as f32 * rate as f32
+fn rate_to_gain(rate: usize, envelope_clock: Clock) -> f32 {
+    envelope_clock as f32 * rate as f32
 }
 
 #[derive(Clone)]
 struct Channel {
+    debug_name: String,
     operators: Vec<Operator>,
     on_state: u8,
     next_on_state: u8,
@@ -165,9 +314,10 @@ struct Channel {
 }
 
 impl Channel {
-    fn new(sample_rate: usize) -> Self {
+    fn new(debug_name: String, sample_rate: usize) -> Self {
         Self {
-            operators: vec![Operator::new(sample_rate); 4],
+            debug_name: debug_name.clone(),
+            operators: (0..4).map(|i| Operator::new(format!("{}, op {}", debug_name, i), sample_rate)).collect(),
             on_state: 0,
             next_on_state: 0,
             base_frequency: 0.0,
@@ -188,67 +338,67 @@ impl Channel {
         }
     }
 
-    fn get_sample(&mut self, event_clock: Clock) -> f32 {
+    fn get_sample(&mut self, envelope_clock: Clock) -> f32 {
         if self.on_state != self.next_on_state {
             self.on_state = self.next_on_state;
             for (i, operator) in self.operators.iter_mut().enumerate() {
-                operator.notify_state_change(((self.on_state >> i) & 0x01) != 0, event_clock);
+                operator.notify_state_change(((self.on_state >> i) & 0x01) != 0, envelope_clock);
             }
         }
 
         if self.on_state != 0 {
-            self.get_algorithm_sample(event_clock)
+            self.get_algorithm_sample(envelope_clock)
         } else {
             0.0
         }
     }
 
-    fn get_algorithm_sample(&mut self, event_clock: Clock) -> f32 {
+    fn get_algorithm_sample(&mut self, envelope_clock: Clock) -> f32 {
         match self.algorithm {
             OperatorAlgorithm::A0 => {
-                let modulator0 = self.operators[0].get_sample(0.0, event_clock);
-                let modulator1 = self.operators[1].get_sample(modulator0, event_clock);
-                let modulator2 = self.operators[2].get_sample(modulator1, event_clock);
-                self.operators[3].get_sample(modulator2, event_clock)
+                let modulator0 = self.operators[0].get_sample(0.0, envelope_clock);
+                let modulator1 = self.operators[1].get_sample(modulator0, envelope_clock);
+                let modulator2 = self.operators[2].get_sample(modulator1, envelope_clock);
+                self.operators[3].get_sample(modulator2, envelope_clock)
             },
             OperatorAlgorithm::A1 => {
-                let sample1 = self.operators[0].get_sample(0.0, event_clock) + self.operators[1].get_sample(0.0, event_clock);
-                let sample2 = self.operators[2].get_sample(sample1, event_clock);
-                self.operators[3].get_sample(sample2, event_clock)
+                let sample1 = self.operators[0].get_sample(0.0, envelope_clock) + self.operators[1].get_sample(0.0, envelope_clock);
+                let sample2 = self.operators[2].get_sample(sample1, envelope_clock);
+                self.operators[3].get_sample(sample2, envelope_clock)
             },
             OperatorAlgorithm::A2 => {
-                let sample1 = self.operators[1].get_sample(0.0, event_clock);
-                let sample2 = self.operators[2].get_sample(sample1, event_clock);
-                let sample3 = self.operators[0].get_sample(0.0, event_clock) + sample2;
-                self.operators[3].get_sample(sample3, event_clock)
+                let sample1 = self.operators[1].get_sample(0.0, envelope_clock);
+                let sample2 = self.operators[2].get_sample(sample1, envelope_clock);
+                let sample3 = self.operators[0].get_sample(0.0, envelope_clock) + sample2;
+                self.operators[3].get_sample(sample3, envelope_clock)
             },
             OperatorAlgorithm::A3 => {
-                let sample1 = self.operators[0].get_sample(0.0, event_clock);
-                let sample2 = self.operators[1].get_sample(sample1, event_clock);
-                let sample3 = self.operators[2].get_sample(0.0, event_clock);
-                self.operators[3].get_sample(sample2 + sample3, event_clock)
+                let sample1 = self.operators[0].get_sample(0.0, envelope_clock);
+                let sample2 = self.operators[1].get_sample(sample1, envelope_clock);
+                let sample3 = self.operators[2].get_sample(0.0, envelope_clock);
+                self.operators[3].get_sample(sample2 + sample3, envelope_clock)
             },
             OperatorAlgorithm::A4 => {
-                let sample1 = self.operators[0].get_sample(0.0, event_clock);
-                let sample2 = self.operators[1].get_sample(sample1, event_clock);
-                let sample3 = self.operators[2].get_sample(0.0, event_clock);
-                let sample4 = self.operators[3].get_sample(sample3, event_clock);
+                let sample1 = self.operators[0].get_sample(0.0, envelope_clock);
+                let sample2 = self.operators[1].get_sample(sample1, envelope_clock);
+                let sample3 = self.operators[2].get_sample(0.0, envelope_clock);
+                let sample4 = self.operators[3].get_sample(sample3, envelope_clock);
                 sample2 + sample4
             },
             OperatorAlgorithm::A5 => {
-                let sample1 = self.operators[0].get_sample(0.0, event_clock);
-                self.operators[1].get_sample(sample1, event_clock) + self.operators[2].get_sample(sample1, event_clock) + self.operators[3].get_sample(sample1, event_clock)
+                let sample1 = self.operators[0].get_sample(0.0, envelope_clock);
+                self.operators[1].get_sample(sample1, envelope_clock) + self.operators[2].get_sample(sample1, envelope_clock) + self.operators[3].get_sample(sample1, envelope_clock)
             },
             OperatorAlgorithm::A6 => {
-                let sample1 = self.operators[0].get_sample(0.0, event_clock);
-                let sample2 = self.operators[1].get_sample(sample1, event_clock);
-                sample2 + self.operators[2].get_sample(0.0, event_clock) + self.operators[3].get_sample(0.0, event_clock)
+                let sample1 = self.operators[0].get_sample(0.0, envelope_clock);
+                let sample2 = self.operators[1].get_sample(sample1, envelope_clock);
+                sample2 + self.operators[2].get_sample(0.0, envelope_clock) + self.operators[3].get_sample(0.0, envelope_clock)
             },
             OperatorAlgorithm::A7 => {
-                self.operators[0].get_sample(0.0, event_clock)
-                + self.operators[1].get_sample(0.0, event_clock)
-                + self.operators[2].get_sample(0.0, event_clock)
-                + self.operators[3].get_sample(0.0, event_clock)
+                self.operators[0].get_sample(0.0, envelope_clock)
+                + self.operators[1].get_sample(0.0, envelope_clock)
+                + self.operators[2].get_sample(0.0, envelope_clock)
+                + self.operators[3].get_sample(0.0, envelope_clock)
             },
         }
     }
@@ -290,7 +440,7 @@ pub struct Ym2612 {
     selected_reg_1: Option<NonZeroU8>,
 
     clock_frequency: u32,
-    event_clock_period: ClockElapsed,
+    envelope_clock_period: ClockElapsed,
     channels: Vec<Channel>,
     channel_frequencies: [(u8, u16); CHANNELS],
     dac: Dac,
@@ -318,8 +468,8 @@ impl Ym2612 {
             selected_reg_1: None,
 
             clock_frequency,
-            event_clock_period: 3 * 144 * 1_000_000_000 / clock_frequency as ClockElapsed,
-            channels: vec![Channel::new(sample_rate); 8],
+            envelope_clock_period: 351 * 1_000_000_000 / clock_frequency as ClockElapsed,  //3 * 144 * 1_000_000_000 / clock_frequency as ClockElapsed,
+            channels: (0..6).map(|i| Channel::new(format!("ch {}", i), sample_rate)).collect(),
             channel_frequencies: [(0, 0); CHANNELS],
 
             dac: Dac::default(),
@@ -337,7 +487,41 @@ impl Ym2612 {
             registers: vec![0; 512],
         })
     }
+}
 
+impl Steppable for Ym2612 {
+    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
+        let rate = self.source.samples_per_second();
+        let available = self.source.space_available();
+        let samples = if available < rate / 1000 { available } else { rate / 1000 };
+        let nanos_per_sample = 1_000_000_000 / rate;
+
+        //if self.source.space_available() >= samples {
+            let mut buffer = vec![0.0; samples];
+            for (i, buffered_sample) in buffer.iter_mut().enumerate().take(samples) {
+                let envelope_clock = (system.clock + (i * nanos_per_sample) as Clock) / self.envelope_clock_period;
+                let mut sample = 0.0;
+
+                for ch in 0..5 {
+                    sample += self.channels[ch].get_sample(envelope_clock);
+                }
+
+                if self.dac.enabled {
+                    sample += self.dac.get_sample();
+                } else {
+                    sample += self.channels[5].get_sample(envelope_clock);
+                }
+
+                *buffered_sample = sample.clamp(-1.0, 1.0);
+            }
+            self.source.write_samples(system.clock, &buffer);
+        //}
+
+        Ok(1_000_000)          // Every 1ms of simulated time
+    }
+}
+
+impl Ym2612 {
     pub fn set_register(&mut self, bank: u8, reg: u8, data: u8) {
         // Keep a copy for debugging purposes, and if the original values are needed
         self.registers[bank as usize * 256 + reg as usize] = data;
@@ -359,7 +543,15 @@ impl Ym2612 {
             },
 
             0x28 => {
-                let ch = (data as usize) & 0x07;
+                let num = (data as usize) & 0x07;
+                let ch = match num {
+                    0 | 1 | 2 => num,
+                    4 | 5 | 6 => num - 1,
+                    _ => {
+                        warn!("{}: attempted key on/off to invalid channel {}", DEV_NAME, num);
+                        return;
+                    },
+                };
                 self.channels[ch].next_on_state = data >> 4;
                 self.channels[ch].reset();
             },
@@ -442,15 +634,16 @@ impl Ym2612 {
         let rate_scaling = self.registers[0x50 + index] & 0xC0 >> 6;
         let attack_rate = self.registers[0x50 + index] & 0x1F;
         let first_decay_rate = self.registers[0x60 + index] & 0x1F;
-        let first_decay_level = (self.registers[0x80 + index] & 0x0F) >> 4;
         let second_decay_rate = self.registers[0x70 + index] & 0x1F;
         let release_rate = self.registers[0x80 + index] & 0x0F;
 
-        self.channels[ch].operators[op].set_attack_rate(calculate_rate(attack_rate, rate_scaling, keycode));
-        self.channels[ch].operators[op].set_first_decay_rate(calculate_rate(first_decay_rate, rate_scaling, keycode));
-        self.channels[ch].operators[op].set_first_decay_level(calculate_rate(first_decay_level, rate_scaling, keycode));
-        self.channels[ch].operators[op].set_second_decay_rate(calculate_rate(second_decay_rate, rate_scaling, keycode));
-        self.channels[ch].operators[op].set_release_rate(calculate_rate(release_rate, rate_scaling, keycode));
+        self.channels[ch].operators[op].set_rate(EnvelopeState::Attack, calculate_rate(attack_rate, rate_scaling, keycode));
+        self.channels[ch].operators[op].set_rate(EnvelopeState::Decay, calculate_rate(first_decay_rate, rate_scaling, keycode));
+        self.channels[ch].operators[op].set_rate(EnvelopeState::Sustain, calculate_rate(second_decay_rate, rate_scaling, keycode));
+        self.channels[ch].operators[op].set_rate(EnvelopeState::Release, calculate_rate(release_rate, rate_scaling, keycode));
+
+        let sustain_level = (self.registers[0x80 + index] & 0x0F) >> 4;
+        self.channels[ch].operators[op].set_sustain_level(sustain_level as u16);
     }
 }
 
@@ -469,7 +662,7 @@ fn calculate_rate(rate: u8, rate_scaling: u8, keycode: u8) -> usize {
         _ => 8, // this shouldn't be possible
     };
 
-    (2 * rate as usize + (keycode as usize / scale)).min(64)
+    (2 * rate as usize + (keycode as usize / scale)).min(63)
 }
 
 #[inline]
@@ -505,39 +698,6 @@ fn get_ch_index(ch: usize) -> usize {
         ch
     } else {
         0x100 + ch - 3
-    }
-}
-
-
-impl Steppable for Ym2612 {
-    fn step(&mut self, system: &System) -> Result<ClockElapsed, Error> {
-        let rate = self.source.samples_per_second();
-        let available = self.source.space_available();
-        let samples = if available < rate / 1000 { available } else { rate / 1000 };
-        let nanos_per_sample = 1_000_000_000 / rate;
-
-        //if self.source.space_available() >= samples {
-            let mut buffer = vec![0.0; samples];
-            for (i, buffered_sample) in buffer.iter_mut().enumerate().take(samples) {
-                let event_clock = (system.clock + (i * nanos_per_sample) as Clock) / self.event_clock_period;
-                let mut sample = 0.0;
-
-                for ch in 0..6 {
-                    sample += self.channels[ch].get_sample(event_clock);
-                }
-
-                if self.dac.enabled {
-                    sample += self.dac.get_sample();
-                } else {
-                    sample += self.channels[6].get_sample(event_clock);
-                }
-
-                *buffered_sample = sample.clamp(-1.0, 1.0);
-            }
-            self.source.write_samples(system.clock, &buffer);
-        //}
-
-        Ok(1_000_000)          // Every 1ms of simulated time
     }
 }
 

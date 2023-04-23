@@ -1,4 +1,9 @@
 
+[Note: until the dashed line is logs pieced together after the fact]
+
+Project Start
+=============
+
 - 2021-09-28: started the project, computie monitor working after a week
 - 2021-10-08: I think the Computie OS could boot by this point
 - 2021-10-14: I think I started working on the genesis at this point, or maybe a bit before
@@ -13,8 +18,6 @@
 
 Genesis
 =======
-
-(pieced together after the fact)
 
 before 2021-10-25
 - controllers and coproc controls aren't an issue as dummies until much later
@@ -65,7 +68,7 @@ before 2021-10-25
   that caused some of the issues
 
 
------
+-----------------------------
 
 2021-10-31
 - at this point I had finally gotten the scrolls to work enough to print the SEGA logo at the start
@@ -74,6 +77,55 @@ before 2021-10-25
 - started working on the Z80 and TRS-80 implementations, as well as debugging the Mac stuff, which
   I think I was doing for most of November (instead of working on the Genesis impl)
 
+
+Macintosh
+=========
+
+- ram self test is run by jumping to 0x400694, which returns by jumping to %a6 which contains 0x4000f0
+  if it returns with eq set, it will jump to the system initialization at 0x40026c
+  it doesn't have eq set, so it ends up in an infinite loop.
+- turns out MOVEM was broken such that it was incrementing instead of decrementing address (found by
+  inspecting the first byte of memory when trying to get 0x5555AAAA to cancel itself out
+
+2021-11-19
+- still not working, calling 0x4000f0 to fail.  Turns out this is where the dead mac is supposed to
+  be printed, but it's not (found that from another blog post)
+
+2021-11-23
+- finally got dead mac screen showing with 0F0003 as the error.  It wasn't showing because the 0 colour
+  used by the genesis, which is a mask colour, causes nothing to appear
+- then the issue was the indexing of the memory page (x * 2) * y instead of (x * 2) + (y * 512/8)
+
+- so the 0F0003 dead mac was caused by the first trap instruction in the ROM, appearing at 4002adc
+  It causes an illegal instruction, which then jumps to the exception entry points start at 4001aa
+  in rom which all jump to the same function at 4001d2, which then ends up in the failure
+- trying to find why, i traced the program to find where the trap table was being set up, which
+  turned out to be around 400448 which is where I'd been debugging the last issue.  It sets location
+  0x28 to 401018 which is the trap handler...
+- 0x28 is not the illegal instruction handler, it's the 1010 line emulator exception... 1010 as it A
+  as in the A line traps... So the m68k is specifically not handling the a000 instructions correctly
+
+- it's now getting past the dead mac, but instead it causes two writes to read only memory when it
+  tries to set some bits indirectly to an address in rom (0x4034ae), which is something do with the
+  drivers. The Sound and Disk drivers are opened and it's during each of the open functions that the
+  write occurs
+- it's possible to continue (which might be in broken state) and it then attempts to write to
+  sequential addresses in upper ram which eventually spills over into 0x100000 which isn't mapped...
+  No idea if this is just because of something going wrong earlier, or if this is also an emulator bug
+
+- the writes to rom issues happens during InitIO (0x400614), when initializing the first two drivers,
+  the Sound and Disk (I think).  There is a pointer to a pointer to a value that contains 0x4034ae,
+  which seems to be calculated from a jump table, presumably pointing to something in rom that contains
+  the driver, but for some reason the code is bit setting that value.  I'm not sure if the data is wrong
+  and it should normally see a 0 instead of the rom addr, or if there's a branch that shouldn't/should
+  happen that leads it to that code when it shouldn't
+- c4c and c7c seem to be driver descriptors of some kind, each with a rom addr and what seems to be some
+  flags after that.  They also have 0xfffb and 0xfffc.  That said, if there's a bug in the code that
+  creates that data, it would likely be broken for both
+
+
+Back to Genesis
+===============
 
 2021-11-30
 - after getting things working somewhat with the scrolls, but not the sprites, I finally found
@@ -270,6 +322,10 @@ before 2021-10-25
   check before the audio devices write only account for one channel of audio instead of two, so the
   buffer was over filling.  Dividing the available buffer size by 2 fixed it
 
+
+General Work
+============
+
 2022-10-08
 - I replaced the circular buffer with queues of audio frames, which might be less able to handle time
   dialation, but which uses fewer locks for less time, which seems to improve the occasional dropout
@@ -279,7 +335,6 @@ before 2021-10-25
 - the PCM data in ym2612, looking at the recording of the waveform, shows it's offset by a bias, which
   probably shouldn't be.  The other audio sounds distorted but still sort of sounds like what it should,
   so I don't think it's too far off
-
 
 2023-03-25
 - trying to improve the performance.  It seems to be at about 20 to 30 fps on firefox but 60 fps on
@@ -295,74 +350,6 @@ before 2021-10-25
   individually, with steps in between so the game can do those tricks...  and I don't see a lot of
   issues with colour glitches and stuff
 
-
----------------------------------------------------------------------------------------------------
-
-Macintosh
-=========
-
-- ram self test is run by jumping to 0x400694, which returns by jumping to %a6 which contains 0x4000f0
-  if it returns with eq set, it will jump to the system initialization at 0x40026c
-  it doesn't have eq set, so it ends up in an infinite loop.
-- turns out MOVEM was broken such that it was incrementing instead of decrementing address (found by
-  inspecting the first byte of memory when trying to get 0x5555AAAA to cancel itself out
-
-2021-11-19
-- still not working, calling 0x4000f0 to fail.  Turns out this is where the dead mac is supposed to
-  be printed, but it's not (found that from another blog post)
-
-2021-11-23
-- finally got dead mac screen showing with 0F0003 as the error.  It wasn't showing because the 0 colour
-  used by the genesis, which is a mask colour, causes nothing to appear
-- then the issue was the indexing of the memory page (x * 2) * y instead of (x * 2) + (y * 512/8)
-
-- so the 0F0003 dead mac was caused by the first trap instruction in the ROM, appearing at 4002adc
-  It causes an illegal instruction, which then jumps to the exception entry points start at 4001aa
-  in rom which all jump to the same function at 4001d2, which then ends up in the failure
-- trying to find why, i traced the program to find where the trap table was being set up, which
-  turned out to be around 400448 which is where I'd been debugging the last issue.  It sets location
-  0x28 to 401018 which is the trap handler...
-- 0x28 is not the illegal instruction handler, it's the 1010 line emulator exception... 1010 as it A
-  as in the A line traps... So the m68k is specifically not handling the a000 instructions correctly
-
-- it's now getting past the dead mac, but instead it causes two writes to read only memory when it
-  tries to set some bits indirectly to an address in rom (0x4034ae), which is something do with the
-  drivers. The Sound and Disk drivers are opened and it's during each of the open functions that the
-  write occurs
-- it's possible to continue (which might be in broken state) and it then attempts to write to
-  sequential addresses in upper ram which eventually spills over into 0x100000 which isn't mapped...
-  No idea if this is just because of something going wrong earlier, or if this is also an emulator bug
-
-- the writes to rom issues happens during InitIO (0x400614), when initializing the first two drivers,
-  the Sound and Disk (I think).  There is a pointer to a pointer to a value that contains 0x4034ae,
-  which seems to be calculated from a jump table, presumably pointing to something in rom that contains
-  the driver, but for some reason the code is bit setting that value.  I'm not sure if the data is wrong
-  and it should normally see a 0 instead of the rom addr, or if there's a branch that shouldn't/should
-  happen that leads it to that code when it shouldn't
-- c4c and c7c seem to be driver descriptors of some kind, each with a rom addr and what seems to be some
-  flags after that.  They also have 0xfffb and 0xfffc.  That said, if there's a bug in the code that
-  creates that data, it would likely be broken for both
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+2023-04-22
+- I'm back to trying to get the ym2612 emulation working properly for the Genesis
 

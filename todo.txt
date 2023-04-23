@@ -1,4 +1,10 @@
 
+* add a Duration-like clock type that records femto seconds
+* move parser to utils/ of some kind, or lib/
+
+* add doc strings everywhere
+* get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion
+
 * the interrupt controller stuff is really not good.  It should be more like busport, and connected to a device at startup (eg. create
   interrupt controller, then create objects that use that controller and pass in values, maybe an option so that the controller doesn't
   have to be hooked up, meaning hardware interrupts would not be used.
