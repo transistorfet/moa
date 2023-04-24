@@ -1,5 +1,5 @@
 
-use moa_core::{Error, System, ClockDuration, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable, debug, warn};
+use moa_core::{Error, System, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable, debug, warn};
 
 
 const REG_OUTPUT_B: Address     = 0x00;
@@ -57,7 +57,7 @@ impl Addressable for Mos6522 {
         0x10
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             REG_OUTPUT_B => { data[0] = self.port_b.borrow_mut().data; },
             REG_OUTPUT_A => { data[0] = self.port_a.borrow_mut().data; },
@@ -73,7 +73,7 @@ impl Addressable for Mos6522 {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             REG_OUTPUT_B => { self.port_b.borrow_mut().data = data[0]; self.port_b.notify(); },

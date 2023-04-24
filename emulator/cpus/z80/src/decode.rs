@@ -1,5 +1,5 @@
 
-use moa_core::{Error, Address, Addressable};
+use moa_core::{Error, ClockTime, Address, Addressable};
 
 use crate::state::{Register, InterruptMode};
 
@@ -173,6 +173,7 @@ pub enum Instruction {
 }
 
 pub struct Z80Decoder {
+    pub clock: ClockTime,
     pub start: u16,
     pub end: u16,
     pub instruction: Instruction,
@@ -182,6 +183,7 @@ pub struct Z80Decoder {
 impl Default for Z80Decoder {
     fn default() -> Self {
         Self {
+            clock: ClockTime::START,
             start: 0,
             end: 0,
             instruction: Instruction::NOP,
@@ -191,7 +193,8 @@ impl Default for Z80Decoder {
 }
 
 impl Z80Decoder {
-    pub fn decode_at(&mut self, memory: &mut dyn Addressable, start: u16) -> Result<(), Error> {
+    pub fn decode_at(&mut self, memory: &mut dyn Addressable, clock: ClockTime, start: u16) -> Result<(), Error> {
+        self.clock = clock;
         self.start = start;
         self.end = start;
         self.execution_time = 0;
@@ -674,14 +677,14 @@ impl Z80Decoder {
 
 
     fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Error> {
-        let byte = device.read_u8(self.end as Address)?;
+        let byte = device.read_u8(self.clock, self.end as Address)?;
         self.end += 1;
         self.execution_time += 4;
         Ok(byte)
     }
 
     fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Error> {
-        let word = device.read_leu16(self.end as Address)?;
+        let word = device.read_leu16(self.clock, self.end as Address)?;
         self.end += 2;
         self.execution_time += 8;
         Ok(word)
@@ -690,7 +693,7 @@ impl Z80Decoder {
     pub fn format_instruction_bytes(&mut self, memory: &mut dyn Addressable) -> String {
         let ins_data: String =
             (0..(self.end - self.start)).map(|offset|
-                format!("{:02x} ", memory.read_u8((self.start + offset) as Address).unwrap())
+                format!("{:02x} ", memory.read_u8(self.clock, (self.start + offset) as Address).unwrap())
             ).collect();
         ins_data
     }
@@ -703,7 +706,7 @@ impl Z80Decoder {
     pub fn dump_disassembly(&mut self, memory: &mut dyn Addressable, start: u16, length: u16) {
         let mut next = start;
         while next < (start + length) {
-            match self.decode_at(memory, next) {
+            match self.decode_at(memory, self.clock, next) {
                 Ok(()) => {
                     self.dump_decoded(memory);
                     next = self.end;

@@ -32,11 +32,11 @@ impl Pixel {
 
         match encoding {
             PixelEncoding::RGBA =>
-                ((r as u32) << 24) | ((g as u32) << 16) | ((b as u32) << 8) | (a as u32),
+                (r << 24) | (g << 16) | (b << 8) | a,
             PixelEncoding::ARGB =>
-                ((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32),
+                (a << 24) | (r << 16) | (g << 8) | b,
             PixelEncoding::ABGR =>
-                ((a as u32) << 24) | ((b as u32) << 16) | ((g as u32) << 8) | (r as u32),
+                (a << 24) | (b << 16) | (g << 8) | r,
         }
     }
 }

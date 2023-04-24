@@ -116,7 +116,7 @@ impl Debugger {
                 if args.len() > 1 {
                     let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?;
                     let len = if args.len() > 2 { u32::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse length"))? } else { 0x20 };
-                    system.get_bus().dump_memory(addr as Address, len as Address);
+                    system.get_bus().dump_memory(system.clock, addr as Address, len as Address);
                 } else {
                     //self.port.dump_memory(self.state.ssp as Address, 0x40 as Address);
                 }
@@ -167,9 +167,9 @@ impl Debugger {
                     let addr = u64::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse set address"))?;
                     let data = u32::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse data"))?;
                     match args[0] {
-                        "setb" => system.get_bus().write_u8(addr, data as u8)?,
-                        "setw" => system.get_bus().write_beu16(addr, data as u16)?,
-                        "setl" => system.get_bus().write_beu32(addr, data)?,
+                        "setb" => system.get_bus().write_u8(system.clock, addr, data as u8)?,
+                        "setw" => system.get_bus().write_beu16(system.clock, addr, data as u16)?,
+                        "setl" => system.get_bus().write_beu32(system.clock, addr, data)?,
                         _ => panic!("Unimplemented: {:?}", args[0]),
                     }
                 }

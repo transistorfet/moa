@@ -1,12 +1,12 @@
-/// Emulate the YM2612 FM Sound Synthesizer (used by the Sega Genesis)
-///
-/// This implementation is mostly based on online references to the YM2612's registers and their
-/// function, forum posts that describe the details of operation of the chip, and looking at
-/// source code that emulates the chip.  It is still very much a work in progress
-///
-/// Resources:
-/// - Registers: https://www.smspower.org/maxim/Documents/YM2612
-/// - Envelope and rates: http://gendev.spritesmind.net/forum/viewtopic.php?p=5716#5716
+//! Emulate the YM2612 FM Sound Synthesizer (used by the Sega Genesis)
+//!
+//! This implementation is mostly based on online references to the YM2612's registers and their
+//! function, forum posts that describe the details of operation of the chip, and looking at
+//! source code that emulates the chip.  It is still very much a work in progress
+//!
+//! Resources:
+//! - Registers: https://www.smspower.org/maxim/Documents/YM2612
+//! - Envelope and rates: http://gendev.spritesmind.net/forum/viewtopic.php?p=5716#5716
 
 use std::num::NonZeroU8;
 use std::collections::VecDeque;
@@ -140,7 +140,6 @@ struct EnvelopeGenerator {
     rates: [usize; 4],
 
     envelope_state: EnvelopeState,
-    last_state_change: ClockTime,
     next_envelope_clock: EnvelopeClock,
     envelope: u16,
 }
@@ -154,7 +153,6 @@ impl EnvelopeGenerator {
             rates: [0; 4],
 
             envelope_state: EnvelopeState::Attack,
-            last_state_change: ClockTime::START,
             next_envelope_clock: 0,
             envelope: 0,
         }
@@ -172,8 +170,7 @@ impl EnvelopeGenerator {
         self.rates[etype as usize] = rate;
     }
 
-    fn notify_state_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
-        //self.last_state_change = envelope_clock;
+    fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
         if state {
             self.next_envelope_clock = envelope_clock;
             self.envelope_state = EnvelopeState::Attack;
@@ -265,6 +262,10 @@ impl Operator {
         }
     }
 
+    fn reset(&mut self) {
+        self.wave.reset();
+    }
+
     fn set_frequency(&mut self, frequency: f32) {
         self.frequency = frequency;
     }
@@ -285,8 +286,8 @@ impl Operator {
         self.envelope.set_rate(etype, rate)
     }
 
-    fn notify_state_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
-        self.envelope.notify_state_change(state, envelope_clock);
+    fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
+        self.envelope.notify_key_change(state, envelope_clock);
     }
 
     fn get_sample(&mut self, modulator: f32, envelope_clock: EnvelopeClock) -> f32 {
@@ -306,8 +307,9 @@ struct Channel {
     #[allow(dead_code)]
     debug_name: String,
     operators: Vec<Operator>,
-    on_state: u8,
-    next_on_state: u8,
+    key_state: u8,
+    next_key_clock: ClockTime,
+    next_key_state: u8,
     base_frequency: f32,
     algorithm: OperatorAlgorithm,
 }
@@ -317,8 +319,9 @@ impl Channel {
         Self {
             debug_name: debug_name.clone(),
             operators: (0..OPERATORS).map(|i| Operator::new(format!("{}, op {}", debug_name, i), sample_rate)).collect(),
-            on_state: 0,
-            next_on_state: 0,
+            key_state: 0,
+            next_key_clock: ClockTime::START,
+            next_key_state: 0,
             base_frequency: 0.0,
             algorithm: OperatorAlgorithm::A0,
         }
@@ -331,15 +334,25 @@ impl Channel {
         }
     }
 
-    fn get_sample(&mut self, envelope_clock: EnvelopeClock) -> f32 {
-        if self.on_state != self.next_on_state {
-            self.on_state = self.next_on_state;
+    fn change_key_state(&mut self, clock: ClockTime, key: u8) {
+        self.next_key_clock = clock;
+        self.next_key_state = key;
+    }
+
+    fn check_key_change(&mut self, clock: ClockTime, envelope_clock: EnvelopeClock) {
+        if self.key_state != self.next_key_state && clock >= self.next_key_clock {
+            self.key_state = self.next_key_state;
             for (i, operator) in self.operators.iter_mut().enumerate() {
-                operator.notify_state_change(((self.on_state >> i) & 0x01) != 0, envelope_clock);
+                operator.notify_key_change(((self.key_state >> i) & 0x01) != 0, envelope_clock);
+                operator.reset();
             }
         }
+    }
 
-        if self.on_state != 0 {
+    fn get_sample(&mut self, clock: ClockTime, envelope_clock: EnvelopeClock) -> f32 {
+        self.check_key_change(clock, envelope_clock);
+
+        if self.key_state != 0 {
             self.get_algorithm_sample(envelope_clock)
         } else {
             0.0
@@ -492,17 +505,18 @@ impl Steppable for Ym2612 {
         //if self.source.space_available() >= samples {
             let mut buffer = vec![0.0; samples];
             for (i, buffered_sample) in buffer.iter_mut().enumerate().take(samples) {
-                let envelope_clock = (system.clock.as_duration() + (sample_duration * i as u64)) / self.envelope_clock_period;
+                let sample_clock = system.clock + (sample_duration * i as u64);
+                let envelope_clock = sample_clock.as_duration() / self.envelope_clock_period;
                 let mut sample = 0.0;
 
                 for ch in 0..(CHANNELS - 1) {
-                    sample += self.channels[ch].get_sample(envelope_clock);
+                    sample += self.channels[ch].get_sample(sample_clock, envelope_clock);
                 }
 
                 if self.dac.enabled {
                     sample += self.dac.get_sample();
                 } else {
-                    sample += self.channels[CHANNELS - 1].get_sample(envelope_clock);
+                    sample += self.channels[CHANNELS - 1].get_sample(sample_clock, envelope_clock);
                 }
 
                 *buffered_sample = sample.clamp(-1.0, 1.0);
@@ -515,7 +529,7 @@ impl Steppable for Ym2612 {
 }
 
 impl Ym2612 {
-    pub fn set_register(&mut self, bank: u8, reg: u8, data: u8) {
+    pub fn set_register(&mut self, clock: ClockTime, bank: u8, reg: u8, data: u8) {
         // Keep a copy for debugging purposes, and if the original values are needed
         self.registers[bank as usize * 256 + reg as usize] = data;
 
@@ -545,7 +559,7 @@ impl Ym2612 {
                         return;
                     },
                 };
-                self.channels[ch].next_on_state = data >> 4;
+                self.channels[ch].change_key_state(clock, data >> 4);
             },
 
             0x2a => {
@@ -695,7 +709,7 @@ impl Addressable for Ym2612 {
         0x04
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             0 | 1 | 2 | 3 => {
                 // Read the status byte (busy/overflow)
@@ -709,7 +723,7 @@ impl Addressable for Ym2612 {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             0 => {
@@ -717,7 +731,7 @@ impl Addressable for Ym2612 {
             },
             1 => {
                 if let Some(reg) = self.selected_reg_0 {
-                    self.set_register(0, reg.get(), data[0]);
+                    self.set_register(clock, 0, reg.get(), data[0]);
                 }
             },
             2 => {
@@ -725,7 +739,7 @@ impl Addressable for Ym2612 {
             },
             3 => {
                 if let Some(reg) = self.selected_reg_1 {
-                    self.set_register(1, reg.get(), data[0]);
+                    self.set_register(clock, 1, reg.get(), data[0]);
                 }
             },
             _ => {

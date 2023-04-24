@@ -1,8 +1,10 @@
 
-* the audio needs to not run if nothing is using it or there's constant buffer underruns
+* remove the old timer stuff and replace with opentelemetry if it can be wasm compatible
 
-* add a Duration-like clock type that records femto seconds
-* move parser to utils/ of some kind, or lib/
+* maybe I should make ClockDuration use picos as the base instead, and use u64 since that gives like 212 days or something instead of 5h
+  and should prevent split nanoseconds which is the main concern
+
+* the audio needs to not run if nothing is using it or there's constant buffer underruns
 
 * add doc strings everywhere
 * get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion

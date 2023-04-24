@@ -1,5 +1,5 @@
 
-use moa_core::{Error, Address, Addressable};
+use moa_core::{Error, ClockTime, Address, Addressable};
 
 use super::state::{M68kType, Exceptions};
 use super::instructions::{
@@ -40,6 +40,7 @@ const OPCG_FLINE: u8 = 0xF;
 #[derive(Clone)]
 pub struct M68kDecoder {
     pub cputype: M68kType,
+    pub clock: ClockTime,
     pub start: u32,
     pub end: u32,
     pub instruction_word: u16,
@@ -47,9 +48,10 @@ pub struct M68kDecoder {
 }
 
 impl M68kDecoder {
-    pub fn new(cputype: M68kType, start: u32) -> M68kDecoder {
+    pub fn new(cputype: M68kType, clock: ClockTime, start: u32) -> M68kDecoder {
         M68kDecoder {
             cputype,
+            clock,
             start,
             end: start,
             instruction_word: 0,
@@ -58,13 +60,14 @@ impl M68kDecoder {
     }
 
     #[inline(always)]
-    pub fn init(&mut self, start: u32) {
+    pub fn init(&mut self, clock: ClockTime, start: u32) {
+        self.clock = clock;
         self.start = start;
         self.end = start;
     }
 
-    pub fn decode_at(&mut self, memory: &mut dyn Addressable, start: u32) -> Result<(), Error> {
-        self.init(start);
+    pub fn decode_at(&mut self, memory: &mut dyn Addressable, clock: ClockTime, start: u32) -> Result<(), Error> {
+        self.init(clock, start);
         self.instruction = self.decode_one(memory)?;
         Ok(())
     }
@@ -645,13 +648,13 @@ impl M68kDecoder {
     }
 
     fn read_instruction_word(&mut self, memory: &mut dyn Addressable) -> Result<u16, Error> {
-        let word = memory.read_beu16(self.end as Address)?;
+        let word = memory.read_beu16(self.clock, self.end as Address)?;
         self.end += 2;
         Ok(word)
     }
 
     fn read_instruction_long(&mut self, memory: &mut dyn Addressable) -> Result<u32, Error> {
-        let word = memory.read_beu32(self.end as Address)?;
+        let word = memory.read_beu32(self.clock, self.end as Address)?;
         self.end += 4;
         Ok(word)
     }
@@ -781,7 +784,7 @@ impl M68kDecoder {
     pub fn dump_disassembly(&mut self, memory: &mut dyn Addressable, start: u32, length: u32) {
         let mut next = start;
         while next < (start + length) {
-            match self.decode_at(memory, next) {
+            match self.decode_at(memory, self.clock, next) {
                 Ok(()) => {
                     self.dump_decoded(memory);
                     next = self.end;
@@ -790,7 +793,7 @@ impl M68kDecoder {
                     println!("{:?}", err);
                     match err {
                         Error { native, .. } if native == Exceptions::IllegalInstruction as u32 => {
-                            println!("    at {:08x}: {:04x}", self.start, memory.read_beu16(self.start as Address).unwrap());
+                            println!("    at {:08x}: {:04x}", self.start, memory.read_beu16(self.clock, self.start as Address).unwrap());
                         },
                         _ => { },
                     }
@@ -803,7 +806,7 @@ impl M68kDecoder {
     pub fn dump_decoded(&mut self, memory: &mut dyn Addressable) {
         let ins_data: Result<String, Error> =
             (0..((self.end - self.start) / 2)).map(|offset|
-                Ok(format!("{:04x} ", memory.read_beu16((self.start + (offset * 2)) as Address).unwrap()))
+                Ok(format!("{:04x} ", memory.read_beu16(self.clock, (self.start + (offset * 2)) as Address).unwrap()))
             ).collect();
         println!("{:#010x}: {}\n\t{}\n", self.start, ins_data.unwrap(), self.instruction);
     }

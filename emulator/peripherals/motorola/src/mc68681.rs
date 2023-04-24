@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ClockDuration, Frequency, Address, Steppable, Addressable, Transmutable, debug};
+use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Steppable, Addressable, Transmutable, debug};
 use moa_core::host::Tty;
 
 
@@ -250,7 +250,7 @@ impl Addressable for MC68681 {
         0x30
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             REG_SRA_RD => {
                 data[0] = self.port_a.status
@@ -302,7 +302,7 @@ impl Addressable for MC68681 {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         debug!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr);
         match addr {
             REG_MR1A_MR2A | REG_MR1B_MR2B | REG_CSRA_WR | REG_CSRB_WR => {

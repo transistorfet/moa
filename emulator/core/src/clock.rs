@@ -1,5 +1,5 @@
-/// Clock time and duration types for simulation with femtosecond accurancy
-///
+//! Clock time and duration types for simulation with femtosecond accurancy
+//!
 
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
 

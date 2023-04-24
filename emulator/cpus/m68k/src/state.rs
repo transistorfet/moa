@@ -1,5 +1,5 @@
 
-use moa_core::{Address, BusPort, Frequency};
+use moa_core::{ClockTime, Address, BusPort, Frequency};
 use moa_core::timers::CpuTimer;
 
 use crate::instructions::Size;
@@ -132,6 +132,7 @@ pub struct M68k {
     pub debugger: M68kDebugger,
     pub port: BusPort,
     pub timer: CpuTimer,
+    pub current_clock: ClockTime,
 }
 
 impl Default for M68kState {
@@ -160,23 +161,24 @@ impl M68k {
             cputype,
             frequency,
             state: M68kState::default(),
-            decoder: M68kDecoder::new(cputype, 0),
+            decoder: M68kDecoder::new(cputype, ClockTime::START, 0),
             timing: M68kInstructionTiming::new(cputype, port.data_width()),
             debugger: M68kDebugger::default(),
             port,
             timer: CpuTimer::default(),
+            current_clock: ClockTime::START,
         }
     }
 
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.state = M68kState::default();
-        self.decoder = M68kDecoder::new(self.cputype, 0);
+        self.decoder = M68kDecoder::new(self.cputype, ClockTime::START, 0);
         self.timing = M68kInstructionTiming::new(self.cputype, self.port.data_width());
         self.debugger = M68kDebugger::default();
     }
 
-    pub fn dump_state(&mut self) {
+    pub fn dump_state(&mut self, clock: ClockTime) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#010x}", self.state.pc);
         println!("SR: {:#06x}", self.state.sr);
@@ -188,7 +190,7 @@ impl M68k {
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
         println!();
-        self.port.dump_memory(self.state.ssp as Address, 0x40);
+        self.port.dump_memory(clock, self.state.ssp as Address, 0x40);
         println!();
     }
 }

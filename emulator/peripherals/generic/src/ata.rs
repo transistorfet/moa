@@ -1,7 +1,7 @@
 
 use std::fs;
 
-use moa_core::{Error, Address, Addressable, Transmutable, debug};
+use moa_core::{Error, ClockTime, Address, Addressable, Transmutable, debug};
 
 
 const ATA_REG_DATA_WORD: Address        = 0x20;
@@ -57,7 +57,7 @@ impl Addressable for AtaDevice {
         0x30
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             ATA_REG_DATA_WORD => {
                 self.selected_count -= 2;
@@ -90,7 +90,7 @@ impl Addressable for AtaDevice {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             ATA_REG_DRIVE_HEAD => { self.selected_sector |= ((data[0] & 0x1F) as u32) << 24; },

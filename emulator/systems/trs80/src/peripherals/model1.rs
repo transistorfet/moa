@@ -1,7 +1,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use moa_core::{System, Error, ClockDuration, Address, Addressable, Steppable, Transmutable, debug, warn};
+use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable, debug, warn};
 use moa_core::host::gfx::{Frame, FrameQueue};
 use moa_core::host::{Host, BlitableSurface, KeyboardUpdater, KeyEvent};
 
@@ -64,7 +64,7 @@ impl Addressable for Model1Peripherals {
         0x820
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         if (0x20..=0xA0).contains(&addr) {
             let offset = addr - 0x20;
             data[0] = 0;
@@ -86,7 +86,7 @@ impl Addressable for Model1Peripherals {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         if (0x420..0x820).contains(&addr) {
             self.video_mem[addr as usize - 0x420] = data[0];

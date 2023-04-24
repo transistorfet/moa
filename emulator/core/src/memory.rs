@@ -6,6 +6,7 @@ use std::fmt::Write;
 
 use crate::info;
 use crate::error::Error;
+use crate::clock::ClockTime;
 use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, read_beu16};
 
 
@@ -53,12 +54,12 @@ impl Addressable for MemoryBlock {
         self.contents.len()
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         data.copy_from_slice(&self.contents[(addr as usize)..(addr as usize) + data.len()]);
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         if self.read_only {
             return Err(Error::breakpoint(&format!("Attempt to write to read-only memory at {:x} with data {:?}", addr, data)));
         }
@@ -95,12 +96,12 @@ impl Addressable for AddressRightShifter {
         len << self.shift
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        self.subdevice.borrow_mut().as_addressable().unwrap().read(addr >> self.shift, data)
+    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        self.subdevice.borrow_mut().as_addressable().unwrap().read(clock, addr >> self.shift, data)
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
-        self.subdevice.borrow_mut().as_addressable().unwrap().write(addr >> self.shift, data)
+    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
+        self.subdevice.borrow_mut().as_addressable().unwrap().write(clock, addr >> self.shift, data)
     }
 }
 
@@ -130,14 +131,14 @@ impl Addressable for AddressRepeater {
         self.range as usize
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         let len = self.subdevice.borrow_mut().as_addressable().unwrap().len() as Address;
-        self.subdevice.borrow_mut().as_addressable().unwrap().read(addr % len, data)
+        self.subdevice.borrow_mut().as_addressable().unwrap().read(clock, addr % len, data)
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         let len = self.subdevice.borrow_mut().as_addressable().unwrap().len() as Address;
-        self.subdevice.borrow_mut().as_addressable().unwrap().write(addr % len, data)
+        self.subdevice.borrow_mut().as_addressable().unwrap().write(clock, addr % len, data)
     }
 }
 
@@ -193,13 +194,13 @@ impl Bus {
         Err(Error::new(&format!("No segment found at {:#010x}", addr)))
     }
 
-    pub fn dump_memory(&mut self, mut addr: Address, mut count: Address) {
+    pub fn dump_memory(&mut self, clock: ClockTime, mut addr: Address, mut count: Address) {
         while count > 0 {
             let mut line = format!("{:#010x}: ", addr);
 
             let to = if count < 16 { count / 2 } else { 8 };
             for _ in 0..to {
-                let word = self.read_beu16(addr);
+                let word = self.read_beu16(clock, addr);
                 if word.is_err() {
                     println!("{}", line);
                     return;
@@ -236,7 +237,7 @@ impl Addressable for Bus {
         (block.base as usize) + block.length
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         let (dev, relative_addr) = match self.get_device_at(addr, data.len()) {
             Ok(result) => result,
             Err(err) if self.ignore_unmapped => {
@@ -245,11 +246,11 @@ impl Addressable for Bus {
             },
             Err(err) => return Err(err),
         };
-        let result = dev.borrow_mut().as_addressable().unwrap().read(relative_addr, data);
+        let result = dev.borrow_mut().as_addressable().unwrap().read(clock, relative_addr, data);
         result
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         if self.watchers.iter().any(|a| *a == addr) {
             println!("watch: writing to address {:#06x} with {:?}", addr, data);
             self.watcher_modified = true;
@@ -263,7 +264,7 @@ impl Addressable for Bus {
             },
             Err(err) => return Err(err),
         };
-        let result = dev.borrow_mut().as_addressable().unwrap().write(relative_addr, data);
+        let result = dev.borrow_mut().as_addressable().unwrap().write(clock, relative_addr, data);
         result
     }
 }
@@ -291,8 +292,8 @@ impl BusPort {
         }
     }
 
-    pub fn dump_memory(&mut self, addr: Address, count: Address) {
-        self.subdevice.borrow_mut().dump_memory(self.offset + (addr & self.address_mask), count)
+    pub fn dump_memory(&mut self, clock: ClockTime, addr: Address, count: Address) {
+        self.subdevice.borrow_mut().dump_memory(clock, self.offset + (addr & self.address_mask), count)
     }
 
     pub fn address_mask(&self) -> Address {
@@ -309,22 +310,22 @@ impl Addressable for BusPort {
         self.subdevice.borrow().len()
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         let addr = self.offset + (addr & self.address_mask);
         let mut subdevice = self.subdevice.borrow_mut();
         for i in (0..data.len()).step_by(self.data_width as usize) {
             let end = std::cmp::min(i + self.data_width as usize, data.len());
-            subdevice.read(addr + i as Address, &mut data[i..end])?;
+            subdevice.read(clock, addr + i as Address, &mut data[i..end])?;
         }
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         let addr = self.offset + (addr & self.address_mask);
         let mut subdevice = self.subdevice.borrow_mut();
         for i in (0..data.len()).step_by(self.data_width as usize) {
             let end = std::cmp::min(i + self.data_width as usize, data.len());
-            subdevice.write(addr + i as Address, &data[i..end])?;
+            subdevice.write(clock, addr + i as Address, &data[i..end])?;
         }
         Ok(())
     }

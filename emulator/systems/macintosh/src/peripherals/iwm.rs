@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ClockDuration, Address, Addressable, Steppable, Transmutable, info, warn};
+use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable, info, warn};
 
 
 //const CA0: u8           = 0x01;
@@ -38,7 +38,7 @@ impl Addressable for IWM {
         0x10
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         self.flip_switches(addr);
 
         if (addr & 0x01) != 0 {
@@ -71,7 +71,7 @@ impl Addressable for IWM {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         self.flip_switches(addr);
 
         info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);

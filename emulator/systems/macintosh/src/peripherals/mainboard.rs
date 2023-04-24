@@ -69,19 +69,19 @@ impl Addressable for Mainboard {
         0x01000000
     }
 
-    fn read(&mut self, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         if addr < 0x800000 {
-            self.lower_bus.borrow_mut().read(addr, data)
+            self.lower_bus.borrow_mut().read(clock, addr, data)
         } else if (0x900000..0xA00000).contains(&addr) {
-            self.scc1.read((addr >> 9) & 0x0F, data)
+            self.scc1.read(clock, (addr >> 9) & 0x0F, data)
         } else if (0xB00000..0xC00000).contains(&addr) {
-            self.scc2.read((addr >> 9) & 0x0F, data)
+            self.scc2.read(clock, (addr >> 9) & 0x0F, data)
         } else if (0xD00000..0xE00000).contains(&addr) {
-            self.iwm.read((addr >> 9) & 0x0F, data)
+            self.iwm.read(clock, (addr >> 9) & 0x0F, data)
         } else if (0xE80000..0xF00000).contains(&addr) {
-            self.via.read((addr >> 9) & 0x0F, data)
+            self.via.read(clock, (addr >> 9) & 0x0F, data)
         } else if (0xF00000..0xF80000).contains(&addr) {
-            self.phase_read.read(addr, data)
+            self.phase_read.read(clock, addr, data)
         } else if (0xF80000..0xF80010).contains(&addr) {
             // Debugger
             Ok(())
@@ -90,19 +90,19 @@ impl Addressable for Mainboard {
         }
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         if addr < 0x800000 {
-            self.lower_bus.borrow_mut().write(addr, data)
+            self.lower_bus.borrow_mut().write(clock, addr, data)
         } else if (0x900000..0xA00000).contains(&addr) {
-            self.scc1.write((addr >> 9) & 0x0F, data)
+            self.scc1.write(clock, (addr >> 9) & 0x0F, data)
         } else if (0xB00000..0xC00000).contains(&addr) {
-            self.scc2.write((addr >> 9) & 0x0F, data)
+            self.scc2.write(clock, (addr >> 9) & 0x0F, data)
         } else if (0xD00000..0xE00000).contains(&addr) {
-            self.iwm.write((addr >> 9) & 0x0F, data)
+            self.iwm.write(clock, (addr >> 9) & 0x0F, data)
         } else if (0xE80000..0xF00000).contains(&addr) {
-            self.via.write((addr >> 9) & 0x0F, data)
+            self.via.write(clock, (addr >> 9) & 0x0F, data)
         } else if (0xF00000..0xF80000).contains(&addr) {
-            self.phase_read.write(addr, data)
+            self.phase_read.write(clock, addr, data)
         } else {
             Err(Error::new(&format!("Error writing address {:#010x}", addr)))
         }
@@ -146,13 +146,13 @@ impl Addressable for PhaseRead {
         0x80000
     }
 
-    fn read(&mut self, _addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, _addr: Address, data: &mut [u8]) -> Result<(), Error> {
         // TODO I'm not sure how this is supposed to work
         data[0] = 0x00;
         Ok(())
     }
 
-    fn write(&mut self, _addr: Address, _data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: ClockTime, _addr: Address, _data: &[u8]) -> Result<(), Error> {
         // TODO I'm not sure how this is supposed to work
         Ok(())
     }

@@ -5,7 +5,7 @@ use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
 use moa_core::host::gfx::{Frame, FrameQueue, PixelEncoding};
 use moa_core::host::{Host, WindowUpdater, KeyboardUpdater, Key, KeyEvent /*, MouseUpdater, MouseState, MouseEvent*/};
-use moa_core::{System, Error, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
+use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 
 pub struct SynthControlsUpdater(mpsc::Sender<KeyEvent>);
@@ -42,14 +42,14 @@ impl Steppable for SynthControl {
 
             match event.key {
                 Key::Enter => {
-                    system.get_bus().write_u8(0x00, 0x28)?;
-                    system.get_bus().write_u8(0x01, if event.state { 0xF0 } else { 0x00 })?;
+                    system.get_bus().write_u8(system.clock, 0x00, 0x28)?;
+                    system.get_bus().write_u8(system.clock, 0x01, if event.state { 0xF0 } else { 0x00 })?;
                 },
 
                 Key::A => {
-                    system.get_bus().write_u8(0x10, 0x84)?;
-                    system.get_bus().write_u8(0x10, 0x0F)?;
-                    system.get_bus().write_u8(0x10, if event.state { 0x90 } else { 0x9F })?;
+                    system.get_bus().write_u8(system.clock, 0x10, 0x84)?;
+                    system.get_bus().write_u8(system.clock, 0x10, 0x0F)?;
+                    system.get_bus().write_u8(system.clock, 0x10, if event.state { 0x90 } else { 0x9F })?;
                 },
 
                 _ => { },
@@ -72,8 +72,8 @@ impl Transmutable for SynthControl {
 
 fn set_register(device: &mut dyn Addressable, bank: u8, reg: u8, data: u8) -> Result<(), Error> {
     let addr = (bank as Address) * 2;
-    device.write_u8(addr, reg)?;
-    device.write_u8(addr + 1, data)?;
+    device.write_u8(ClockTime::START, addr, reg)?;
+    device.write_u8(ClockTime::START, addr + 1, data)?;
     Ok(())
 }
 

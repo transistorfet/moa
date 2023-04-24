@@ -32,10 +32,10 @@ impl Debuggable for Z80 {
         }
     }
 
-    fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
-        self.decoder.decode_at(&mut self.port, self.state.pc)?;
+    fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
+        self.decoder.decode_at(&mut self.port, system.clock, self.state.pc)?;
         self.decoder.dump_decoded(&mut self.port);
-        self.dump_state();
+        self.dump_state(system.clock);
         Ok(())
     }
 

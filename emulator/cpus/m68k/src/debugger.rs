@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, Address, Addressable, Debuggable};
+use moa_core::{System, Error, ClockTime, Address, Addressable, Debuggable};
 
 use super::state::M68k;
 use super::decode::M68kDecoder;
@@ -50,24 +50,24 @@ impl Debuggable for M68k {
         }
     }
 
-    fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
-        self.decoder.decode_at(&mut self.port, self.state.pc)?;
+    fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
+        self.decoder.decode_at(&mut self.port, system.clock, self.state.pc)?;
         self.decoder.dump_decoded(&mut self.port);
-        self.dump_state();
+        self.dump_state(system.clock);
         Ok(())
     }
 
     fn print_disassembly(&mut self, addr: Address, count: usize) {
-        let mut decoder = M68kDecoder::new(self.cputype, 0);
+        let mut decoder = M68kDecoder::new(self.cputype, ClockTime::START, 0);
         decoder.dump_disassembly(&mut self.port, addr as u32, count as u32);
     }
 
-    fn execute_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
+    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
         match args[0] {
             "ds" | "stack" | "dumpstack" => {
                 println!("Stack:");
                 for addr in &self.debugger.stack_tracer.calls {
-                    println!("  {:08x}", self.port.read_beu32(*addr as Address)?);
+                    println!("  {:08x}", self.port.read_beu32(system.clock, *addr as Address)?);
                 }
             },
             "so" | "stepout" => {

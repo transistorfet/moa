@@ -31,8 +31,8 @@ impl Steppable for Z80 {
         Ok(self.frequency.period_duration() * clocks as u64)
     }
 
-    fn on_error(&mut self, _system: &System) {
-        self.dump_state();
+    fn on_error(&mut self, system: &System) {
+        self.dump_state(system.clock);
     }
 }
 
@@ -56,6 +56,7 @@ impl Transmutable for Z80 {
 
 impl Z80 {
     pub fn step_internal(&mut self, system: &System) -> Result<u16, Error> {
+        self.current_clock = system.clock;
         match self.state.status {
             Status::Init => self.init(),
             Status::Halted => Err(Error::new("CPU stopped")),
@@ -92,7 +93,7 @@ impl Z80 {
     }
 
     pub fn decode_next(&mut self) -> Result<(), Error> {
-        self.decoder.decode_at(&mut self.port, self.state.pc)?;
+        self.decoder.decode_at(&mut self.port, self.current_clock, self.state.pc)?;
         self.state.pc = self.decoder.end;
         Ok(())
     }
@@ -244,9 +245,9 @@ impl Z80 {
             Instruction::EXsp(regpair) => {
                 let reg_value = self.get_register_pair_value(regpair);
                 let sp = self.get_register_pair_value(RegisterPair::SP);
-                let sp_value = self.port.read_leu16(sp as Address)?;
+                let sp_value = self.port.read_leu16(self.current_clock, sp as Address)?;
                 self.set_register_pair_value(regpair, sp_value);
-                self.port.write_leu16(sp as Address, reg_value)?;
+                self.port.write_leu16(self.current_clock, sp as Address, reg_value)?;
             },
             Instruction::HALT => {
                 self.state.status = Status::Halted;
@@ -616,17 +617,17 @@ impl Z80 {
 
     fn push_word(&mut self, value: u16) -> Result<(), Error> {
         self.state.sp = self.state.sp.wrapping_sub(1);
-        self.port.write_u8(self.state.sp as Address, (value >> 8) as u8)?;
+        self.port.write_u8(self.current_clock, self.state.sp as Address, (value >> 8) as u8)?;
         self.state.sp = self.state.sp.wrapping_sub(1);
-        self.port.write_u8(self.state.sp as Address, (value & 0x00FF) as u8)?;
+        self.port.write_u8(self.current_clock, self.state.sp as Address, (value & 0x00FF) as u8)?;
         Ok(())
     }
 
     fn pop_word(&mut self) -> Result<u16, Error> {
         let mut value;
-        value = self.port.read_u8(self.state.sp as Address)? as u16;
+        value = self.port.read_u8(self.current_clock, self.state.sp as Address)? as u16;
         self.state.sp = self.state.sp.wrapping_add(1);
-        value |= (self.port.read_u8(self.state.sp as Address)? as u16) << 8;
+        value |= (self.port.read_u8(self.current_clock, self.state.sp as Address)? as u16) << 8;
         self.state.sp = self.state.sp.wrapping_add(1);
         Ok(value)
     }
@@ -638,21 +639,21 @@ impl Z80 {
             LoadTarget::DirectRegWord(regpair) => self.get_register_pair_value(regpair),
             LoadTarget::IndirectRegByte(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
-                self.port.read_u8(addr as Address)? as u16
+                self.port.read_u8(self.current_clock, addr as Address)? as u16
             },
             LoadTarget::IndirectOffsetByte(index_reg, offset) => {
                 let addr = self.get_index_register_value(index_reg);
-                self.port.read_u8(((addr as i16).wrapping_add(offset as i16)) as Address)? as u16
+                self.port.read_u8(self.current_clock, ((addr as i16).wrapping_add(offset as i16)) as Address)? as u16
             },
             LoadTarget::IndirectRegWord(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
-                self.port.read_leu16(addr as Address)?
+                self.port.read_leu16(self.current_clock, addr as Address)?
             },
             LoadTarget::IndirectByte(addr) => {
-                self.port.read_u8(addr as Address)? as u16
+                self.port.read_u8(self.current_clock, addr as Address)? as u16
             },
             LoadTarget::IndirectWord(addr) => {
-                self.port.read_leu16(addr as Address)?
+                self.port.read_leu16(self.current_clock, addr as Address)?
             },
             LoadTarget::ImmediateByte(data) => data as u16,
             LoadTarget::ImmediateWord(data) => data,
@@ -668,21 +669,21 @@ impl Z80 {
             LoadTarget::DirectRegWord(regpair) => self.set_register_pair_value(regpair, value),
             LoadTarget::IndirectRegByte(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
-                self.port.write_u8(addr as Address, value as u8)?;
+                self.port.write_u8(self.current_clock, addr as Address, value as u8)?;
             },
             LoadTarget::IndirectOffsetByte(index_reg, offset) => {
                 let addr = self.get_index_register_value(index_reg);
-                self.port.write_u8(((addr as i16).wrapping_add(offset as i16)) as Address, value as u8)?;
+                self.port.write_u8(self.current_clock, ((addr as i16).wrapping_add(offset as i16)) as Address, value as u8)?;
             },
             LoadTarget::IndirectRegWord(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
-                self.port.write_leu16(addr as Address, value)?;
+                self.port.write_leu16(self.current_clock, addr as Address, value)?;
             },
             LoadTarget::IndirectByte(addr) => {
-                self.port.write_u8(addr as Address, value as u8)?;
+                self.port.write_u8(self.current_clock, addr as Address, value as u8)?;
             },
             LoadTarget::IndirectWord(addr) => {
-                self.port.write_leu16(addr as Address, value)?;
+                self.port.write_leu16(self.current_clock, addr as Address, value)?;
             },
             _ => panic!("Unsupported LoadTarget for set: {:?}", target),
         }
@@ -695,11 +696,11 @@ impl Z80 {
             Target::DirectRegHalf(reg) => Ok(self.get_index_register_half_value(reg)),
             Target::IndirectReg(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
-                Ok(self.port.read_u8(addr as Address)?)
+                Ok(self.port.read_u8(self.current_clock, addr as Address)?)
             },
             Target::IndirectOffset(reg, offset) => {
                 let addr = (self.get_index_register_value(reg) as i16) + (offset as i16);
-                Ok(self.port.read_u8(addr as Address)?)
+                Ok(self.port.read_u8(self.current_clock, addr as Address)?)
             },
             Target::Immediate(data) => Ok(data),
         }
@@ -711,11 +712,11 @@ impl Z80 {
             Target::DirectRegHalf(reg) => self.set_index_register_half_value(reg, value),
             Target::IndirectReg(regpair) => {
                 let addr = self.get_register_pair_value(regpair);
-                self.port.write_u8(addr as Address, value)?;
+                self.port.write_u8(self.current_clock, addr as Address, value)?;
             },
             Target::IndirectOffset(reg, offset) => {
                 let addr = (self.get_index_register_value(reg) as i16) + (offset as i16);
-                self.port.write_u8(addr as Address, value)?;
+                self.port.write_u8(self.current_clock, addr as Address, value)?;
             },
             _ => panic!("Unsupported LoadTarget for set"),
         }

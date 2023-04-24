@@ -1,6 +1,6 @@
 
 use moa_core::{warn, info};
-use moa_core::{System, Error, ClockDuration, Address, Addressable, Steppable, Transmutable};
+use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, ControllerUpdater, HostData, ControllerDevice, ControllerEvent};
 
 
@@ -154,7 +154,7 @@ impl Addressable for GenesisControllers {
         0x30
     }
 
-    fn read(&mut self, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
         // If the address is even, only the second byte (odd byte) will be meaningful
         let mut i = 0;
         if (addr % 2) == 0 {
@@ -179,7 +179,7 @@ impl Addressable for GenesisControllers {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         self.reset_timer = ClockDuration::ZERO;
 
         info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);

@@ -229,7 +229,7 @@ impl Ym7101Memory {
 
                     while self.transfer_remain > 0 {
                         let mut data = [0; 2];
-                        bus.read(self.transfer_src_addr as Address, &mut data)?;
+                        bus.read(system.clock, self.transfer_src_addr as Address, &mut data)?;
 
                         let addr = self.transfer_dest_addr as usize;
                         let target = self.get_transfer_target_mut();
@@ -783,7 +783,7 @@ impl Addressable for Ym7101 {
         0x20
     }
 
-    fn read(&mut self, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: ClockTime, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             // Read from Data Port
             0x00 | 0x02 => self.state.memory.read_data_port(addr, data)?,
@@ -814,7 +814,7 @@ impl Addressable for Ym7101 {
         Ok(())
     }
 
-    fn write(&mut self, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         match addr {
             // Write to Data Port
             0x00 | 0x02 => self.state.memory.write_data_port(data)?,
@@ -840,7 +840,7 @@ impl Addressable for Ym7101 {
             },
 
             0x11 | 0x12 => {
-                self.sn_sound.borrow_mut().as_addressable().unwrap().write(0, data)?;
+                self.sn_sound.borrow_mut().as_addressable().unwrap().write(clock, 0, data)?;
             },
 
             _ => { warn!("{}: !!! unhandled write to {:x} with {:?}", DEV_NAME, addr, data); },
