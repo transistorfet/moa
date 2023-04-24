@@ -650,7 +650,7 @@ const CHARACTERS: [[u8; 8]; 64] = [
 ];
 
 
-use moa_core::host::gfx::Pixel;
+use moa_core::host::Pixel;
 
 pub struct CharacterGenerator {
     pub row: i8,

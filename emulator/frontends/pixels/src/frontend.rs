@@ -7,8 +7,7 @@ use winit::event::{Event, VirtualKeyCode, WindowEvent, ElementState};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use moa_core::{System, Error};
-use moa_core::host::{Host, WindowUpdater, ControllerDevice, ControllerEvent, ControllerUpdater, Audio, DummyAudio};
-use moa_core::host::gfx::{PixelEncoding, Frame};
+use moa_core::host::{Host, PixelEncoding, Frame, WindowUpdater, ControllerDevice, ControllerEvent, ControllerUpdater, Audio, DummyAudio};
 use moa_common::{AudioMixer, AudioSource, CpalAudioOutput};
 
 use crate::settings;

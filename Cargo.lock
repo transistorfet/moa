@@ -578,6 +578,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "moa_audio"
+version = "0.1.0"
+
+[[package]]
 name = "moa_common"
 version = "0.1.0"
 dependencies = [
@@ -696,6 +700,7 @@ dependencies = [
 name = "moa_peripherals_yamaha"
 version = "0.1.0"
 dependencies = [
+ "moa_audio",
  "moa_core",
 ]
 

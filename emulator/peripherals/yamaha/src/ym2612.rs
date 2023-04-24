@@ -14,7 +14,7 @@ use std::collections::VecDeque;
 use moa_core::{debug, warn};
 use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio};
-use moa_core::host::audio::{SineWave, db_to_gain};
+use moa_audio::{SineWave, db_to_gain};
 
 
 /// Table of shift values for each possible rate angle

@@ -1,6 +1,5 @@
 
 use moa_core::{ClockTime, Address, BusPort, Frequency};
-use moa_core::timers::CpuTimer;
 
 use crate::instructions::Size;
 use crate::decode::M68kDecoder;
@@ -131,7 +130,6 @@ pub struct M68k {
     pub timing: M68kInstructionTiming,
     pub debugger: M68kDebugger,
     pub port: BusPort,
-    pub timer: CpuTimer,
     pub current_clock: ClockTime,
 }
 
@@ -165,7 +163,6 @@ impl M68k {
             timing: M68kInstructionTiming::new(cputype, port.data_width()),
             debugger: M68kDebugger::default(),
             port,
-            timer: CpuTimer::default(),
             current_clock: ClockTime::START,
         }
     }

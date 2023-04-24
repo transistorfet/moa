@@ -8,8 +8,7 @@ use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
 use moa_core::{System, Error, ClockDuration};
-use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice};
-use moa_core::host::gfx::{PixelEncoding, Frame};
+use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice, PixelEncoding, Frame};
 
 use moa_common::{AudioMixer, AudioSource};
 use moa_common::CpalAudioOutput;

@@ -1,7 +1,6 @@
 
 use moa_core::{System, Error, ClockDuration, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::gfx::{Frame, FrameQueue, Pixel};
-use moa_core::host::{Host, BlitableSurface};
+use moa_core::host::{Host, BlitableSurface, Frame, FrameQueue, Pixel};
 
 
 const SCRN_BASE: u32        = 0x07A700;

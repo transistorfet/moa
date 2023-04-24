@@ -11,7 +11,6 @@ mod signals;
 mod system;
 
 pub mod host;
-pub mod timers;
 
 pub use log::{trace, debug, info, warn, error};
 

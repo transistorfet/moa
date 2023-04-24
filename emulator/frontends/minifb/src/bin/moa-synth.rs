@@ -3,8 +3,7 @@ use std::sync::mpsc;
 
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
-use moa_core::host::gfx::{Frame, FrameQueue, PixelEncoding};
-use moa_core::host::{Host, WindowUpdater, KeyboardUpdater, Key, KeyEvent /*, MouseUpdater, MouseState, MouseEvent*/};
+use moa_core::host::{Host, Frame, FrameQueue, PixelEncoding, WindowUpdater, KeyboardUpdater, Key, KeyEvent /*, MouseUpdater, MouseState, MouseEvent*/};
 use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
 

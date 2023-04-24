@@ -2,7 +2,7 @@
 use moa_core::{info, warn, debug};
 use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio};
-use moa_core::host::audio::{SquareWave};
+use moa_audio::SquareWave;
 
 
 const DEV_NAME: &str = "sn76489";

@@ -90,13 +90,8 @@ impl M68k {
     }
 
     pub fn cycle_one(&mut self, system: &System) -> Result<ClockDuration, Error> {
-        self.timer.cycle.start();
         self.decode_next()?;
         self.execute_current()?;
-        self.timer.cycle.end();
-        //if (self.timer.cycle.events % 500) == 0 {
-        //    println!("{}", self.timer);
-        //}
 
         self.check_pending_interrupts(system)?;
         self.check_breakpoints(system);
@@ -204,10 +199,8 @@ impl M68k {
     pub fn decode_next(&mut self) -> Result<(), Error> {
         self.timing.reset();
 
-        self.timer.decode.start();
         self.start_instruction_request(self.state.pc)?;
         self.decoder.decode_at(&mut self.port, self.current_clock, self.state.pc)?;
-        self.timer.decode.end();
 
         self.timing.add_instruction(&self.decoder.instruction);
 
@@ -221,7 +214,6 @@ impl M68k {
     }
 
     pub fn execute_current(&mut self) -> Result<(), Error> {
-        self.timer.execute.start();
         match self.decoder.instruction {
             Instruction::ABCD(src, dest) => self.execute_abcd(src, dest),
             Instruction::ADD(src, dest, size) => self.execute_add(src, dest, size),
@@ -310,7 +302,6 @@ impl M68k {
             _ => { return Err(Error::new("Unsupported instruction")); },
         }?;
 
-        self.timer.execute.end();
         Ok(())
     }
 

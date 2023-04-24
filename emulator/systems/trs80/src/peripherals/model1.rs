@@ -2,8 +2,7 @@
 use std::sync::{Arc, Mutex};
 
 use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable, debug, warn};
-use moa_core::host::gfx::{Frame, FrameQueue};
-use moa_core::host::{Host, BlitableSurface, KeyboardUpdater, KeyEvent};
+use moa_core::host::{Host, Frame, FrameQueue, BlitableSurface, KeyboardUpdater, KeyEvent};
 
 use super::keymap;
 use super::charset::CharacterGenerator;

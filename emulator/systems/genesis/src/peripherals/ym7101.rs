@@ -1,8 +1,7 @@
 
 use moa_core::{debug, warn, error};
 use moa_core::{System, Error, EdgeSignal, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
-use moa_core::host::{Host, BlitableSurface, HostData};
-use moa_core::host::gfx::{Pixel, PixelEncoding, Frame, FrameQueue};
+use moa_core::host::{Host, Pixel, PixelEncoding, Frame, FrameQueue, BlitableSurface, HostData};
 
 
 const REG_MODE_SET_1: usize             = 0x00;
