@@ -27,6 +27,8 @@
   the cost of having more events on the queue when re-scheduling.  There needs to be a mechanism to avoid the event queue ballooning due to
   an error
 
+* add ability to serialize/deserialize state into something, so it can be restored... (maybe not worth it though)
+
 * can you refactor the update timeout to put it in rust?  Would that make it faster? (the tricky part is the closure)
 * re-enable sound on webassembly, see if it works (it does not. Very lagged and jittery with what sounds like repeated frames)
 

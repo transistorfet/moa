@@ -380,3 +380,10 @@ General Work
   changing from a sine wave generator to a square wave generator made it go from being muddled and
   mute sounding to sounding crisp and much closer to what it's supposed to sound like
 
+- in order to match the way I did the rates, I modified the frequency setting code to store the
+  fnumber and block in the operators themselves, and used the cached registers to update the values
+  whenever either of the sets of registers was updated.  It previously only updated the frequency if
+  the A0 registers were written, so it was multiple octaves lower than it should have been
+- now it actually sounds pretty close for the high pitch tones, but the base tones are completely
+  missing
+

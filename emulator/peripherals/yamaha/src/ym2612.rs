@@ -251,7 +251,9 @@ struct Operator {
     #[allow(dead_code)]
     debug_name: String,
     wave: SquareWave,
-    frequency: f32,
+    block: u8,
+    fnumber: u16,
+    detune: u8,
     multiplier: f32,
     envelope: EnvelopeGenerator,
 }
@@ -261,7 +263,9 @@ impl Operator {
         Self {
             debug_name: debug_name.clone(),
             wave: SquareWave::new(400.0, sample_rate),
-            frequency: 400.0,
+            block: 0,
+            fnumber: 0,
+            detune: 0,
             multiplier: 1.0,
             envelope: EnvelopeGenerator::new(debug_name),
         }
@@ -271,12 +275,17 @@ impl Operator {
         self.wave.reset();
     }
 
-    fn set_frequency(&mut self, frequency: f32) {
-        self.frequency = frequency;
+    fn set_block_and_fnumber(&mut self, block: u8, fnumber: u16) {
+        self.block = block;
+        self.fnumber = fnumber;
     }
 
-    fn set_multiplier(&mut self, _frequency: f32, multiplier: f32) {
-        self.multiplier = multiplier;
+    fn set_detune(&mut self, detune: u8) {
+        self.detune = detune;
+    }
+
+    fn set_multiplier(&mut self, multiplier: u16) {
+        self.multiplier = if multiplier == 0 { 0.5 } else { multiplier as f32 };
     }
 
     fn set_total_level(&mut self, level: u16) {
@@ -296,7 +305,8 @@ impl Operator {
     }
 
     fn get_sample(&mut self, modulator: f32, envelope_clock: EnvelopeClock) -> f32 {
-        self.wave.set_frequency((self.frequency * self.multiplier) + modulator);
+        let frequency = fnumber_to_frequency(self.block, self.fnumber);
+        self.wave.set_frequency((frequency * self.multiplier) as f32 + modulator);
         let sample = self.wave.next().unwrap();
 
         self.envelope.update_envelope(envelope_clock);
@@ -306,6 +316,10 @@ impl Operator {
     }
 }
 
+#[inline]
+fn fnumber_to_frequency(block: u8, fnumber: u16) -> f32 {
+    (fnumber as f32 * 0.0264) * 2_u32.pow(block as u32) as f32
+}
 
 #[derive(Clone)]
 struct Channel {
@@ -329,13 +343,6 @@ impl Channel {
             next_key_state: 0,
             base_frequency: 0.0,
             algorithm: OperatorAlgorithm::A0,
-        }
-    }
-
-    fn set_frequency(&mut self, frequency: f32) {
-        self.base_frequency = frequency;
-        for operator in self.operators.iter_mut() {
-            operator.set_frequency(frequency);
         }
     }
 
@@ -454,7 +461,6 @@ pub struct Ym2612 {
     fm_clock_period: ClockDuration,
     envelope_clock_period: ClockDuration,
     channels: Vec<Channel>,
-    channel_frequencies: [(u8, u16); CHANNELS],
     dac: Dac,
 
     timer_a_enable: bool,
@@ -487,7 +493,6 @@ impl Ym2612 {
             fm_clock_period,
             envelope_clock_period,
             channels: (0..CHANNELS).map(|i| Channel::new(format!("ch {}", i), sample_rate)).collect(),
-            channel_frequencies: [(0, 0); CHANNELS],
 
             dac: Dac::default(),
 
@@ -559,6 +564,9 @@ impl Ym2612 {
             0x27 => {
                 //if (data >> 5) & 0x1 {
                 //    self.timer_b
+                if data >> 6 == 0x01 {
+                    warn!("{}: ch 3 special mode requested, but not implemented", DEV_NAME);
+                }
             },
 
             0x28 => {
@@ -588,10 +596,8 @@ impl Ym2612 {
 
             reg if is_reg_range(reg, 0x30) => {
                 let (ch, op) = get_ch_op(bank, reg);
-                let multiplier = if data == 0 { 0.5 } else { (data & 0x0F) as f32 };
-                let frequency = self.channels[ch].base_frequency;
-                debug!("{}: channel {} operator {} set to multiplier {}", DEV_NAME, ch + 1, op + 1, multiplier);
-                self.channels[ch].operators[op].set_multiplier(frequency, multiplier)
+                self.channels[ch].operators[op].set_detune((data & 0xF0) >> 4);
+                self.channels[ch].operators[op].set_multiplier((data & 0x0F) as u16);
             },
 
             reg if is_reg_range(reg, 0x40) => {
@@ -613,18 +619,11 @@ impl Ym2612 {
             },
 
             reg if (0xA0..=0xA2).contains(&reg) => {
-                let ch = get_ch(bank, reg);
-                self.channel_frequencies[ch].1 = (self.channel_frequencies[ch].1 & 0xFF00) | data as u16;
-
-                let frequency = fnumber_to_frequency(self.channel_frequencies[ch]);
-                debug!("{}: channel {} set to frequency {}", DEV_NAME, ch + 1, frequency);
-                self.channels[ch].set_frequency(frequency);
+                self.update_fnumber(bank, reg & 0x0F);
             },
 
             reg if (0xA4..=0xA6).contains(&reg) => {
-                let ch = ((reg as usize) & 0x07) - 4 + ((bank as usize) * 3);
-                self.channel_frequencies[ch].1 = (self.channel_frequencies[ch].1 & 0xFF) | ((data as u16) & 0x07) << 8;
-                self.channel_frequencies[ch].0 = (data & 0x38) >> 3;
+                self.update_fnumber(bank, reg & 0x0F);
             },
 
             reg if (0xB0..=0xB2).contains(&reg) => {
@@ -648,9 +647,18 @@ impl Ym2612 {
         }
     }
 
-    fn update_rates(&mut self, bank: u8, reg: u8) {
-        let index = bank as usize * 256 + reg as usize;
-        let (ch, op) = get_ch_op(bank, reg);
+    fn update_fnumber(&mut self, bank: u8, lower_reg: u8) {
+        let index = bank as usize * 256 + lower_reg as usize;
+        let block = (self.registers[0xA4 + index] & 0x38) >> 3;
+        let fnumber = ((self.registers[0xA4 + index] as u16 & 0x07) << 8) | self.registers[0xA0 + index] as u16;
+
+        let (ch, op) = get_ch_op(bank, lower_reg);
+        self.channels[ch].operators[op].set_block_and_fnumber(block, fnumber);
+    }
+
+    fn update_rates(&mut self, bank: u8, lower_reg: u8) {
+        let index = bank as usize * 256 + lower_reg as usize;
+        let (ch, op) = get_ch_op(bank, lower_reg);
         let keycode = self.registers[0xA0 + get_ch_index(ch)] >> 1;
         let rate_scaling = self.registers[0x50 + index] & 0xC0 >> 6;
 
@@ -668,11 +676,6 @@ impl Ym2612 {
         let sustain_level = if sustain_level == (0xF0 << 2) { MAX_ENVELOPE } else { sustain_level };    // adjust the maximum storable value to be the max attenuation
         self.channels[ch].operators[op].set_sustain_level(sustain_level);
     }
-}
-
-#[inline]
-fn fnumber_to_frequency(fnumber: (u8, u16)) -> f32 {
-    (fnumber.1 as f32 * 0.0264) * 2_u32.pow(fnumber.0 as u32) as f32
 }
 
 #[inline]
