@@ -120,6 +120,7 @@ const OPERATORS: usize = 4;
 const MAX_ENVELOPE: u16 = 0x3FC;
 
 
+type FmClock = u64;
 type EnvelopeClock = u64;
 
 #[repr(usize)]
@@ -173,8 +174,12 @@ impl EnvelopeGenerator {
     fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
         if state {
             self.next_envelope_clock = envelope_clock;
-            self.envelope_state = EnvelopeState::Attack;
             self.envelope = 0;
+            if self.rates[EnvelopeState::Attack as usize] < 62 {
+                self.envelope_state = EnvelopeState::Attack;
+            } else {
+                self.envelope_state = EnvelopeState::Decay;
+            }
         } else {
             self.envelope_state = EnvelopeState::Release;
         }
@@ -200,7 +205,6 @@ impl EnvelopeGenerator {
 
             match self.envelope_state {
                 EnvelopeState::Attack => {
-                    //let new_envelope = self.envelope + increment * (((1024 - self.envelope) / 16) + 1);
                     let new_envelope = ((!self.envelope * increment) >> 4) & 0xFFFC;
                     if new_envelope > self.envelope {
                         self.envelope_state = EnvelopeState::Decay;
@@ -216,9 +220,10 @@ impl EnvelopeGenerator {
                 },
             }
 
-            if self.debug_name == "ch 3, op 2" {
-                println!("{}: {:?} {} {}", update_cycle, self.envelope_state, self.envelope, self.sustain_level);
-            }
+            // TODO remove this
+            //if self.debug_name == "ch 3, op 2" {
+            //    println!("{}: {:?} {} {}", update_cycle, self.envelope_state, self.envelope, self.sustain_level);
+            //}
         }
     }
 
@@ -308,7 +313,7 @@ struct Channel {
     debug_name: String,
     operators: Vec<Operator>,
     key_state: u8,
-    next_key_clock: ClockTime,
+    next_key_clock: FmClock,
     next_key_state: u8,
     base_frequency: f32,
     algorithm: OperatorAlgorithm,
@@ -320,7 +325,7 @@ impl Channel {
             debug_name: debug_name.clone(),
             operators: (0..OPERATORS).map(|i| Operator::new(format!("{}, op {}", debug_name, i), sample_rate)).collect(),
             key_state: 0,
-            next_key_clock: ClockTime::START,
+            next_key_clock: 0,
             next_key_state: 0,
             base_frequency: 0.0,
             algorithm: OperatorAlgorithm::A0,
@@ -334,13 +339,13 @@ impl Channel {
         }
     }
 
-    fn change_key_state(&mut self, clock: ClockTime, key: u8) {
-        self.next_key_clock = clock;
+    fn change_key_state(&mut self, fm_clock: FmClock, key: u8) {
+        self.next_key_clock = fm_clock;
         self.next_key_state = key;
     }
 
-    fn check_key_change(&mut self, clock: ClockTime, envelope_clock: EnvelopeClock) {
-        if self.key_state != self.next_key_state && clock >= self.next_key_clock {
+    fn check_key_change(&mut self, fm_clock: FmClock, envelope_clock: EnvelopeClock) {
+        if self.key_state != self.next_key_state && fm_clock >= self.next_key_clock {
             self.key_state = self.next_key_state;
             for (i, operator) in self.operators.iter_mut().enumerate() {
                 operator.notify_key_change(((self.key_state >> i) & 0x01) != 0, envelope_clock);
@@ -349,8 +354,8 @@ impl Channel {
         }
     }
 
-    fn get_sample(&mut self, clock: ClockTime, envelope_clock: EnvelopeClock) -> f32 {
-        self.check_key_change(clock, envelope_clock);
+    fn get_sample(&mut self, fm_clock: FmClock, envelope_clock: EnvelopeClock) -> f32 {
+        self.check_key_change(fm_clock, envelope_clock);
 
         if self.key_state != 0 {
             self.get_algorithm_sample(envelope_clock)
@@ -446,6 +451,7 @@ pub struct Ym2612 {
     selected_reg_1: Option<NonZeroU8>,
 
     clock_frequency: Frequency,
+    fm_clock_period: ClockDuration,
     envelope_clock_period: ClockDuration,
     channels: Vec<Channel>,
     channel_frequencies: [(u8, u16); CHANNELS],
@@ -468,13 +474,18 @@ impl Ym2612 {
     pub fn create<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
         let source = host.create_audio_source()?;
         let sample_rate = source.samples_per_second();
+        let fm_clock = clock_frequency / 6 / 24;
+        let fm_clock_period = fm_clock.period_duration();
+        let envelope_clock_period = (fm_clock / 3).period_duration();
+
         Ok(Self {
             source,
             selected_reg_0: None,
             selected_reg_1: None,
 
             clock_frequency,
-            envelope_clock_period: clock_frequency.period_duration() * 144 * 3, // Nemesis shows * 351?  Not sure why the difference
+            fm_clock_period,
+            envelope_clock_period,
             channels: (0..CHANNELS).map(|i| Channel::new(format!("ch {}", i), sample_rate)).collect(),
             channel_frequencies: [(0, 0); CHANNELS],
 
@@ -506,17 +517,18 @@ impl Steppable for Ym2612 {
             let mut buffer = vec![0.0; samples];
             for (i, buffered_sample) in buffer.iter_mut().enumerate().take(samples) {
                 let sample_clock = system.clock + (sample_duration * i as u64);
+                let fm_clock = sample_clock.as_duration() / self.fm_clock_period;
                 let envelope_clock = sample_clock.as_duration() / self.envelope_clock_period;
                 let mut sample = 0.0;
 
                 for ch in 0..(CHANNELS - 1) {
-                    sample += self.channels[ch].get_sample(sample_clock, envelope_clock);
+                    sample += self.channels[ch].get_sample(fm_clock, envelope_clock);
                 }
 
                 if self.dac.enabled {
                     sample += self.dac.get_sample();
                 } else {
-                    sample += self.channels[CHANNELS - 1].get_sample(sample_clock, envelope_clock);
+                    sample += self.channels[CHANNELS - 1].get_sample(fm_clock, envelope_clock);
                 }
 
                 *buffered_sample = sample.clamp(-1.0, 1.0);
@@ -559,7 +571,7 @@ impl Ym2612 {
                         return;
                     },
                 };
-                self.channels[ch].change_key_state(clock, data >> 4);
+                self.channels[ch].change_key_state(clock.as_duration() / self.fm_clock_period, data >> 4);
             },
 
             0x2a => {

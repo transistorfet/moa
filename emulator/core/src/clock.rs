@@ -281,3 +281,31 @@ impl Frequency {
     }
 }
 
+impl Mul<u32> for Frequency {
+    type Output = Self;
+
+    fn mul(self, rhs: u32) -> Self::Output {
+        Self::from_hz(self.hertz * rhs)
+    }
+}
+
+impl MulAssign<u32> for Frequency {
+    fn mul_assign(&mut self, rhs: u32) {
+        *self = Self::from_hz(self.hertz * rhs);
+    }
+}
+
+impl Div<u32> for Frequency {
+    type Output = Self;
+
+    fn div(self, rhs: u32) -> Self::Output {
+        Self::from_hz(self.hertz / rhs)
+    }
+}
+
+impl DivAssign<u32> for Frequency {
+    fn div_assign(&mut self, rhs: u32) {
+        *self = Self::from_hz(self.hertz / rhs);
+    }
+}
+
