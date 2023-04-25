@@ -1,5 +1,3 @@
-//! Clock time and duration types for simulation with femtosecond accurancy
-//!
 
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
 
@@ -230,7 +228,11 @@ impl AddAssign<ClockDuration> for ClockTime {
     }
 }
 
-
+/// Represents a frequency in Hz
+///
+/// Clocks are usually given as a frequency, but durations are needed when dealing with clocks
+/// and clock durations.  This type makes it easier to create a clock of a given frequency and
+/// convert it to a `ClockDuration`
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Frequency {
     hertz: u32,

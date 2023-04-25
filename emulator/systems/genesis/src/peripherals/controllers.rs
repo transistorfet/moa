@@ -1,4 +1,7 @@
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU16, Ordering};
+
 use moa_core::{warn, info};
 use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, ControllerUpdater, HostData, ControllerDevice, ControllerEvent};
@@ -22,7 +25,7 @@ pub struct GenesisControllerPort {
     /// Data contains bits:
     /// 11 | 10 | 9 |    8 |     7 | 6 | 5 | 4 |     3 |    2 |    1 |  0
     ///  X |  Y | Z | MODE | START | A | C | B | RIGHT | LEFT | DOWN | UP
-    buttons: HostData<u16>,
+    buttons: Arc<AtomicU16>,
 
     ctrl: u8,
     outputs: u8,
@@ -34,7 +37,7 @@ pub struct GenesisControllerPort {
 impl Default for GenesisControllerPort {
     fn default() -> Self {
         Self {
-            buttons: HostData::new(0xffff),
+            buttons: Arc::new(AtomicU16::new(0xffff)),
             ctrl: 0,
             outputs: 0,
             th_count: 0,
@@ -45,7 +48,7 @@ impl Default for GenesisControllerPort {
 
 impl GenesisControllerPort {
     pub fn get_data(&mut self) -> u8 {
-        let inputs = self.buttons.get();
+        let inputs = self.buttons.load(Ordering::Relaxed);
         let th_state = (self.outputs & 0x40) != 0;
 
         match (th_state, self.th_count) {
@@ -85,7 +88,7 @@ impl GenesisControllerPort {
     }
 }
 
-pub struct GenesisControllersUpdater(HostData<u16>, HostData<bool>);
+pub struct GenesisControllersUpdater(Arc<AtomicU16>, HostData<bool>);
 
 impl ControllerUpdater for GenesisControllersUpdater {
     fn update_controller(&mut self, event: ControllerEvent) {
@@ -102,8 +105,8 @@ impl ControllerUpdater for GenesisControllersUpdater {
             _ => (0x0000, false),
         };
 
-        let buttons = (self.0.get() & !mask) | (if !state { mask } else { 0 });
-        self.0.set(buttons);
+        let buttons = (self.0.load(Ordering::Acquire) & !mask) | (if !state { mask } else { 0 });
+        self.0.store(buttons, Ordering::Release);
         if buttons != 0 {
             self.1.set(true);
         }

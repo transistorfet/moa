@@ -1,10 +1,15 @@
 
-* remove the old timer stuff and replace with opentelemetry if it can be wasm compatible
-
+* can you make the frontend more adaptive to the input that the devices are using
+* change the name of the functions that take Host to be `with_host` or `register` or something
+* need to re-add a mechanism for audio frame dialation, either based on speed, or somehow automatic, use clocks and make them aligned
 * maybe I should make ClockDuration use picos as the base instead, and use u64 since that gives like 212 days or something instead of 5h
   and should prevent split nanoseconds which is the main concern
-
 * the audio needs to not run if nothing is using it or there's constant buffer underruns
+
+* fix ym2612 sound generation
+* sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
+
+* add opentelemetry if it can be wasm compatible, or some kind of timing for giving an average framerate
 
 * add doc strings everywhere
 * get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion
@@ -25,16 +30,9 @@
 * can you refactor the update timeout to put it in rust?  Would that make it faster? (the tricky part is the closure)
 * re-enable sound on webassembly, see if it works (it does not. Very lagged and jittery with what sounds like repeated frames)
 
-
 * can you somehow speed up the memory accessing through the sim?  The dyn Addressable is causing a fair amount of overhead
 * can you somehow make devices have two step functions for running things at different times? (I'm thinking ym2612 audio gen vs timers)
 * should you rename devices.rs traits.rs?
-* you could refactor the instruction loop into a series of functions, and test if there's a performance difference with and without #[inline(always)]
-* move parser into its own utils/ or /libs/ directory
-
-* fix ym2612 sound generation
-* need to re-add a mechanism for audio frame dialation, either based on speed, or somehow automatic
-* sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
 
 
 * the pixel format idea didn't work because of window resizing and the fact that the frame needs to be adjusted in size because the window can't always be resized...

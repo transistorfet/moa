@@ -6,7 +6,7 @@
 //!
 //! Resources:
 //! - Registers: https://www.smspower.org/maxim/Documents/YM2612
-//! - Envelope and rates: http://gendev.spritesmind.net/forum/viewtopic.php?p=5716#5716
+//! - Envelope and rates: https://gendev.spritesmind.net/forum/viewtopic.php?t=386 [Nemesis]
 
 use std::num::NonZeroU8;
 use std::collections::VecDeque;
@@ -14,7 +14,7 @@ use std::collections::VecDeque;
 use moa_core::{debug, warn};
 use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio};
-use moa_audio::{SineWave, db_to_gain};
+use moa_audio::{SquareWave, db_to_gain};
 
 
 /// Table of shift values for each possible rate angle
@@ -117,7 +117,7 @@ const DEV_NAME: &str = "ym2612";
 
 const CHANNELS: usize = 6;
 const OPERATORS: usize = 4;
-const MAX_ENVELOPE: u16 = 0xFFC;
+const MAX_ENVELOPE: u16 = 0x3FC;
 
 
 type EnvelopeClock = u64;
@@ -200,12 +200,13 @@ impl EnvelopeGenerator {
 
             match self.envelope_state {
                 EnvelopeState::Attack => {
-                    let new_envelope = self.envelope + increment * (((1024 - self.envelope) / 16) + 1);
-                    if new_envelope < MAX_ENVELOPE {
-                        self.envelope = new_envelope;
-                    } else {
+                    //let new_envelope = self.envelope + increment * (((1024 - self.envelope) / 16) + 1);
+                    let new_envelope = ((!self.envelope * increment) >> 4) & 0xFFFC;
+                    if new_envelope > self.envelope {
                         self.envelope_state = EnvelopeState::Decay;
                         self.envelope = 0;
+                    } else {
+                        self.envelope = new_envelope.min(MAX_ENVELOPE);
                     }
                 },
                 EnvelopeState::Decay |
@@ -214,16 +215,15 @@ impl EnvelopeGenerator {
                     self.envelope = (self.envelope + increment).min(MAX_ENVELOPE);
                 },
             }
+
+            if self.debug_name == "ch 3, op 2" {
+                println!("{}: {:?} {} {}", update_cycle, self.envelope_state, self.envelope, self.sustain_level);
+            }
         }
     }
 
     fn get_db_at(&mut self) -> f32 {
-        let envelope = if self.envelope_state == EnvelopeState::Attack {
-            !self.envelope & 0x3FF
-        } else {
-            self.envelope
-        };
-        let attenuation_10bit = (envelope + self.total_level).min(MAX_ENVELOPE);
+        let attenuation_10bit = (self.envelope + self.total_level).min(MAX_ENVELOPE);
         attenuation_10bit as f32 * 0.09375
     }
 }
@@ -245,7 +245,7 @@ enum OperatorAlgorithm {
 struct Operator {
     #[allow(dead_code)]
     debug_name: String,
-    wave: SineWave,
+    wave: SquareWave,
     frequency: f32,
     multiplier: f32,
     envelope: EnvelopeGenerator,
@@ -255,7 +255,7 @@ impl Operator {
     fn new(debug_name: String, sample_rate: usize) -> Self {
         Self {
             debug_name: debug_name.clone(),
-            wave: SineWave::new(400.0, sample_rate),
+            wave: SquareWave::new(400.0, sample_rate),
             frequency: 400.0,
             multiplier: 1.0,
             envelope: EnvelopeGenerator::new(debug_name),
@@ -474,7 +474,7 @@ impl Ym2612 {
             selected_reg_1: None,
 
             clock_frequency,
-            envelope_clock_period: clock_frequency.period_duration() * 351,
+            envelope_clock_period: clock_frequency.period_duration() * 144 * 3, // Nemesis shows * 351?  Not sure why the difference
             channels: (0..CHANNELS).map(|i| Channel::new(format!("ch {}", i), sample_rate)).collect(),
             channel_frequencies: [(0, 0); CHANNELS],
 
@@ -585,10 +585,10 @@ impl Ym2612 {
             reg if is_reg_range(reg, 0x40) => {
                 let (ch, op) = get_ch_op(bank, reg);
                 // The total level (attenuation) is 0-127, where 0 is the highest volume and 127
-                // is the lowest, in 0.75 dB intervals.  The 7-bit value is multiplied by 8 to
+                // is the lowest, in 0.75 dB intervals.  The 7-bit value is shifted left to
                 // convert it to a 10-bit attenuation for the envelope generator, which is an
                 // attenuation value in 0.09375 dB intervals
-                self.channels[ch].operators[op].set_total_level((data & 0x7F) as u16 * 8);
+                self.channels[ch].operators[op].set_total_level(((data & 0x7F) as u16) << 3);
             },
 
             reg if is_reg_range(reg, 0x50)
@@ -641,18 +641,20 @@ impl Ym2612 {
         let (ch, op) = get_ch_op(bank, reg);
         let keycode = self.registers[0xA0 + get_ch_index(ch)] >> 1;
         let rate_scaling = self.registers[0x50 + index] & 0xC0 >> 6;
+
         let attack_rate = self.registers[0x50 + index] & 0x1F;
         let first_decay_rate = self.registers[0x60 + index] & 0x1F;
         let second_decay_rate = self.registers[0x70 + index] & 0x1F;
-        let release_rate = self.registers[0x80 + index] & 0x0F;
+        let release_rate = ((self.registers[0x80 + index] & 0x0F) << 1) + 1;    // register is only 4 bits, so it's adjusted to 5-bits with 1 in the LSB
 
         self.channels[ch].operators[op].set_rate(EnvelopeState::Attack, calculate_rate(attack_rate, rate_scaling, keycode));
         self.channels[ch].operators[op].set_rate(EnvelopeState::Decay, calculate_rate(first_decay_rate, rate_scaling, keycode));
         self.channels[ch].operators[op].set_rate(EnvelopeState::Sustain, calculate_rate(second_decay_rate, rate_scaling, keycode));
         self.channels[ch].operators[op].set_rate(EnvelopeState::Release, calculate_rate(release_rate, rate_scaling, keycode));
 
-        let sustain_level = (self.registers[0x80 + index] & 0x0F) >> 4;
-        self.channels[ch].operators[op].set_sustain_level(sustain_level as u16);
+        let sustain_level = (self.registers[0x80 + index] as u16 & 0xF0) << 2;  // register is 4 bits, so it's adjusted to match total_level's scale
+        let sustain_level = if sustain_level == (0xF0 << 2) { MAX_ENVELOPE } else { sustain_level };    // adjust the maximum storable value to be the max attenuation
+        self.channels[ch].operators[op].set_sustain_level(sustain_level);
     }
 }
 

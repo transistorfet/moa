@@ -353,3 +353,30 @@ General Work
 2023-04-22
 - I'm back to trying to get the ym2612 emulation working properly for the Genesis
 
+2023-04-23
+- I managed to get the idea of the envelope implemented but it's clearly very broken and I don't
+  know why exactly.  It could easily be the waveform generators or bugs or anything else.  I have
+  already found and fixed a number of bugs, so there are probably more
+
+2023-04-24
+- I added a print statement to blastem to see how the envelope value was varying over time based on
+  the envelope state and what update cycle it was in.  In moa, it shows the envelope output varying
+  over many many update cycles which I thought was maybe wrong, and the decay was only lasting one
+  cycle
+- It turned out blastem showed the same output varying over many cycles, so that wasn't a problem,
+  but it showed the decay lasting many cycles too
+- it also showed the envelope output being up to 4092 instead of ~1024 and I didn't notice until now
+  but there's a comment that blastem is using a 12 bit number in two parts, 8 bits and 4 bits, but I
+  don't yet know how it uses those numbers to get the output
+- the decay lasting only one cycle turned out to be a bug where I was masking the wrong bits and
+  shifting them away, so it was always 0.
+- there was also a bug in that the raw values from the registers needs to be adjusted to make it
+  comparable to the envelope, and the total level also needs to be adjusted (which I was already
+  doing but it's a 10 bit value)
+- it looks like the release rate also needs to be adjusted.  It should be shifted left and
+  incremented to make it the same as the other rates
+
+- after messing with it, it still didn't seem to work, and it still doesn't work correctly, but
+  changing from a sine wave generator to a square wave generator made it go from being muddled and
+  mute sounding to sounding crisp and much closer to what it's supposed to sound like
+
