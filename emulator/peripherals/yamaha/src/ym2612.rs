@@ -120,6 +120,41 @@ const RATE_TABLE: &[u16] = &[
     8, 8, 8, 8, 8, 8, 8, 8,
 ];
 
+const DETUNE_TABLE: &[u8] = &[
+    0,  0,  1,  2,
+    0,  0,  1,  2,
+    0,  0,  1,  2,
+    0,  0,  1,  2,
+    0,  1,  2,  2,
+    0,  1,  2,  3,
+    0,  1,  2,  3,
+    0,  1,  2,  3,
+    0,  1,  2,  4,
+    0,  1,  3,  4,
+    0,  1,  3,  4,
+    0,  1,  3,  5,
+    0,  2,  4,  5,
+    0,  2,  4,  6,
+    0,  2,  4,  6,
+    0,  2,  5,  7,
+    0,  2,  5,  8,
+    0,  3,  6,  8,
+    0,  3,  6,  9,
+    0,  3,  7, 10,
+    0,  4,  8, 11,
+    0,  4,  8, 12,
+    0,  4,  9, 13,
+    0,  5, 10, 14,
+    0,  5, 11, 16,
+    0,  6, 12, 17,
+    0,  6, 13, 19,
+    0,  7, 14, 20,
+    0,  8, 16, 22,
+    0,  8, 16, 22,
+    0,  8, 16, 22,
+    0,  8, 16, 22,
+];
+
 const SIN_TABLE_SIZE: usize = 512;
 const POW_TABLE_SIZE: usize = 1 << 13;
 
@@ -302,23 +337,35 @@ impl PhaseGenerator {
     }
 
     fn calculate_phase_increment(&mut self) {
+        // Start with the Fnumber
         let increment = self.fnumber as u32;
 
+        // Shift according to the block (octave)
         let increment = if self.block == 0 {
             increment >> 1
         } else {
             increment << self.block - 1
         };
 
-        // TODO detune
-        //let inc =
+        // Apply detune
+        let keycode = get_keycode(self.block, self.fnumber);
+        let sign = self.detune >> 2;
+        let detune_index = (self.detune & 0x03) as usize;
+        let detune = DETUNE_TABLE[keycode * 4 + detune_index] as u32;
+        let increment = if sign == 0 {
+            increment + detune
+        } else {
+            increment - detune
+        }.min(0x1FFFF);
 
+        // Apply multiple
         let increment = if self.multiple == 0 {
             increment >> 1
         } else {
             (increment * self.multiple).min(MAX_PHASE)
         };
 
+        // Cache the value for use later, since it only changes when the input registers are set
         self.increment = increment;
     }
 
@@ -328,6 +375,26 @@ impl PhaseGenerator {
         phase
     }
 }
+
+/// Map the upper 5 bits of the fnumber to the lower 2 bits of the keycode
+///
+/// The upper of the two bits is bit 11 of the fnumber, and the lower bit is follows
+/// the formula F11 & (F10 | F9 | F8) | !F11 & (F10 & F9 & F8), where the bit numbers
+/// of the fnumber value start from 1 instead of 0.  It's easier to map this with an
+/// lookup table than to calculate this.
+///
+/// K1 = F11
+/// K0 = F11 & (F10 | F9 | F8) | !F11 & (F10 & F9 & F8)
+const FNUMBER_TO_KEYCODE: &[u8] = &[
+    0, 0, 0, 0, 0, 0, 0, 1,
+    2, 3, 3, 3, 3, 3, 3, 3,
+];
+
+/// Generate the keycode required for detune calculations using the block and fnumber
+fn get_keycode(block: u8, fnumber: u16) -> usize {
+    ((block as usize) << 2) | FNUMBER_TO_KEYCODE[(fnumber as usize) >> 7] as usize
+}
+
 
 #[derive(Copy, Clone, Debug)]
 enum OperatorAlgorithm {
@@ -340,7 +407,6 @@ enum OperatorAlgorithm {
     A6,
     A7,
 }
-
 
 #[derive(Clone)]
 struct Operator {
@@ -391,11 +457,11 @@ impl Operator {
         let phase = self.phase.update_phase(fm_clock);
 
         let mod_phase = phase + modulator;
-
-        let mut output = POW_TABLE[(SIN_TABLE[(mod_phase & 0x1FF) as usize] + envelope) as usize];
-//if self.debug_name == "ch 3, op 1" {
-//print!("{:4x}", output);
+//if self.debug_name == "ch 2, op 0" {
+//println!("{:4x} {:4x} {:4x} {:4x}", phase, self.phase.increment, modulator, envelope);
 //}
+        let mut output = POW_TABLE[(SIN_TABLE[(mod_phase & 0x1FF) as usize] + envelope) as usize];
+
         if mod_phase & 0x200 != 0 {
             output = (output as i16 * -1) as u16
         }
@@ -404,34 +470,36 @@ impl Operator {
     }
 }
 
-#[inline]
-fn fnumber_to_frequency(block: u8, fnumber: u16) -> f32 {
-    (fnumber as f32 * 0.0264) * 2_u32.pow(block as u32) as f32
-}
 
 #[derive(Clone)]
 struct Channel {
     #[allow(dead_code)]
     debug_name: String,
+    enabled: (bool, bool),
     operators: Vec<Operator>,
+    algorithm: OperatorAlgorithm,
+
     key_state: u8,
     next_key_clock: FmClock,
     next_key_state: u8,
-    base_frequency: f32,
-    algorithm: OperatorAlgorithm,
 }
 
 impl Channel {
     fn new(debug_name: String) -> Self {
         Self {
             debug_name: debug_name.clone(),
+            enabled: (true, true),
             operators: (0..OPERATORS).map(|i| Operator::new(format!("{}, op {}", debug_name, i))).collect(),
+            algorithm: OperatorAlgorithm::A0,
+
             key_state: 0,
             next_key_clock: 0,
             next_key_state: 0,
-            base_frequency: 0.0,
-            algorithm: OperatorAlgorithm::A0,
         }
+    }
+
+    fn set_enabled(&mut self, left: bool, right: bool) {
+        self.enabled = (left, right);
     }
 
     fn change_key_state(&mut self, fm_clock: FmClock, key: u8) {
@@ -449,20 +517,25 @@ impl Channel {
         }
     }
 
-    fn get_sample(&mut self, clocks: (FmClock, EnvelopeClock)) -> f32 {
+    fn get_sample(&mut self, clocks: (FmClock, EnvelopeClock)) -> (f32, f32) {
         self.check_key_change(clocks);
-        let mut output = self.get_algorithm_output(clocks);
+        let output = self.get_algorithm_output(clocks);
 
         let output = if output & 0x2000 == 0 {
             output as i16
         } else {
             (output | 0xC000) as i16
         };
-//if self.debug_name == "ch 0" {
-//println!("{}", output);
+
+        //let output = output * 2 / 3;
+//if self.debug_name == "ch 2" {
+//println!("{:6x}", output);
 //}
         let output = output as f32 / (1 << 14) as f32;
-        output
+
+        let left = if self.enabled.0 { output } else { 0.0 };
+        let right = if self.enabled.1 { output } else { 0.0 };
+        (left, right)
     }
 
     fn get_algorithm_output(&mut self, clocks: (FmClock, EnvelopeClock)) -> u16 {
@@ -649,11 +722,11 @@ impl Ym2612 {
         let mut sample = 0.0;
 
         for ch in 0..(CHANNELS - 1) {
-            sample += self.channels[ch].get_sample(clocks);
+            sample += self.channels[ch].get_sample(clocks).0;
         }
 
         if !self.dac.enabled {
-            sample += self.channels[CHANNELS - 1].get_sample(clocks);
+            sample += self.channels[CHANNELS - 1].get_sample(clocks).0;
         }
 
         sample
@@ -744,6 +817,7 @@ impl Ym2612 {
 
             reg if (0xB0..=0xB2).contains(&reg) => {
                 let ch = get_ch(bank, reg);
+                // TODO add feedback values
                 self.channels[ch].algorithm = match data & 0x07 {
                     0 => OperatorAlgorithm::A0,
                     1 => OperatorAlgorithm::A1,
@@ -755,6 +829,12 @@ impl Ym2612 {
                     7 => OperatorAlgorithm::A7,
                     _ => OperatorAlgorithm::A0,
                 };
+            },
+
+            reg if (0xB4..=0xB6).contains(&reg) => {
+                let ch = get_ch(bank, reg - 4);
+                // TODO add AMS and FMS (which only apply to the LFO)
+                self.channels[ch].set_enabled(data & 0x80 != 0, data & 0x40 != 0);
             },
 
             _ => {

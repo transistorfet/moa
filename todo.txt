@@ -2,6 +2,9 @@
 * the first 512 entries are 0 for some reason, in the log table, but otherwise seems ok
 * you need to scale the output sample to be +/- 1.0 instead of 0-1.0
 
+* AudioFrame (and possibly the mixer and source) should be moved to the core, it should probably have the sample rate
+* need to be able to support stereo output eventually
+
 * can you make the frontend more adaptive to the input that the devices are using
 * change the name of the functions that take Host to be `with_host` or `register` or something
 * need to re-add a mechanism for audio frame dialation, either based on speed, or somehow automatic, use clocks and make them aligned
