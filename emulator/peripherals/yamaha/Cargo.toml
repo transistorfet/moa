@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 moa_core = { path = "../../core" }
 moa_audio = { path = "../../libraries/audio" }
+lazy_static = "1.4.0"
