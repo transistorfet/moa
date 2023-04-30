@@ -1,4 +1,6 @@
 
+* add runtime checks for arithmetic to look for errors
+
 * the first 512 entries are 0 for some reason, in the log table, but otherwise seems ok
 * you need to scale the output sample to be +/- 1.0 instead of 0-1.0
 

@@ -189,6 +189,7 @@ const CHANNELS: usize = 6;
 const OPERATORS: usize = 4;
 
 const MAX_ENVELOPE: u16 = 0xFFC;
+const ENVELOPE_CENTER: u16 = 0x800;
 const MAX_PHASE: u32 = 0x000FFFFF;
 
 
@@ -210,10 +211,11 @@ struct EnvelopeGenerator {
     debug_name: String,
     total_level: u16,
     sustain_level: u16,
-    rates: [usize; 4],
+    rates: [u8; 4],
 
     envelope_state: EnvelopeState,
     envelope: u16,
+    last_envelope_clock: EnvelopeClock,
 }
 
 impl EnvelopeGenerator {
@@ -226,6 +228,7 @@ impl EnvelopeGenerator {
 
             envelope_state: EnvelopeState::Attack,
             envelope: 0,
+            last_envelope_clock: 0,
         }
     }
 
@@ -234,20 +237,25 @@ impl EnvelopeGenerator {
     }
 
     fn set_sustain_level(&mut self, level: u16) {
-        // Convert it to a fixed point decimal number of 4 bit : 8 bits, which will be the output
-        self.sustain_level = level << 2;
+        self.sustain_level = level;
     }
 
-    fn set_rate(&mut self, etype: EnvelopeState, rate: usize) {
+    fn set_rate(&mut self, etype: EnvelopeState, rate: u8) {
         self.rates[etype as usize] = rate;
     }
 
-    fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
+    fn get_scaled_rate(&self, etype: EnvelopeState, rate_adjust: usize) -> usize {
+        calculate_rate(self.rates[etype as usize], rate_adjust)
+    }
+
+    fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock, rate_adjust: usize) {
+
         if state {
-            self.envelope = 0;
-            if self.rates[EnvelopeState::Attack as usize] < 62 {
+            let rate = self.get_scaled_rate(EnvelopeState::Attack, rate_adjust);
+            if rate < 62 {
                 self.envelope_state = EnvelopeState::Attack;
             } else {
+                self.envelope = 0;
                 self.envelope_state = EnvelopeState::Decay;
             }
         } else {
@@ -255,20 +263,21 @@ impl EnvelopeGenerator {
         }
     }
 
-    fn update_envelope(&mut self, envelope_clock: EnvelopeClock) {
+    fn update_envelope(&mut self, envelope_clock: EnvelopeClock, rate_adjust: usize) {
         if self.envelope_state == EnvelopeState::Decay && self.envelope >= self.sustain_level {
             self.envelope_state = EnvelopeState::Sustain;
         }
 
-        let rate = self.rates[self.envelope_state as usize];
+        let rate = self.get_scaled_rate(self.envelope_state, rate_adjust);
         let counter_shift = COUNTER_SHIFT_VALUES[rate];
+
         if envelope_clock % (1 << counter_shift) == 0 {
             let update_cycle = (envelope_clock >> counter_shift) & 0x07;
             let increment = RATE_TABLE[rate * 8 + update_cycle as usize];
 
             match self.envelope_state {
                 EnvelopeState::Attack => {
-                    let new_envelope = ((!self.envelope * increment) >> 4) & 0xFFFC;
+                    let new_envelope = self.envelope + ((!self.envelope * increment) >> 4) & 0xFFC;
                     if new_envelope > self.envelope {
                         self.envelope_state = EnvelopeState::Decay;
                         self.envelope = 0;
@@ -280,15 +289,36 @@ impl EnvelopeGenerator {
                 EnvelopeState::Sustain |
                 EnvelopeState::Release => {
                     // Convert it to a fixed point decimal number of 4 bit : 8 bits, which will be the output
-                    self.envelope = (self.envelope + increment << 2).min(MAX_ENVELOPE);
+                    self.envelope = self.envelope + (increment << 2);
+                    if self.envelope > MAX_ENVELOPE || self.envelope_state == EnvelopeState::Release && self.envelope >= ENVELOPE_CENTER {
+                        self.envelope = MAX_ENVELOPE;
+                    }
                 },
             }
         }
     }
 
-    fn get_last_attenuation(&mut self) -> u16 {
+    fn get_envelope(&mut self, envelope_clock: EnvelopeClock, rate_adjust: usize) -> u16 {
+        if envelope_clock != self.last_envelope_clock {
+            self.update_envelope(envelope_clock, rate_adjust);
+            self.last_envelope_clock = envelope_clock;
+        }
         (self.envelope + self.total_level).min(MAX_ENVELOPE)
     }
+}
+
+#[inline]
+fn calculate_rate(rate: u8, rate_adjust: usize) -> usize {
+    if rate == 0 {
+        0
+    } else {
+        (2 * rate as usize + rate_adjust).min(63)
+    }
+}
+
+#[inline]
+fn get_rate_adjust(rate_scaling: u8, keycode: usize) -> usize {
+    keycode >> rate_scaling
 }
 
 #[derive(Clone, Debug)]
@@ -300,6 +330,7 @@ struct PhaseGenerator {
     fnumber: u16,
     detune: u8,
     multiple: u32,
+    rate_scaling: u8,
 
     counter: u32,
     increment: u32,
@@ -314,6 +345,7 @@ impl PhaseGenerator {
             fnumber: 0,
             detune: 0,
             multiple: 1,
+            rate_scaling: 0,
 
             counter: 0,
             increment: 0,
@@ -334,6 +366,15 @@ impl PhaseGenerator {
         self.detune = detune;
         self.multiple = multiple as u32;
         self.calculate_phase_increment();
+    }
+
+    fn set_rate_scaling(&mut self, rate_scaling: u8) {
+        self.rate_scaling = rate_scaling;
+    }
+
+    fn get_rate_adjust(&self) -> usize {
+        let keycode = get_keycode(self.block, self.fnumber);
+        get_rate_adjust(self.rate_scaling, keycode)
     }
 
     fn calculate_phase_increment(&mut self) {
@@ -414,6 +455,7 @@ struct Operator {
     debug_name: String,
     phase: PhaseGenerator,
     envelope: EnvelopeGenerator,
+    output: u16,
 }
 
 impl Operator {
@@ -422,6 +464,7 @@ impl Operator {
             debug_name: debug_name.clone(),
             phase: PhaseGenerator::new(debug_name.clone()),
             envelope: EnvelopeGenerator::new(debug_name),
+            output: 0,
         }
     }
 
@@ -441,30 +484,34 @@ impl Operator {
         self.envelope.set_sustain_level(level)
     }
 
-    fn set_rate(&mut self, etype: EnvelopeState, rate: usize) {
+    fn set_rate(&mut self, etype: EnvelopeState, rate: u8) {
         self.envelope.set_rate(etype, rate)
     }
 
+    fn set_rate_scaling(&mut self, rate_scaling: u8) {
+        self.phase.set_rate_scaling(rate_scaling)
+    }
+
     fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
-        self.envelope.notify_key_change(state, envelope_clock);
+        self.envelope.notify_key_change(state, envelope_clock, self.phase.get_rate_adjust());
         self.phase.reset();
     }
 
     fn get_output(&mut self, modulator: u16, clocks: (FmClock, EnvelopeClock)) -> u16 {
         let (fm_clock, envelope_clock) = clocks;
-        self.envelope.update_envelope(envelope_clock);
-        let envelope = self.envelope.get_last_attenuation();
+        let envelope = self.envelope.get_envelope(envelope_clock, self.phase.get_rate_adjust());
         let phase = self.phase.update_phase(fm_clock);
 
         let mod_phase = phase + modulator;
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} {:4x} {:4x} {:4x}", phase, self.phase.increment, modulator, envelope);
-//}
+
         let mut output = POW_TABLE[(SIN_TABLE[(mod_phase & 0x1FF) as usize] + envelope) as usize];
 
         if mod_phase & 0x200 != 0 {
             output = (output as i16 * -1) as u16
         }
+
+        // Save the output for use as feedback later
+        self.output = output;
 
         output
     }
@@ -478,10 +525,12 @@ struct Channel {
     enabled: (bool, bool),
     operators: Vec<Operator>,
     algorithm: OperatorAlgorithm,
+    feedback: u8,
 
     key_state: u8,
     next_key_clock: FmClock,
     next_key_state: u8,
+    op1_output: [u16; 2],
 }
 
 impl Channel {
@@ -491,15 +540,22 @@ impl Channel {
             enabled: (true, true),
             operators: (0..OPERATORS).map(|i| Operator::new(format!("{}, op {}", debug_name, i))).collect(),
             algorithm: OperatorAlgorithm::A0,
+            feedback: 0,
 
             key_state: 0,
             next_key_clock: 0,
             next_key_state: 0,
+            op1_output: [0; 2],
         }
     }
 
     fn set_enabled(&mut self, left: bool, right: bool) {
         self.enabled = (left, right);
+    }
+
+    fn set_algorithm_and_feedback(&mut self, algorithm: OperatorAlgorithm, feedback: u8) {
+        self.algorithm = algorithm;
+        self.feedback = feedback;
     }
 
     fn change_key_state(&mut self, fm_clock: FmClock, key: u8) {
@@ -519,7 +575,12 @@ impl Channel {
 
     fn get_sample(&mut self, clocks: (FmClock, EnvelopeClock)) -> (f32, f32) {
         self.check_key_change(clocks);
-        let output = self.get_algorithm_output(clocks);
+        let feedback = if self.feedback != 0 {
+            (self.op1_output[0] + self.op1_output[1]) >> (10 - self.feedback)
+        } else {
+            0
+        };
+        let output = self.get_algorithm_output(clocks, feedback);
 
         let output = if output & 0x2000 == 0 {
             output as i16
@@ -527,60 +588,60 @@ impl Channel {
             (output | 0xC000) as i16
         };
 
-        //let output = output * 2 / 3;
-//if self.debug_name == "ch 2" {
-//println!("{:6x}", output);
-//}
-        let output = output as f32 / (1 << 14) as f32;
+        self.op1_output[0] = self.op1_output[1];
+        self.op1_output[1] = self.operators[0].output;
 
-        let left = if self.enabled.0 { output } else { 0.0 };
-        let right = if self.enabled.1 { output } else { 0.0 };
+        let sample = output as f32 / (1 << 14) as f32;
+
+        let left = if self.enabled.0 { sample } else { 0.0 };
+        let right = if self.enabled.1 { sample } else { 0.0 };
         (left, right)
     }
 
-    fn get_algorithm_output(&mut self, clocks: (FmClock, EnvelopeClock)) -> u16 {
+    fn get_algorithm_output(&mut self, clocks: (FmClock, EnvelopeClock), feedback: u16) -> u16 {
         match self.algorithm {
             OperatorAlgorithm::A0 => {
-                let modulator0 = self.operators[0].get_output(0, clocks);
+                let modulator0 = self.operators[0].get_output(feedback, clocks);
                 let modulator1 = self.operators[1].get_output(modulator0, clocks);
                 let modulator2 = self.operators[2].get_output(modulator1, clocks);
                 self.operators[3].get_output(modulator2, clocks)
             },
             OperatorAlgorithm::A1 => {
-                let output1 = self.operators[0].get_output(0, clocks) + self.operators[1].get_output(0, clocks);
+                let output1 = self.operators[0].get_output(feedback, clocks) + self.operators[1].get_output(0, clocks);
                 let output2 = self.operators[2].get_output(output1, clocks);
                 self.operators[3].get_output(output2, clocks)
             },
             OperatorAlgorithm::A2 => {
-                let output1 = self.operators[1].get_output(0, clocks);
-                let output2 = self.operators[2].get_output(output1, clocks);
-                let output3 = self.operators[0].get_output(0, clocks) + output2;
-                self.operators[3].get_output(output3, clocks)
+                let output1 = self.operators[0].get_output(feedback, clocks);
+                let output2 = self.operators[1].get_output(0, clocks);
+                let output3 = self.operators[2].get_output(output2, clocks);
+                let output4 = output1 + output3;
+                self.operators[3].get_output(output4, clocks)
             },
             OperatorAlgorithm::A3 => {
-                let output1 = self.operators[0].get_output(0, clocks);
+                let output1 = self.operators[0].get_output(feedback, clocks);
                 let output2 = self.operators[1].get_output(output1, clocks);
                 let output3 = self.operators[2].get_output(0, clocks);
                 self.operators[3].get_output(output2 + output3, clocks)
             },
             OperatorAlgorithm::A4 => {
-                let output1 = self.operators[0].get_output(0, clocks);
+                let output1 = self.operators[0].get_output(feedback, clocks);
                 let output2 = self.operators[1].get_output(output1, clocks);
                 let output3 = self.operators[2].get_output(0, clocks);
                 let output4 = self.operators[3].get_output(output3, clocks);
                 output2 + output4
             },
             OperatorAlgorithm::A5 => {
-                let output1 = self.operators[0].get_output(0, clocks);
+                let output1 = self.operators[0].get_output(feedback, clocks);
                 self.operators[1].get_output(output1, clocks) + self.operators[2].get_output(output1, clocks) + self.operators[3].get_output(output1, clocks)
             },
             OperatorAlgorithm::A6 => {
-                let output1 = self.operators[0].get_output(0, clocks);
+                let output1 = self.operators[0].get_output(feedback, clocks);
                 let output2 = self.operators[1].get_output(output1, clocks);
                 output2 + self.operators[2].get_output(0, clocks) + self.operators[3].get_output(0, clocks)
             },
             OperatorAlgorithm::A7 => {
-                self.operators[0].get_output(0, clocks)
+                self.operators[0].get_output(feedback, clocks)
                 + self.operators[1].get_output(0, clocks)
                 + self.operators[2].get_output(0, clocks)
                 + self.operators[3].get_output(0, clocks)
@@ -795,16 +856,49 @@ impl Ym2612 {
                 // is the lowest, in 0.75 dB intervals.  The 7-bit value is shifted left to
                 // convert it to a 10-bit attenuation for the envelope generator, which is an
                 // attenuation value in 0.09375 dB intervals
-                self.channels[ch].operators[op].set_total_level(((data & 0x7F) as u16) << 3);
+                self.channels[ch].operators[op].set_total_level(((data & 0x7F) as u16) << 5);
             },
 
-            reg if is_reg_range(reg, 0x50)
-                || is_reg_range(reg, 0x60)
-                || is_reg_range(reg, 0x70)
-                || is_reg_range(reg, 0x80)
-                || is_reg_range(reg, 0x90)
-            => {
-                self.update_rates(bank, reg & 0x0F);
+            reg if is_reg_range(reg, 0x50) => {
+                let (ch, op) = get_ch_op(bank, reg);
+                let index = get_index(bank, reg);
+
+                let rate_scaling = self.registers[0x50 + index] & 0xC0 >> 6;
+                self.channels[ch].operators[op].set_rate_scaling(3 - rate_scaling);
+
+                let attack_rate = self.registers[0x50 + index] & 0x1F;
+                self.channels[ch].operators[op].set_rate(EnvelopeState::Attack, attack_rate);
+            },
+
+            reg if is_reg_range(reg, 0x60) => {
+                let (ch, op) = get_ch_op(bank, reg);
+                let index = get_index(bank, reg);
+
+                let first_decay_rate = self.registers[0x60 + index] & 0x1F;
+                self.channels[ch].operators[op].set_rate(EnvelopeState::Decay, first_decay_rate);
+            },
+
+            reg if is_reg_range(reg, 0x70)=> {
+                let (ch, op) = get_ch_op(bank, reg);
+                let index = get_index(bank, reg);
+
+                let second_decay_rate = self.registers[0x70 + index] & 0x1F;
+                self.channels[ch].operators[op].set_rate(EnvelopeState::Sustain, second_decay_rate);
+            },
+
+            reg if is_reg_range(reg, 0x80) => {
+                let (ch, op) = get_ch_op(bank, reg);
+                let index = get_index(bank, reg);
+
+                // Register is only 4 bits, so adjust it to 5-bits with 1 in the LSB
+                let release_rate = ((self.registers[0x80 + index] & 0x0F) << 1) + 1;
+                self.channels[ch].operators[op].set_rate(EnvelopeState::Release, release_rate);
+
+                // Register is 4 bits, so adjust it to match total_level's scale
+                let sustain_level = (self.registers[0x80 + index] as u16 & 0xF0) << 3;
+                // Adjust the maximum storable value to be the max attenuation
+                let sustain_level = if sustain_level == (0x00F0 << 3) { MAX_ENVELOPE } else { sustain_level };
+                self.channels[ch].operators[op].set_sustain_level(sustain_level);
             },
 
             reg if (0xA0..=0xA2).contains(&reg) => {
@@ -817,8 +911,10 @@ impl Ym2612 {
 
             reg if (0xB0..=0xB2).contains(&reg) => {
                 let ch = get_ch(bank, reg);
-                // TODO add feedback values
-                self.channels[ch].algorithm = match data & 0x07 {
+
+                let feedback = (data >> 3) & 0x07;
+
+                let algorithm = match data & 0x07 {
                     0 => OperatorAlgorithm::A0,
                     1 => OperatorAlgorithm::A1,
                     2 => OperatorAlgorithm::A2,
@@ -829,6 +925,8 @@ impl Ym2612 {
                     7 => OperatorAlgorithm::A7,
                     _ => OperatorAlgorithm::A0,
                 };
+
+                self.channels[ch].set_algorithm_and_feedback(algorithm, feedback);
             },
 
             reg if (0xB4..=0xB6).contains(&reg) => {
@@ -843,48 +941,19 @@ impl Ym2612 {
         }
     }
 
-    fn update_fnumber(&mut self, bank: u8, lower_reg: u8) {
+    #[inline]
+    fn get_block_and_fnumber(&self, bank: u8, lower_reg: u8) -> (u8, u16) {
         let index = bank as usize * 256 + lower_reg as usize;
         let block = (self.registers[0xA4 + index] & 0x38) >> 3;
         let fnumber = ((self.registers[0xA4 + index] as u16 & 0x07) << 8) | self.registers[0xA0 + index] as u16;
+        (block, fnumber)
+    }
 
+    fn update_fnumber(&mut self, bank: u8, lower_reg: u8) {
+        let (block, fnumber) = self.get_block_and_fnumber(bank, lower_reg);
         let (ch, op) = get_ch_op(bank, lower_reg);
         self.channels[ch].operators[op].set_block_and_fnumber(block, fnumber);
     }
-
-    fn update_rates(&mut self, bank: u8, lower_reg: u8) {
-        let index = bank as usize * 256 + lower_reg as usize;
-        let (ch, op) = get_ch_op(bank, lower_reg);
-        let keycode = self.registers[0xA0 + get_ch_index(ch)] >> 1;
-        let rate_scaling = self.registers[0x50 + index] & 0xC0 >> 6;
-
-        let attack_rate = self.registers[0x50 + index] & 0x1F;
-        let first_decay_rate = self.registers[0x60 + index] & 0x1F;
-        let second_decay_rate = self.registers[0x70 + index] & 0x1F;
-        let release_rate = ((self.registers[0x80 + index] & 0x0F) << 1) + 1;    // register is only 4 bits, so it's adjusted to 5-bits with 1 in the LSB
-
-        self.channels[ch].operators[op].set_rate(EnvelopeState::Attack, calculate_rate(attack_rate, rate_scaling, keycode));
-        self.channels[ch].operators[op].set_rate(EnvelopeState::Decay, calculate_rate(first_decay_rate, rate_scaling, keycode));
-        self.channels[ch].operators[op].set_rate(EnvelopeState::Sustain, calculate_rate(second_decay_rate, rate_scaling, keycode));
-        self.channels[ch].operators[op].set_rate(EnvelopeState::Release, calculate_rate(release_rate, rate_scaling, keycode));
-
-        let sustain_level = (self.registers[0x80 + index] as u16 & 0xF0) << 2;  // register is 4 bits, so it's adjusted to match total_level's scale
-        let sustain_level = if sustain_level == (0xF0 << 2) { MAX_ENVELOPE } else { sustain_level };    // adjust the maximum storable value to be the max attenuation
-        self.channels[ch].operators[op].set_sustain_level(sustain_level);
-    }
-}
-
-#[inline]
-fn calculate_rate(rate: u8, rate_scaling: u8, keycode: u8) -> usize {
-    let scale = match rate_scaling {
-        0 => 8,
-        1 => 4,
-        2 => 2,
-        3 => 1,
-        _ => 8, // this shouldn't be possible
-    };
-
-    (2 * rate as usize + (keycode as usize / scale)).min(63)
 }
 
 #[inline]
@@ -904,17 +973,13 @@ fn get_ch_op(bank: u8, reg: u8) -> (usize, usize) {
 }
 
 #[inline]
-fn get_ch(bank: u8, reg: u8) -> usize {
-    ((reg as usize) & 0x07) + ((bank as usize) * 3)
+fn get_index(bank: u8, reg: u8) -> usize {
+    bank as usize * 256 + (reg & 0x0F) as usize
 }
 
 #[inline]
-fn get_ch_index(ch: usize) -> usize {
-    if ch < 3 {
-        ch
-    } else {
-        0x100 + ch - 3
-    }
+fn get_ch(bank: u8, reg: u8) -> usize {
+    ((reg as usize) & 0x07) + ((bank as usize) * 3)
 }
 
 impl Addressable for Ym2612 {
