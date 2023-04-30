@@ -163,14 +163,15 @@ lazy_static! {
         .map(|i| {
             let sine = (((i * 2 + 1) as f32  / SIN_TABLE_SIZE as f32) * f32::consts::PI / 2.0).sin();
             let log_sine = -1.0 * sine.log2();
+            // Convert to fixed decimal notation with 4.8 bit format
             (log_sine * (1 << 8) as f32) as u16
         })
         .collect();
 
-    static ref POW_TABLE: Vec<u16> = (0..POW_TABLE_SIZE)
+    static ref POW_TABLE: Vec<i16> = (0..POW_TABLE_SIZE)
         .map(|i| {
             let linear = 2.0_f32.powf(-1.0 * (((i & 0xFF) + 1) as f32 / 256.0));
-            let linear_fixed = (linear * (1 << 11) as f32) as u16;
+            let linear_fixed = (linear * (1 << 11) as f32) as i16;
             let shift = (i as i32 >> 8) - 2;
             if shift < 0 {
                 linear_fixed << (0 - shift)
@@ -226,8 +227,8 @@ impl EnvelopeGenerator {
             sustain_level: 0,
             rates: [0; 4],
 
-            envelope_state: EnvelopeState::Attack,
-            envelope: 0,
+            envelope_state: EnvelopeState::Release,
+            envelope: MAX_ENVELOPE,
             last_envelope_clock: 0,
         }
     }
@@ -410,8 +411,8 @@ impl PhaseGenerator {
         self.increment = increment;
     }
 
-    fn update_phase(&mut self, _fm_clock: FmClock) -> u16 {
-        let phase = ((self.counter >> 10) & 0x3FF) as u16;
+    fn update_phase(&mut self, _fm_clock: FmClock) -> i16 {
+        let phase = ((self.counter >> 10) & 0x3FF) as i16;
         self.counter += self.increment;
         phase
     }
@@ -455,7 +456,7 @@ struct Operator {
     debug_name: String,
     phase: PhaseGenerator,
     envelope: EnvelopeGenerator,
-    output: u16,
+    output: i16,
 }
 
 impl Operator {
@@ -497,18 +498,29 @@ impl Operator {
         self.phase.reset();
     }
 
-    fn get_output(&mut self, modulator: u16, clocks: (FmClock, EnvelopeClock)) -> u16 {
+    fn get_output(&mut self, modulator: i16, clocks: (FmClock, EnvelopeClock)) -> i16 {
         let (fm_clock, envelope_clock) = clocks;
+
         let envelope = self.envelope.get_envelope(envelope_clock, self.phase.get_rate_adjust());
         let phase = self.phase.update_phase(fm_clock);
 
         let mod_phase = phase + modulator;
 
-        let mut output = POW_TABLE[(SIN_TABLE[(mod_phase & 0x1FF) as usize] + envelope) as usize];
+        // The sine table contains the first half of the wave as an attenuation value
+        // Use the phase with the sign truncated to get the attenuation, plus the
+        // attenuation from the envelope, to get the total attenuation at this point
+        let attenuation = SIN_TABLE[(mod_phase & 0x1FF) as usize] + envelope;
 
+        // The power table contains the 13-bit output (not including the sign) for a
+        // 12 bit attenuation value, which is then negated based on the sign of the phase
+        let mut output = POW_TABLE[attenuation as usize];
+
+        // If the original phase was in the negative portion, invert the output
+        // since the sine wave's second half is a mirror of the first half
         if mod_phase & 0x200 != 0 {
-            output = (output as i16 * -1) as u16
+            output = output * -1;
         }
+        // The output is now represented with a 16-bit signed number in the range of -0x1FFF and 0x1FFF
 
         // Save the output for use as feedback later
         self.output = output;
@@ -530,7 +542,7 @@ struct Channel {
     key_state: u8,
     next_key_clock: FmClock,
     next_key_state: u8,
-    op1_output: [u16; 2],
+    op1_output: [i16; 2],
 }
 
 impl Channel {
@@ -580,25 +592,24 @@ impl Channel {
         } else {
             0
         };
-        let output = self.get_algorithm_output(clocks, feedback);
 
-        let output = if output & 0x2000 == 0 {
-            output as i16
-        } else {
-            (output | 0xC000) as i16
-        };
+        let output = self.get_algorithm_output(clocks, feedback);
 
         self.op1_output[0] = self.op1_output[1];
         self.op1_output[1] = self.operators[0].output;
 
-        let sample = output as f32 / (1 << 14) as f32;
+        //let output = sign_extend_u16(output, 14);
+
+        //let output = output * 2 / 3;
+
+        let sample = output as f32 / (1 << 13) as f32;
 
         let left = if self.enabled.0 { sample } else { 0.0 };
         let right = if self.enabled.1 { sample } else { 0.0 };
         (left, right)
     }
 
-    fn get_algorithm_output(&mut self, clocks: (FmClock, EnvelopeClock), feedback: u16) -> u16 {
+    fn get_algorithm_output(&mut self, clocks: (FmClock, EnvelopeClock), feedback: i16) -> i16 {
         match self.algorithm {
             OperatorAlgorithm::A0 => {
                 let modulator0 = self.operators[0].get_output(feedback, clocks);
@@ -647,6 +658,14 @@ impl Channel {
                 + self.operators[3].get_output(0, clocks)
             },
         }
+    }
+}
+
+fn sign_extend_u16(value: u16, size: usize) -> i16 {
+    if value & (1 << (size + 1)) == 0 {
+        value as i16
+    } else {
+        (value | 0xFFFF << (size + 1)) as i16
     }
 }
 
