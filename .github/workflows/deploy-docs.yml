@@ -1,0 +1,29 @@
+name: deploy-docs
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build docs
+        run: cargo doc --document-private-items --workspace && mv target/doc .
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: 
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v1
