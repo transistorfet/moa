@@ -16,6 +16,9 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install dependencies
+        run: apt-get install -y alsa
+
       - name: Build docs
         run: cargo doc --document-private-items --workspace && mv target/doc .
 
