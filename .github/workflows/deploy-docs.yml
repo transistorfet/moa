@@ -18,12 +18,27 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: wasm32-unknown-unknown
 
       - name: Install dependencies
-        run: sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
+        run: |
+          sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
+          cargo install just
+
+      - name: Make build directory
+        run: mkdir build
+
+      - name: Build Pixels frontend
+        run: |
+          cd emulator/frontends/pixels
+          just build moa-genesis
+          cp -R dist ../../../build
 
       - name: Build docs
-        run: cargo doc --document-private-items --workspace
+        run: |
+          cargo doc --document-private-items --workspace
+          mkdir build/doc
+          cp -R target/doc build/doc
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
