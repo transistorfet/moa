@@ -11,7 +11,7 @@ winit = "0.26"
 moa_core = { path = "../../core" }
 moa_common = { path = "../common", features = ["audio"] }
 
-moa_genesis = { path = "../../systems/genesis" }
+moa_systems_genesis = { path = "../../systems/genesis" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"

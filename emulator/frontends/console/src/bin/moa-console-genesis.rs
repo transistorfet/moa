@@ -2,7 +2,7 @@
 use clap::{App, Arg};
 
 use moa_console::ConsoleFrontend;
-use moa_genesis::{build_genesis, SegaGenesisOptions};
+use moa_systems_genesis::{build_genesis, SegaGenesisOptions};
 
 fn main() {
     let matches = App::new("Sega Genesis/Mega Drive Emulator")

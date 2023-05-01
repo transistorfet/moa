@@ -1,7 +1,7 @@
 
 use clap::Arg;
 
-use moa_genesis::{build_genesis, SegaGenesisOptions};
+use moa_systems_genesis::{build_genesis, SegaGenesisOptions};
 
 fn main() {
     let matches = moa_minifb::new("Sega Genesis/Mega Drive Emulator")

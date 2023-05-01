@@ -12,8 +12,8 @@ simple_logger = "2.3.0"
 moa_core = { path = "../../core" }
 moa_common = { path = "../common", features = ["tty"] }
 
-moa_genesis = { path = "../../systems/genesis" }
-moa_computie = { path = "../../systems/computie" }
+moa_systems_genesis = { path = "../../systems/genesis" }
+moa_systems_computie = { path = "../../systems/computie" }
 moa_m68k = { path = "../../cpus/m68k" }
 moa_peripherals_generic = { path = "../../peripherals/generic" }
 moa_peripherals_motorola = { path = "../../peripherals/motorola" }

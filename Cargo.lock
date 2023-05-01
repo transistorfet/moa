@@ -591,28 +591,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "moa_computie"
-version = "0.1.0"
-dependencies = [
- "moa_core",
- "moa_m68k",
- "moa_peripherals_generic",
- "moa_peripherals_motorola",
-]
-
-[[package]]
 name = "moa_console"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.22",
  "log",
  "moa_common",
- "moa_computie",
  "moa_core",
- "moa_genesis",
  "moa_m68k",
  "moa_peripherals_generic",
  "moa_peripherals_motorola",
+ "moa_systems_computie",
+ "moa_systems_genesis",
  "simple_logger",
 ]
 
@@ -624,31 +614,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "moa_genesis"
-version = "0.1.0"
-dependencies = [
- "moa_core",
- "moa_m68k",
- "moa_peripherals_yamaha",
- "moa_z80",
-]
-
-[[package]]
 name = "moa_m68k"
 version = "0.1.0"
 dependencies = [
  "moa_core",
  "moa_parsing",
-]
-
-[[package]]
-name = "moa_macintosh"
-version = "0.1.0"
-dependencies = [
- "moa_core",
- "moa_m68k",
- "moa_peripherals_mos",
- "moa_peripherals_zilog",
 ]
 
 [[package]]
@@ -659,12 +629,12 @@ dependencies = [
  "log",
  "minifb",
  "moa_common",
- "moa_computie",
  "moa_core",
- "moa_genesis",
- "moa_macintosh",
  "moa_peripherals_yamaha",
- "moa_trs80",
+ "moa_systems_computie",
+ "moa_systems_genesis",
+ "moa_systems_macintosh",
+ "moa_systems_trs80",
  "simple_logger",
 ]
 
@@ -713,7 +683,37 @@ dependencies = [
 ]
 
 [[package]]
-name = "moa_trs80"
+name = "moa_systems_computie"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+ "moa_m68k",
+ "moa_peripherals_generic",
+ "moa_peripherals_motorola",
+]
+
+[[package]]
+name = "moa_systems_genesis"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+ "moa_m68k",
+ "moa_peripherals_yamaha",
+ "moa_z80",
+]
+
+[[package]]
+name = "moa_systems_macintosh"
+version = "0.1.0"
+dependencies = [
+ "moa_core",
+ "moa_m68k",
+ "moa_peripherals_mos",
+ "moa_peripherals_zilog",
+]
+
+[[package]]
+name = "moa_systems_trs80"
 version = "0.1.0"
 dependencies = [
  "moa_core",

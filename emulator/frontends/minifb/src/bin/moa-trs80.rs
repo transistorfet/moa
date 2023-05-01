@@ -1,7 +1,7 @@
 
 use clap::Arg;
 
-use moa_trs80::{build_trs80, Trs80Options};
+use moa_systems_trs80::{build_trs80, Trs80Options};
 
 fn main() {
     let matches = moa_minifb::new("TRS-80 Emulator")

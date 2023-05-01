@@ -8,7 +8,7 @@ use moa_m68k::{M68k, M68kType};
 use moa_peripherals_generic::AtaDevice;
 use moa_peripherals_motorola::MC68681;
 
-use moa_computie::build_computie;
+use moa_systems_computie::build_computie;
 
 fn main() {
     thread::spawn(|| {

@@ -2,7 +2,7 @@
 use moa_pixels::{PixelsFrontend, start};
 
 use moa_core::{System, Error};
-use moa_genesis::{SegaGenesisOptions, build_genesis};
+use moa_systems_genesis::{SegaGenesisOptions, build_genesis};
 
 fn load_system(host: &mut PixelsFrontend, rom_data: Vec<u8>) -> Result<System, Error> {
     let mut options = SegaGenesisOptions::default();

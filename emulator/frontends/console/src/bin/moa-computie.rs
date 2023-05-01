@@ -1,6 +1,6 @@
 
 use moa_console::ConsoleFrontend;
-use moa_computie::build_computie;
+use moa_systems_computie::build_computie;
 
 fn main() {
     simple_logger::SimpleLogger::new()
