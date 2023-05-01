@@ -17,7 +17,7 @@ fn main() {
 #[cfg(target_arch = "wasm32")]
 mod web {
     use wasm_bindgen::prelude::*;
-    use moa_genesis::utils;
+    use moa_systems_genesis::utils;
     use moa_pixels::LoadSystemFnHandle;
 
     use super::load_system;
