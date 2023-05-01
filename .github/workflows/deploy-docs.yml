@@ -10,6 +10,9 @@ permissions:
 jobs:
   build-docs:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -17,15 +20,15 @@ jobs:
           toolchain: stable
 
       - name: Install dependencies
-        run: apt-get install -y alsa
+        run: sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
 
       - name: Build docs
-        run: cargo doc --document-private-items --workspace && mv target/doc .
+        run: cargo doc --document-private-items --workspace
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
         with:
-          path: 
+          path: target/doc
 
       - name: Deploy to GitHub Pages
         id: deployment
