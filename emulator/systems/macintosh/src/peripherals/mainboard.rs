@@ -22,7 +22,7 @@ pub struct Mainboard {
 }
 
 impl Mainboard {
-    pub fn create(ram: TransmutableBox, rom: TransmutableBox) -> Result<Self, Error> {
+    pub fn new(ram: TransmutableBox, rom: TransmutableBox) -> Result<Self, Error> {
         let scc1 = Z8530::default();
         let scc2 = Z8530::default();
         let iwm = IWM::default();

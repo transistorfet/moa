@@ -1,7 +1,11 @@
 
-* add runtime checks for arithmetic to look for errors
+* make the ym generate audio in sync so the DAC timings can be more accurate
+* change the host things to use queues instead
 
-* the first 512 entries are 0 for some reason, in the log table, but otherwise seems ok
+* add rust runtime checks for math to look for overflow errors
+* I think the overflowing add and subs return the original number and not the overflowed result.  I might have already checked that
+  in the m68k impl but I should check again
+
 * you need to scale the output sample to be +/- 1.0 instead of 0-1.0
 
 * AudioFrame (and possibly the mixer and source) should be moved to the core, it should probably have the sample rate

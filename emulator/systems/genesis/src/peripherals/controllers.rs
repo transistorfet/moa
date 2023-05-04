@@ -1,6 +1,6 @@
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 
 use moa_core::{warn, info};
 use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable};
@@ -88,10 +88,10 @@ impl GenesisControllerPort {
     }
 }
 
-pub struct GenesisControllersUpdater(Arc<AtomicU16>, HostData<bool>);
+pub struct GenesisControllersUpdater(Arc<AtomicU16>, Arc<AtomicBool>);
 
 impl ControllerUpdater for GenesisControllersUpdater {
-    fn update_controller(&mut self, event: ControllerEvent) {
+    fn update_controller(&self, event: ControllerEvent) {
         let (mask, state) = match event {
             ControllerEvent::ButtonA(state) => (0x0040, state),
             ControllerEvent::ButtonB(state) => (0x0010, state),
@@ -108,7 +108,7 @@ impl ControllerUpdater for GenesisControllersUpdater {
         let buttons = (self.0.load(Ordering::Acquire) & !mask) | (if !state { mask } else { 0 });
         self.0.store(buttons, Ordering::Release);
         if buttons != 0 {
-            self.1.set(true);
+            self.1.store(true, Ordering::Release);
         }
     }
 }
@@ -119,6 +119,7 @@ pub struct GenesisControllers {
     port_1: GenesisControllerPort,
     port_2: GenesisControllerPort,
     expansion: GenesisControllerPort,
+    has_changed: Arc<AtomicBool>,
     interrupt: HostData<bool>,
     reset_timer: ClockDuration,
 }
@@ -129,6 +130,7 @@ impl Default for GenesisControllers {
             port_1: GenesisControllerPort::default(),
             port_2: GenesisControllerPort::default(),
             expansion: GenesisControllerPort::default(),
+            has_changed: Arc::new(AtomicBool::new(false)),
             interrupt: HostData::new(false),
             reset_timer: ClockDuration::ZERO,
         }
@@ -136,12 +138,12 @@ impl Default for GenesisControllers {
 }
 
 impl GenesisControllers {
-    pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
+    pub fn new<H: Host>(host: &mut H) -> Result<Self, Error> {
         let controller = GenesisControllers::default();
 
-        let controller1 = Box::new(GenesisControllersUpdater(controller.port_1.buttons.clone(), controller.interrupt.clone()));
+        let controller1 = Box::new(GenesisControllersUpdater(controller.port_1.buttons.clone(), controller.has_changed.clone()));
         host.register_controller(ControllerDevice::A, controller1)?;
-        let controller2 = Box::new(GenesisControllersUpdater(controller.port_2.buttons.clone(), controller.interrupt.clone()));
+        let controller2 = Box::new(GenesisControllersUpdater(controller.port_2.buttons.clone(), controller.has_changed.clone()));
         host.register_controller(ControllerDevice::B, controller2)?;
 
         Ok(controller)
@@ -205,6 +207,11 @@ impl Addressable for GenesisControllers {
 impl Steppable for GenesisControllers {
     fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
         let duration = ClockDuration::from_micros(100);     // Update every 100us
+
+        if self.has_changed.load(Ordering::Acquire) {
+            self.has_changed.store(false, Ordering::Release);
+            self.interrupt.set(true);
+        }
 
         self.reset_timer += duration;
         if self.reset_timer >= ClockDuration::from_micros(1_500) {

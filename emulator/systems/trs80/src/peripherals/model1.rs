@@ -2,7 +2,7 @@
 use std::sync::{Arc, Mutex};
 
 use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable, debug, warn};
-use moa_core::host::{Host, Frame, FrameQueue, BlitableSurface, KeyboardUpdater, KeyEvent};
+use moa_core::host::{self, Host, Frame, FrameSender, KeyboardUpdater, KeyEvent};
 
 use super::keymap;
 use super::charset::CharacterGenerator;
@@ -12,21 +12,21 @@ const DEV_NAME: &str    = "model1";
 const SCREEN_SIZE: (u32, u32)   = (384, 128);
 
 pub struct Model1Peripherals {
-    frame_queue: FrameQueue,
+    frame_sender: FrameSender,
     keyboard_mem: Arc<Mutex<[u8; 8]>>,
     video_mem: [u8; 1024],
 }
 
 impl Model1Peripherals {
-    pub fn create<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let frame_queue = FrameQueue::new(SCREEN_SIZE.0, SCREEN_SIZE.1);
+    pub fn new<H: Host>(host: &mut H) -> Result<Self, Error> {
+        let (frame_sender, frame_receiver) = host::frame_queue(SCREEN_SIZE.0, SCREEN_SIZE.1);
         let keyboard_mem = Arc::new(Mutex::new([0; 8]));
 
-        host.add_window(Box::new(frame_queue.clone()))?;
+        host.add_video_source(frame_receiver)?;
         host.register_keyboard(Box::new(Model1KeyboardUpdater(keyboard_mem.clone())))?;
 
         Ok(Self {
-            frame_queue,
+            frame_sender,
             keyboard_mem,
             video_mem: [0x20; 1024],
         })
@@ -36,7 +36,7 @@ impl Model1Peripherals {
 pub struct Model1KeyboardUpdater(Arc<Mutex<[u8; 8]>>);
 
 impl KeyboardUpdater for Model1KeyboardUpdater {
-    fn update_keyboard(&mut self, event: KeyEvent) {
+    fn update_keyboard(&self, event: KeyEvent) {
         println!(">>> {:?}", event.key);
         keymap::record_key_press(&mut self.0.lock().unwrap(), event.key, event.state);
     }
@@ -44,7 +44,7 @@ impl KeyboardUpdater for Model1KeyboardUpdater {
 
 impl Steppable for Model1Peripherals {
     fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
-        let mut frame = Frame::new(SCREEN_SIZE.0, SCREEN_SIZE.1, self.frame_queue.encoding());
+        let mut frame = Frame::new(SCREEN_SIZE.0, SCREEN_SIZE.1, self.frame_sender.encoding());
         for y in 0..16 {
             for x in 0..64 {
                 let ch = self.video_mem[x + (y * 64)];
@@ -52,7 +52,7 @@ impl Steppable for Model1Peripherals {
                 frame.blit((x * 6) as u32, (y * 8) as u32, iter, 6, 8);
             }
         }
-        self.frame_queue.add(system.clock, frame);
+        self.frame_sender.add(system.clock, frame);
 
         Ok(ClockDuration::from_micros(16_630))
     }

@@ -37,7 +37,7 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
     let ram = MemoryBlock::new(vec![0; options.memory as usize]);
     system.add_addressable_device(0x4000, wrap_transmutable(ram))?;
 
-    let model1 = Model1Peripherals::create(host)?;
+    let model1 = Model1Peripherals::new(host)?;
     system.add_addressable_device(0x37E0, wrap_transmutable(model1)).unwrap();
 
     let cpu = Z80::new(Z80Type::Z80, options.frequency, BusPort::new(0, 16, 8, system.bus.clone()));

@@ -7,7 +7,7 @@ use winit::event::{Event, VirtualKeyCode, WindowEvent, ElementState};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use moa_core::{System, Error};
-use moa_core::host::{Host, PixelEncoding, Frame, WindowUpdater, ControllerDevice, ControllerEvent, ControllerUpdater, Audio, DummyAudio};
+use moa_core::host::{Host, PixelEncoding, Frame, ControllerDevice, ControllerEvent, ControllerUpdater, Audio, DummyAudio, FrameReceiver};
 use moa_common::{AudioMixer, AudioSource, CpalAudioOutput};
 
 use crate::settings;
@@ -20,7 +20,7 @@ pub const HEIGHT: u32 = 224;
 pub type LoadSystemFn = fn (&mut PixelsFrontend, Vec<u8>) -> Result<System, Error>;
 
 pub struct PixelsFrontend {
-    updater: Option<Box<dyn WindowUpdater>>,
+    video: Option<FrameReceiver>,
     controller: Option<Box<dyn ControllerUpdater>>,
     //mixer: Arc<Mutex<AudioMixer>>,
     //audio_output: CpalAudioOutput,
@@ -33,8 +33,8 @@ impl PixelsFrontend {
         //let audio_output = CpalAudioOutput::create_audio_output(mixer.lock().unwrap().get_sink());
 
         PixelsFrontend {
+            video: None,
             controller: None,
-            updater: None,
             //mixer,
             //audio_output,
         }
@@ -42,8 +42,8 @@ impl PixelsFrontend {
 }
 
 impl Host for PixelsFrontend {
-    fn add_window(&mut self, updater: Box<dyn WindowUpdater>) -> Result<(), Error> {
-        self.updater = Some(updater);
+    fn add_video_source(&mut self, receiver: FrameReceiver) -> Result<(), Error> {
+        self.video = Some(receiver);
         Ok(())
     }
 
@@ -56,20 +56,20 @@ impl Host for PixelsFrontend {
         Ok(())
     }
 
-    fn create_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
+    fn add_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
         //let source = AudioSource::new(self.mixer.clone());
         //Ok(Box::new(source))
         Ok(Box::new(DummyAudio()))
     }
 }
 
-pub async fn run_loop(mut host: PixelsFrontend) {
+pub async fn run_loop(host: PixelsFrontend) {
     let event_loop = EventLoop::new();
 
     let window = create_window(&event_loop);
 
-    if let Some(updater) = host.updater.as_mut() {
-        updater.request_encoding(PixelEncoding::ABGR);
+    if let Some(recevier) = host.video.as_ref() {
+        recevier.request_encoding(PixelEncoding::ABGR);
     }
 
     let mut pixels = {
@@ -93,8 +93,8 @@ pub async fn run_loop(mut host: PixelsFrontend) {
             //log::warn!("updated after {:4}ms", update_timer.elapsed().as_millis());
             //update_timer = Instant::now();
 
-            if let Some(updater) = host.updater.as_mut() {
-                if let Ok(frame) = updater.take_frame() {
+            if let Some(updater) = host.video.as_ref() {
+                if let Some((clock, frame)) = updater.latest() {
                     last_frame = frame;
                 }
 
@@ -131,7 +131,7 @@ pub async fn run_loop(mut host: PixelsFrontend) {
                     }
                 };
 
-                if let Some(updater) = host.controller.as_mut() {
+                if let Some(updater) = host.controller.as_ref() {
                     if let Some(key) = key {
                         updater.update_controller(key);
                     }

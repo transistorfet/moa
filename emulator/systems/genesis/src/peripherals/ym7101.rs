@@ -1,7 +1,7 @@
 
 use moa_core::{debug, warn, error};
 use moa_core::{System, Error, EdgeSignal, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
-use moa_core::host::{Host, Pixel, PixelEncoding, Frame, FrameQueue, BlitableSurface, HostData};
+use moa_core::host::{self, Host, Pixel, PixelEncoding, Frame, FrameSender, HostData};
 
 
 const REG_MODE_SET_1: usize             = 0x00;
@@ -659,9 +659,9 @@ impl Steppable for Ym7101 {
             }
 
             if (self.state.mode_1 & MODE1_BF_DISABLE_DISPLAY) == 0 {
-                let mut frame = Frame::new(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8, self.queue.encoding());
+                let mut frame = Frame::new(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8, self.sender.encoding());
                 self.state.draw_frame(&mut frame);
-                self.queue.add(system.clock, frame);
+                self.sender.add(system.clock, frame);
             }
 
             self.frame_complete.signal();
@@ -681,7 +681,7 @@ impl Steppable for Ym7101 {
 
 
 pub struct Ym7101 {
-    queue: FrameQueue,
+    sender: FrameSender,
     state: Ym7101State,
     sn_sound: TransmutableBox,
 
@@ -691,11 +691,11 @@ pub struct Ym7101 {
 
 impl Ym7101 {
     pub fn new<H: Host>(host: &mut H, external_interrupt: HostData<bool>, sn_sound: TransmutableBox) -> Ym7101 {
-        let queue = FrameQueue::new(320, 224);
-        host.add_window(Box::new(queue.clone())).unwrap();
+        let (sender, receiver) = host::frame_queue(320, 224);
+        host.add_video_source(receiver).unwrap();
 
         Ym7101 {
-            queue,
+            sender,
             state: Ym7101State::default(),
             sn_sound,
             external_interrupt,

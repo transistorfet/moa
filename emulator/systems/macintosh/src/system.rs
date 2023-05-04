@@ -32,7 +32,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     let misc = MemoryBlock::new(vec![0; 0x100000]);
     system.add_addressable_device(0x00f00000, wrap_transmutable(misc))?;
 
-    let video = MacVideo::create(host)?;
+    let video = MacVideo::new(host)?;
     system.add_device("video", wrap_transmutable(video)).unwrap();
 
     let scc1 = Z8530::new();
@@ -62,10 +62,10 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     let mut rom = MemoryBlock::load("binaries/macintosh/Macintosh 512k.rom")?;
     rom.read_only();
 
-    let video = MacVideo::create(host)?;
+    let video = MacVideo::new(host)?;
     system.add_device("video", wrap_transmutable(video)).unwrap();
 
-    let mainboard = Mainboard::create(wrap_transmutable(ram), wrap_transmutable(rom))?;
+    let mainboard = Mainboard::new(wrap_transmutable(ram), wrap_transmutable(rom))?;
     system.add_addressable_device(0x00000000, wrap_transmutable(mainboard))?;
 
 

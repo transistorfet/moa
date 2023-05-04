@@ -5,14 +5,14 @@
 //! source code that emulates the chip.  It is still very much a work in progress
 //!
 //! Resources:
-//! - Registers: https://www.smspower.org/maxim/Documents/YM2612
-//! - Internal Implementation: https://gendev.spritesmind.net/forum/viewtopic.php?t=386 [Nemesis]
+//! - Registers: <https://www.smspower.org/maxim/Documents/YM2612>
+//! - Internal Implementation: <https://gendev.spritesmind.net/forum/viewtopic.php?t=386> (Nemesis)
 //!     * Envelope Generator and Corrections:
-//!         http://gendev.spritesmind.net/forum/viewtopic.php?p=5716#5716
-//!         http://gendev.spritesmind.net/forum/viewtopic.php?t=386&postdays=0&postorder=asc&start=417
+//!         <http://gendev.spritesmind.net/forum/viewtopic.php?p=5716#5716>
+//!         <http://gendev.spritesmind.net/forum/viewtopic.php?t=386&postdays=0&postorder=asc&start=417>
 //!     * Phase Generator and Output:
-//!         http://gendev.spritesmind.net/forum/viewtopic.php?f=24&t=386&start=150
-//!         http://gendev.spritesmind.net/forum/viewtopic.php?p=6224#6224
+//!         <http://gendev.spritesmind.net/forum/viewtopic.php?f=24&t=386&start=150>
+//!         <http://gendev.spritesmind.net/forum/viewtopic.php?p=6224#6224>
 
 use std::f32;
 use std::num::NonZeroU8;
@@ -262,6 +262,9 @@ impl EnvelopeGenerator {
         } else {
             self.envelope_state = EnvelopeState::Release;
         }
+//if self.debug_name == "ch 2, op 1" {
+//println!("change: {} {:?} {}", state, self.envelope_state, self.envelope);
+//}
     }
 
     fn update_envelope(&mut self, envelope_clock: EnvelopeClock, rate_adjust: usize) {
@@ -272,13 +275,24 @@ impl EnvelopeGenerator {
         let rate = self.get_scaled_rate(self.envelope_state, rate_adjust);
         let counter_shift = COUNTER_SHIFT_VALUES[rate];
 
+//if self.debug_name == "ch 2, op 0" {
+//println!("{:4x} {:4x} {:4x}", envelope_clock, counter_shift, envelope_clock % (1 << counter_shift));
+//}
         if envelope_clock % (1 << counter_shift) == 0 {
             let update_cycle = (envelope_clock >> counter_shift) & 0x07;
             let increment = RATE_TABLE[rate * 8 + update_cycle as usize];
 
             match self.envelope_state {
                 EnvelopeState::Attack => {
-                    let new_envelope = self.envelope + ((!self.envelope * increment) >> 4) & 0xFFC;
+                    // NOTE: the adjustment added to the envelope is negative, but the envelope is an unsigned number, so
+                    // it's converted to signed to ensure an arithmetic (sign-extending) shift right is used.  The addition
+                    // will work the same regardless due to the magic of two's complement numbers.  It would have also worked
+                    // to bitwise-and with 0xFFC instead, which will wrap the number to a 12-bit signed number, which when
+                    // clamped to MAX_ENVELOPE will produce the same results
+                    let new_envelope = self.envelope + (((!self.envelope * increment) as i16) >> 4) as u16;
+if self.debug_name == "ch 2, op 0" {
+println!("{:4x} {:4x} {:4x} {:4x} {:4x}", self.envelope, update_cycle, rate * 8 + update_cycle as usize, (((!self.envelope * increment) as i16) >> 4) as u16 & 0xFFFC, new_envelope);
+}
                     if new_envelope > self.envelope {
                         self.envelope_state = EnvelopeState::Decay;
                         self.envelope = 0;
@@ -296,6 +310,9 @@ impl EnvelopeGenerator {
                     }
                 },
             }
+//if self.debug_name == "ch 2, op 0" {
+//println!("{:4x} {:4x} {:4x} {:4x} {:4x}", rate, counter_shift, self.envelope_state as usize, increment, self.envelope);
+//}
         }
     }
 
@@ -506,6 +523,10 @@ impl Operator {
 
         let mod_phase = phase + modulator;
 
+//if self.debug_name == "ch 2, op 0" {
+//println!("{:4x} = {:4x} + {:4x} + {:4x}, e: {:x}, {:4x} {:4x}", mod_phase, phase, self.phase.increment, modulator, self.envelope.envelope_state as usize, envelope, self.envelope.envelope);
+//}
+
         // The sine table contains the first half of the wave as an attenuation value
         // Use the phase with the sign truncated to get the attenuation, plus the
         // attenuation from the envelope, to get the total attenuation at this point
@@ -601,7 +622,9 @@ impl Channel {
         //let output = sign_extend_u16(output, 14);
 
         //let output = output * 2 / 3;
-
+//if self.debug_name == "ch 2" {
+//println!("{:6x}", output);
+//}
         let sample = output as f32 / (1 << 13) as f32;
 
         let left = if self.enabled.0 { sample } else { 0.0 };
@@ -726,8 +749,8 @@ pub struct Ym2612 {
 }
 
 impl Ym2612 {
-    pub fn create<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
-        let source = host.create_audio_source()?;
+    pub fn new<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
+        let source = host.add_audio_source()?;
         let fm_clock = clock_frequency / (6 * 24);
         let fm_clock_period = fm_clock.period_duration();
 
@@ -817,6 +840,7 @@ impl Ym2612 {
     pub fn set_register(&mut self, clock: ClockTime, bank: u8, reg: u8, data: u8) {
         // Keep a copy for debugging purposes, and if the original values are needed
         self.registers[bank as usize * 256 + reg as usize] = data;
+        //println!("set {:x} to {:x}", bank as usize * 256 + reg as usize, data);
 
         //warn!("{}: set reg {}{:x} to {:x}", DEV_NAME, bank, reg, data);
         match reg {

@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use crate::host::traits::{BlitableSurface, ClockedQueue, WindowUpdater};
-use crate::ClockTime;
 use crate::Error;
+use crate::ClockTime;
+use crate::host::traits::ClockedQueue;
 
 pub const MASK_COLOUR: u32 = 0xFFFFFFFF;
 
@@ -62,16 +62,15 @@ impl Frame {
     pub fn new_shared(width: u32, height: u32, encoding: PixelEncoding) -> Arc<Mutex<Frame>> {
         Arc::new(Mutex::new(Frame::new(width, height, encoding)))
     }
-}
 
-impl BlitableSurface for Frame {
-    fn set_size(&mut self, width: u32, height: u32) {
+    pub fn set_size(&mut self, width: u32, height: u32) {
         self.width = width;
         self.height = height;
         self.bitmap.resize((width * height) as usize, 0);
     }
 
-    fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: Pixel) {
+    #[inline]
+    pub fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: Pixel) {
         match pixel {
             Pixel::Mask => {}
             value if pos_x < self.width && pos_y < self.height => {
@@ -82,7 +81,7 @@ impl BlitableSurface for Frame {
     }
 
     #[inline]
-    fn set_encoded_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32) {
+    pub fn set_encoded_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32) {
         match pixel {
             MASK_COLOUR => { },
             value if pos_x < self.width && pos_y < self.height => {
@@ -92,7 +91,7 @@ impl BlitableSurface for Frame {
         }
     }
 
-    fn blit<B: Iterator<Item = Pixel>>(&mut self, pos_x: u32, pos_y: u32, mut bitmap: B, width: u32, height: u32) {
+    pub fn blit<B: Iterator<Item = Pixel>>(&mut self, pos_x: u32, pos_y: u32, mut bitmap: B, width: u32, height: u32) {
         for y in pos_y..(pos_y + height) {
             for x in pos_x..(pos_x + width) {
                 match bitmap.next().unwrap() {
@@ -106,20 +105,35 @@ impl BlitableSurface for Frame {
         }
     }
 
-    fn clear(&mut self, value: Pixel) {
+    pub fn clear(&mut self, value: Pixel) {
         let value = value.encode(self.encoding);
         self.bitmap.iter_mut().for_each(|pixel| *pixel = value);
     }
 }
 
-#[derive(Clone)]
-pub struct FrameQueue {
+pub fn frame_queue(width: u32, height: u32) -> (FrameSender, FrameReceiver) {
+    let sender = FrameSender {
+        max_size: (width, height),
+        encoding: Arc::new(Mutex::new(PixelEncoding::RGBA)),
+        queue: Default::default(),
+    };
+
+    let receiver = FrameReceiver {
+        max_size: (width, height),
+        encoding: sender.encoding.clone(),
+        queue: sender.queue.clone(),
+    };
+
+    (sender, receiver)
+}
+
+pub struct FrameSender {
     max_size: (u32, u32),
     encoding: Arc<Mutex<PixelEncoding>>,
     queue: ClockedQueue<Frame>,
 }
 
-impl FrameQueue {
+impl FrameSender {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
             max_size: (width, height),
@@ -128,12 +142,28 @@ impl FrameQueue {
         }
     }
 
-    pub fn encoding(&mut self) -> PixelEncoding {
+    pub fn encoding(&self) -> PixelEncoding {
         *self.encoding.lock().unwrap()
     }
 
     pub fn add(&self, clock: ClockTime, frame: Frame) {
         self.queue.push(clock, frame);
+    }
+}
+
+pub struct FrameReceiver {
+    max_size: (u32, u32),
+    encoding: Arc<Mutex<PixelEncoding>>,
+    queue: ClockedQueue<Frame>,
+}
+
+impl FrameReceiver {
+    pub fn max_size(&self) -> (u32, u32) {
+        self.max_size
+    }
+
+    pub fn request_encoding(&self, encoding: PixelEncoding) {
+        *self.encoding.lock().unwrap() = encoding;
     }
 
     pub fn latest(&self) -> Option<(ClockTime, Frame)> {
@@ -141,18 +171,3 @@ impl FrameQueue {
     }
 }
 
-impl WindowUpdater for FrameQueue {
-    fn max_size(&self) -> (u32, u32) {
-        self.max_size
-    }
-
-    fn request_encoding(&mut self, encoding: PixelEncoding) {
-        *self.encoding.lock().unwrap() = encoding;
-    }
-
-    fn take_frame(&mut self) -> Result<Frame, Error> {
-        self.latest()
-            .map(|(_, f)| f)
-            .ok_or_else(|| Error::new("No frame available"))
-    }
-}

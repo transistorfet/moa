@@ -8,7 +8,7 @@ use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
 use moa_core::{System, Error, ClockDuration};
-use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, WindowUpdater, Audio, ControllerDevice, PixelEncoding, Frame};
+use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, Audio, ControllerDevice, PixelEncoding, Frame, FrameReceiver};
 
 use moa_common::{AudioMixer, AudioSource};
 use moa_common::CpalAudioOutput;
@@ -95,18 +95,18 @@ fn wait_until_initialized(frontend: Arc<Mutex<MiniFrontendBuilder>>) {
 
 
 pub struct MiniFrontendBuilder {
-    pub window: Option<Box<dyn WindowUpdater>>,
-    pub controller: Option<Box<dyn ControllerUpdater>>,
-    pub keyboard: Option<Box<dyn KeyboardUpdater>>,
-    pub mouse: Option<Box<dyn MouseUpdater>>,
-    pub mixer: Option<Arc<Mutex<AudioMixer>>>,
-    pub finalized: bool,
+    video: Option<FrameReceiver>,
+    controller: Option<Box<dyn ControllerUpdater>>,
+    keyboard: Option<Box<dyn KeyboardUpdater>>,
+    mouse: Option<Box<dyn MouseUpdater>>,
+    mixer: Option<Arc<Mutex<AudioMixer>>>,
+    finalized: bool,
 }
 
 impl Default for MiniFrontendBuilder {
     fn default() -> Self {
         Self {
-            window: None,
+            video: None,
             controller: None,
             keyboard: None,
             mouse: None,
@@ -122,22 +122,27 @@ impl MiniFrontendBuilder {
     }
 
     pub fn build(&mut self) -> MiniFrontend {
-        let window = std::mem::take(&mut self.window);
+        let video = std::mem::take(&mut self.video);
         let controller = std::mem::take(&mut self.controller);
         let keyboard = std::mem::take(&mut self.keyboard);
         let mouse = std::mem::take(&mut self.mouse);
         let mixer = std::mem::take(&mut self.mixer);
-        MiniFrontend::new(window, controller, keyboard, mouse, mixer.unwrap())
+        MiniFrontend::new(video, controller, keyboard, mouse, mixer.unwrap())
     }
 }
 
 impl Host for MiniFrontendBuilder {
-    fn add_window(&mut self, updater: Box<dyn WindowUpdater>) -> Result<(), Error> {
-        if self.window.is_some() {
-            return Err(Error::new("A window updater has already been registered with the frontend"));
+    fn add_video_source(&mut self, receiver: FrameReceiver) -> Result<(), Error> {
+        if self.video.is_some() {
+            return Err(Error::new("Only one video source can be registered with this frontend"));
         }
-        self.window = Some(updater);
+        self.video = Some(receiver);
         Ok(())
+    }
+
+    fn add_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
+        let source = AudioSource::new(self.mixer.as_ref().unwrap().clone());
+        Ok(Box::new(source))
     }
 
     fn register_controller(&mut self, device: ControllerDevice, input: Box<dyn ControllerUpdater>) -> Result<(), Error> {
@@ -167,18 +172,13 @@ impl Host for MiniFrontendBuilder {
         self.mouse = Some(input);
         Ok(())
     }
-
-    fn create_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
-        let source = AudioSource::new(self.mixer.as_ref().unwrap().clone());
-        Ok(Box::new(source))
-    }
 }
 
 
 pub struct MiniFrontend {
     pub modifiers: u16,
     pub mouse_state: MouseState,
-    pub window: Option<Box<dyn WindowUpdater>>,
+    pub video: Option<FrameReceiver>,
     pub controller: Option<Box<dyn ControllerUpdater>>,
     pub keyboard: Option<Box<dyn KeyboardUpdater>>,
     pub mouse: Option<Box<dyn MouseUpdater>>,
@@ -188,7 +188,7 @@ pub struct MiniFrontend {
 
 impl MiniFrontend {
     pub fn new(
-        window: Option<Box<dyn WindowUpdater>>,
+        video: Option<FrameReceiver>,
         controller: Option<Box<dyn ControllerUpdater>>,
         keyboard: Option<Box<dyn KeyboardUpdater>>,
         mouse: Option<Box<dyn MouseUpdater>>,
@@ -197,7 +197,7 @@ impl MiniFrontend {
         Self {
             modifiers: 0,
             mouse_state: Default::default(),
-            window,
+            video,
             controller,
             keyboard,
             mouse,
@@ -239,9 +239,9 @@ impl MiniFrontend {
         };
 
         let mut size = (WIDTH, HEIGHT);
-        if let Some(updater) = self.window.as_mut() {
-            size = updater.max_size();
-            updater.request_encoding(PixelEncoding::ARGB);
+        if let Some(queue) = self.video.as_mut() {
+            size = queue.max_size();
+            queue.request_encoding(PixelEncoding::ARGB);
         }
 
         let mut window = minifb::Window::new(
@@ -306,8 +306,8 @@ impl MiniFrontend {
                 }
             }
 
-            if let Some(updater) = self.window.as_mut() {
-                if let Ok(frame) = updater.take_frame() {
+            if let Some(queue) = self.video.as_mut() {
+                if let Some((clock, frame)) = queue.latest() {
                     last_frame = frame
                 }
                 window.update_with_buffer(&last_frame.bitmap, last_frame.width as usize, last_frame.height as usize).unwrap();

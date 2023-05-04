@@ -3,18 +3,22 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{ClockTime, Error};
-use crate::host::gfx::{PixelEncoding, Pixel, Frame};
+use crate::host::gfx::{PixelEncoding, Pixel, Frame, FrameReceiver};
 use crate::host::keys::KeyEvent;
 use crate::host::controllers::{ControllerDevice, ControllerEvent};
 use crate::host::mouse::MouseEvent;
 
 pub trait Host {
-    fn create_pty(&self) -> Result<Box<dyn Tty>, Error> {
+    fn add_pty(&self) -> Result<Box<dyn Tty>, Error> {
         Err(Error::new("This frontend doesn't support PTYs"))
     }
 
-    fn add_window(&mut self, _updater: Box<dyn WindowUpdater>) -> Result<(), Error> {
+    fn add_video_source(&mut self, _receiver: FrameReceiver) -> Result<(), Error> {
         Err(Error::new("This frontend doesn't support windows"))
+    }
+
+    fn add_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
+        Err(Error::new("This frontend doesn't support the sound"))
     }
 
     fn register_controller(&mut self, _device: ControllerDevice, _input: Box<dyn ControllerUpdater>) -> Result<(), Error> {
@@ -28,10 +32,6 @@ pub trait Host {
     fn register_mouse(&mut self, _input: Box<dyn MouseUpdater>) -> Result<(), Error> {
         Err(Error::new("This frontend doesn't support the mouse"))
     }
-
-    fn create_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
-        Err(Error::new("This frontend doesn't support the sound"))
-    }
 }
 
 
@@ -41,22 +41,16 @@ pub trait Tty {
     fn write(&mut self, output: u8) -> bool;
 }
 
-pub trait WindowUpdater: Send {
-    fn max_size(&self) -> (u32, u32);
-    fn request_encoding(&mut self, encoding: PixelEncoding);
-    fn take_frame(&mut self) -> Result<Frame, Error>;
-}
-
 pub trait ControllerUpdater: Send {
-    fn update_controller(&mut self, event: ControllerEvent);
+    fn update_controller(&self, event: ControllerEvent);
 }
 
 pub trait KeyboardUpdater: Send {
-    fn update_keyboard(&mut self, event: KeyEvent);
+    fn update_keyboard(&self, event: KeyEvent);
 }
 
 pub trait MouseUpdater: Send {
-    fn update_mouse(&mut self, event: MouseEvent);
+    fn update_mouse(&self, event: MouseEvent);
 }
 
 pub trait Audio {
@@ -64,14 +58,6 @@ pub trait Audio {
     fn space_available(&self) -> usize;
     fn write_samples(&mut self, clock: ClockTime, buffer: &[f32]);
     fn flush(&mut self);
-}
-
-pub trait BlitableSurface {
-    fn set_size(&mut self, width: u32, height: u32);
-    fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: Pixel);
-    fn set_encoded_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32);
-    fn blit<B: Iterator<Item=Pixel>>(&mut self, pos_x: u32, pos_y: u32, bitmap: B, width: u32, height: u32);
-    fn clear(&mut self, value: Pixel);
 }
 
 

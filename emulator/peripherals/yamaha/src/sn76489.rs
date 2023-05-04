@@ -94,8 +94,8 @@ pub struct Sn76489 {
 }
 
 impl Sn76489 {
-    pub fn create<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
-        let source = host.create_audio_source()?;
+    pub fn new<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
+        let source = host.add_audio_source()?;
         let sample_rate = source.samples_per_second();
 
         Ok(Self {

@@ -387,3 +387,17 @@ General Work
 - now it actually sounds pretty close for the high pitch tones, but the base tones are completely
   missing
 
+2023-05-03
+- it still doesn't sound quite right but it's much better.  The drum sounds are provided by the DAC
+  which explains why they aren't working properly.  The DAC is not synchronized to the FM output
+  because the fm output is generated in 1 millisecond batches, so I'll have to change that
+- one of the issues that came up was that in C code that has the attack calculation, the same as
+  detailed on page 28 of the Nemesis forum posts, the result is different.  It turns out C is using
+  arithmetic shift right instead of logical shift right, despite the types of the inputs being
+  unsigned explicitly, however in rust, it will use the appropriate operation based on the sign of
+  the strongly typed numbers, so unsigned shift right will insert 0s in the upper bits, which makes
+  the number result be bigger than the previous version, so the attack phase ends on the first pass.
+  Forcing the numbers to be signed for the shift in Rust makes it sign-extend the number (insert 1s
+  because the upper bit is 1), so the number is negative.  Even an unsigned addition will result in
+  the correct number at the end.  It's just that shift that caused the issue
+

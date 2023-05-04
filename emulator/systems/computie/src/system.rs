@@ -22,8 +22,8 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
     let mut serial = MC68681::default();
-    launch_terminal_emulator(serial.port_a.connect(host.create_pty()?)?);
-    launch_slip_connection(serial.port_b.connect(host.create_pty()?)?);
+    launch_terminal_emulator(serial.port_a.connect(host.add_pty()?)?);
+    launch_slip_connection(serial.port_b.connect(host.add_pty()?)?);
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
@@ -60,8 +60,8 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00600000, wrap_transmutable(ata))?;
 
     let mut serial = MC68681::default();
-    launch_terminal_emulator(serial.port_a.connect(host.create_pty()?)?);
-    //launch_slip_connection(serial.port_b.connect(host.create_pty()?)?);
+    launch_terminal_emulator(serial.port_a.connect(host.add_pty()?)?);
+    //launch_slip_connection(serial.port_b.connect(host.add_pty()?)?);
     system.add_addressable_device(0x00700000, wrap_transmutable(serial))?;
 
 
