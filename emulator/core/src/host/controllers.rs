@@ -8,7 +8,7 @@ pub enum ControllerDevice {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ControllerEvent {
+pub enum ControllerInput {
     DpadUp(bool),
     DpadDown(bool),
     DpadLeft(bool),
@@ -21,5 +21,20 @@ pub enum ControllerEvent {
     ButtonZ(bool),
     Start(bool),
     Mode(bool),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct ControllerEvent {
+    pub device: ControllerDevice,
+    pub input: ControllerInput,
+}
+
+impl ControllerEvent {
+    pub fn new(device: ControllerDevice, input: ControllerInput) -> Self {
+        Self {
+            device,
+            input,
+        }
+    }
 }
 

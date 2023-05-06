@@ -1,22 +1,25 @@
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MouseButton {
     Left,
     Right,
     Middle,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MouseEventType {
     Down(MouseButton),
     Up(MouseButton),
     Move,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MouseEvent {
     pub etype: MouseEventType,
     pub pos: (u32, u32),
 }
 
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub struct MouseState {
     pub buttons: [bool; 3],
     pub pos: (u32, u32),

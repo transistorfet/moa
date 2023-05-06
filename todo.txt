@@ -1,4 +1,20 @@
 
+* what if, to allow a device to have multiple steppable functions, you pass the system in, or otherwise provide some mechanism for
+  each device to create sub devices which are scheduled independently
+
+* for some unknown reason, the js-based updater works much better than the rust based one, but the rust based one just goes back to
+  a fixed time per loop instead of trying to speed up
+
+* need to remove HostData and replace the interrupt with Signal
+* make Signal directional, by making SignalDriver and SignalInput or SignalReceiver
+* should you combine the input updaters into one thing and have a queue for communicating?  Even if you have 3 input channels, you can
+  make them all use the same generic type for the input queue
+* you need to refactor the audio mixer stuff to reject data quicker and stay in sync, but how to deal with sim time-dilation
+* make the pixels frontend use an rc refcell object, or rc object to directly control the frontend object while also making it accessible
+  to the run loop
+* add support for the controller inputs in the pixels web frontend
+* clean up pixels frontend
+
 * make the ym generate audio in sync so the DAC timings can be more accurate
 * change the host things to use queues instead
 

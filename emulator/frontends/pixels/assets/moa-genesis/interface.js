@@ -5,6 +5,7 @@ function initialize_emulator() {
     let host = Emulator.new_host();
     let system = Emulator.load_system(host, Emulator.get_load_system_fn());
 
+    //Emulator.start_system(system);
     let last_update = performance.now();
     setTimeout(function refreshFrame() {
         let current = performance.now();
@@ -21,6 +22,12 @@ function initialize_emulator() {
 
     Emulator.host_run_loop(host);
 }
+
+// Update the frame rate display
+var frame_rate_el = document.getElementById("frame-rate");
+var frame_rate = setInterval(function () {
+    frame_rate_el.value = Emulator.get_frames_since();
+}, 1000);
 
 window.addEventListener("load", () => {
     Emulator.default();
@@ -55,14 +62,31 @@ document.getElementById("power").addEventListener("click", () => {
         initialize_emulator();
 });
 
-document.getElementById("speed").addEventListener("change", (e) => {
-    document.getElementById("video").focus();
-    Emulator.set_speed(e.target.value);
+var mute_state = false;
+var mute = document.getElementById("mute");
+mute.addEventListener("click", () => {
+    mute_state = !mute_state;
+    if (mute_state) {
+        mute.value = "\uD83D\uDD07";
+    } else {
+        mute.value = "\uD83D\uDD08";
+    }
+    Emulator.set_mute(mute_state);
 });
 
-// Update the frame rate display
-var frame_rate_el = document.getElementById("frame-rate");
-var frame_rate = setInterval(function () {
-    frame_rate_el.value = Emulator.get_frames_since();
-}, 1000);
+function button_event(e) {
+    var state;
+    if (e.type == 'mousedown' || e.type == 'touchstart') {
+        state = true;
+    } else {
+        state = false;
+    }
+    Emulator.button_press(e.target.name, state);
+}
 
+document.getElementById("controller").querySelectorAll('button').forEach(function (button) {
+    button.addEventListener('mousedown', button_event);
+    button.addEventListener('mouseup', button_event);
+    button.addEventListener('touchstart', button_event);
+    button.addEventListener('touchend', button_event);
+});

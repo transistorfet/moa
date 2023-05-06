@@ -8,7 +8,7 @@ use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
 use moa_core::{System, Error, ClockDuration};
-use moa_core::host::{Host, ControllerUpdater, KeyboardUpdater, KeyEvent, MouseUpdater, MouseState, Audio, ControllerDevice, PixelEncoding, Frame, FrameReceiver};
+use moa_core::host::{Host, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame, FrameReceiver};
 
 use moa_common::{AudioMixer, AudioSource};
 use moa_common::CpalAudioOutput;
@@ -96,9 +96,9 @@ fn wait_until_initialized(frontend: Arc<Mutex<MiniFrontendBuilder>>) {
 
 pub struct MiniFrontendBuilder {
     video: Option<FrameReceiver>,
-    controller: Option<Box<dyn ControllerUpdater>>,
-    keyboard: Option<Box<dyn KeyboardUpdater>>,
-    mouse: Option<Box<dyn MouseUpdater>>,
+    controllers: Option<EventSender<ControllerEvent>>,
+    keyboard: Option<EventSender<KeyEvent>>,
+    mouse: Option<EventSender<MouseEvent>>,
     mixer: Option<Arc<Mutex<AudioMixer>>>,
     finalized: bool,
 }
@@ -107,7 +107,7 @@ impl Default for MiniFrontendBuilder {
     fn default() -> Self {
         Self {
             video: None,
-            controller: None,
+            controllers: None,
             keyboard: None,
             mouse: None,
             mixer: Some(AudioMixer::with_default_rate()),
@@ -123,11 +123,11 @@ impl MiniFrontendBuilder {
 
     pub fn build(&mut self) -> MiniFrontend {
         let video = std::mem::take(&mut self.video);
-        let controller = std::mem::take(&mut self.controller);
+        let controllers = std::mem::take(&mut self.controllers);
         let keyboard = std::mem::take(&mut self.keyboard);
         let mouse = std::mem::take(&mut self.mouse);
         let mixer = std::mem::take(&mut self.mixer);
-        MiniFrontend::new(video, controller, keyboard, mouse, mixer.unwrap())
+        MiniFrontend::new(video, controllers, keyboard, mouse, mixer.unwrap())
     }
 }
 
@@ -145,31 +145,27 @@ impl Host for MiniFrontendBuilder {
         Ok(Box::new(source))
     }
 
-    fn register_controller(&mut self, device: ControllerDevice, input: Box<dyn ControllerUpdater>) -> Result<(), Error> {
-        if device != ControllerDevice::A {
-            return Ok(())
-        }
-
-        if self.controller.is_some() {
+    fn register_controllers(&mut self, sender: EventSender<ControllerEvent>) -> Result<(), Error> {
+        if self.controllers.is_some() {
             return Err(Error::new("A controller updater has already been registered with the frontend"));
         }
-        self.controller = Some(input);
+        self.controllers = Some(sender);
         Ok(())
     }
 
-    fn register_keyboard(&mut self, input: Box<dyn KeyboardUpdater>) -> Result<(), Error> {
+    fn register_keyboard(&mut self, sender: EventSender<KeyEvent>) -> Result<(), Error> {
         if self.keyboard.is_some() {
             return Err(Error::new("A keyboard updater has already been registered with the frontend"));
         }
-        self.keyboard = Some(input);
+        self.keyboard = Some(sender);
         Ok(())
     }
 
-    fn register_mouse(&mut self, input: Box<dyn MouseUpdater>) -> Result<(), Error> {
+    fn register_mouse(&mut self, sender: EventSender<MouseEvent>) -> Result<(), Error> {
         if self.mouse.is_some() {
             return Err(Error::new("A mouse updater has already been registered with the frontend"));
         }
-        self.mouse = Some(input);
+        self.mouse = Some(sender);
         Ok(())
     }
 }
@@ -179,9 +175,9 @@ pub struct MiniFrontend {
     pub modifiers: u16,
     pub mouse_state: MouseState,
     pub video: Option<FrameReceiver>,
-    pub controller: Option<Box<dyn ControllerUpdater>>,
-    pub keyboard: Option<Box<dyn KeyboardUpdater>>,
-    pub mouse: Option<Box<dyn MouseUpdater>>,
+    pub controllers: Option<EventSender<ControllerEvent>>,
+    pub keyboard: Option<EventSender<KeyEvent>>,
+    pub mouse: Option<EventSender<MouseEvent>>,
     pub audio: Option<CpalAudioOutput>,
     pub mixer: Arc<Mutex<AudioMixer>>,
 }
@@ -189,16 +185,16 @@ pub struct MiniFrontend {
 impl MiniFrontend {
     pub fn new(
         video: Option<FrameReceiver>,
-        controller: Option<Box<dyn ControllerUpdater>>,
-        keyboard: Option<Box<dyn KeyboardUpdater>>,
-        mouse: Option<Box<dyn MouseUpdater>>,
+        controllers: Option<EventSender<ControllerEvent>>,
+        keyboard: Option<EventSender<KeyEvent>>,
+        mouse: Option<EventSender<MouseEvent>>,
         mixer: Arc<Mutex<AudioMixer>>,
     ) -> Self {
         Self {
             modifiers: 0,
             mouse_state: Default::default(),
             video,
-            controller,
+            controllers,
             keyboard,
             mouse,
             audio: None,
@@ -218,7 +214,7 @@ impl MiniFrontend {
             }
         }
 
-        if matches.occurrences_of("disable-audio") == 0 {
+        if self.mixer.lock().unwrap().num_sources() != 0 && matches.occurrences_of("disable-audio") == 0 {
             self.audio = Some(CpalAudioOutput::create_audio_output(self.mixer.lock().unwrap().get_sink()));
         }
 
@@ -292,7 +288,7 @@ impl MiniFrontend {
                 }
             }
 
-            if let Some(updater) = self.mouse.as_mut() {
+            if let Some(sender) = self.mouse.as_mut() {
                 if let Some((x, y)) = window.get_mouse_pos(MouseMode::Clamp) {
                     let left = window.get_mouse_down(MouseButton::Left);
                     let right = window.get_mouse_down(MouseButton::Right);
@@ -302,7 +298,7 @@ impl MiniFrontend {
                     self.mouse_state
                         .to_events(next_state)
                         .into_iter()
-                        .for_each(|event| updater.update_mouse(event));
+                        .for_each(|event| sender.send(event));
                 }
             }
 
@@ -316,13 +312,14 @@ impl MiniFrontend {
     }
 
     fn check_key(&mut self, key: Key, state: bool) {
-        if let Some(updater) = self.keyboard.as_mut() {
-            updater.update_keyboard(KeyEvent::new(map_key(key), state));
+        if let Some(sender) = self.keyboard.as_mut() {
+            sender.send(KeyEvent::new(map_key(key), state));
         }
 
-        if let Some(updater) = self.controller.as_mut() {
-            if let Some(event) = map_controller_a(key, state) {
-                updater.update_controller(event);
+        if let Some(sender) = self.controllers.as_mut() {
+            if let Some(input) = map_controller_a(key, state) {
+                let event = ControllerEvent::new(ControllerDevice::A, input);
+                sender.send(event);
             }
         }
     }

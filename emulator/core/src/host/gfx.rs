@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use crate::Error;
 use crate::ClockTime;
 use crate::host::traits::ClockedQueue;
 
@@ -113,9 +112,8 @@ impl Frame {
 
 pub fn frame_queue(width: u32, height: u32) -> (FrameSender, FrameReceiver) {
     let sender = FrameSender {
-        max_size: (width, height),
         encoding: Arc::new(Mutex::new(PixelEncoding::RGBA)),
-        queue: Default::default(),
+        queue: ClockedQueue::new(10),
     };
 
     let receiver = FrameReceiver {
@@ -128,20 +126,11 @@ pub fn frame_queue(width: u32, height: u32) -> (FrameSender, FrameReceiver) {
 }
 
 pub struct FrameSender {
-    max_size: (u32, u32),
     encoding: Arc<Mutex<PixelEncoding>>,
     queue: ClockedQueue<Frame>,
 }
 
 impl FrameSender {
-    pub fn new(width: u32, height: u32) -> Self {
-        Self {
-            max_size: (width, height),
-            encoding: Arc::new(Mutex::new(PixelEncoding::RGBA)),
-            queue: Default::default(),
-        }
-    }
-
     pub fn encoding(&self) -> PixelEncoding {
         *self.encoding.lock().unwrap()
     }

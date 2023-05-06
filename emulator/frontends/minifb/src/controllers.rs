@@ -1,18 +1,18 @@
 
 use minifb::Key as MiniKey;
-use moa_core::host::ControllerEvent;
+use moa_core::host::ControllerInput;
 
-pub fn map_controller_a(key: MiniKey, state: bool) -> Option<ControllerEvent> {
+pub fn map_controller_a(key: MiniKey, state: bool) -> Option<ControllerInput> {
     match key {
-        MiniKey::A => { Some(ControllerEvent::ButtonA(state)) },
-        MiniKey::O => { Some(ControllerEvent::ButtonB(state)) },
-        MiniKey::E => { Some(ControllerEvent::ButtonC(state)) },
-        MiniKey::Up => { Some(ControllerEvent::DpadUp(state)) },
-        MiniKey::Down => { Some(ControllerEvent::DpadDown(state)) },
-        MiniKey::Left => { Some(ControllerEvent::DpadLeft(state)) },
-        MiniKey::Right => { Some(ControllerEvent::DpadRight(state)) },
-        MiniKey::Enter => { Some(ControllerEvent::Start(state)) },
-        MiniKey::M => { Some(ControllerEvent::Mode(state)) },
+        MiniKey::A => { Some(ControllerInput::ButtonA(state)) },
+        MiniKey::O => { Some(ControllerInput::ButtonB(state)) },
+        MiniKey::E => { Some(ControllerInput::ButtonC(state)) },
+        MiniKey::Up => { Some(ControllerInput::DpadUp(state)) },
+        MiniKey::Down => { Some(ControllerInput::DpadDown(state)) },
+        MiniKey::Left => { Some(ControllerInput::DpadLeft(state)) },
+        MiniKey::Right => { Some(ControllerInput::DpadRight(state)) },
+        MiniKey::Enter => { Some(ControllerInput::Start(state)) },
+        MiniKey::M => { Some(ControllerInput::Mode(state)) },
         _ => None,
     }
 }

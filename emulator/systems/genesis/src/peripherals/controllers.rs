@@ -1,10 +1,7 @@
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
-
 use moa_core::{warn, info};
 use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{Host, ControllerUpdater, HostData, ControllerDevice, ControllerEvent};
+use moa_core::host::{self, Host, HostData, ControllerDevice, ControllerInput, ControllerEvent, EventReceiver};
 
 
 const REG_VERSION: Address      = 0x01;
@@ -25,7 +22,7 @@ pub struct GenesisControllerPort {
     /// Data contains bits:
     /// 11 | 10 | 9 |    8 |     7 | 6 | 5 | 4 |     3 |    2 |    1 |  0
     ///  X |  Y | Z | MODE | START | A | C | B | RIGHT | LEFT | DOWN | UP
-    buttons: Arc<AtomicU16>,
+    buttons: u16,
 
     ctrl: u8,
     outputs: u8,
@@ -37,7 +34,7 @@ pub struct GenesisControllerPort {
 impl Default for GenesisControllerPort {
     fn default() -> Self {
         Self {
-            buttons: Arc::new(AtomicU16::new(0xffff)),
+            buttons: 0xffff,
             ctrl: 0,
             outputs: 0,
             th_count: 0,
@@ -48,7 +45,7 @@ impl Default for GenesisControllerPort {
 
 impl GenesisControllerPort {
     pub fn get_data(&mut self) -> u8 {
-        let inputs = self.buttons.load(Ordering::Relaxed);
+        let inputs = self.buttons;
         let th_state = (self.outputs & 0x40) != 0;
 
         match (th_state, self.th_count) {
@@ -88,69 +85,59 @@ impl GenesisControllerPort {
     }
 }
 
-pub struct GenesisControllersUpdater(Arc<AtomicU16>, Arc<AtomicBool>);
-
-impl ControllerUpdater for GenesisControllersUpdater {
-    fn update_controller(&self, event: ControllerEvent) {
-        let (mask, state) = match event {
-            ControllerEvent::ButtonA(state) => (0x0040, state),
-            ControllerEvent::ButtonB(state) => (0x0010, state),
-            ControllerEvent::ButtonC(state) => (0x0020, state),
-            ControllerEvent::DpadUp(state) => (0x0001, state),
-            ControllerEvent::DpadDown(state) => (0x0002, state),
-            ControllerEvent::DpadLeft(state) => (0x0004, state),
-            ControllerEvent::DpadRight(state) => (0x0008, state),
-            ControllerEvent::Start(state) => (0x0080, state),
-            ControllerEvent::Mode(state) => (0x0100, state),
-            _ => (0x0000, false),
-        };
-
-        let buttons = (self.0.load(Ordering::Acquire) & !mask) | (if !state { mask } else { 0 });
-        self.0.store(buttons, Ordering::Release);
-        if buttons != 0 {
-            self.1.store(true, Ordering::Release);
-        }
-    }
-}
-
-
 
 pub struct GenesisControllers {
+    receiver: EventReceiver<ControllerEvent>,
     port_1: GenesisControllerPort,
     port_2: GenesisControllerPort,
     expansion: GenesisControllerPort,
-    has_changed: Arc<AtomicBool>,
     interrupt: HostData<bool>,
     reset_timer: ClockDuration,
 }
 
-impl Default for GenesisControllers {
-    fn default() -> Self {
-        Self {
+impl GenesisControllers {
+    pub fn new<H: Host>(host: &mut H) -> Result<Self, Error> {
+        let (sender, receiver) = host::event_queue();
+        host.register_controllers(sender)?;
+
+        Ok(Self {
+            receiver,
             port_1: GenesisControllerPort::default(),
             port_2: GenesisControllerPort::default(),
             expansion: GenesisControllerPort::default(),
-            has_changed: Arc::new(AtomicBool::new(false)),
             interrupt: HostData::new(false),
             reset_timer: ClockDuration::ZERO,
-        }
-    }
-}
-
-impl GenesisControllers {
-    pub fn new<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let controller = GenesisControllers::default();
-
-        let controller1 = Box::new(GenesisControllersUpdater(controller.port_1.buttons.clone(), controller.has_changed.clone()));
-        host.register_controller(ControllerDevice::A, controller1)?;
-        let controller2 = Box::new(GenesisControllersUpdater(controller.port_2.buttons.clone(), controller.has_changed.clone()));
-        host.register_controller(ControllerDevice::B, controller2)?;
-
-        Ok(controller)
+        })
     }
 
     pub fn get_interrupt_signal(&self) -> HostData<bool> {
         self.interrupt.clone()
+    }
+
+    fn process_event(&mut self, event: ControllerEvent) {
+        let (mask, state) = match event.input {
+            ControllerInput::ButtonA(state) => (0x0040, state),
+            ControllerInput::ButtonB(state) => (0x0010, state),
+            ControllerInput::ButtonC(state) => (0x0020, state),
+            ControllerInput::DpadUp(state) => (0x0001, state),
+            ControllerInput::DpadDown(state) => (0x0002, state),
+            ControllerInput::DpadLeft(state) => (0x0004, state),
+            ControllerInput::DpadRight(state) => (0x0008, state),
+            ControllerInput::Start(state) => (0x0080, state),
+            ControllerInput::Mode(state) => (0x0100, state),
+            _ => (0x0000, false),
+        };
+
+        let prev_state = match event.device {
+            ControllerDevice::A => &mut self.port_1.buttons,
+            ControllerDevice::B => &mut self.port_2.buttons,
+            _ => return,
+        };
+
+        *prev_state = (*prev_state & !mask) | (if !state { mask } else { 0 });
+        if *prev_state != 0 {
+            self.interrupt.set(true);
+        }
     }
 }
 
@@ -208,9 +195,8 @@ impl Steppable for GenesisControllers {
     fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
         let duration = ClockDuration::from_micros(100);     // Update every 100us
 
-        if self.has_changed.load(Ordering::Acquire) {
-            self.has_changed.store(false, Ordering::Release);
-            self.interrupt.set(true);
+        while let Some(event) = self.receiver.receive() {
+            self.process_event(event);
         }
 
         self.reset_timer += duration;

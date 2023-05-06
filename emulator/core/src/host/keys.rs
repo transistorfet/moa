@@ -110,6 +110,7 @@ pub enum Key {
     Unknown,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct KeyEvent {
     pub key: Key,
     pub state: bool,

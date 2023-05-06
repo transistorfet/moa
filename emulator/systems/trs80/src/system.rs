@@ -4,7 +4,7 @@ use moa_core::host::Host;
 
 use moa_z80::{Z80, Z80Type};
 
-use crate::peripherals::model1::Model1Peripherals;
+use crate::peripherals::model1::{Model1Keyboard, Model1Video};
 
 
 pub struct Trs80Options {
@@ -37,8 +37,10 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
     let ram = MemoryBlock::new(vec![0; options.memory as usize]);
     system.add_addressable_device(0x4000, wrap_transmutable(ram))?;
 
-    let model1 = Model1Peripherals::new(host)?;
-    system.add_addressable_device(0x37E0, wrap_transmutable(model1)).unwrap();
+    let keyboard = Model1Keyboard::new(host)?;
+    system.add_addressable_device(0x37E0, wrap_transmutable(keyboard)).unwrap();
+    let video = Model1Video::new(host)?;
+    system.add_addressable_device(0x37E0 + 0x420, wrap_transmutable(video)).unwrap();
 
     let cpu = Z80::new(Z80Type::Z80, options.frequency, BusPort::new(0, 16, 8, system.bus.clone()));
     //cpu.add_breakpoint(0x0);

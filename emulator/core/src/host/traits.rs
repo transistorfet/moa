@@ -3,10 +3,11 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{ClockTime, Error};
-use crate::host::gfx::{PixelEncoding, Pixel, Frame, FrameReceiver};
+use crate::host::gfx::FrameReceiver;
 use crate::host::keys::KeyEvent;
-use crate::host::controllers::{ControllerDevice, ControllerEvent};
+use crate::host::controllers::ControllerEvent;
 use crate::host::mouse::MouseEvent;
+use crate::host::input::EventSender;
 
 pub trait Host {
     fn add_pty(&self) -> Result<Box<dyn Tty>, Error> {
@@ -21,15 +22,15 @@ pub trait Host {
         Err(Error::new("This frontend doesn't support the sound"))
     }
 
-    fn register_controller(&mut self, _device: ControllerDevice, _input: Box<dyn ControllerUpdater>) -> Result<(), Error> {
+    fn register_controllers(&mut self, _sender: EventSender<ControllerEvent>) -> Result<(), Error> {
         Err(Error::new("This frontend doesn't support game controllers"))
     }
 
-    fn register_keyboard(&mut self, _input: Box<dyn KeyboardUpdater>) -> Result<(), Error> {
+    fn register_keyboard(&mut self, _sender: EventSender<KeyEvent>) -> Result<(), Error> {
         Err(Error::new("This frontend doesn't support the keyboard"))
     }
 
-    fn register_mouse(&mut self, _input: Box<dyn MouseUpdater>) -> Result<(), Error> {
+    fn register_mouse(&mut self, _sender: EventSender<MouseEvent>) -> Result<(), Error> {
         Err(Error::new("This frontend doesn't support the mouse"))
     }
 }
@@ -39,18 +40,6 @@ pub trait Tty {
     fn device_name(&self) -> String;
     fn read(&mut self) -> Option<u8>;
     fn write(&mut self, output: u8) -> bool;
-}
-
-pub trait ControllerUpdater: Send {
-    fn update_controller(&self, event: ControllerEvent);
-}
-
-pub trait KeyboardUpdater: Send {
-    fn update_keyboard(&self, event: KeyEvent);
-}
-
-pub trait MouseUpdater: Send {
-    fn update_mouse(&self, event: MouseEvent);
 }
 
 pub trait Audio {
@@ -84,12 +73,22 @@ impl<T: Copy> HostData<T> {
     }
 }
 
+
 #[derive(Clone, Default)]
-pub struct ClockedQueue<T>(Arc<Mutex<VecDeque<(ClockTime, T)>>>);
+pub struct ClockedQueue<T>(Arc<Mutex<VecDeque<(ClockTime, T)>>>, usize);
 
 impl<T: Clone> ClockedQueue<T> {
+    pub fn new(max: usize) -> Self {
+        Self(Arc::new(Mutex::new(VecDeque::new())), max)
+    }
+
     pub fn push(&self, clock: ClockTime, data: T) {
-        self.0.lock().unwrap().push_back((clock, data));
+        let mut queue = self.0.lock().unwrap();
+        if queue.len() > self.1 {
+            //log::warn!("dropping data from queue due to limit of {} items", self.1);
+            queue.pop_front();
+        }
+        queue.push_back((clock, data));
     }
 
     pub fn pop_next(&self) -> Option<(ClockTime, T)> {
@@ -100,7 +99,7 @@ impl<T: Clone> ClockedQueue<T> {
         self.0.lock().unwrap().drain(..).last()
     }
 
-    pub fn unpop(&mut self, clock: ClockTime, data: T) {
+    pub fn unpop(&self, clock: ClockTime, data: T) {
         self.0.lock().unwrap().push_front((clock, data));
     }
 

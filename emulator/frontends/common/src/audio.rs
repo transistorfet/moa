@@ -8,8 +8,11 @@ use moa_core::host::{Audio, ClockedQueue};
 
 pub const SAMPLE_RATE: usize = 48000;
 
+pub struct Sample(f32, f32);
+
 #[derive(Clone, Default)]
 pub struct AudioFrame {
+    //pub sample_rate: usize,
     pub data: Vec<(f32, f32)>,
 }
 
@@ -23,7 +26,7 @@ pub struct AudioSource {
 
 impl AudioSource {
     pub fn new(mixer: Arc<Mutex<AudioMixer>>) -> Self {
-        let queue = ClockedQueue::default();
+        let queue = ClockedQueue::new(5000);
         let (id, sample_rate, frame_size) = {
             let mut mixer = mixer.lock().unwrap();
             let id = mixer.add_source(queue.clone());
@@ -124,6 +127,10 @@ impl AudioMixer {
         self.sources.len() - 1
     }
 
+    pub fn num_sources(&self) -> usize {
+        self.sources.len()
+    }
+
     pub fn get_sink(&mut self) -> Arc<Mutex<AudioOutput>> {
         self.output.clone()
     }
@@ -214,11 +221,9 @@ impl AudioMixer {
     }
 }
 
-#[allow(dead_code)]
 pub struct AudioOutput {
     frame_size: usize,
     sequence_num: usize,
-    last_frame: Option<AudioFrame>,
     output: VecDeque<AudioFrame>,
 }
 
@@ -227,7 +232,6 @@ impl AudioOutput {
         Arc::new(Mutex::new(Self {
             frame_size: 0,
             sequence_num: 0,
-            last_frame: None,
             output: VecDeque::with_capacity(2),
         }))
     }

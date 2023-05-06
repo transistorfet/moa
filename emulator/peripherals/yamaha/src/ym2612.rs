@@ -249,8 +249,7 @@ impl EnvelopeGenerator {
         calculate_rate(self.rates[etype as usize], rate_adjust)
     }
 
-    fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock, rate_adjust: usize) {
-
+    fn notify_key_change(&mut self, state: bool, _envelope_clock: EnvelopeClock, rate_adjust: usize) {
         if state {
             let rate = self.get_scaled_rate(EnvelopeState::Attack, rate_adjust);
             if rate < 62 {
@@ -262,9 +261,6 @@ impl EnvelopeGenerator {
         } else {
             self.envelope_state = EnvelopeState::Release;
         }
-//if self.debug_name == "ch 2, op 1" {
-//println!("change: {} {:?} {}", state, self.envelope_state, self.envelope);
-//}
     }
 
     fn update_envelope(&mut self, envelope_clock: EnvelopeClock, rate_adjust: usize) {
@@ -403,7 +399,7 @@ impl PhaseGenerator {
         let increment = if self.block == 0 {
             increment >> 1
         } else {
-            increment << self.block - 1
+            increment << (self.block - 1)
         };
 
         // Apply detune
@@ -539,7 +535,7 @@ impl Operator {
         // If the original phase was in the negative portion, invert the output
         // since the sine wave's second half is a mirror of the first half
         if mod_phase & 0x200 != 0 {
-            output = output * -1;
+            output *= -1;
         }
         // The output is now represented with a 16-bit signed number in the range of -0x1FFF and 0x1FFF
 

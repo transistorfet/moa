@@ -1,43 +1,29 @@
 
-use std::sync::mpsc;
-
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
-use moa_core::host::{Host, Frame, FrameQueue, PixelEncoding, WindowUpdater, KeyboardUpdater, Key, KeyEvent /*, MouseUpdater, MouseState, MouseEvent*/};
+use moa_core::host::{self, Host, Frame, FrameSender, PixelEncoding, Key, KeyEvent, EventReceiver};
 use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
 
-
-pub struct SynthControlsUpdater(mpsc::Sender<KeyEvent>);
-
-impl KeyboardUpdater for SynthControlsUpdater {
-    fn update_keyboard(&mut self, event: KeyEvent) {
-        self.0.send(event).unwrap();
-    }
-}
-
-//impl MouseUpdater for SynthControlsUpdater {
-//    fn update_mouse(&mut self, event: MouseEvent) {
-//        self.0.send(event).unwrap();
-//    }
-//}
+const SCREEN_WIDTH: u32 = 384;
+const SCREEN_HEIGHT: u32 = 128;
 
 struct SynthControl {
-    queue: FrameQueue,
-    receiver: mpsc::Receiver<KeyEvent>,
+    key_receiver: EventReceiver<KeyEvent>,
+    frame_sender: FrameSender,
 }
 
 impl SynthControl {
-    pub fn new(queue: FrameQueue, receiver: mpsc::Receiver<KeyEvent>) -> Self {
+    pub fn new(key_receiver: EventReceiver<KeyEvent>, frame_sender: FrameSender) -> Self {
         Self {
-            queue,
-            receiver,
+            key_receiver,
+            frame_sender,
         }
     }
 }
 
 impl Steppable for SynthControl {
     fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
-        if let Ok(event) = self.receiver.try_recv() {
+        if let Some(event) = self.key_receiver.receive() {
 
             match event.key {
                 Key::Enter => {
@@ -55,11 +41,10 @@ impl Steppable for SynthControl {
             }
         }
 
-        let size = self.queue.max_size();
-        let frame = Frame::new(size.0, size.1, PixelEncoding::RGBA);
-        self.queue.add(system.clock, frame);
+        let frame = Frame::new(SCREEN_WIDTH, SCREEN_HEIGHT, PixelEncoding::RGBA);
+        self.frame_sender.add(system.clock, frame);
 
-        Ok(ClockDuration::from_millis(1))
+        Ok(ClockDuration::from_micros(100))
     }
 }
 
@@ -98,21 +83,20 @@ fn main() {
     moa_minifb::run(matches, |host| {
         let mut system = System::default();
 
-        let queue = FrameQueue::new(384, 128);
-        let (sender, receiver) = mpsc::channel();
-        let control = wrap_transmutable(SynthControl::new(queue.clone(), receiver));
+        let (frame_sender, frame_receiver) = host::frame_queue(SCREEN_WIDTH, SCREEN_HEIGHT);
+        let (key_sender, key_receiver) = host::event_queue();
+        let control = wrap_transmutable(SynthControl::new(key_receiver, frame_sender));
         system.add_device("control", control)?;
 
-        let ym_sound = wrap_transmutable(Ym2612::create(host, Frequency::from_hz(7_670_454))?);
+        let ym_sound = wrap_transmutable(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
         initialize_ym(ym_sound.clone())?;
         system.add_addressable_device(0x00, ym_sound)?;
 
-        let sn_sound = wrap_transmutable(Sn76489::create(host, Frequency::from_hz(3_579_545))?);
+        let sn_sound = wrap_transmutable(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
         system.add_addressable_device(0x10, sn_sound)?;
 
-        host.add_window(Box::new(queue))?;
-        host.register_keyboard(Box::new(SynthControlsUpdater(sender)))?;
-        //host.register_mouse(Box::new(SynthControlsUpdater(sender)))?;
+        host.add_video_source(frame_receiver)?;
+        host.register_keyboard(key_sender)?;
 
         Ok(system)
     });

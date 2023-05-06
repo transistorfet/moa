@@ -1,4 +1,5 @@
 body {
+    font-family: sans;
     background-color: #000;
     margin: 0;
     overflow: hidden;
@@ -19,3 +20,16 @@ body {
     color: #DDD;
     background-color: #000;
 }
+
+#mute {
+    cursor: pointer;
+}
+
+#controller .updown {
+    overflow: hidden;
+}
+
+#controller button[name="left"] {
+
+}
+

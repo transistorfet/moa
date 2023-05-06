@@ -1,24 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <title>Sega Genesis - Moa</title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="style.css">
-    <title>Sega Genesis - Moa</title>
     <script type="module" src="./interface.js"></script>
   </head>
   <body>
     <div id="config">
-      <label>ROM File (only .bin format)</label>
+      <input type="button" id="mute" value="&#x1F508;" />
+      <label>ROM File</label>
       <input type="file" id="rom-file" accept=".bin,.smd,.md" />
-      <input type="button" id="reset" value="Reset" />
       <input type="button" id="power" value="Power" />
-      <input type="text" id="speed" value="4.0" />
-      <select id="scale">
-        <option value="1">320 x 224</option>
-        <option value="2" selected>640 x 448</option>
-        <option value="3">960 x 672</option>
-      </select>
+      <input type="button" id="reset" value="Reset" />
     </div>
 
     <div id="metrics">
@@ -27,7 +22,19 @@
     </div>
 
     <div id="video-screen">
-      <canvas id="video" tabindex="0" draw-raw-handle="1" style="width: 640px; height: 448px;" width="640" height="448" />
+      <canvas id="video" tabindex="0" draw-raw-handle="1" />
+    </div>
+    <div id="controller">
+      <button name="left">&#x21E6;</button>
+      <button name="up">&#x21E7;</button>
+      <button name="down">&#x21E8;</button>
+      <button name="right">&#x21E9;</button>
+
+      <button name="start">Start</button>
+
+      <button name="a">A</button>
+      <button name="b">B</button>
+      <button name="c">C</button>
     </div>
   </body>
 </html>

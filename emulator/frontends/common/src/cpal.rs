@@ -1,6 +1,6 @@
 
 use std::sync::{Arc, Mutex};
-use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, StreamInstant, OutputCallbackInfo, traits::{DeviceTrait, HostTrait, StreamTrait}};
 
 use moa_core::{warn, error};
 
@@ -25,7 +25,7 @@ impl CpalAudioOutput {
             .with_sample_rate(SampleRate(SAMPLE_RATE as u32))
             .into();
 
-        let data_callback = move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+        let data_callback = move |data: &mut [f32], info: &OutputCallbackInfo| {
             let result = if let Ok(mut output) = output.lock() {
                 output.set_frame_size(data.len() / 2);
                 output.pop_next()
@@ -57,6 +57,14 @@ impl CpalAudioOutput {
 
         CpalAudioOutput {
             stream,
+        }
+    }
+
+    pub fn set_mute(&self, mute: bool) {
+        if mute {
+            self.stream.pause().unwrap();
+        } else {
+            self.stream.play().unwrap();
         }
     }
 }

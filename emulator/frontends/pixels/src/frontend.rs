@@ -7,7 +7,7 @@ use winit::event::{Event, VirtualKeyCode, WindowEvent, ElementState};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use moa_core::{System, Error};
-use moa_core::host::{Host, PixelEncoding, Frame, ControllerDevice, ControllerEvent, ControllerUpdater, Audio, DummyAudio, FrameReceiver};
+use moa_core::host::{Host, PixelEncoding, Frame, ControllerDevice, ControllerInput, ControllerEvent, EventSender, Audio, DummyAudio, FrameReceiver};
 use moa_common::{AudioMixer, AudioSource, CpalAudioOutput};
 
 use crate::settings;
@@ -21,22 +21,22 @@ pub type LoadSystemFn = fn (&mut PixelsFrontend, Vec<u8>) -> Result<System, Erro
 
 pub struct PixelsFrontend {
     video: Option<FrameReceiver>,
-    controller: Option<Box<dyn ControllerUpdater>>,
-    //mixer: Arc<Mutex<AudioMixer>>,
-    //audio_output: CpalAudioOutput,
+    controllers: Option<EventSender<ControllerEvent>>,
+    mixer: Arc<Mutex<AudioMixer>>,
+    audio_output: CpalAudioOutput,
 }
 
 impl PixelsFrontend {
     pub fn new() -> PixelsFrontend {
         settings::get().run = true;
-        //let mixer = AudioMixer::with_default_rate();
-        //let audio_output = CpalAudioOutput::create_audio_output(mixer.lock().unwrap().get_sink());
+        let mixer = AudioMixer::with_default_rate();
+        let audio_output = CpalAudioOutput::create_audio_output(mixer.lock().unwrap().get_sink());
 
         PixelsFrontend {
             video: None,
-            controller: None,
-            //mixer,
-            //audio_output,
+            controllers: None,
+            mixer,
+            audio_output,
         }
     }
 }
@@ -47,19 +47,15 @@ impl Host for PixelsFrontend {
         Ok(())
     }
 
-    fn register_controller(&mut self, device: ControllerDevice, input: Box<dyn ControllerUpdater>) -> Result<(), Error> {
-        if device != ControllerDevice::A {
-            return Ok(())
-        }
-
-        self.controller = Some(input);
+    fn register_controllers(&mut self, sender: EventSender<ControllerEvent>) -> Result<(), Error> {
+        self.controllers = Some(sender);
         Ok(())
     }
 
     fn add_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
-        //let source = AudioSource::new(self.mixer.clone());
-        //Ok(Box::new(source))
-        Ok(Box::new(DummyAudio()))
+        let source = AudioSource::new(self.mixer.clone());
+        Ok(Box::new(source))
+        //Ok(Box::new(DummyAudio()))
     }
 }
 
@@ -68,8 +64,8 @@ pub async fn run_loop(host: PixelsFrontend) {
 
     let window = create_window(&event_loop);
 
-    if let Some(recevier) = host.video.as_ref() {
-        recevier.request_encoding(PixelEncoding::ABGR);
+    if let Some(receiver) = host.video.as_ref() {
+        receiver.request_encoding(PixelEncoding::ABGR);
     }
 
     let mut pixels = {
@@ -81,6 +77,7 @@ pub async fn run_loop(host: PixelsFrontend) {
             .expect("Pixels error")
     };
 
+    let mut mute = false;
     let mut last_size = (WIDTH, HEIGHT);
     let mut last_frame = Frame::new(WIDTH, HEIGHT, PixelEncoding::ABGR);
     //let mut update_timer = Instant::now();
@@ -131,12 +128,20 @@ pub async fn run_loop(host: PixelsFrontend) {
                     }
                 };
 
-                if let Some(updater) = host.controller.as_ref() {
+                if let Some(sender) = host.controllers.as_ref() {
                     if let Some(key) = key {
-                        updater.update_controller(key);
+                        let event = ControllerEvent::new(ControllerDevice::A, key);
+                        sender.send(event);
                     }
                 }
             }
+        }
+
+        let requested_mute = settings::get().mute;
+        if requested_mute != mute {
+            mute = requested_mute;
+            host.audio_output.set_mute(mute);
+            log::info!("setting mute to {}", mute);
         }
 
         // Check if the run flag is no longer true, and exit the loop
@@ -161,17 +166,17 @@ pub async fn run_loop(host: PixelsFrontend) {
     });
 }
 
-pub fn map_controller_a(key: VirtualKeyCode, state: bool) -> Option<ControllerEvent> {
+pub fn map_controller_a(key: VirtualKeyCode, state: bool) -> Option<ControllerInput> {
     match key {
-        VirtualKeyCode::A => { Some(ControllerEvent::ButtonA(state)) },
-        VirtualKeyCode::S => { Some(ControllerEvent::ButtonB(state)) },
-        VirtualKeyCode::D => { Some(ControllerEvent::ButtonC(state)) },
-        VirtualKeyCode::Up => { Some(ControllerEvent::DpadUp(state)) },
-        VirtualKeyCode::Down => { Some(ControllerEvent::DpadDown(state)) },
-        VirtualKeyCode::Left => { Some(ControllerEvent::DpadLeft(state)) },
-        VirtualKeyCode::Right => { Some(ControllerEvent::DpadRight(state)) },
-        VirtualKeyCode::Return => { Some(ControllerEvent::Start(state)) },
-        VirtualKeyCode::M => { Some(ControllerEvent::Mode(state)) },
+        VirtualKeyCode::A => { Some(ControllerInput::ButtonA(state)) },
+        VirtualKeyCode::S => { Some(ControllerInput::ButtonB(state)) },
+        VirtualKeyCode::D => { Some(ControllerInput::ButtonC(state)) },
+        VirtualKeyCode::Up => { Some(ControllerInput::DpadUp(state)) },
+        VirtualKeyCode::Down => { Some(ControllerInput::DpadDown(state)) },
+        VirtualKeyCode::Left => { Some(ControllerInput::DpadLeft(state)) },
+        VirtualKeyCode::Right => { Some(ControllerInput::DpadRight(state)) },
+        VirtualKeyCode::Return => { Some(ControllerInput::Start(state)) },
+        VirtualKeyCode::M => { Some(ControllerInput::Mode(state)) },
         _ => None,
     }
 }
