@@ -401,3 +401,18 @@ General Work
   because the upper bit is 1), so the number is negative.  Even an unsigned addition will result in
   the correct number at the end.  It's just that shift that caused the issue
 
+2023-05-06
+- I replaced the controller, keyboard, and mouse updaters with queues to make it easier to implement
+  I/O devices, and avoid some of the mutablility and timing issues of the old updaters.
+  Unfortunately I can't easily add time to those queues because webassembly doesn't support
+  std::time.  There's another type called instant::Instant which I've used in the pixels frontend
+  because it does work with webassembly, but it's a bit uncomfortable.  I'd rather not integrate
+  that into the core crate, which makes me want to not put the mixer in core but keep it in common,
+  where the `instant` dep is isolated to a smaller area
+- this all started because I was trying to add a web controller, which I still haven't added due to
+  mutability and references with the pixels frontend
+
+- for some reason, the new rust updater that calls `set_timeout` doesn't work too well in chrome,
+  making the fps drop down to 47-50 instead of 60.  I'm not sure if that's because the older js
+  version does some funny clock stuff or if the concept itself adds a lot of overhead for some as
+  yet unknown reason

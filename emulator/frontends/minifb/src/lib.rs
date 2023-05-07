@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
-use moa_core::{System, Error, ClockDuration};
+use moa_core::{System, Error, ClockDuration, wrap_transmutable};
 use moa_core::host::{Host, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame, FrameReceiver};
 
 use moa_common::{AudioMixer, AudioSource};
@@ -99,7 +99,7 @@ pub struct MiniFrontendBuilder {
     controllers: Option<EventSender<ControllerEvent>>,
     keyboard: Option<EventSender<KeyEvent>>,
     mouse: Option<EventSender<MouseEvent>>,
-    mixer: Option<Arc<Mutex<AudioMixer>>>,
+    mixer: Option<AudioMixer>,
     finalized: bool,
 }
 
@@ -179,7 +179,7 @@ pub struct MiniFrontend {
     pub keyboard: Option<EventSender<KeyEvent>>,
     pub mouse: Option<EventSender<MouseEvent>>,
     pub audio: Option<CpalAudioOutput>,
-    pub mixer: Arc<Mutex<AudioMixer>>,
+    pub mixer: AudioMixer,
 }
 
 impl MiniFrontend {
@@ -188,7 +188,7 @@ impl MiniFrontend {
         controllers: Option<EventSender<ControllerEvent>>,
         keyboard: Option<EventSender<KeyEvent>>,
         mouse: Option<EventSender<MouseEvent>>,
-        mixer: Arc<Mutex<AudioMixer>>,
+        mixer: AudioMixer,
     ) -> Self {
         Self {
             modifiers: 0,
@@ -214,8 +214,11 @@ impl MiniFrontend {
             }
         }
 
-        if self.mixer.lock().unwrap().num_sources() != 0 && matches.occurrences_of("disable-audio") == 0 {
-            self.audio = Some(CpalAudioOutput::create_audio_output(self.mixer.lock().unwrap().get_sink()));
+        if self.mixer.borrow_mut().num_sources() != 0 && matches.occurrences_of("disable-audio") == 0 {
+            if let Some(system) = system.as_mut() {
+                system.add_device("mixer", wrap_transmutable(self.mixer.clone())).unwrap();
+            }
+            self.audio = Some(CpalAudioOutput::create_audio_output(self.mixer.borrow_mut().get_sink()));
         }
 
         let options = minifb::WindowOptions {

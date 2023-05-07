@@ -1,5 +1,4 @@
 
-use std::sync::{Arc, Mutex};
 use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, StreamInstant, OutputCallbackInfo, traits::{DeviceTrait, HostTrait, StreamTrait}};
 
 use moa_core::{warn, error};
@@ -12,7 +11,7 @@ pub struct CpalAudioOutput {
 }
 
 impl CpalAudioOutput {
-    pub fn create_audio_output(output: Arc<Mutex<AudioOutput>>) -> CpalAudioOutput {
+    pub fn create_audio_output(output: AudioOutput) -> CpalAudioOutput {
         let device = cpal::default_host()
             .default_output_device()
             .expect("No sound output device available");
@@ -26,22 +25,25 @@ impl CpalAudioOutput {
             .into();
 
         let data_callback = move |data: &mut [f32], info: &OutputCallbackInfo| {
-            let result = if let Ok(mut output) = output.lock() {
-                output.set_frame_size(data.len() / 2);
-                output.pop_next()
-            } else {
-                return;
-            };
-
-            if let Some(frame) = result {
-                let (start, middle, end) = unsafe { frame.data.align_to::<f32>() };
-                if !start.is_empty() || !end.is_empty() {
-                    warn!("audio: frame wasn't aligned");
+            let mut index = 0;
+            while index < data.len() {
+                if let Some((clock, mut frame)) = output.receive() {
+                    let size = (frame.data.len() * 2).min(data.len() - index);
+                    frame.data.iter()
+                        .zip(data[index..index + size].chunks_mut(2))
+                        .for_each(|(sample, location)| {
+                            location[0] = sample.0;
+                            location[1] = sample.1;
+                        });
+                    index += size;
+                    if size < frame.data.len() * 2 {
+                        frame.data.drain(0..size / 2);
+                        output.put_back(clock, frame);
+                    }
+                } else {
+                    warn!("missed an audio frame");
+                    break;
                 }
-                let length = middle.len().min(data.len());
-                data[..length].copy_from_slice(&middle[..length]);
-            } else {
-                warn!("missed an audio frame");
             }
         };
 

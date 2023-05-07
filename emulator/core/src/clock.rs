@@ -1,4 +1,5 @@
 
+use std::time::Duration;
 use std::ops::{Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Div, DivAssign};
 
 /// Type to use for storing femtoseconds
@@ -184,6 +185,18 @@ impl Div<ClockDuration> for ClockDuration {
 }
 
 
+impl From<ClockDuration> for Duration {
+    fn from(value: ClockDuration) -> Self {
+        Duration::from_nanos(value.as_nanos())
+    }
+}
+
+impl From<Duration> for ClockDuration {
+    fn from(value: Duration) -> Self {
+        ClockDuration::from_nanos(value.as_nanos() as u64)
+    }
+}
+
 
 /// Represents time from the start of the simulation
 ///
@@ -208,6 +221,14 @@ impl ClockTime {
     #[inline]
     pub const fn checked_add(self, duration: ClockDuration) -> Option<Self> {
         match self.0.checked_add(duration) {
+            Some(duration) => Some(Self(duration)),
+            None => None,
+        }
+    }
+
+    #[inline]
+    pub const fn checked_sub(self, duration: ClockDuration) -> Option<Self> {
+        match self.0.checked_sub(duration) {
             Some(duration) => Some(Self(duration)),
             None => None,
         }

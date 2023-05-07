@@ -21,7 +21,7 @@ use lazy_static::lazy_static;
 
 use moa_core::{debug, warn};
 use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{Host, Audio};
+use moa_core::host::{Host, Audio, Sample};
 
 
 /// Table of shift values for each possible rate angle
@@ -286,9 +286,9 @@ impl EnvelopeGenerator {
                     // to bitwise-and with 0xFFC instead, which will wrap the number to a 12-bit signed number, which when
                     // clamped to MAX_ENVELOPE will produce the same results
                     let new_envelope = self.envelope + (((!self.envelope * increment) as i16) >> 4) as u16;
-if self.debug_name == "ch 2, op 0" {
-println!("{:4x} {:4x} {:4x} {:4x} {:4x}", self.envelope, update_cycle, rate * 8 + update_cycle as usize, (((!self.envelope * increment) as i16) >> 4) as u16 & 0xFFFC, new_envelope);
-}
+//if self.debug_name == "ch 2, op 0" {
+//println!("{:4x} {:4x} {:4x} {:4x} {:4x}", self.envelope, update_cycle, rate * 8 + update_cycle as usize, (((!self.envelope * increment) as i16) >> 4) as u16 & 0xFFFC, new_envelope);
+//}
                     if new_envelope > self.envelope {
                         self.envelope_state = EnvelopeState::Decay;
                         self.envelope = 0;
@@ -781,31 +781,31 @@ impl Ym2612 {
 impl Steppable for Ym2612 {
     fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         let rate = self.source.samples_per_second();
-        let available = self.source.space_available();
-        let samples = if available < rate / 1000 { available } else { rate / 1000 };
+        let samples = rate / 1000;
         let sample_duration = ClockDuration::from_secs(1) / rate as u64;
 
-        //if self.source.space_available() >= samples {
-            let mut sample = 0.0;
-            let mut buffer = vec![0.0; samples];
-            for (i, buffered_sample) in buffer.iter_mut().enumerate().take(samples) {
-                let sample_clock = system.clock + (sample_duration * i as u64);
-                let fm_clock = sample_clock.as_duration() / self.fm_clock_period;
+        let mut sample = 0.0;
+        let mut buffer = vec![Sample(0.0, 0.0); samples];
+        for (i, buffered_sample) in buffer.iter_mut().enumerate().take(samples) {
+            let sample_clock = system.clock + (sample_duration * i as u64);
+            let fm_clock = sample_clock.as_duration() / self.fm_clock_period;
 
-                // Simulate each clock cycle, even if we skip one due to aliasing from the unequal sampling rate of 53,267 Hz
-                for clock in self.next_fm_clock..=fm_clock {
-                    sample = self.get_sample(clock);
-                }
-                self.next_fm_clock = fm_clock + 1;
-
-                // The DAC uses an 8000 Hz sample rate, so we don't want to skip clocks
-                if self.dac.enabled {
-                    sample += self.dac.get_sample();
-                }
-                *buffered_sample = sample.clamp(-1.0, 1.0);
+            // Simulate each clock cycle, even if we skip one due to aliasing from the unequal sampling rate of 53,267 Hz
+            for clock in self.next_fm_clock..=fm_clock {
+                sample = self.get_sample(clock);
             }
-            self.source.write_samples(system.clock, &buffer);
-        //}
+            self.next_fm_clock = fm_clock + 1;
+
+            // The DAC uses an 8000 Hz sample rate, so we don't want to skip clocks
+            if self.dac.enabled {
+                sample += self.dac.get_sample();
+            }
+
+            // TODO add stereo output, which is supported by ym2612
+            let sample = sample.clamp(-1.0, 1.0);
+            *buffered_sample = Sample(sample, sample);
+        }
+        self.source.write_samples(system.clock, &buffer);
 
         Ok(ClockDuration::from_millis(1))          // Every 1ms of simulated time
     }

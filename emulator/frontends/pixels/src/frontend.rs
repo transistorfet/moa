@@ -1,6 +1,4 @@
 
-use std::sync::{Arc, Mutex};
-
 use instant::Instant;
 use pixels::{Pixels, SurfaceTexture};
 use winit::event::{Event, VirtualKeyCode, WindowEvent, ElementState};
@@ -22,22 +20,23 @@ pub type LoadSystemFn = fn (&mut PixelsFrontend, Vec<u8>) -> Result<System, Erro
 pub struct PixelsFrontend {
     video: Option<FrameReceiver>,
     controllers: Option<EventSender<ControllerEvent>>,
-    mixer: Arc<Mutex<AudioMixer>>,
-    audio_output: CpalAudioOutput,
+    mixer: AudioMixer,
 }
 
 impl PixelsFrontend {
     pub fn new() -> PixelsFrontend {
         settings::get().run = true;
         let mixer = AudioMixer::with_default_rate();
-        let audio_output = CpalAudioOutput::create_audio_output(mixer.lock().unwrap().get_sink());
 
         PixelsFrontend {
             video: None,
             controllers: None,
             mixer,
-            audio_output,
         }
+    }
+
+    pub fn get_mixer(&self) -> AudioMixer {
+        self.mixer.clone()
     }
 }
 
@@ -66,6 +65,11 @@ pub async fn run_loop(host: PixelsFrontend) {
 
     if let Some(receiver) = host.video.as_ref() {
         receiver.request_encoding(PixelEncoding::ABGR);
+    }
+
+    let mut audio_output = None;
+    if host.mixer.borrow_mut().num_sources() > 0 {
+        audio_output = Some(CpalAudioOutput::create_audio_output(host.mixer.borrow_mut().get_sink()));
     }
 
     let mut pixels = {
@@ -137,11 +141,13 @@ pub async fn run_loop(host: PixelsFrontend) {
             }
         }
 
-        let requested_mute = settings::get().mute;
-        if requested_mute != mute {
-            mute = requested_mute;
-            host.audio_output.set_mute(mute);
-            log::info!("setting mute to {}", mute);
+        if let Some(output) = audio_output.as_ref() {
+            let requested_mute = settings::get().mute;
+            if requested_mute != mute {
+                mute = requested_mute;
+                output.set_mute(mute);
+                log::info!("setting mute to {}", mute);
+            }
         }
 
         // Check if the run flag is no longer true, and exit the loop

@@ -1,11 +1,13 @@
  
-mod traits;
-mod keys;
+mod audio;
+mod controllers;
 mod gfx;
 mod input;
-mod controllers;
+mod keys;
 mod mouse;
+mod traits;
 
+pub use self::audio::{Sample, AudioFrame};
 pub use self::gfx::{Pixel, PixelEncoding, Frame, FrameSender, FrameReceiver, frame_queue};
 pub use self::keys::{Key, KeyEvent};
 pub use self::mouse::{MouseButton, MouseEventType, MouseEvent, MouseState};

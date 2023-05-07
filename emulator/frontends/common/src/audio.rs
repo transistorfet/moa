@@ -1,47 +1,35 @@
 
-use std::sync::{Arc, Mutex};
-use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use moa_core::{ClockTime, ClockDuration};
-use moa_core::host::{Audio, ClockedQueue};
+use moa_core::host::{Audio, Sample, AudioFrame, ClockedQueue};
 
 
 pub const SAMPLE_RATE: usize = 48000;
 
-pub struct Sample(f32, f32);
-
-#[derive(Clone, Default)]
-pub struct AudioFrame {
-    //pub sample_rate: usize,
-    pub data: Vec<(f32, f32)>,
-}
-
 pub struct AudioSource {
     id: usize,
     sample_rate: usize,
-    frame_size: usize,
-    mixer: Arc<Mutex<AudioMixer>>,
     queue: ClockedQueue<AudioFrame>,
 }
 
 impl AudioSource {
-    pub fn new(mixer: Arc<Mutex<AudioMixer>>) -> Self {
+    // TODO should you move this to AudioMixer to make the interface easier to use?
+    // ie. let source: AudioSource = mixer.new_source();
+    pub fn new(mixer: AudioMixer) -> Self {
         let queue = ClockedQueue::new(5000);
-        let (id, sample_rate, frame_size) = {
-            let mut mixer = mixer.lock().unwrap();
+        let (id, sample_rate) = {
+            let mut mixer = mixer.borrow_mut();
             let id = mixer.add_source(queue.clone());
             (
                 id,
                 mixer.sample_rate(),
-                mixer.frame_size(),
             )
         };
 
         Self {
             id,
             sample_rate,
-            frame_size,
-            mixer,
             queue,
         }
     }
@@ -50,27 +38,15 @@ impl AudioSource {
         self.id
     }
 
-    pub fn space_available(&self) -> usize {
-        self.frame_size / 2
-    }
-
-    pub fn add_frame(&mut self, clock: ClockTime, buffer: &[f32]) {
-        let mut data = vec![];
+    pub fn add_frame(&mut self, clock: ClockTime, buffer: &[Sample]) {
+        let mut data = Vec::with_capacity(buffer.len());
         for sample in buffer.iter() {
-            // TODO this is here to keep it quiet for testing, but should be removed later
-            let sample = 0.5 * *sample;
-            data.push((sample, sample));
+            data.push(*sample);
         }
 
-        let frame = AudioFrame {
-            data,
-        };
+        let frame = AudioFrame::new(self.sample_rate, data);
 
         self.queue.push(clock, frame);
-    }
-
-    pub fn flush(&mut self) {
-        self.mixer.lock().unwrap().check_next_frame();
     }
 }
 
@@ -80,48 +56,39 @@ impl Audio for AudioSource {
         self.sample_rate
     }
 
-    fn space_available(&self) -> usize {
-        self.space_available()
-    }
-
-    fn write_samples(&mut self, clock: ClockTime, buffer: &[f32]) {
+    fn write_samples(&mut self, clock: ClockTime, buffer: &[Sample]) {
         self.add_frame(clock, buffer);
-        self.flush();
-    }
-
-    fn flush(&mut self) {
-        self.mixer.lock().unwrap().check_next_frame();
     }
 }
 
 #[derive(Clone)]
-pub struct AudioMixer {
+pub struct AudioMixer(Arc<Mutex<AudioMixerInner>>);
+
+pub struct AudioMixerInner {
     sample_rate: usize,
-    frame_size: usize,
-    sequence_num: usize,
-    clock: ClockTime,
     sources: Vec<ClockedQueue<AudioFrame>>,
-    buffer_underrun: bool,
-    output: Arc<Mutex<AudioOutput>>,
+    output: AudioOutput,
 }
 
 impl AudioMixer {
-    pub fn new(sample_rate: usize) -> Arc<Mutex<AudioMixer>> {
-        Arc::new(Mutex::new(AudioMixer {
+    pub fn new(sample_rate: usize) -> AudioMixer {
+        AudioMixer(Arc::new(Mutex::new(AudioMixerInner {
             sample_rate,
-            frame_size: 1280,
-            sequence_num: 0,
-            clock: ClockTime::START,
             sources: vec![],
-            buffer_underrun: false,
             output: AudioOutput::new(),
-        }))
+        })))
     }
 
-    pub fn with_default_rate() -> Arc<Mutex<AudioMixer>> {
+    pub fn with_default_rate() -> AudioMixer {
         AudioMixer::new(SAMPLE_RATE)
     }
 
+    pub fn borrow_mut(&self) -> MutexGuard<'_, AudioMixerInner> {
+        self.0.lock().unwrap()
+    }
+}
+
+impl AudioMixerInner {
     pub fn add_source(&mut self, source: ClockedQueue<AudioFrame>) -> usize {
         self.sources.push(source);
         self.sources.len() - 1
@@ -131,7 +98,7 @@ impl AudioMixer {
         self.sources.len()
     }
 
-    pub fn get_sink(&mut self) -> Arc<Mutex<AudioOutput>> {
+    pub fn get_sink(&mut self) -> AudioOutput {
         self.output.clone()
     }
 
@@ -143,120 +110,90 @@ impl AudioMixer {
         ClockDuration::from_secs(1) / self.sample_rate as u64
     }
 
-    pub fn frame_size(&self) -> usize {
-        self.frame_size
-    }
-
-    pub fn sequence_num(&self) -> usize {
-        self.sequence_num
-    }
-
-    pub fn resize_frame(&mut self, newlen: usize) {
-        self.frame_size = newlen;
-    }
-
-    pub fn check_next_frame(&mut self) {
-        if self.output.lock().unwrap().is_empty() {
-            self.assemble_frame();
-        }
-    }
-
-    pub fn assemble_frame(&mut self) {
-        self.frame_size = self.output.lock().unwrap().frame_size;
-
+    fn assemble_frame(&mut self, frame_start: ClockTime, frame_duration: ClockDuration) {
         let sample_duration = self.sample_duration();
-        let mut data: Vec<(f32, f32)> = vec![(0.0, 0.0); self.frame_size];
+        let samples = (frame_duration / sample_duration) as usize;
 
-        if self.buffer_underrun {
-            self.buffer_underrun = false;
-            self.clock += sample_duration * data.len() as u64;
-            let empty_frame = AudioFrame { data };
-            self.output.lock().unwrap().add_frame(empty_frame.clone());
-            self.output.lock().unwrap().add_frame(empty_frame);
-            return;
-        }
+        let mut data = vec![Sample(0.0, 0.0); samples];
 
-        let lowest_clock = self.sources
-            .iter()
-            .fold(self.clock, |lowest_clock, source|
-                source
-                    .peek_clock()
-                    .map_or(lowest_clock, |c| c.min(lowest_clock)));
-        self.clock = self.clock.min(lowest_clock);
-
-        for source in &mut self.sources {
-            let mut i = 0;
-            while i < data.len() {
-                let (clock, frame) = match source.pop_next() {
-                    Some(frame) => frame,
-                    None => {
-                        println!("buffer underrun");
-                        self.buffer_underrun = true;
-                        break;
-                    },
-                };
-
-                let start = ((clock.duration_since(self.clock) / sample_duration) as usize).min(data.len() - 1);
-                let length = frame.data.len().min(data.len() - start);
-
-                data[start..start + length].iter_mut()
-                    .zip(frame.data[..length].iter())
-                    .for_each(|(d, s)|
-                        *d = (
-                            (d.0 + s.0).clamp(-1.0, 1.0),
-                            (d.1 + s.1).clamp(-1.0, 1.0)
-                        )
-                    );
-                if length < frame.data.len() {
-                    let adjusted_clock = clock + sample_duration * length as u64;
-                    //println!("unpopping at clock {}, length {}", adjusted_clock, frame.data.len() - length);
-                    source.unpop(adjusted_clock, AudioFrame { data: frame.data[length..].to_vec() });
+        for source in &self.sources {
+            let mut index = 0;
+            while index < data.len() {
+                if let Some((clock, mut frame)) = source.pop_next() {
+                    index = (clock.duration_since(frame_start) / sample_duration) as usize;
+                    let size = frame.data.len().min(data.len() - index);
+                    frame.data.iter()
+                        .zip(&mut data[index..index + size])
+                        .for_each(|(source, dest)| {
+                            dest.0 += source.0;
+                            dest.1 += source.1;
+                        });
+                    index += size;
+                    if size < frame.data.len() {
+                        frame.data.drain(0..size);
+                        source.put_back(clock, frame);
+                    }
                 }
-                i = start + length;
             }
         }
-        self.clock += sample_duration * data.len() as u64;
 
-        self.output.lock().unwrap().add_frame(AudioFrame { data });
+        // Average each sample, and clamp it to the 1 to -1 range
+        for sample in data.iter_mut() {
+            sample.0 = (sample.0 / self.sources.len() as f32).clamp(-1.0, 1.0);
+            sample.1 = (sample.1 / self.sources.len() as f32).clamp(-1.0, 1.0);
+        }
+
+        self.output.add_frame(frame_start, AudioFrame::new(self.sample_rate, data));
     }
 }
 
+use moa_core::{Transmutable, Steppable, Error, System};
+
+impl Steppable for AudioMixer {
+    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+        let duration = ClockDuration::from_millis(1);
+        // TODO should you make the clock be even further back to ensure the data is already written
+        if let Some(start) = system.clock.checked_sub(duration) {
+            self.borrow_mut().assemble_frame(start, duration);
+        }
+        Ok(duration)
+    }
+}
+
+impl Transmutable for AudioMixer {
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
+}
+
+
+// TODO this should be split up into a sender/receiver
+#[derive(Clone)]
 pub struct AudioOutput {
-    frame_size: usize,
-    sequence_num: usize,
-    output: VecDeque<AudioFrame>,
+    queue: ClockedQueue<AudioFrame>,
 }
 
 impl AudioOutput {
-    pub fn new() -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self {
-            frame_size: 0,
-            sequence_num: 0,
-            output: VecDeque::with_capacity(2),
-        }))
+    pub fn new() -> Self {
+        Self {
+            queue: ClockedQueue::new(5000),
+        }
     }
 
-    pub fn set_frame_size(&mut self, frame_size: usize) {
-        self.frame_size = frame_size
+    pub fn add_frame(&self, clock: ClockTime, frame: AudioFrame) {
+        self.queue.push(clock, frame);
     }
 
-    pub fn add_frame(&mut self, frame: AudioFrame) {
-        self.output.push_back(frame);
-        self.sequence_num = self.sequence_num.wrapping_add(1);
-        //println!("added frame {}", self.sequence_num);
+    pub fn put_back(&self, clock: ClockTime, frame: AudioFrame) {
+        self.queue.put_back(clock, frame);
     }
 
-    pub fn pop_next(&mut self) -> Option<AudioFrame> {
-        //println!("frame {} sent", self.sequence_num);
-        self.output.pop_front()
-    }
-
-    pub fn pop_latest(&mut self) -> Option<AudioFrame> {
-        self.output.drain(..).last()
+    pub fn receive(&self) -> Option<(ClockTime, AudioFrame)> {
+        self.queue.pop_next()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.output.is_empty()
+        self.queue.is_empty()
     }
 }
 

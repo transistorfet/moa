@@ -4,10 +4,12 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::{ClockTime, Error};
 use crate::host::gfx::FrameReceiver;
+use crate::host::audio::Sample;
 use crate::host::keys::KeyEvent;
 use crate::host::controllers::ControllerEvent;
 use crate::host::mouse::MouseEvent;
 use crate::host::input::EventSender;
+
 
 pub trait Host {
     fn add_pty(&self) -> Result<Box<dyn Tty>, Error> {
@@ -44,9 +46,7 @@ pub trait Tty {
 
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
-    fn space_available(&self) -> usize;
-    fn write_samples(&mut self, clock: ClockTime, buffer: &[f32]);
-    fn flush(&mut self);
+    fn write_samples(&mut self, clock: ClockTime, buffer: &[Sample]);
 }
 
 
@@ -99,12 +99,16 @@ impl<T: Clone> ClockedQueue<T> {
         self.0.lock().unwrap().drain(..).last()
     }
 
-    pub fn unpop(&self, clock: ClockTime, data: T) {
+    pub fn put_back(&self, clock: ClockTime, data: T) {
         self.0.lock().unwrap().push_front((clock, data));
     }
 
     pub fn peek_clock(&self) -> Option<ClockTime> {
         self.0.lock().unwrap().front().map(|(clock, _)| *clock)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.lock().unwrap().is_empty()
     }
 }
 
@@ -116,12 +120,6 @@ impl Audio for DummyAudio {
         48000
     }
 
-    fn space_available(&self) -> usize {
-        4800
-    }
-
-    fn write_samples(&mut self, _clock: ClockTime, _buffer: &[f32]) {}
-
-    fn flush(&mut self) {}
+    fn write_samples(&mut self, _clock: ClockTime, _buffer: &[Sample]) {}
 }
 

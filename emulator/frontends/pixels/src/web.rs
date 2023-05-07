@@ -12,7 +12,7 @@ use web_sys::Event;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
-use moa_core::{ClockDuration, System};
+use moa_core::{ClockDuration, System, wrap_transmutable};
 
 use crate::settings;
 use crate::frontend::{self, PixelsFrontend, LoadSystemFn};
@@ -104,7 +104,11 @@ impl LoadSystemFnHandle {
 
 #[wasm_bindgen]
 pub fn load_system(handle: &mut HostHandle, load: LoadSystemFnHandle) -> SystemHandle {
-    let system = load.0(&mut handle.0, settings::get().rom_data.clone()).unwrap();
+    let mut system = load.0(&mut handle.0, settings::get().rom_data.clone()).unwrap();
+    let mixer = handle.0.get_mixer();
+    if mixer.borrow_mut().num_sources() > 0 {
+        system.add_device("mixer", wrap_transmutable(mixer.clone())).unwrap();
+    }
     SystemHandle(system)
 }
 
@@ -243,7 +247,7 @@ pub fn create_window<T>(event_loop: &EventLoop<T>) -> Rc<Window> {
 #[wasm_bindgen]
 pub fn start_system(handle: SystemHandle) -> Handle {
     let emulator = Emulator::new(handle.0);
-    set_timeout(emulator.clone(), 17);
+    set_timeout(emulator.clone(), 0);
     Handle(emulator)
 }
 
@@ -254,6 +258,7 @@ pub struct Emulator {
     running: bool,
     //frontend: PixelsFrontend,
     system: System,
+    last_update: Instant,
 }
 
 impl Emulator {
@@ -261,6 +266,7 @@ impl Emulator {
         Rc::new(RefCell::new(Self {
             running: false,
             system,
+            last_update: Instant::now(),
         }))
     }
 
@@ -269,6 +275,35 @@ impl Emulator {
     }
 }
 
+/// This updater tries to work like the JS one, by simulating the amount of time that has passed
+/// since the last update, but it doesn't work too well yet
+fn update(emulator: Rc<RefCell<Emulator>>) {
+    let run_timer = Instant::now();
+    let last_update = {
+        let mut emulator = emulator.borrow_mut();
+        let last_update = emulator.last_update;
+        emulator.last_update = run_timer;
+        last_update
+    };
+
+    let diff = run_timer.duration_since(last_update);
+    let nanoseconds_per_frame = ClockDuration::from_nanos(diff.as_nanos() as u64);
+    //let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as Clock;
+    if let Err(err) = emulator.borrow_mut().system.run_for(nanoseconds_per_frame) {
+        log::error!("{:?}", err);
+    }
+    let run_time = run_timer.elapsed().as_millis();
+    log::debug!("ran simulation for {:?}ms in {:?}ms", nanoseconds_per_frame / 1_000_000, run_time);
+
+    let running = emulator.borrow().running;
+    if running {
+        let remaining = (diff.as_millis() - run_time - (diff.as_millis() / 10)).max(1);
+        set_timeout(emulator, 16);
+    }
+}
+
+/*
+/// This is the constant-time updater which always tries to simulate one frame
 fn update(emulator: Rc<RefCell<Emulator>>) {
     let run_timer = Instant::now();
     let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as u64;
@@ -282,6 +317,7 @@ fn update(emulator: Rc<RefCell<Emulator>>) {
         set_timeout(emulator, 17);
     }
 }
+*/
 
 fn set_timeout(emulator: Rc<RefCell<Emulator>>, timeout: i32) {
     emulator.borrow_mut().running = true;

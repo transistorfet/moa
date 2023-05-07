@@ -1,7 +1,7 @@
 
 use moa_core::{info, warn, debug};
 use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{Host, Audio};
+use moa_core::host::{Host, Audio, Sample};
 use moa_audio::SquareWave;
 
 
@@ -111,31 +111,26 @@ impl Sn76489 {
 impl Steppable for Sn76489 {
     fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
         let rate = self.source.samples_per_second();
-        let available = self.source.space_available();
-        let samples = if available < rate / 1000 { available } else { rate / 1000 };
+        let samples = rate / 1000;
 
-        if samples > 0 {
-        //if available >= rate / 1000 {
-            let mut buffer = vec![0.0; samples];
-            for buffered_sample in buffer.iter_mut().take(samples) {
-                let mut sample = 0.0;
+        let mut buffer = vec![Sample(0.0, 0.0); samples];
+        for buffered_sample in buffer.iter_mut().take(samples) {
+            let mut sample = 0.0;
 
-                for ch in 0..3 {
-                    if self.tones[ch].on {
-                        sample += self.tones[ch].get_sample();
-                    }
+            for ch in 0..3 {
+                if self.tones[ch].on {
+                    sample += self.tones[ch].get_sample();
                 }
-
-                if self.noise.on {
-                    sample += self.noise.get_sample();
-                }
-
-                *buffered_sample = sample.clamp(-1.0, 1.0);
             }
-            self.source.write_samples(system.clock, &buffer);
-        } else {
-            self.source.flush();
+
+            if self.noise.on {
+                sample += self.noise.get_sample();
+            }
+
+            let sample = sample.clamp(-1.0, 1.0);
+            *buffered_sample = Sample(sample, sample);
         }
+        self.source.write_samples(system.clock, &buffer);
 
         Ok(ClockDuration::from_millis(1))          // Every 1ms of simulated time
     }
