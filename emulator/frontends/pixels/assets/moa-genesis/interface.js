@@ -1,49 +1,70 @@
 
 import * as Emulator from './moa-genesis.js';
 
+window.addEventListener("load", () => {
+    Emulator.default();
+});
+
 function initialize_emulator() {
-    let host = Emulator.new_host();
-    let system = Emulator.load_system(host, Emulator.get_load_system_fn());
+    const host = Emulator.new_host();
+    const system = Emulator.load_system(host, Emulator.get_load_system_fn());
 
     //Emulator.start_system(system);
     let last_update = performance.now();
     setTimeout(function refreshFrame() {
-        let current = performance.now();
-        let diff = current - last_update;
-        //let remaining = Math.max((16 * Emulator.get_speed()) - diff, 0);
+        // Calculate the time difference since the last update cycle
+        const current = performance.now();
+        const diff = current - last_update;
         last_update = current;
 
-        let runtime = Emulator.run_system_for(system, diff * 1_000_000);
+        // Run the system for the difference, and get the realtime runtime in millis
+        const runtime = Emulator.run_system_for(system, diff * 1_000_000);
+
         if (Emulator.is_running()) {
-            let remaining = Math.max(diff - runtime - (diff * 0.1), 1);
+            // Calculate the timeout needed to fill the time that was *not* taken by the sim
+            const remaining = Math.max(diff - runtime - (diff * 0.1), 1);
             setTimeout(refreshFrame, remaining);
         }
     }, 0);
+
+    const controllers = Emulator.get_controllers(host);
+    function button_event(e) {
+        let state;
+        if (e.type == 'mousedown' || e.type == 'touchstart') {
+            state = true;
+        } else {
+            state = false;
+        }
+        Emulator.button_press(controllers, e.target.name, state);
+    }
+
+    document.getElementById("controller").querySelectorAll('button').forEach(function (button) {
+        button.addEventListener('mousedown', button_event);
+        button.addEventListener('mouseup', button_event);
+        button.addEventListener('touchstart', button_event);
+        button.addEventListener('touchend', button_event);
+    });
 
     Emulator.host_run_loop(host);
 }
 
 // Update the frame rate display
-var frame_rate_el = document.getElementById("frame-rate");
-var frame_rate = setInterval(function () {
+const frame_rate_el = document.getElementById("frame-rate");
+const frame_rate = setInterval(function () {
     frame_rate_el.value = Emulator.get_frames_since();
 }, 1000);
 
-window.addEventListener("load", () => {
-    Emulator.default();
-});
-
 // Load a new ROM file
-var reader = new FileReader();
+const reader = new FileReader();
 reader.onloadend = function (e) {
-    var data = new Uint8Array(reader.result);
+    let data = new Uint8Array(reader.result);
     // If the SMD file magic number is present, then convert it before loading
     if (data[8] == 0xAA && data[9] == 0xBB)
         data = Emulator.smd_to_bin(data);
     Emulator.set_rom_data(data);
 };
 
-var file_input = document.getElementById("rom-file");
+const file_input = document.getElementById("rom-file");
 file_input.addEventListener("change", e => {
     document.getElementById("video").focus();
     reader.readAsArrayBuffer(file_input.files[0])
@@ -62,8 +83,8 @@ document.getElementById("power").addEventListener("click", () => {
         initialize_emulator();
 });
 
-var mute_state = false;
-var mute = document.getElementById("mute");
+let mute_state = false;
+const mute = document.getElementById("mute");
 mute.addEventListener("click", () => {
     mute_state = !mute_state;
     if (mute_state) {
@@ -74,19 +95,3 @@ mute.addEventListener("click", () => {
     Emulator.set_mute(mute_state);
 });
 
-function button_event(e) {
-    var state;
-    if (e.type == 'mousedown' || e.type == 'touchstart') {
-        state = true;
-    } else {
-        state = false;
-    }
-    Emulator.button_press(e.target.name, state);
-}
-
-document.getElementById("controller").querySelectorAll('button').forEach(function (button) {
-    button.addEventListener('mousedown', button_event);
-    button.addEventListener('mouseup', button_event);
-    button.addEventListener('touchstart', button_event);
-    button.addEventListener('touchend', button_event);
-});

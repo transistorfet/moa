@@ -691,7 +691,7 @@ fn sign_extend_u16(value: u16, size: usize) -> i16 {
 
 struct Dac {
     enabled: bool,
-    samples: VecDeque<f32>,
+    samples: VecDeque<(FmClock, f32)>,
 }
 
 impl Default for Dac {
@@ -704,16 +704,19 @@ impl Default for Dac {
 }
 
 impl Dac {
-    fn add_sample(&mut self, sample: f32) {
-        self.samples.push_back(sample);
+    fn add_sample(&mut self, clock: FmClock, sample: f32) {
+        self.samples.push_back((clock, sample));
     }
 
-    fn get_sample(&mut self) -> f32 {
-        if let Some(data) = self.samples.pop_front() {
-            data
-        } else {
-            0.0
+    fn get_sample_after(&mut self, clock: FmClock) -> f32 {
+        if let Some((sample_clock, data)) = self.samples.front().cloned() {
+            if clock > sample_clock {
+                self.samples.pop_front();
+                return data;
+            }
         }
+
+        0.0
     }
 }
 
@@ -798,7 +801,7 @@ impl Steppable for Ym2612 {
 
             // The DAC uses an 8000 Hz sample rate, so we don't want to skip clocks
             if self.dac.enabled {
-                sample += self.dac.get_sample();
+                sample += self.dac.get_sample_after(fm_clock);
             }
 
             // TODO add stereo output, which is supported by ym2612
@@ -872,8 +875,9 @@ impl Ym2612 {
 
             0x2a => {
                 if self.dac.enabled {
-                    for _ in 0..3 {
-                        self.dac.add_sample(((data as f32 - 128.0) / 255.0) * 2.0);
+                    let fm_clock = clock.as_duration() / self.fm_clock_period;
+                    for i in 0..3 {
+                        self.dac.add_sample(fm_clock + i, ((data as f32 - 128.0) / 255.0) * 2.0);
                     }
                 }
             },

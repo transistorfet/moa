@@ -1,4 +1,6 @@
 
+use std::rc::Rc;
+
 use instant::Instant;
 use pixels::{Pixels, SurfaceTexture};
 use winit::event::{Event, VirtualKeyCode, WindowEvent, ElementState};
@@ -37,6 +39,10 @@ impl PixelsFrontend {
 
     pub fn get_mixer(&self) -> AudioMixer {
         self.mixer.clone()
+    }
+
+    pub fn get_controllers(&self) -> Option<EventSender<ControllerEvent>> {
+        self.controllers.clone()
     }
 }
 

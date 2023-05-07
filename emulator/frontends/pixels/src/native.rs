@@ -5,12 +5,13 @@ use winit::dpi::LogicalSize;
 use winit::event_loop::EventLoop;
 use winit::window::{Window, WindowBuilder};
 
-use crate::frontend::{self, LoadSystemFn};
+use crate::frontend::{self, LoadSystemFn, PixelsFrontend};
 
 pub fn start(load: LoadSystemFn) {
     env_logger::init();
 
-    pollster::block_on(frontend::run(load));
+    let host = PixelsFrontend::new();
+    pollster::block_on(frontend::run_loop(host));
 }
 
 pub fn create_window<T>(event_loop: &EventLoop<T>) -> Rc<Window> {

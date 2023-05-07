@@ -13,6 +13,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
 use moa_core::{ClockDuration, System, wrap_transmutable};
+use moa_core::host::{ControllerInput, ControllerDevice, ControllerEvent, EventSender};
 
 use crate::settings;
 use crate::frontend::{self, PixelsFrontend, LoadSystemFn};
@@ -72,8 +73,22 @@ pub fn set_mute(mute: bool) {
 }
 
 #[wasm_bindgen]
-pub fn button_press(name: String, state: bool) {
-    
+pub fn button_press(handle: &ControllersHandle, name: String, state: bool) {
+    let input = match name.as_str() {
+        "up" => Some(ControllerInput::DpadUp(state)),
+        "down" => Some(ControllerInput::DpadDown(state)),
+        "left" => Some(ControllerInput::DpadLeft(state)),
+        "right" => Some(ControllerInput::DpadRight(state)),
+        "start" => Some(ControllerInput::Start(state)),
+        "a" => Some(ControllerInput::ButtonA(state)),
+        "b" => Some(ControllerInput::ButtonB(state)),
+        "c" => Some(ControllerInput::ButtonC(state)),
+        _ => None
+    };
+
+    if let Some(input) = input {
+        handle.0.send(ControllerEvent::new(ControllerDevice::A, input));
+    }
 }
 
 
@@ -81,8 +96,16 @@ pub fn button_press(name: String, state: bool) {
 pub struct HostHandle(PixelsFrontend);
 
 #[wasm_bindgen]
+pub struct ControllersHandle(EventSender<ControllerEvent>);
+
+#[wasm_bindgen]
 pub fn new_host() -> HostHandle {
     HostHandle(PixelsFrontend::new())
+}
+
+#[wasm_bindgen]
+pub fn get_controllers(handle: &HostHandle) -> ControllersHandle {
+    ControllersHandle(handle.0.get_controllers().unwrap())
 }
 
 #[wasm_bindgen]
@@ -195,50 +218,6 @@ pub fn create_window<T>(event_loop: &EventLoop<T>) -> Rc<Window> {
         closure.forget();
     }
     */
-
-    /*
-    fn ycombinator<F>(f: &F)
-    where
-        F: Fn(&F)
-    {
-        f(f)
-    }
-
-
-    let closure: Closure<dyn Fn(Event)> = Closure::new(move |_e: Event| {
-        
-    });
-    client_window
-        .set_interval_with_callback_and_timeout_and_arguments_0(closure.as_ref().unchecked_ref(), 17)
-        .unwrap();
-    closure.forget();
-    */
-
-    /*
-    let mut update_timer = Instant::now();
-    let mut system = load(&mut host, settings::get().rom_data.clone()).unwrap();
-    let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |_e: web_sys::Event| {
-        let run_timer = Instant::now();
-        let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as Clock;
-        if let Err(err) = system.run_for(nanoseconds_per_frame) {
-            log::error!("{:?}", err);
-        }
-        log::info!("ran simulation for {:?}ms in {:?}ms", nanoseconds_per_frame / 1_000_000, run_timer.elapsed().as_millis());
-
-        let settings = settings::get();
-        if settings.run {
-            //match load(&mut host.lock().unwrap(), settings.rom_data.clone()) {
-            //    Ok(s) => { system = s; },
-            //    Err(err) => log::error!("{:?}", err),
-            //}
-        }
-    }) as Box<dyn FnMut(_)>);
-    client_window
-        .set_interval_with_callback_and_timeout_and_arguments_0(closure.as_ref().unchecked_ref(), 17)
-        .unwrap();
-    closure.forget();
-    */
-
 
     window
 }
