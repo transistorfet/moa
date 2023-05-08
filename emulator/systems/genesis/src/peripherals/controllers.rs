@@ -1,7 +1,7 @@
 
 use moa_core::{warn, info};
-use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{self, Host, HostData, ControllerDevice, ControllerInput, ControllerEvent, EventReceiver};
+use moa_core::{System, Error, ClockTime, ClockDuration, Signal, Address, Addressable, Steppable, Transmutable};
+use moa_core::host::{self, Host, ControllerDevice, ControllerInput, ControllerEvent, EventReceiver};
 
 
 const REG_VERSION: Address      = 0x01;
@@ -91,7 +91,7 @@ pub struct GenesisControllers {
     port_1: GenesisControllerPort,
     port_2: GenesisControllerPort,
     expansion: GenesisControllerPort,
-    interrupt: HostData<bool>,
+    interrupt: Signal<bool>,
     reset_timer: ClockDuration,
 }
 
@@ -105,12 +105,12 @@ impl GenesisControllers {
             port_1: GenesisControllerPort::default(),
             port_2: GenesisControllerPort::default(),
             expansion: GenesisControllerPort::default(),
-            interrupt: HostData::new(false),
+            interrupt: Signal::new(false),
             reset_timer: ClockDuration::ZERO,
         })
     }
 
-    pub fn get_interrupt_signal(&self) -> HostData<bool> {
+    pub fn get_interrupt_signal(&self) -> Signal<bool> {
         self.interrupt.clone()
     }
 

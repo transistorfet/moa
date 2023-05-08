@@ -11,7 +11,7 @@ use clap::{Parser, ArgEnum};
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 
-use moa_core::{System, Error, MemoryBlock, BusPort, Address, Addressable, Steppable, wrap_transmutable};
+use moa_core::{System, Error, MemoryBlock, BusPort, Frequency, Address, Addressable, Steppable, wrap_transmutable};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::Status;
@@ -149,7 +149,7 @@ fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, Syst
     } else {
         BusPort::new(0, 32, 32, system.bus.clone())
     };
-    let mut cpu = M68k::new(cputype, 10_000_000, port);
+    let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
     cpu.state.status = Status::Running;
 
     load_state(&mut cpu, &mut system, state)?;
@@ -189,12 +189,12 @@ fn load_state(cpu: &mut M68k, system: &mut System, initial: &TestState) -> Resul
 
     // Load instructions into memory
     for (i, ins) in initial.prefetch.iter().enumerate() {
-        system.get_bus().write_beu16((initial.pc + (i as u32 * 2)) as u64, *ins)?;
+        system.get_bus().write_beu16(system.clock, (initial.pc + (i as u32 * 2)) as u64, *ins)?;
     }
 
     // Load data bytes into memory
     for (addr, byte) in initial.ram.iter() {
-        system.get_bus().write_u8(*addr as u64, *byte)?;
+        system.get_bus().write_u8(system.clock, *addr as u64, *byte)?;
     }
 
     Ok(())
@@ -227,13 +227,13 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
     // Load instructions into memory
     for (i, ins) in expected.prefetch.iter().enumerate() {
         let addr = expected.pc + (i as u32 * 2);
-        let actual = system.get_bus().read_beu16(addr as Address & addr_mask)?;
+        let actual = system.get_bus().read_beu16(system.clock, addr as Address & addr_mask)?;
         assert_value(actual, *ins, &format!("prefetch at {:x}", addr))?;
     }
 
     // Load data bytes into memory
     for (addr, byte) in expected.ram.iter() {
-        let actual = system.get_bus().read_u8(*addr as Address & addr_mask)?;
+        let actual = system.get_bus().read_u8(system.clock, *addr as Address & addr_mask)?;
         assert_value(actual, *byte, &format!("ram at {:x}", addr))?;
     }
 
@@ -242,7 +242,7 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
 
 fn step_cpu_and_assert(cpu: &mut M68k, system: &System, case: &TestCase, test_timing: bool) -> Result<(), Error> {
     let clock_elapsed = cpu.step(&system)?;
-    let cycles = clock_elapsed / (1_000_000_000 / cpu.frequency as u64);
+    let cycles = clock_elapsed / cpu.frequency.period_duration();
 
     assert_state(&cpu, &system, &case.final_state)?;
 
@@ -265,8 +265,8 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                 if args.debug {
                     case.dump();
                     println!("");
-                    initial_cpu.dump_state();
-                    cpu.dump_state();
+                    initial_cpu.dump_state(system.clock);
+                    cpu.dump_state(system.clock);
                 }
                 println!("FAILED: {}",  err.msg);
             }

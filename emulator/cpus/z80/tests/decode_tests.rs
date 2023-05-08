@@ -1,5 +1,5 @@
 
-use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, wrap_transmutable};
+use moa_core::{System, MemoryBlock, BusPort, Frequency, Address, Addressable, wrap_transmutable};
 
 use moa_z80::{Z80, Z80Type};
 use moa_z80::state::Register;
@@ -14,7 +14,7 @@ fn init_decode_test() -> (Z80, System) {
     system.add_addressable_device(0x0000, wrap_transmutable(mem)).unwrap();
 
     // Initialize the CPU and make sure it's in the expected state
-    let mut cpu = Z80::new(Z80Type::Z80, 4_000_000, BusPort::new(0, 16, 8, system.bus.clone()));
+    let mut cpu = Z80::new(Z80Type::Z80, Frequency::from_mhz(4), BusPort::new(0, 16, 8, system.bus.clone()));
     cpu.init().unwrap();
 
     (cpu, system)
@@ -22,7 +22,7 @@ fn init_decode_test() -> (Z80, System) {
 
 fn load_memory(system: &System, data: &[u8]) {
     for i in 0..data.len() {
-        system.get_bus().write_u8(i as Address, data[i]).unwrap();
+        system.get_bus().write_u8(system.clock, i as Address, data[i]).unwrap();
     }
 }
 

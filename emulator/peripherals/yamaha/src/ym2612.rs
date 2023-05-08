@@ -300,7 +300,7 @@ impl EnvelopeGenerator {
                 EnvelopeState::Sustain |
                 EnvelopeState::Release => {
                     // Convert it to a fixed point decimal number of 4 bit : 8 bits, which will be the output
-                    self.envelope = self.envelope + (increment << 2);
+                    self.envelope += increment << 2;
                     if self.envelope > MAX_ENVELOPE || self.envelope_state == EnvelopeState::Release && self.envelope >= ENVELOPE_CENTER {
                         self.envelope = MAX_ENVELOPE;
                     }
@@ -680,14 +680,6 @@ impl Channel {
     }
 }
 
-fn sign_extend_u16(value: u16, size: usize) -> i16 {
-    if value & (1 << (size + 1)) == 0 {
-        value as i16
-    } else {
-        (value | 0xFFFF << (size + 1)) as i16
-    }
-}
-
 
 struct Dac {
     enabled: bool,
@@ -726,7 +718,6 @@ pub struct Ym2612 {
     selected_reg_0: Option<NonZeroU8>,
     selected_reg_1: Option<NonZeroU8>,
 
-    clock_frequency: Frequency,
     fm_clock_period: ClockDuration,
     next_fm_clock: FmClock,
     envelope_clock: EnvelopeClock,
@@ -758,7 +749,6 @@ impl Ym2612 {
             selected_reg_0: None,
             selected_reg_1: None,
 
-            clock_frequency,
             fm_clock_period,
             next_fm_clock: 0,
             envelope_clock: 0,

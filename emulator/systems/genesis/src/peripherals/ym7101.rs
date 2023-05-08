@@ -1,7 +1,7 @@
 
 use moa_core::{debug, warn, error};
-use moa_core::{System, Error, EdgeSignal, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
-use moa_core::host::{self, Host, Pixel, PixelEncoding, Frame, FrameSender, HostData};
+use moa_core::{System, Error, EdgeSignal, ClockTime, ClockDuration, Frequency, Signal, Address, Addressable, Steppable, Inspectable, Transmutable, TransmutableBox, read_beu16, dump_slice};
+use moa_core::host::{self, Host, Pixel, PixelEncoding, Frame, FrameSender};
 
 
 const REG_MODE_SET_1: usize             = 0x00;
@@ -685,12 +685,12 @@ pub struct Ym7101 {
     state: Ym7101State,
     sn_sound: TransmutableBox,
 
-    pub external_interrupt: HostData<bool>,
+    pub external_interrupt: Signal<bool>,
     pub frame_complete: EdgeSignal,
 }
 
 impl Ym7101 {
-    pub fn new<H: Host>(host: &mut H, external_interrupt: HostData<bool>, sn_sound: TransmutableBox) -> Ym7101 {
+    pub fn new<H: Host>(host: &mut H, external_interrupt: Signal<bool>, sn_sound: TransmutableBox) -> Ym7101 {
         let (sender, receiver) = host::frame_queue(320, 224);
         host.add_video_source(receiver).unwrap();
 

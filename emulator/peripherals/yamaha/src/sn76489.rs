@@ -86,7 +86,6 @@ impl NoiseGenerator {
 
 
 pub struct Sn76489 {
-    clock_frequency: Frequency,
     first_byte: Option<u8>,
     source: Box<dyn Audio>,
     tones: Vec<ToneGenerator>,
@@ -94,12 +93,11 @@ pub struct Sn76489 {
 }
 
 impl Sn76489 {
-    pub fn new<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
+    pub fn new<H: Host>(host: &mut H, _clock_frequency: Frequency) -> Result<Self, Error> {
         let source = host.add_audio_source()?;
         let sample_rate = source.samples_per_second();
 
         Ok(Self {
-            clock_frequency,
             first_byte: None,
             source,
             tones: vec![ToneGenerator::new(sample_rate); 3],

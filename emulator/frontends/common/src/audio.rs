@@ -75,7 +75,7 @@ impl AudioMixer {
         AudioMixer(Arc::new(Mutex::new(AudioMixerInner {
             sample_rate,
             sources: vec![],
-            output: AudioOutput::new(),
+            output: AudioOutput::default(),
         })))
     }
 
@@ -173,13 +173,15 @@ pub struct AudioOutput {
     queue: ClockedQueue<AudioFrame>,
 }
 
-impl AudioOutput {
-    pub fn new() -> Self {
+impl Default for AudioOutput {
+    fn default() -> Self {
         Self {
             queue: ClockedQueue::new(5000),
         }
     }
+}
 
+impl AudioOutput {
     pub fn add_frame(&self, clock: ClockTime, frame: AudioFrame) {
         self.queue.push(clock, frame);
     }

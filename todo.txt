@@ -1,112 +1,65 @@
 
+* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
+* sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
+* make the ym generate audio in sync so the DAC timings can be more accurate
+* add stereo output to ym2612
+* you need to scale the output sample to be +/- 1.0 instead of 0-1.0
+* fix ym2612 sound generation (no drums/bass, no LFO, etc)
+
 * what if, to allow a device to have multiple steppable functions, you pass the system in, or otherwise provide some mechanism for
   each device to create sub devices which are scheduled independently
-
-* for some unknown reason, the js-based updater works much better than the rust based one, but the rust based one just goes back to
-  a fixed time per loop instead of trying to speed up
-
-* need to remove HostData and replace the interrupt with Signal
-* make Signal directional, by making SignalDriver and SignalInput or SignalReceiver
-* should you combine the input updaters into one thing and have a queue for communicating?  Even if you have 3 input channels, you can
-  make them all use the same generic type for the input queue
-* you need to refactor the audio mixer stuff to reject data quicker and stay in sync, but how to deal with sim time-dilation
-* make the pixels frontend use an rc refcell object, or rc object to directly control the frontend object while also making it accessible
-  to the run loop
-* add support for the controller inputs in the pixels web frontend
-* clean up pixels frontend
-
-* make the ym generate audio in sync so the DAC timings can be more accurate
-* change the host things to use queues instead
-
-* add rust runtime checks for math to look for overflow errors
-* I think the overflowing add and subs return the original number and not the overflowed result.  I might have already checked that
-  in the m68k impl but I should check again
-
-* you need to scale the output sample to be +/- 1.0 instead of 0-1.0
-
-* AudioFrame (and possibly the mixer and source) should be moved to the core, it should probably have the sample rate
-* need to be able to support stereo output eventually
-
-* can you make the frontend more adaptive to the input that the devices are using
-* change the name of the functions that take Host to be `with_host` or `register` or something
-* need to re-add a mechanism for audio frame dialation, either based on speed, or somehow automatic, use clocks and make them aligned
-* maybe I should make ClockDuration use picos as the base instead, and use u64 since that gives like 212 days or something instead of 5h
-  and should prevent split nanoseconds which is the main concern
-* the audio needs to not run if nothing is using it or there's constant buffer underruns
-
-* fix ym2612 sound generation
-* sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
-
-* add opentelemetry if it can be wasm compatible, or some kind of timing for giving an average framerate
-
-* add doc strings everywhere
-* get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion
-
-* the interrupt controller stuff is really not good.  It should be more like busport, and connected to a device at startup (eg. create
-  interrupt controller, then create objects that use that controller and pass in values, maybe an option so that the controller doesn't
-  have to be hooked up, meaning hardware interrupts would not be used.
-
-* along with the interrupt stuff, I'm kind of thinking of packaging things a bit differently, like using a tuple struct for the rc refcell
-  transmutable abstraction, so that you can avoid the need for explicit borrows
-
-* improve performance
 * should it be possible to reschedule multiple events at different intervals to reduce the times a given step function is called?  Some have
   multiple clocks, or multiple things at different clocks, and making them each an event would mean they could be smaller and faster, but at
   the cost of having more events on the queue when re-scheduling.  There needs to be a mechanism to avoid the event queue ballooning due to
   an error
+* can you somehow make devices have two step functions for running things at different times? (I'm thinking ym2612 audio gen vs timers)
+
+* for some unknown reason, the js-based updater works much better than the rust based one, but the rust based one just goes back to
+  a fixed time per loop instead of trying to speed up
+* can you refactor the update timeout to put it in rust?  Would that make it faster? (the tricky part is the closure)
+
+* make Signal directional, by making SignalDriver and SignalInput or SignalReceiver
+* clean up pixels frontend
+
+* modify cpal code to skip audio until caught up
+* AudioFrame (and possibly the mixer and source) should be moved to the core, it should probably have the sample rate
+* split AudioOutput into a sender and receiver
+* can you eliminate the source-to-mixer queues?
+
+
+* should you rename devices.rs traits.rs?
+* the interrupt controller stuff is really not good.  It should be more like busport, and connected to a device at startup (eg. create
+  interrupt controller, then create objects that use that controller and pass in values, maybe an option so that the controller doesn't
+  have to be hooked up, meaning hardware interrupts would not be used.
+* I'm kind of thinking of packaging things a bit differently, like using a tuple struct for the rc refcell
+  transmutable abstraction, so that you can avoid the need for explicit borrows
+
+* add rust runtime checks for math to look for overflow errors
+* I think the overflowing add and subs return the original number and not the overflowed result.  I might have already checked that
+  in the m68k impl but I should check again
+* double check the functioning of the banked areas and register settings for Z80 coprocessor
+* test the Z80 more, add tests
+* add opentelemetry if it can be wasm compatible, or some kind of timing for giving an average framerate
+* improve performance
+
+* can you make the frontend more adaptive to the input that the devices are using
+* maybe I should make ClockDuration use picos as the base instead, and use u64 since that gives like 212 days or something instead of 5h
+  and should prevent split nanoseconds which is the main concern
+* make the keys easier to config...
+
+* add doc strings everywhere
+* get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion
+
 
 * add ability to serialize/deserialize state into something, so it can be restored... (maybe not worth it though)
 
-* can you refactor the update timeout to put it in rust?  Would that make it faster? (the tricky part is the closure)
-* re-enable sound on webassembly, see if it works (it does not. Very lagged and jittery with what sounds like repeated frames)
-
-* can you somehow speed up the memory accessing through the sim?  The dyn Addressable is causing a fair amount of overhead
-* can you somehow make devices have two step functions for running things at different times? (I'm thinking ym2612 audio gen vs timers)
-* should you rename devices.rs traits.rs?
-
-
-* the pixel format idea didn't work because of window resizing and the fact that the frame needs to be adjusted in size because the window can't always be resized...
-* add mouse support to synth app
-
-* test the Z80 more, add tests
-* double check the functioning of the banked areas and register settings for Z80 coprocessor
-
-* make the keys easier to config...
 
 * can you make the debugger more accessible, so a web interface could access the data and display it, in light of the fact that println isn't available in wasm
 
 Web Assembly:
     * can you make the web interface nicer with like... a picture of a genesis or something
-    * would a different pixel format help at all?
 
-    * can you limit the size of the window that pixels generates?
-    * can you automatically adjust the speed based on the calculated framerate (if you moved that to Rust)
-    * enable sound in web assembly
-
-
-* add ability to disable one or the other audio chips in the genesis
-* make it possible to disable audio in browser
 * make it possible to compile without audio support (minifb frontend requires it atm)
-* should you have a separate attenuation value for each input in the mixer so that you can make one chip quieter (the sn76489 is pretty loud, and I added a fixed offset to the attenuation for now)
-
-
-
-
-
-Audio:
-    * address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
-
-    * should you represent audio as frequencies rather than amplitude so that time dilation is more accurate?  Would possible require less
-      accurate simulation of the audio
-
-    * Removing at a sample-level granularity would compress or lengthen the waveforms, so it would be better to mix/drop a whole chunk at
-      once (either predetermined by the audio system or determined by each device by the amount of samples it writes at once).  The chunk
-      size could either be specified by the device in microseconds or something, or can be inferred by the sample_rate and the size of the
-      chunk.
-
-    * you could make the sound device be an object that is passed back to the simulation section like SimplePty.  You need to either register
-      a callback with the frontend sound system that is called when it needs data, or you write to a shared buffer which is passed back to the
-      frontend when it needs it, or it has a copy it can use directly
 
 
 System/Traits:
@@ -140,9 +93,6 @@ Genesis/Mega Drive:
     * there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
       stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
 
-    * implement sn76489 and ym2612 for audio
-    * there's a bug when Sonic 2 goes to the demo screen, it's all corrupted (could it be a dma copy error)
-
     * the 68000/Z80 bank switching is probably buggy
     * the H/V counters are not accurate because it seems to count at different speeds in the blanking period (time vs return value numbers don't divide properly)
     * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
@@ -167,9 +117,13 @@ Macintosh:
 
 
 Z80:
+
     * add instruction timings to Z80
     * unimplemented: CPD, CPDR, CPI, CPIR, DAA, IND, INDR, INI, INIR, INic, INx, OTDR, OTIR, OUTD, OUTI, OUTic, OUTx, RETI, RETN, RLD, RRD
 
+Synth:
+
+    * add mouse support to synth app
 
 * can you eventually make the system connections all configurable via a config file?
 

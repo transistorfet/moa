@@ -1,6 +1,6 @@
 
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 use crate::{ClockTime, Error};
 use crate::host::gfx::FrameReceiver;
@@ -47,30 +47,6 @@ pub trait Tty {
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
     fn write_samples(&mut self, clock: ClockTime, buffer: &[Sample]);
-}
-
-
-#[derive(Clone, Debug)]
-pub struct HostData<T>(Arc<Mutex<T>>);
-
-impl<T> HostData<T> {
-    pub fn new(init: T) -> HostData<T> {
-        HostData(Arc::new(Mutex::new(init)))
-    }
-
-    pub fn lock(&self) -> MutexGuard<'_, T> {
-        self.0.lock().unwrap()
-    }
-}
-
-impl<T: Copy> HostData<T> {
-    pub fn set(&mut self, value: T) {
-        *(self.0.lock().unwrap()) = value;
-    }
-
-    pub fn get(&mut self) -> T {
-        *(self.0.lock().unwrap())
-    }
 }
 
 

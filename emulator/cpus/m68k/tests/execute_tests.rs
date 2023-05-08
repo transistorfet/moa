@@ -1,5 +1,5 @@
 
-use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, wrap_transmutable};
+use moa_core::{System, MemoryBlock, BusPort, ClockTime, Frequency, Address, Addressable, Steppable, wrap_transmutable};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::M68kState;
@@ -39,17 +39,17 @@ fn init_execute_test(cputype: M68kType) -> (M68k, System) {
     let data = vec![0; 0x00100000];
     let mem = MemoryBlock::new(data);
     system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
-    system.get_bus().write_beu32(0, INIT_STACK as u32).unwrap();
-    system.get_bus().write_beu32(4, INIT_ADDR as u32).unwrap();
+    system.get_bus().write_beu32(ClockTime::START, 0, INIT_STACK as u32).unwrap();
+    system.get_bus().write_beu32(ClockTime::START, 4, INIT_ADDR as u32).unwrap();
 
     let port = if cputype <= M68kType::MC68010 {
         BusPort::new(0, 24, 16, system.bus.clone())
     } else {
         BusPort::new(0, 24, 16, system.bus.clone())
     };
-    let mut cpu = M68k::new(cputype, 10_000_000, port);
+    let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
     cpu.step(&system).unwrap();
-    cpu.decoder.init(cpu.state.pc);
+    cpu.decoder.init(system.clock, cpu.state.pc);
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
     assert_eq!(cpu.decoder.instruction, Instruction::NOP);
@@ -71,7 +71,7 @@ fn build_state(state: &TestState) -> M68kState {
 
 fn load_memory(system: &System, data: &[u16]) {
     for i in 0..data.len() {
-        system.get_bus().write_beu16((i << 1) as Address, data[i]).unwrap();
+        system.get_bus().write_beu16(system.clock, (i << 1) as Address, data[i]).unwrap();
     } 
 }
 
@@ -80,7 +80,7 @@ fn run_test(case: &TestCase) {
 
     let init_state = build_state(&case.init);
     let mut expected_state = build_state(&case.fini);
-    system.get_bus().write_beu32(MEM_ADDR as Address, case.init.mem).unwrap();
+    system.get_bus().write_beu32(system.clock, MEM_ADDR as Address, case.init.mem).unwrap();
 
     load_memory(&system, case.data);
     cpu.state = init_state;
@@ -92,7 +92,7 @@ fn run_test(case: &TestCase) {
     expected_state.request = cpu.state.request.clone();
     assert_eq!(cpu.state, expected_state);
 
-    let mem = system.get_bus().read_beu32(MEM_ADDR as Address).unwrap();
+    let mem = system.get_bus().read_beu32(system.clock, MEM_ADDR as Address).unwrap();
     assert_eq!(mem, case.fini.mem);
 }
 

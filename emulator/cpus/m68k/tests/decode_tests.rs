@@ -1,5 +1,5 @@
 
-use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, wrap_transmutable};
+use moa_core::{System, MemoryBlock, BusPort, ClockTime, Frequency, Address, Addressable, wrap_transmutable};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, XRegister, BaseRegister, IndexRegister, Direction, ShiftDirection};
@@ -68,8 +68,8 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
     let data = vec![0; 0x00100000];
     let mem = MemoryBlock::new(data);
     system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
-    system.get_bus().write_beu32(0, INIT_STACK as u32).unwrap();
-    system.get_bus().write_beu32(4, INIT_ADDR as u32).unwrap();
+    system.get_bus().write_beu32(ClockTime::START, 0, INIT_STACK as u32).unwrap();
+    system.get_bus().write_beu32(ClockTime::START, 4, INIT_ADDR as u32).unwrap();
 
     // Initialize the CPU and make sure it's in the expected state
     let port = if cputype <= M68kType::MC68010 {
@@ -77,12 +77,12 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
     } else {
         BusPort::new(0, 24, 16, system.bus.clone())
     };
-    let mut cpu = M68k::new(cputype, 10_000_000, port);
+    let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
     cpu.init().unwrap();
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
 
-    cpu.decoder.init(INIT_ADDR as u32);
+    cpu.decoder.init(ClockTime::START, INIT_ADDR as u32);
     assert_eq!(cpu.decoder.start, INIT_ADDR as u32);
     assert_eq!(cpu.decoder.instruction, Instruction::NOP);
     (cpu, system)
@@ -91,7 +91,7 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
 fn load_memory(system: &System, data: &[u16]) {
     let mut addr = INIT_ADDR;
     for word in data {
-        system.get_bus().write_beu16(addr, *word).unwrap();
+        system.get_bus().write_beu16(system.clock, addr, *word).unwrap();
         addr += 2;
     }
 }
