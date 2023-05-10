@@ -282,6 +282,8 @@ impl Z80 {
             //},
             //Instruction::INic(reg) => {
             //},
+            //Instruction::INicz => {
+            //},
             //Instruction::INx(u8) => {
             //},
             Instruction::JP(addr) => {
@@ -367,6 +369,8 @@ impl Z80 {
             //Instruction::OUTI => {
             //},
             //Instruction::OUTic(reg) => {
+            //},
+            //Instruction::OUTicz => {
             //},
             Instruction::OUTx(_port) => {
                 // TODO this needs to be fixed

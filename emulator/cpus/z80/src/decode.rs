@@ -121,6 +121,7 @@ pub enum Instruction {
     INI,
     INIR,
     INic(Register),
+    INicz,
     INx(u8),
     JP(u16),
     JPIndirect(RegisterPair),
@@ -141,6 +142,7 @@ pub enum Instruction {
     OUTD,
     OUTI,
     OUTic(Register),
+    OUTicz,
     OUTx(u8),
     POP(RegisterPair),
     PUSH(RegisterPair),
@@ -362,7 +364,7 @@ impl Z80Decoder {
                                 1 => self.decode_prefix_dd_fd(memory, IndexRegister::IX),
                                 2 => self.decode_prefix_ed(memory),
                                 3 => self.decode_prefix_dd_fd(memory, IndexRegister::IY),
-                                _ => panic!("Undecoded Instruction"),
+                                _ => panic!("InternalError: impossible value"),
                             }
                         }
                     }
@@ -376,7 +378,7 @@ impl Z80Decoder {
                     _ => panic!("InternalError: impossible value"),
                 }
             },
-            _ => panic!("Undecoded Instruction"),
+            _ => panic!("InternalError: impossible value"),
         }
     }
 
@@ -420,8 +422,7 @@ impl Z80Decoder {
                         if let Target::DirectReg(reg) = target {
                             Ok(Instruction::INic(reg))
                         } else {
-                            //Ok(Instruction::INic())
-                            panic!("Unimplemented");
+                            Ok(Instruction::INicz)
                         }
                     },
                     1 => {
@@ -429,8 +430,7 @@ impl Z80Decoder {
                         if let Target::DirectReg(reg) = target {
                             Ok(Instruction::OUTic(reg))
                         } else {
-                            //Ok(Instruction::OUTic())
-                            panic!("Unimplemented");
+                            Ok(Instruction::OUTicz)
                         }
                     },
                     2 => {
