@@ -38,7 +38,7 @@
 * I think the overflowing add and subs return the original number and not the overflowed result.  I might have already checked that
   in the m68k impl but I should check again
 * double check the functioning of the banked areas and register settings for Z80 coprocessor
-* test the Z80 more, add tests
+* test the Z80 more, add tests like jsmoo's
 * add opentelemetry if it can be wasm compatible, or some kind of timing for giving an average framerate
 * improve performance
 

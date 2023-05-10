@@ -5,7 +5,7 @@ use crate::state::Z80;
 use crate::decode::Z80Decoder;
 
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Z80Debugger {
     pub enabled: bool,
     pub breakpoints: Vec<u16>,

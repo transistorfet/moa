@@ -1,5 +1,5 @@
 
-const DEFAULT_HARTE_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
+const DEFAULT_RAD_TESTS: &str = "tests/jsmoo/misc/tests/GeneratedTests/z80/v1/";
 
 use std::io::prelude::*;
 use std::fmt::Debug;
@@ -13,8 +13,8 @@ use serde_derive::Deserialize;
 
 use moa_core::{System, Error, MemoryBlock, BusPort, Frequency, Address, Addressable, Steppable, wrap_transmutable};
 
-use moa_m68k::{M68k, M68kType};
-use moa_m68k::state::Status;
+use moa_z80::{Z80, Z80Type};
+use moa_z80::state::Status;
 
 #[derive(Copy, Clone, PartialEq, Eq, ArgEnum)]
 enum Selection {
@@ -37,11 +37,8 @@ struct Args {
     /// Only print a summary for each test file
     #[clap(short, long)]
     quiet: bool,
-    /// Also test instruction timing
-    #[clap(short, long)]
-    timing: bool,
     /// Directory to the test suite to run
-    #[clap(long, default_value = DEFAULT_HARTE_TESTS)]
+    #[clap(long, default_value = DEFAULT_RAD_TESTS)]
     testsuite: String,
     #[clap(long, short, arg_enum, default_value_t = Selection::Include)]
     exceptions: Selection,
@@ -55,27 +52,32 @@ fn main() {
 
 #[derive(Debug, Deserialize)]
 struct TestState {
-    d0: u32,
-    d1: u32,
-    d2: u32,
-    d3: u32,
-    d4: u32,
-    d5: u32,
-    d6: u32,
-    d7: u32,
-    a0: u32,
-    a1: u32,
-    a2: u32,
-    a3: u32,
-    a4: u32,
-    a5: u32,
-    a6: u32,
-    usp: u32,
-    ssp: u32,
-    sr: u16,
-    pc: u32,
-    prefetch: Vec<u16>,
-    ram: Vec<(u32, u8)>,
+    pc: u16,
+    sp: u16,
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+    e: u8,
+    f: u8,
+    h: u8,
+    l: u8,
+    //i: u8,
+    //r: u8,
+    //ei: u8,
+    //wz: u8,
+    ix: u16,
+    iy: u16,
+    af_: u16,
+    bc_: u16,
+    de_: u16,
+    hl_: u16,
+    //im: u8,
+    //p: u8,
+    //q: u8,
+    //iff1: u8,
+    //iff2: u8,
+    ram: Vec<(u16, u8)>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,31 +87,24 @@ struct TestCase {
     initial_state: TestState,
     #[serde(rename(deserialize = "final"))]
     final_state: TestState,
-    length: usize
 }
 
 impl TestState {
     pub fn dump(&self) {
-        println!("d0: {:08x}    a0: {:08x}", self.d0, self.a0);
-        println!("d1: {:08x}    a1: {:08x}", self.d1, self.a1);
-        println!("d2: {:08x}    a2: {:08x}", self.d2, self.a2);
-        println!("d3: {:08x}    a3: {:08x}", self.d3, self.a3);
-        println!("d4: {:08x}    a4: {:08x}", self.d4, self.a4);
-        println!("d5: {:08x}    a5: {:08x}", self.d5, self.a5);
-        println!("d6: {:08x}    a6: {:08x}", self.d6, self.a6);
-        println!("d7: {:08x}   usp: {:08x}", self.d7, self.usp);
-        println!("pc: {:08x}   ssp: {:08x}", self.pc, self.ssp);
-        println!("sr: {:04x}", self.sr);
-
-        print!("prefetch: ");
-        for word in self.prefetch.iter() {
-            print!("{:04x} ", *word);
-        }
-        println!("");
+        println!(" a: {:02x}   a': {:02x}", self.a, self.af_ >> 8);
+        println!(" b: {:02x}   b': {:02x}", self.b, self.bc_ & 0xff);
+        println!(" c: {:02x}   c': {:02x}", self.c, self.bc_ >> 8);
+        println!(" d: {:02x}   d': {:02x}", self.d, self.de_ & 0xff);
+        println!(" e: {:02x}   e': {:02x}", self.e, self.de_ >> 8);
+        println!(" f: {:02x}   f': {:02x}", self.f, self.af_ & 0xff);
+        println!(" h: {:02x}   h': {:02x}", self.h, self.hl_ >> 8);
+        println!(" l: {:02x}   l': {:02x}", self.l, self.hl_ & 0xff);
+        println!("pc: {:04x}   sp: {:04x}", self.pc, self.sp);
+        println!("ix: {:04x}   iy: {:04x}", self.ix, self.iy);
 
         println!("ram: ");
         for (addr, byte) in self.ram.iter() {
-            println!("{:08x} {:02x} ", *addr, *byte);
+            println!("{:04x} {:02x} ", *addr, *byte);
         }
     }
 }
@@ -121,22 +116,11 @@ impl TestCase {
         self.initial_state.dump();
         println!("final:");
         self.final_state.dump();
-        println!("cycles: {}", self.length);
-    }
-
-    pub fn is_exception_case(&self) -> bool {
-        // If the supervisor stack changes by 6 or more bytes, then it's likely expected to be caused by an exception
-        self.initial_state.ssp.saturating_sub(self.final_state.ssp) >= 6
-    }
-
-    pub fn is_extended_exception_case(&self) -> bool {
-        // If the supervisor stack changes by 6 or more bytes, then it's likely expected to be caused by an exception
-        self.initial_state.ssp.saturating_sub(self.final_state.ssp) >= 10
     }
 }
 
 
-fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, System), Error> {
+fn init_execute_test(cputype: Z80Type, state: &TestState) -> Result<(Z80, System), Error> {
     let mut system = System::default();
 
     // Insert basic initialization
@@ -144,12 +128,8 @@ fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, Syst
     let mem = MemoryBlock::new(data);
     system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
 
-    let port = if cputype <= M68kType::MC68010 {
-        BusPort::new(0, 24, 16, system.bus.clone())
-    } else {
-        BusPort::new(0, 32, 32, system.bus.clone())
-    };
-    let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
+    let port = BusPort::new(0, 16, 8, system.bus.clone());
+    let mut cpu = Z80::new(cputype, Frequency::from_mhz(10), port);
     cpu.state.status = Status::Running;
 
     load_state(&mut cpu, &mut system, state)?;
@@ -165,32 +145,28 @@ fn assert_value<T: PartialEq + Debug>(actual: T, expected: T, message: &str) -> 
     }
 }
 
-fn load_state(cpu: &mut M68k, system: &mut System, initial: &TestState) -> Result<(), Error> {
-    cpu.state.d_reg[0] = initial.d0;
-    cpu.state.d_reg[1] = initial.d1;
-    cpu.state.d_reg[2] = initial.d2;
-    cpu.state.d_reg[3] = initial.d3;
-    cpu.state.d_reg[4] = initial.d4;
-    cpu.state.d_reg[5] = initial.d5;
-    cpu.state.d_reg[6] = initial.d6;
-    cpu.state.d_reg[7] = initial.d7;
-    cpu.state.a_reg[0] = initial.a0;
-    cpu.state.a_reg[1] = initial.a1;
-    cpu.state.a_reg[2] = initial.a2;
-    cpu.state.a_reg[3] = initial.a3;
-    cpu.state.a_reg[4] = initial.a4;
-    cpu.state.a_reg[5] = initial.a5;
-    cpu.state.a_reg[6] = initial.a6;
+fn load_state(cpu: &mut Z80, system: &mut System, initial: &TestState) -> Result<(), Error> {
+    cpu.state.reg[0] = initial.b;
+    cpu.state.reg[1] = initial.c;
+    cpu.state.reg[2] = initial.d;
+    cpu.state.reg[3] = initial.e;
+    cpu.state.reg[4] = initial.h;
+    cpu.state.reg[5] = initial.l;
+    cpu.state.reg[6] = initial.a;
+    cpu.state.reg[7] = initial.f;
+    cpu.state.shadow_reg[0] = (initial.bc_ >> 8) as u8;
+    cpu.state.shadow_reg[1] = (initial.bc_ & 0xff) as u8;
+    cpu.state.shadow_reg[2] = (initial.de_ >> 8) as u8;
+    cpu.state.shadow_reg[3] = (initial.de_ & 0xff) as u8;
+    cpu.state.shadow_reg[4] = (initial.hl_ >> 8) as u8;
+    cpu.state.shadow_reg[5] = (initial.hl_ & 0xff) as u8;
+    cpu.state.shadow_reg[6] = (initial.af_ >> 8) as u8;
+    cpu.state.shadow_reg[7] = (initial.af_ & 0xff) as u8;
 
-    cpu.state.usp = initial.usp;
-    cpu.state.ssp = initial.ssp;
-    cpu.state.sr = initial.sr;
+    cpu.state.ix = initial.ix;
+    cpu.state.iy = initial.iy;
+    cpu.state.sp = initial.sp;
     cpu.state.pc = initial.pc;
-
-    // Load instructions into memory
-    for (i, ins) in initial.prefetch.iter().enumerate() {
-        system.get_bus().write_beu16(system.clock, (initial.pc + (i as u32 * 2)) as u64, *ins)?;
-    }
 
     // Load data bytes into memory
     for (addr, byte) in initial.ram.iter() {
@@ -200,36 +176,30 @@ fn load_state(cpu: &mut M68k, system: &mut System, initial: &TestState) -> Resul
     Ok(())
 }
 
-fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(), Error> {
-    assert_value(cpu.state.d_reg[0], expected.d0, "d0")?;
-    assert_value(cpu.state.d_reg[1], expected.d1, "d1")?;
-    assert_value(cpu.state.d_reg[2], expected.d2, "d2")?;
-    assert_value(cpu.state.d_reg[3], expected.d3, "d3")?;
-    assert_value(cpu.state.d_reg[4], expected.d4, "d4")?;
-    assert_value(cpu.state.d_reg[5], expected.d5, "d5")?;
-    assert_value(cpu.state.d_reg[6], expected.d6, "d6")?;
-    assert_value(cpu.state.d_reg[7], expected.d7, "d7")?;
-    assert_value(cpu.state.a_reg[0], expected.a0, "a0")?;
-    assert_value(cpu.state.a_reg[1], expected.a1, "a1")?;
-    assert_value(cpu.state.a_reg[2], expected.a2, "a2")?;
-    assert_value(cpu.state.a_reg[3], expected.a3, "a3")?;
-    assert_value(cpu.state.a_reg[4], expected.a4, "a4")?;
-    assert_value(cpu.state.a_reg[5], expected.a5, "a5")?;
-    assert_value(cpu.state.a_reg[6], expected.a6, "a6")?;
+fn assert_state(cpu: &Z80, system: &System, expected: &TestState) -> Result<(), Error> {
+    assert_value(cpu.state.reg[0], expected.b, "b")?;
+    assert_value(cpu.state.reg[1], expected.c, "c")?;
+    assert_value(cpu.state.reg[2], expected.d, "d")?;
+    assert_value(cpu.state.reg[3], expected.e, "e")?;
+    assert_value(cpu.state.reg[4], expected.h, "h")?;
+    assert_value(cpu.state.reg[5], expected.l, "l")?;
+    assert_value(cpu.state.reg[6], expected.a, "a")?;
+    assert_value(cpu.state.reg[7], expected.f, "f")?;
+    assert_value(cpu.state.shadow_reg[0], (expected.bc_ >> 8) as u8, "b'")?;
+    assert_value(cpu.state.shadow_reg[1], (expected.bc_ & 0xff) as u8, "c'")?;
+    assert_value(cpu.state.shadow_reg[2], (expected.de_ >> 8) as u8, "d'")?;
+    assert_value(cpu.state.shadow_reg[3], (expected.de_ & 0xff) as u8, "e'")?;
+    assert_value(cpu.state.shadow_reg[4], (expected.hl_ >> 8) as u8, "h'")?;
+    assert_value(cpu.state.shadow_reg[5], (expected.hl_ & 0xff) as u8, "l'")?;
+    assert_value(cpu.state.shadow_reg[6], (expected.af_ >> 8) as u8, "a'")?;
+    assert_value(cpu.state.shadow_reg[7], (expected.af_ & 0xff) as u8, "f'")?;
 
-    assert_value(cpu.state.usp, expected.usp, "usp")?;
-    assert_value(cpu.state.ssp, expected.ssp, "ssp")?;
-    assert_value(cpu.state.sr, expected.sr, "sr")?;
+    assert_value(cpu.state.ix, expected.ix, "ix")?;
+    assert_value(cpu.state.iy, expected.iy, "iy")?;
+    assert_value(cpu.state.sp, expected.sp, "sp")?;
     assert_value(cpu.state.pc, expected.pc, "pc")?;
 
     let addr_mask = cpu.port.address_mask();
-
-    // Load instructions into memory
-    for (i, ins) in expected.prefetch.iter().enumerate() {
-        let addr = expected.pc + (i as u32 * 2);
-        let actual = system.get_bus().read_beu16(system.clock, addr as Address & addr_mask)?;
-        assert_value(actual, *ins, &format!("prefetch at {:x}", addr))?;
-    }
 
     // Load data bytes into memory
     for (addr, byte) in expected.ram.iter() {
@@ -240,23 +210,19 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
     Ok(())
 }
 
-fn step_cpu_and_assert(cpu: &mut M68k, system: &System, case: &TestCase, test_timing: bool) -> Result<(), Error> {
-    let clock_elapsed = cpu.step(&system)?;
-    let cycles = clock_elapsed / cpu.frequency.period_duration();
+fn step_cpu_and_assert(cpu: &mut Z80, system: &System, case: &TestCase) -> Result<(), Error> {
+    let _clock_elapsed = cpu.step(&system)?;
 
     assert_state(&cpu, &system, &case.final_state)?;
 
-    if test_timing {
-        assert_value(cycles, case.length as u64, "clock cycles")?;
-    }
     Ok(())
 }
 
 fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
-    let (mut cpu, system) = init_execute_test(M68kType::MC68000, &case.initial_state).unwrap();
+    let (mut cpu, system) = init_execute_test(Z80Type::Z80, &case.initial_state).unwrap();
     let mut initial_cpu = cpu.clone();
 
-    let result = step_cpu_and_assert(&mut cpu, &system, case, args.timing);
+    let result = step_cpu_and_assert(&mut cpu, &system, case);
 
     match result {
         Ok(()) => Ok(()),
@@ -296,15 +262,6 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
             if !case.name.ends_with(only) {
                 continue;
             }
-        }
-
-        // Only run the test if it's selected by the exceptions flag
-        if case.is_extended_exception_case() && args.exceptions == Selection::ExcludeAddr {
-            continue;
-        } else if case.is_exception_case() && args.exceptions == Selection::Exclude {
-            continue;
-        } else if !case.is_exception_case() && args.exceptions == Selection::Only {
-            continue;
         }
 
         // Sort the ram memory for debugging help

@@ -314,11 +314,11 @@ impl M68k {
         let src_parts = get_nibbles_from_byte(src_val);
         let dest_parts = get_nibbles_from_byte(dest_val);
 
-        let binary_result = src_val + dest_val + extend_flag;
-        let mut result = src_parts.1 + dest_parts.1 + extend_flag;
-        if result > 0x09 { result += 0x06 };
+        let binary_result = src_val.wrapping_add(dest_val).wrapping_add(extend_flag);
+        let mut result = src_parts.1.wrapping_add(dest_parts.1).wrapping_add(extend_flag);
+        if result > 0x09 { result = result.wrapping_add(0x06) };
         result += src_parts.0 + dest_parts.0;
-        if result > 0x99 { result += 0x60 };
+        if result > 0x99 { result = result.wrapping_add(0x60) };
         let carry = (result & 0xFFFFFF00) != 0;
 
         self.set_target_value(dest, result, Size::Byte, Used::Twice)?;
@@ -434,7 +434,7 @@ impl M68k {
     fn execute_bcc(&mut self, cond: Condition, offset: i32) -> Result<(), Error> {
         let should_branch = self.get_current_condition(cond);
         if should_branch {
-            if let Err(err) = self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32)) {
+            if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
                 self.state.pc -= 2;
                 return Err(err);
             }
@@ -444,7 +444,7 @@ impl M68k {
 
     #[inline]
     fn execute_bra(&mut self, offset: i32) -> Result<(), Error> {
-        if let Err(err) = self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32)) {
+        if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
             self.state.pc -= 2;
             return Err(err);
         }
@@ -456,7 +456,7 @@ impl M68k {
         self.push_long(self.state.pc)?;
         let sp = *self.get_stack_pointer_mut();
         self.debugger.stack_tracer.push_return(sp);
-        if let Err(err) = self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32)) {
+        if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
             self.state.pc -= 2;
             return Err(err);
         }
@@ -629,7 +629,7 @@ impl M68k {
             let next = ((get_value_sized(self.state.d_reg[reg as usize], Size::Word) as u16) as i16).wrapping_sub(1);
             set_value_sized(&mut self.state.d_reg[reg as usize], next as u32, Size::Word);
             if next != -1 {
-                if let Err(err) = self.set_pc((self.decoder.start + 2).wrapping_add(offset as u32)) {
+                if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
                     self.state.pc -= 2;
                     return Err(err);
                 }
@@ -1000,7 +1000,7 @@ impl M68k {
         match dir {
             Direction::ToTarget => {
                 let mut shift = (size.in_bits() as i32) - 8;
-                let mut addr = ((*self.get_a_reg_mut(areg) as i32) + (offset as i32)) as Address;
+                let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32) as Address;
                 while shift >= 0 {
                     let byte = (self.state.d_reg[dreg as usize] >> shift) as u8;
                     self.port.write_u8(self.current_clock, addr, byte)?;
@@ -1010,7 +1010,7 @@ impl M68k {
             },
             Direction::FromTarget => {
                 let mut shift = (size.in_bits() as i32) - 8;
-                let mut addr = ((*self.get_a_reg_mut(areg) as i32) + (offset as i32)) as Address;
+                let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32) as Address;
                 while shift >= 0 {
                     let byte = self.port.read_u8(self.current_clock, addr)?;
                     self.state.d_reg[dreg as usize] |= (byte as u32) << shift;

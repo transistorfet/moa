@@ -1,11 +1,11 @@
 [package]
-name = "harte_tests"
+name = "rad_tests"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 moa_core = { path = "../../emulator/core" }
-moa_m68k = { path = "../../emulator/cpus/m68k" }
+moa_z80 = { path = "../../emulator/cpus/z80" }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"

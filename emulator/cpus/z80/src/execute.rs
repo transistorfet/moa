@@ -217,7 +217,7 @@ impl Z80 {
                 self.set_register_value(Register::B, result);
 
                 if result != 0 {
-                    self.state.pc = ((self.state.pc as i16) + (offset as i16)) as u16;
+                    self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
                 }
             },
             Instruction::EI => {
@@ -251,6 +251,7 @@ impl Z80 {
             },
             Instruction::HALT => {
                 self.state.status = Status::Halted;
+                self.state.pc -= 1;
             },
             Instruction::IM(mode) => {
                 self.state.interrupt_mode = mode;
@@ -297,11 +298,11 @@ impl Z80 {
                 }
             },
             Instruction::JR(offset) => {
-                self.state.pc = ((self.state.pc as i16) + (offset as i16)) as u16;
+                self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
             },
             Instruction::JRcc(cond, offset) => {
                 if self.get_current_condition(cond) {
-                    self.state.pc = ((self.state.pc as i16) + (offset as i16)) as u16;
+                    self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
                 }
             },
             Instruction::LD(dest, src) => {
@@ -367,9 +368,9 @@ impl Z80 {
             //},
             //Instruction::OUTic(reg) => {
             //},
-            Instruction::OUTx(port) => {
+            Instruction::OUTx(_port) => {
                 // TODO this needs to be fixed
-                println!("OUT ({:x}), {:x} {}", port, self.state.reg[Register::A as usize], self.state.reg[Register::A as usize] as char);
+                //println!("OUT ({:x}), {:x} {}", port, self.state.reg[Register::A as usize], self.state.reg[Register::A as usize] as char);
             },
             Instruction::POP(regpair) => {
                 let value = self.pop_word()?;
@@ -699,7 +700,7 @@ impl Z80 {
                 Ok(self.port.read_u8(self.current_clock, addr as Address)?)
             },
             Target::IndirectOffset(reg, offset) => {
-                let addr = (self.get_index_register_value(reg) as i16) + (offset as i16);
+                let addr = self.get_index_register_value(reg).wrapping_add_signed(offset as i16);
                 Ok(self.port.read_u8(self.current_clock, addr as Address)?)
             },
             Target::Immediate(data) => Ok(data),
@@ -715,7 +716,7 @@ impl Z80 {
                 self.port.write_u8(self.current_clock, addr as Address, value)?;
             },
             Target::IndirectOffset(reg, offset) => {
-                let addr = (self.get_index_register_value(reg) as i16) + (offset as i16);
+                let addr = self.get_index_register_value(reg).wrapping_add_signed(offset as i16);
                 self.port.write_u8(self.current_clock, addr as Address, value)?;
             },
             _ => panic!("Unsupported LoadTarget for set"),

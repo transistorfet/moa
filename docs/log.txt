@@ -416,3 +416,15 @@ General Work
   making the fps drop down to 47-50 instead of 60.  I'm not sure if that's because the older js
   version does some funny clock stuff or if the concept itself adds a lot of overhead for some as
   yet unknown reason
+
+2023-05-08
+- audio works in Sonic1.  Mortal Kombat 2 has a bit of audio, but periods of silence where it's
+  clearly turning notes on and off and changing frequencies, but nothing is coming out.  Then every
+  other has silence but they seems to write to the ym2612 registers with note on/off (reg 0x28), and
+  total level or frequency changes which make sense for audio to be playing but nothing.  I had sort
+  of suspected the coprocessor communication until I printed the register set values which clearly
+  shows audio is being requested but nothing is produced, so still some big issues with the ym2612
+- looking at earthworm jim, it's sending a lot of commands to the 0x40s on bank 0 and 1, which
+  doesn't make a heck of a lot of sense to be changing the volume level but nothing else all the
+  time.  It doesn't seem to set the initial frequencies.  So it's possible that a bug in the Z80
+  code is making it run incorrectly and thus not producing correct register commands to the ym2612

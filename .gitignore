@@ -13,3 +13,5 @@ binaries/*/*.bin
 binaries/*/*.smd
 
 emulator/frontends/pixels/dist/
+tests/ProcessorTests/
+tests/jsmoo/

@@ -211,3 +211,53 @@ impl Device {
 }
 
 
+/*
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DeviceId(usize);
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Interrupt {
+    Number(usize),
+}
+
+pub enum InterruptPriority {
+    NonMaskable,
+    Number(usize),
+}
+
+struct InterruptPort {
+    id: usize,
+    controller: TransmutableBox,
+}
+
+impl InterruptPort {
+    fn check_pending(&self) -> Option<Interrupt> {
+        self.controller.borrow_mut().as_interrupt_controller().check_pending(self.id)
+    }
+
+    fn acknowledge(&self, interrupt: Interrupt) -> Result<(), Error> {
+        self.controller.borrow_mut().as_interrupt_controller().acknowledge(self.id, interrupt)
+    }
+}
+
+//pub trait InterruptPort {
+//    fn check_pending(&mut self, id: DeviceId) -> Option<Interrupt>;
+//    fn acknowledge(&mut self, id: DeviceId, interrupt: Interrupt) -> Result<(), Error>;
+//}
+
+//pub trait Interrupter {
+//    fn trigger(&mut self, id: DeviceId, interrupt: Interrupt) -> Result<(), Error>;
+//}
+
+struct Interrupter {
+    input_id: usize,
+    interrupt: Interrupt,
+    controller: Rc<RefCell<TransmutableBox>>,
+}
+
+pub trait InterruptController {
+    fn connect(&mut self, priority: InterruptPriority) -> Result<InterruptPort, Error>;
+    fn check_pending(&mut self, id: usize) -> Option<Interrupt>;
+    fn acknowledge(&mut self, id: usize, interrupt: Interrupt) -> Result<(), Error>;
+}
+*/

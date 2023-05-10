@@ -4,7 +4,8 @@ members = [
     "emulator/frontends/common",
     "emulator/frontends/console",
     "emulator/frontends/minifb",
-    "tests/harte_tests"
+    "tests/harte_tests",
+    "tests/rad_tests"
 ]
 exclude = [
     "emulator/frontends/pixels",

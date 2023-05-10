@@ -172,6 +172,7 @@ pub enum Instruction {
     XOR(Target),
 }
 
+#[derive(Clone)]
 pub struct Z80Decoder {
     pub clock: ClockTime,
     pub start: u16,
@@ -678,14 +679,14 @@ impl Z80Decoder {
 
     fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Error> {
         let byte = device.read_u8(self.clock, self.end as Address)?;
-        self.end += 1;
+        self.end = self.end.wrapping_add(1);
         self.execution_time += 4;
         Ok(byte)
     }
 
     fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Error> {
         let word = device.read_leu16(self.clock, self.end as Address)?;
-        self.end += 2;
+        self.end = self.end.wrapping_add(2);
         self.execution_time += 8;
         Ok(word)
     }

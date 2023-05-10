@@ -18,6 +18,12 @@ For more details on how it works, check out this post about how I started the pr
 For more about the Sega Genesis support, check out this series I wrote about implementing it:
 [Emulating the Sega Genesis](http://jabberwocky.ca/posts/2022-01-emulating_the_sega_genesis_part1.html)
 
+I've also generated rustdocs of the workspace. All the various crates within moa
+are listed in the crates section in the sidebar on the left. There's not a lot
+of doc comments in the code yet but I plan to eventually write more:
+[rustdocs for moa_core](http://jabberwocky.ca/moa/doc/moa_core/)
+[rustdocs for ym2612](http://jabberwocky.ca/moa/doc/moa_peripherals_yamaha/ym2612/index.html)
+
 
 Sega Genesis/MegaDrive
 ----------------------
@@ -67,6 +73,7 @@ though that doesn't happen during normal play
 
 ![alt text](images/sega-genesis-sonic2-demo.gif)
 
+
 Computie
 --------
 
@@ -83,6 +90,7 @@ separate process and connect to the Computie PTY.  It will also launch
 host, and set up host routing.  The exact commands in
 `src/machines/computie.rs` might need to be adjusted to work on different
 hosts.
+
 
 TRS-80
 ------

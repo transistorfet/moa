@@ -104,6 +104,7 @@ impl Z80State {
     }
 }
 
+#[derive(Clone)]
 pub struct Z80 {
     pub cputype: Z80Type,
     pub frequency: Frequency,
