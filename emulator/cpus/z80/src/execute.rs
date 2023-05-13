@@ -106,7 +106,7 @@ impl Z80 {
 
                 let (result1, carry1, overflow1, half_carry1) = add_bytes(acc, self.get_flag(Flags::Carry) as u8);
                 let (result2, carry2, overflow2, half_carry2) = add_bytes(result1, src);
-                self.set_arithmetic_op_flags(result2 as u16, Size::Byte, false, carry1 | carry2, overflow1 | overflow2, half_carry1 | half_carry2);
+                self.set_arithmetic_op_flags(result2 as u16, Size::Byte, false, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
 
                 self.set_register_value(Register::A, result2);
             },
@@ -114,9 +114,9 @@ impl Z80 {
                 let src = self.get_register_pair_value(src_pair);
                 let dest = self.get_register_pair_value(dest_pair);
 
-                let (result1, carry1, overflow1, half_carry1) = add_words(dest, self.get_flag(Flags::Carry) as u16);
-                let (result2, carry2, overflow2, half_carry2) = add_words(result1, src);
-                self.set_arithmetic_op_flags(result2, Size::Word, false, carry1 | carry2, overflow1 | overflow2, half_carry1 | half_carry2);
+                let (result1, carry1, overflow1, half_carry1) = add_words(dest, src);
+                let (result2, carry2, overflow2, half_carry2) = add_words(result1, self.get_flag(Flags::Carry) as u16);
+                self.set_arithmetic_op_flags(result2, Size::Word, false, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
 
                 self.set_register_pair_value(dest_pair, result2);
             },
@@ -484,9 +484,9 @@ impl Z80 {
                 let src = self.get_target_value(target)?;
                 let acc = self.get_register_value(Register::A);
 
-                let (result1, carry1, overflow1) = sub_bytes(acc, self.get_flag(Flags::Carry) as u8);
-                let (result2, carry2, overflow2) = sub_bytes(result1, src);
-                self.set_arithmetic_op_flags(result2 as u16, Size::Byte, true, carry1 | carry2, overflow1 | overflow2, (result2 & 0x10) != 0);
+                let (result1, carry1, overflow1) = sub_bytes(acc, src);
+                let (result2, carry2, overflow2) = sub_bytes(result1, self.get_flag(Flags::Carry) as u8);
+                self.set_arithmetic_op_flags(result2 as u16, Size::Byte, true, carry1 | carry2, overflow1 ^ overflow2, (result2 & 0x10) != 0);
 
                 self.set_register_value(Register::A, result2);
             },
@@ -496,7 +496,7 @@ impl Z80 {
 
                 let (result1, carry1, overflow1) = sub_words(dest, self.get_flag(Flags::Carry) as u16);
                 let (result2, carry2, overflow2) = sub_words(result1, src);
-                self.set_arithmetic_op_flags(result2, Size::Word, true, carry1 | carry2, overflow1 | overflow2, (result2 & 0x10) != 0);
+                self.set_arithmetic_op_flags(result2, Size::Word, true, carry1 | carry2, overflow1 ^ overflow2, (result2 & 0x10) != 0);
 
                 self.set_register_pair_value(dest_pair, result2);
             },
@@ -858,27 +858,28 @@ impl Z80 {
 
 fn add_bytes(operand1: u8, operand2: u8) -> (u8, bool, bool, bool) {
     let (result, carry) = operand1.overflowing_add(operand2);
-    let (_, overflow) = (operand1 as i8).overflowing_add(operand2 as i8);
+    let overflow = (operand1 & 0x80) == (operand2 & 0x80) && (operand1 & 0x80) != (result & 0x80);
     let half_carry = (operand1 & 0x10) != 0 && (result & 0x10) == 0;
     (result, carry, overflow, half_carry)
 }
 
 fn add_words(operand1: u16, operand2: u16) -> (u16, bool, bool, bool) {
     let (result, carry) = operand1.overflowing_add(operand2);
-    let (_, overflow) = ((operand1 as i8) as i16).overflowing_add((operand2 as i8) as i16);
+    let overflow = (operand1 & 0x8000) == (operand2 & 0x8000) && (operand1 & 0x8000) != (result & 0x8000);
+    // TODO this is probably still wrong
     let half_carry = (operand1 & 0x10) != 0 && (result & 0x10) == 0;
     (result, carry, overflow, half_carry)
 }
 
 fn sub_bytes(operand1: u8, operand2: u8) -> (u8, bool, bool) {
     let (result, carry) = operand1.overflowing_sub(operand2);
-    let (_, overflow) = (operand1 as i8).overflowing_sub(operand2 as i8);
+    let overflow = (operand1 & 0x80) != (operand2 & 0x80) && (operand1 & 0x80) != (result & 0x80);
     (result, carry, overflow)
 }
 
 fn sub_words(operand1: u16, operand2: u16) -> (u16, bool, bool) {
     let (result, carry) = operand1.overflowing_sub(operand2);
-    let (_, overflow) = ((operand1 as i8) as i16).overflowing_sub((operand2 as i8) as i16);
+    let overflow = (operand1 & 0x8000) != (operand2 & 0x8000) && (operand1 & 0x8000) != (result & 0x8000);
     (result, carry, overflow)
 }
 
