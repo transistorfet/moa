@@ -2,7 +2,7 @@
 const DEFAULT_RAD_TESTS: &str = "tests/jsmoo/misc/tests/GeneratedTests/z80/v1/";
 
 use std::io::prelude::*;
-use std::fmt::Debug;
+use std::fmt::{Debug, UpperHex};
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::fs::{self, File};
@@ -14,6 +14,7 @@ use serde_derive::Deserialize;
 use moa_core::{System, Error, MemoryBlock, BusPort, Frequency, Address, Addressable, Steppable, wrap_transmutable};
 
 use moa_z80::{Z80, Z80Type};
+use moa_z80::state::Flags;
 use moa_z80::state::Status;
 
 #[derive(Copy, Clone, PartialEq, Eq, ArgEnum)]
@@ -37,6 +38,9 @@ struct Args {
     /// Only print a summary for each test file
     #[clap(short, long)]
     quiet: bool,
+    /// Check the Half Carry, F3, and F5 flags for accuracy
+    #[clap(short = 'f', long)]
+    check_extra_flags: bool,
     /// Directory to the test suite to run
     #[clap(long, default_value = DEFAULT_RAD_TESTS)]
     testsuite: String,
@@ -137,11 +141,14 @@ fn init_execute_test(cputype: Z80Type, state: &TestState) -> Result<(Z80, System
     Ok((cpu, system))
 }
 
-fn assert_value<T: PartialEq + Debug>(actual: T, expected: T, message: &str) -> Result<(), Error> {
+fn assert_value<T>(actual: T, expected: T, message: &str) -> Result<(), Error>
+where
+    T: PartialEq + Debug + UpperHex
+{
     if actual == expected {
         Ok(())
     } else {
-        Err(Error::assertion(&format!("{:?} != {:?}, {}", actual, expected, message)))
+        Err(Error::assertion(&format!("{:#X} != {:#X}, {}", actual, expected, message)))
     }
 }
 
@@ -176,7 +183,9 @@ fn load_state(cpu: &mut Z80, system: &mut System, initial: &TestState) -> Result
     Ok(())
 }
 
-fn assert_state(cpu: &Z80, system: &System, expected: &TestState) -> Result<(), Error> {
+const IGNORE_FLAG_MASK: u8 = Flags::HalfCarry as u8 | Flags::F3 as u8 | Flags::F5 as u8;
+
+fn assert_state(cpu: &Z80, system: &System, expected: &TestState, check_extra_flags: bool) -> Result<(), Error> {
     assert_value(cpu.state.reg[0], expected.b, "b")?;
     assert_value(cpu.state.reg[1], expected.c, "c")?;
     assert_value(cpu.state.reg[2], expected.d, "d")?;
@@ -184,7 +193,11 @@ fn assert_state(cpu: &Z80, system: &System, expected: &TestState) -> Result<(), 
     assert_value(cpu.state.reg[4], expected.h, "h")?;
     assert_value(cpu.state.reg[5], expected.l, "l")?;
     assert_value(cpu.state.reg[6], expected.a, "a")?;
-    assert_value(cpu.state.reg[7], expected.f, "f")?;
+    if check_extra_flags {
+        assert_value(cpu.state.reg[7], expected.f, "f")?;
+    } else {
+        assert_value(cpu.state.reg[7] & !IGNORE_FLAG_MASK, expected.f & !IGNORE_FLAG_MASK, "f")?;
+    }
     assert_value(cpu.state.shadow_reg[0], (expected.bc_ >> 8) as u8, "b'")?;
     assert_value(cpu.state.shadow_reg[1], (expected.bc_ & 0xff) as u8, "c'")?;
     assert_value(cpu.state.shadow_reg[2], (expected.de_ >> 8) as u8, "d'")?;
@@ -210,10 +223,10 @@ fn assert_state(cpu: &Z80, system: &System, expected: &TestState) -> Result<(), 
     Ok(())
 }
 
-fn step_cpu_and_assert(cpu: &mut Z80, system: &System, case: &TestCase) -> Result<(), Error> {
+fn step_cpu_and_assert(cpu: &mut Z80, system: &System, case: &TestCase, check_extra_flags: bool) -> Result<(), Error> {
     let _clock_elapsed = cpu.step(&system)?;
 
-    assert_state(&cpu, &system, &case.final_state)?;
+    assert_state(&cpu, &system, &case.final_state, check_extra_flags)?;
 
     Ok(())
 }
@@ -222,7 +235,7 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
     let (mut cpu, system) = init_execute_test(Z80Type::Z80, &case.initial_state).unwrap();
     let mut initial_cpu = cpu.clone();
 
-    let result = step_cpu_and_assert(&mut cpu, &system, case);
+    let result = step_cpu_and_assert(&mut cpu, &system, case, args.check_extra_flags);
 
     match result {
         Ok(()) => Ok(()),
