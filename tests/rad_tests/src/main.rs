@@ -186,7 +186,7 @@ fn load_state(cpu: &mut Z80, system: &mut System, initial: &TestState) -> Result
     Ok(())
 }
 
-const IGNORE_FLAG_MASK: u8 = Flags::HalfCarry as u8 | Flags::F3 as u8 | Flags::F5 as u8;
+const IGNORE_FLAG_MASK: u8 = Flags::F3 as u8 | Flags::F5 as u8;
 
 fn assert_state(cpu: &Z80, system: &System, expected: &TestState, check_extra_flags: bool) -> Result<(), Error> {
     assert_value(cpu.state.reg[0], expected.b, "b")?;
@@ -379,16 +379,15 @@ fn is_undocumented_instruction(name: &str) -> bool {
     opcodes.extend(vec![0; 3 - opcodes.len()]);
 
     match (opcodes[0], opcodes[1]) {
-        (0xCB, _) => {
-            opcodes[1] >= 0x30 && opcodes[1] <= 0x37
+        (0xCB, op) => {
+            op >= 0x30 && op <= 0x37
         },
         (0xDD, 0xCB) |
         (0xFD, 0xCB) => {
             !(opcodes[2] & 0x07 == 0x06 && opcodes[2] != 0x36)
         },
-        (0xDD, _) |
-        (0xFD, _) => {
-            let op = opcodes[1];
+        (0xDD, op) |
+        (0xFD, op) => {
             let upper3 = op & 0x70;
             let upper4 = op & 0xF0;
             let lower = op & 0x0F;
@@ -399,9 +398,11 @@ fn is_undocumented_instruction(name: &str) -> bool {
             !(lower == 0x09 && upper4 <= 0x30) &&
             !(op == 0xE1 || op == 0xE3 || op == 0xE5 || op == 0xE9 || op == 0xF9)
         },
-        //0xED => {
-
-        //},
+        (0xED, op) => {
+            // NOTE this assumes the tests don't have the missing instructions, or the Z180 instructions
+            //      so it only checks for the undocumented ones
+            op == 0x63 || op == 0x6B || op == 0x70 || op == 0x71
+        },
         _ => false
     }
 }

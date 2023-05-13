@@ -173,8 +173,8 @@ impl Z80 {
                 let src = self.get_target_value(target)?;
                 let acc = self.get_register_value(Register::A);
 
-                let (result, carry, overflow) = sub_bytes(acc, src);
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, (result & 0x10) != 0);
+                let (result, carry, overflow, half_carry) = sub_bytes(acc, src);
+                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
             },
             //Instruction::CPD => {
             //},
@@ -195,16 +195,16 @@ impl Z80 {
             Instruction::DEC16(regpair) => {
                 let value = self.get_register_pair_value(regpair);
 
-                let (result, _, _) = sub_words(value, 1);
+                let (result, _, _, _) = sub_words(value, 1);
 
                 self.set_register_pair_value(regpair, result);
             },
             Instruction::DEC8(target) => {
                 let value = self.get_target_value(target)?;
 
-                let (result, _, overflow) = sub_bytes(value, 1);
+                let (result, _, overflow, half_carry) = sub_bytes(value, 1);
                 let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, (result & 0x10) != 0);
+                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
 
                 self.set_target_value(target, result)?;
             },
@@ -266,9 +266,9 @@ impl Z80 {
             Instruction::INC8(target) => {
                 let value = self.get_target_value(target)?;
 
-                let (result, _, overflow, _) = add_bytes(value, 1);
+                let (result, _, overflow, half_carry) = add_bytes(value, 1);
                 let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, (result & 0x10) != 0);
+                self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, half_carry);
 
                 self.set_target_value(target, result)?;
             },
@@ -347,8 +347,8 @@ impl Z80 {
             Instruction::NEG => {
                 let acc = self.get_register_value(Register::A);
 
-                let (result, carry, overflow) = sub_bytes(0, acc);
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, (acc & 0x10) != 0 && (result & 0x10) == 0);
+                let (result, carry, overflow, half_carry) = sub_bytes(0, acc);
+                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
 
                 self.set_register_value(Register::A, result);
             },
@@ -484,9 +484,9 @@ impl Z80 {
                 let src = self.get_target_value(target)?;
                 let acc = self.get_register_value(Register::A);
 
-                let (result1, carry1, overflow1) = sub_bytes(acc, src);
-                let (result2, carry2, overflow2) = sub_bytes(result1, self.get_flag(Flags::Carry) as u8);
-                self.set_arithmetic_op_flags(result2 as u16, Size::Byte, true, carry1 | carry2, overflow1 ^ overflow2, (result2 & 0x10) != 0);
+                let (result1, carry1, overflow1, half_carry1) = sub_bytes(acc, src);
+                let (result2, carry2, overflow2, half_carry2) = sub_bytes(result1, self.get_flag(Flags::Carry) as u8);
+                self.set_arithmetic_op_flags(result2 as u16, Size::Byte, true, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
 
                 self.set_register_value(Register::A, result2);
             },
@@ -494,9 +494,9 @@ impl Z80 {
                 let src = self.get_register_pair_value(src_pair);
                 let dest = self.get_register_pair_value(dest_pair);
 
-                let (result1, carry1, overflow1) = sub_words(dest, self.get_flag(Flags::Carry) as u16);
-                let (result2, carry2, overflow2) = sub_words(result1, src);
-                self.set_arithmetic_op_flags(result2, Size::Word, true, carry1 | carry2, overflow1 ^ overflow2, (result2 & 0x10) != 0);
+                let (result1, carry1, overflow1, half_carry1) = sub_words(dest, self.get_flag(Flags::Carry) as u16);
+                let (result2, carry2, overflow2, half_carry2) = sub_words(result1, src);
+                self.set_arithmetic_op_flags(result2, Size::Word, true, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
 
                 self.set_register_pair_value(dest_pair, result2);
             },
@@ -558,8 +558,8 @@ impl Z80 {
                 let src = self.get_target_value(target)?;
                 let acc = self.get_register_value(Register::A);
 
-                let (result, carry, overflow) = sub_bytes(acc, src);
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, (result & 0x10) != 0);
+                let (result, carry, overflow, half_carry) = sub_bytes(acc, src);
+                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
 
                 self.set_register_value(Register::A, result);
             },
@@ -859,28 +859,29 @@ impl Z80 {
 fn add_bytes(operand1: u8, operand2: u8) -> (u8, bool, bool, bool) {
     let (result, carry) = operand1.overflowing_add(operand2);
     let overflow = (operand1 & 0x80) == (operand2 & 0x80) && (operand1 & 0x80) != (result & 0x80);
-    let half_carry = (operand1 & 0x10) != 0 && (result & 0x10) == 0;
+    let half_carry = (operand1 & 0x0F) + (operand2 & 0x0F) >= 0x10;
     (result, carry, overflow, half_carry)
 }
 
 fn add_words(operand1: u16, operand2: u16) -> (u16, bool, bool, bool) {
     let (result, carry) = operand1.overflowing_add(operand2);
     let overflow = (operand1 & 0x8000) == (operand2 & 0x8000) && (operand1 & 0x8000) != (result & 0x8000);
-    // TODO this is probably still wrong
-    let half_carry = (operand1 & 0x10) != 0 && (result & 0x10) == 0;
+    let half_carry = (operand1 & 0x0FFF) + (operand2 & 0x0FFF) >= 0x1000;
     (result, carry, overflow, half_carry)
 }
 
-fn sub_bytes(operand1: u8, operand2: u8) -> (u8, bool, bool) {
+fn sub_bytes(operand1: u8, operand2: u8) -> (u8, bool, bool, bool) {
     let (result, carry) = operand1.overflowing_sub(operand2);
     let overflow = (operand1 & 0x80) != (operand2 & 0x80) && (operand1 & 0x80) != (result & 0x80);
-    (result, carry, overflow)
+    let half_carry = (operand1 & 0x0F) < (operand2 & 0x0F);
+    (result, carry, overflow, half_carry)
 }
 
-fn sub_words(operand1: u16, operand2: u16) -> (u16, bool, bool) {
+fn sub_words(operand1: u16, operand2: u16) -> (u16, bool, bool, bool) {
     let (result, carry) = operand1.overflowing_sub(operand2);
     let overflow = (operand1 & 0x8000) != (operand2 & 0x8000) && (operand1 & 0x8000) != (result & 0x8000);
-    (result, carry, overflow)
+    let half_carry = (operand1 & 0x0FFF) < (operand2 & 0x0FFF);
+    (result, carry, overflow, half_carry)
 }
 
 #[inline(always)]
