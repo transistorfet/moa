@@ -423,14 +423,13 @@ fn is_undocumented_instruction(name: &str) -> bool {
         },
         (0xDD, op) |
         (0xFD, op) => {
-            let upper3 = op & 0x70;
-            let upper4 = op & 0xF0;
+            let upper = op & 0xF0;
             let lower = op & 0x0F;
-            !(lower == 0x06 && upper3 >= 0x30 && upper3 <= 0x60) &&
-            !(lower == 0x0E && upper4 >= 0x40 && upper3 <= 0xB0) &&
+            !(lower == 0x06 && upper >= 0x30 && upper <= 0xB0 && upper != 0x70) &&
+            !(lower == 0x0E && upper >= 0x40 && upper <= 0xB0) &&
             !(op >= 0x70 && op <= 0x77 && op != 0x76) &&
             !(op >= 0x21 && op <= 0x23 && op >= 0x34 && op <= 0x36 && op >= 0x29 && op <= 0x2B) &&
-            !(lower == 0x09 && upper4 <= 0x30) &&
+            !(lower == 0x09 && upper <= 0x30) &&
             !(op == 0xE1 || op == 0xE3 || op == 0xE5 || op == 0xE9 || op == 0xF9)
         },
         (0xED, op) => {

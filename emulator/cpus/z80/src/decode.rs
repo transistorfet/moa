@@ -517,7 +517,7 @@ impl Z80Decoder {
         match get_ins_x(ins) {
             0 => {
                 if (ins & 0x0F) == 9 {
-                    return Ok(Instruction::ADD16(RegisterPair::IX, get_register_pair_index(get_ins_p(ins), index_reg)));
+                    return Ok(Instruction::ADD16(index_reg.into(), get_register_pair_index(get_ins_p(ins), index_reg)));
                 }
 
                 match get_ins_p(ins) {
@@ -525,11 +525,11 @@ impl Z80Decoder {
                         match get_ins_z(ins) {
                             1 => {
                                 let data = self.read_instruction_word(memory)?;
-                                Ok(Instruction::LD(LoadTarget::DirectRegWord(get_register_pair_from_index(index_reg)), LoadTarget::ImmediateWord(data)))
+                                Ok(Instruction::LD(LoadTarget::DirectRegWord(index_reg.into()), LoadTarget::ImmediateWord(data)))
                             },
                             2 => {
                                 let addr = self.read_instruction_word(memory)?;
-                                let regpair = get_register_pair_from_index(index_reg);
+                                let regpair = index_reg.into();
                                 match get_ins_q(ins) != 0 {
                                     false => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(regpair))),
                                     true => Ok(Instruction::LD(LoadTarget::DirectRegWord(regpair), LoadTarget::IndirectWord(addr))),
@@ -537,8 +537,8 @@ impl Z80Decoder {
                             },
                             3 => {
                                 match get_ins_q(ins) != 0 {
-                                    false => Ok(Instruction::INC16(get_register_pair_from_index(index_reg))),
-                                    true => Ok(Instruction::DEC16(get_register_pair_from_index(index_reg))),
+                                    false => Ok(Instruction::INC16(index_reg.into())),
+                                    true => Ok(Instruction::DEC16(index_reg.into())),
                                 }
                             },
                             4 => {
@@ -650,11 +650,11 @@ impl Z80Decoder {
             },
             3 => {
                 match ins {
-                    0xE1 => Ok(Instruction::POP(get_register_pair_from_index(index_reg))),
-                    0xE3 => Ok(Instruction::EXsp(get_register_pair_from_index(index_reg))),
-                    0xE5 => Ok(Instruction::PUSH(get_register_pair_from_index(index_reg))),
-                    0xE9 => Ok(Instruction::JPIndirect(get_register_pair_from_index(index_reg))),
-                    0xF9 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::SP), LoadTarget::DirectRegWord(get_register_pair_from_index(index_reg)))),
+                    0xE1 => Ok(Instruction::POP(index_reg.into())),
+                    0xE3 => Ok(Instruction::EXsp(index_reg.into())),
+                    0xE5 => Ok(Instruction::PUSH(index_reg.into())),
+                    0xE9 => Ok(Instruction::JPIndirect(index_reg.into())),
+                    0xF9 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::SP), LoadTarget::DirectRegWord(index_reg.into()))),
                     _ => Ok(Instruction::NOP),
                 }
             },
@@ -717,6 +717,15 @@ impl Z80Decoder {
                     return;
                 },
             }
+        }
+    }
+}
+
+impl From<IndexRegister> for RegisterPair {
+    fn from(value: IndexRegister) -> Self {
+        match value {
+            IndexRegister::IX => RegisterPair::IX,
+            IndexRegister::IY => RegisterPair::IY,
         }
     }
 }
@@ -787,7 +796,7 @@ fn get_register_pair_index(reg: u8, index_reg: IndexRegister) -> RegisterPair {
     match reg {
         0 => RegisterPair::BC,
         1 => RegisterPair::DE,
-        2 => get_register_pair_from_index(index_reg),
+        2 => index_reg.into(),
         3 => RegisterPair::SP,
         _ => panic!("InternalError: impossible value"),
     }
@@ -800,13 +809,6 @@ fn get_register_pair_alt(reg: u8) -> RegisterPair {
         2 => RegisterPair::HL,
         3 => RegisterPair::AF,
         _ => panic!("InternalError: impossible value"),
-    }
-}
-
-fn get_register_pair_from_index(reg: IndexRegister) -> RegisterPair {
-    match reg {
-        IndexRegister::IX => RegisterPair::IX,
-        IndexRegister::IY => RegisterPair::IY,
     }
 }
 

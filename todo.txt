@@ -3,6 +3,7 @@
 * you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
   in order to implement the correct behaviour for address exceptions in 68k, transparently
 
+* should you make Address a newtype and add From impls for each type of numeric, and add utils to wrap address at certain boundaries and such
 * should you make a means of storing different kinds of buses?
 * should you make buses hide their RcRefCell?
 
