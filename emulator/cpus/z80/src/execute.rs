@@ -280,12 +280,24 @@ impl Z80 {
             //},
             //Instruction::INIR => {
             //},
-            //Instruction::INic(reg) => {
-            //},
+            Instruction::INic(reg) => {
+                let b = self.get_register_value(Register::B);
+                let c = self.get_register_value(Register::C);
+                let value = self.get_ioport_value(b, c)?;
+
+                self.set_register_value(reg, value);
+                self.set_numeric_flags(value as u16, Size::Byte);
+                self.set_parity_flags(value);
+                self.set_flag(Flags::HalfCarry, false);
+                self.set_flag(Flags::AddSubtract, false);
+            },
             //Instruction::INicz => {
             //},
-            //Instruction::INx(u8) => {
-            //},
+            Instruction::INx(n) => {
+                let a = self.get_register_value(Register::A);
+                let value = self.get_ioport_value(a, n)?;
+                self.set_register_value(Register::A, value);
+            },
             Instruction::JP(addr) => {
                 self.state.pc = addr;
             },
@@ -368,13 +380,18 @@ impl Z80 {
             //},
             //Instruction::OUTI => {
             //},
-            //Instruction::OUTic(reg) => {
-            //},
+            Instruction::OUTic(reg) => {
+                let b = self.get_register_value(Register::B);
+                let c = self.get_register_value(Register::C);
+                let value = self.get_register_value(reg);
+                self.set_ioport_value(b, c, value)?;
+            },
             //Instruction::OUTicz => {
             //},
-            Instruction::OUTx(_port) => {
-                // TODO this needs to be fixed
-                //println!("OUT ({:x}), {:x} {}", port, self.state.reg[Register::A as usize], self.state.reg[Register::A as usize] as char);
+            Instruction::OUTx(n) => {
+                let a = self.get_register_value(Register::A);
+                let value = self.get_register_value(Register::A);
+                self.set_ioport_value(a, n, value)?;
             },
             Instruction::POP(regpair) => {
                 let value = self.pop_word()?;
@@ -395,10 +412,12 @@ impl Z80 {
             Instruction::RET => {
                 self.state.pc = self.pop_word()?;
             },
-            //Instruction::RETI => {
-            //},
-            //Instruction::RETN => {
-            //},
+            Instruction::RETI => {
+                self.state.pc = self.pop_word()?;
+            },
+            Instruction::RETN => {
+                self.state.pc = self.pop_word()?;
+            },
             Instruction::RETcc(cond) => {
                 if self.get_current_condition(cond) {
                     self.state.pc = self.pop_word()?;
@@ -724,6 +743,23 @@ impl Z80 {
                 self.port.write_u8(self.current_clock, addr as Address, value)?;
             },
             _ => panic!("Unsupported LoadTarget for set"),
+        }
+        Ok(())
+    }
+
+    fn get_ioport_value(&mut self, upper: u8, lower: u8) -> Result<u8, Error> {
+        let addr = ((upper as Address) << 8) | (lower as Address);
+        if let Some(io) = self.ioport.as_mut() {
+            Ok(io.read_u8(self.current_clock, addr)?)
+        } else {
+            Ok(0)
+        }
+    }
+
+    fn set_ioport_value(&mut self, upper: u8, lower: u8, value: u8) -> Result<(), Error> {
+        let addr = ((upper as Address) << 8) | (lower as Address);
+        if let Some(io) = self.ioport.as_mut() {
+            io.write_u8(self.current_clock, addr, value)?
         }
         Ok(())
     }

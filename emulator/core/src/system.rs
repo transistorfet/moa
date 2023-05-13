@@ -21,6 +21,7 @@ pub struct System {
     pub debugger: RefCell<Debugger>,
 
     pub bus: Rc<RefCell<Bus>>,
+    pub buses: HashMap<String, Rc<RefCell<Bus>>>,
     pub interrupt_controller: RefCell<InterruptController>,
 
     pub break_signal: Option<EdgeSignal>,
@@ -37,6 +38,7 @@ impl Default for System {
             debugger: RefCell::new(Debugger::default()),
 
             bus: Rc::new(RefCell::new(Bus::default())),
+            buses: HashMap::new(),
             interrupt_controller: RefCell::new(InterruptController::default()),
 
             break_signal: None,

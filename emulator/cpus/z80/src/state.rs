@@ -112,13 +112,14 @@ pub struct Z80 {
     pub decoder: Z80Decoder,
     pub debugger: Z80Debugger,
     pub port: BusPort,
+    pub ioport: Option<BusPort>,
     pub reset: Signal<bool>,
     pub bus_request: Signal<bool>,
     pub current_clock: ClockTime,
 }
 
 impl Z80 {
-    pub fn new(cputype: Z80Type, frequency: Frequency, port: BusPort) -> Self {
+    pub fn new(cputype: Z80Type, frequency: Frequency, port: BusPort, ioport: Option<BusPort>) -> Self {
         Self {
             cputype,
             frequency,
@@ -126,6 +127,7 @@ impl Z80 {
             decoder: Z80Decoder::default(),
             debugger: Z80Debugger::default(),
             port,
+            ioport,
             reset: Signal::new(false),
             bus_request: Signal::new(false),
             current_clock: ClockTime::START,

@@ -1,4 +1,11 @@
 
+* I like making address adapters like this (below)
+* you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
+  in order to implement the correct behaviour for address exceptions in 68k, transparently
+
+* should you make a means of storing different kinds of buses?
+* should you make buses hide their RcRefCell?
+
 * address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
 * sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
 * make the ym generate audio in sync so the DAC timings can be more accurate

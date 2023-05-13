@@ -14,7 +14,7 @@ fn init_decode_test() -> (Z80, System) {
     system.add_addressable_device(0x0000, wrap_transmutable(mem)).unwrap();
 
     // Initialize the CPU and make sure it's in the expected state
-    let mut cpu = Z80::new(Z80Type::Z80, Frequency::from_mhz(4), BusPort::new(0, 16, 8, system.bus.clone()));
+    let mut cpu = Z80::new(Z80Type::Z80, Frequency::from_mhz(4), BusPort::new(0, 16, 8, system.bus.clone()), None);
     cpu.init().unwrap();
 
     (cpu, system)

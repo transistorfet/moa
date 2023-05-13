@@ -1,6 +1,8 @@
 
 const DEFAULT_RAD_TESTS: &str = "tests/jsmoo/misc/tests/GeneratedTests/z80/v1/";
 
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::io::prelude::*;
 use std::fmt::{Debug, UpperHex};
 use std::path::PathBuf;
@@ -11,7 +13,7 @@ use clap::{Parser, ArgEnum};
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 
-use moa_core::{System, Error, MemoryBlock, BusPort, Frequency, Address, Addressable, Steppable, wrap_transmutable};
+use moa_core::{System, Error, MemoryBlock, Bus, BusPort, Frequency, Address, Addressable, Steppable, wrap_transmutable};
 
 use moa_z80::{Z80, Z80Type};
 use moa_z80::state::Flags;
@@ -88,12 +90,21 @@ struct TestState {
 }
 
 #[derive(Debug, Deserialize)]
+struct TestPort {
+    addr: u16,
+    value: u8,
+    atype: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct TestCase {
     name: String,
     #[serde(rename(deserialize = "initial"))]
     initial_state: TestState,
     #[serde(rename(deserialize = "final"))]
     final_state: TestState,
+    #[serde(default)]
+    ports: Vec<TestPort>,
 }
 
 impl TestState {
@@ -123,25 +134,36 @@ impl TestCase {
         self.initial_state.dump();
         println!("final:");
         self.final_state.dump();
+
+        println!("ports: ");
+        for port in self.ports.iter() {
+            println!("{:04x} {:02x} {}", port.addr, port.value, port.atype);
+        }
     }
 }
 
 
-fn init_execute_test(cputype: Z80Type, state: &TestState) -> Result<(Z80, System), Error> {
+fn init_execute_test(cputype: Z80Type, state: &TestState, ports: &[TestPort]) -> Result<(Z80, System, Rc<RefCell<Bus>>), Error> {
     let mut system = System::default();
 
     // Insert basic initialization
-    let data = vec![0; 0x01000000];
-    let mem = MemoryBlock::new(data);
+    let mem = MemoryBlock::new(vec![0; 0x1_0000]);
     system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
 
+    // Set up IOREQ as memory space
+    let io_ram = wrap_transmutable(MemoryBlock::new(vec![0; 0x10000]));
+    let io_bus = Rc::new(RefCell::new(Bus::default()));
+    io_bus.borrow_mut().set_ignore_unmapped(true);
+    io_bus.borrow_mut().insert(0x0000, io_ram.clone());
+
     let port = BusPort::new(0, 16, 8, system.bus.clone());
-    let mut cpu = Z80::new(cputype, Frequency::from_mhz(10), port);
+    let ioport = BusPort::new(0, 16, 8, io_bus.clone());
+    let mut cpu = Z80::new(cputype, Frequency::from_mhz(10), port, Some(ioport));
     cpu.state.status = Status::Running;
 
-    load_state(&mut cpu, &mut system, state)?;
+    load_state(&mut cpu, &mut system, io_bus.clone(), state, ports)?;
 
-    Ok((cpu, system))
+    Ok((cpu, system, io_bus))
 }
 
 fn assert_value<T>(actual: T, expected: T, message: &str) -> Result<(), Error>
@@ -155,7 +177,7 @@ where
     }
 }
 
-fn load_state(cpu: &mut Z80, system: &mut System, initial: &TestState) -> Result<(), Error> {
+fn load_state(cpu: &mut Z80, system: &mut System, io_bus: Rc<RefCell<Bus>>, initial: &TestState, ports: &[TestPort]) -> Result<(), Error> {
     cpu.state.reg[0] = initial.b;
     cpu.state.reg[1] = initial.c;
     cpu.state.reg[2] = initial.d;
@@ -183,12 +205,17 @@ fn load_state(cpu: &mut Z80, system: &mut System, initial: &TestState) -> Result
         system.get_bus().write_u8(system.clock, *addr as u64, *byte)?;
     }
 
+    // Load data bytes into io space
+    for port in ports.iter() {
+        io_bus.borrow_mut().write_u8(system.clock, port.addr as u64, port.value)?;
+    }
+
     Ok(())
 }
 
 const IGNORE_FLAG_MASK: u8 = Flags::F3 as u8 | Flags::F5 as u8;
 
-fn assert_state(cpu: &Z80, system: &System, expected: &TestState, check_extra_flags: bool) -> Result<(), Error> {
+fn assert_state(cpu: &Z80, system: &System, io_bus: Rc<RefCell<Bus>>, expected: &TestState, check_extra_flags: bool, ports: &[TestPort]) -> Result<(), Error> {
     assert_value(cpu.state.reg[0], expected.b, "b")?;
     assert_value(cpu.state.reg[1], expected.c, "c")?;
     assert_value(cpu.state.reg[2], expected.d, "d")?;
@@ -223,22 +250,30 @@ fn assert_state(cpu: &Z80, system: &System, expected: &TestState, check_extra_fl
         assert_value(actual, *byte, &format!("ram at {:x}", addr))?;
     }
 
+    // Load data bytes into io space
+    for port in ports.iter() {
+        if port.atype == "w" {
+            let actual = io_bus.borrow_mut().read_u8(system.clock, port.addr as u64)?;
+            assert_value(actual, port.value, &format!("port value at {:x}", port.addr))?;
+        }
+    }
+
     Ok(())
 }
 
-fn step_cpu_and_assert(cpu: &mut Z80, system: &System, case: &TestCase, check_extra_flags: bool) -> Result<(), Error> {
+fn step_cpu_and_assert(cpu: &mut Z80, system: &System, io_bus: Rc<RefCell<Bus>>, case: &TestCase, check_extra_flags: bool) -> Result<(), Error> {
     let _clock_elapsed = cpu.step(&system)?;
 
-    assert_state(&cpu, &system, &case.final_state, check_extra_flags)?;
+    assert_state(&cpu, &system, io_bus, &case.final_state, check_extra_flags, &case.ports)?;
 
     Ok(())
 }
 
 fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
-    let (mut cpu, system) = init_execute_test(Z80Type::Z80, &case.initial_state).unwrap();
+    let (mut cpu, system, io_bus) = init_execute_test(Z80Type::Z80, &case.initial_state, &case.ports).unwrap();
     let mut initial_cpu = cpu.clone();
 
-    let result = step_cpu_and_assert(&mut cpu, &system, case, args.check_extra_flags);
+    let result = step_cpu_and_assert(&mut cpu, &system, io_bus, case, args.check_extra_flags);
 
     match result {
         Ok(()) => Ok(()),

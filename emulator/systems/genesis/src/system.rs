@@ -82,7 +82,7 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     coproc_bus.borrow_mut().insert(0x6000, coproc_register.clone());
     coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
     coproc_bus.borrow_mut().insert(0x8000, coproc_area);
-    let mut coproc = Z80::new(Z80Type::Z80, Frequency::from_hz(3_579_545), BusPort::new(0, 16, 8, coproc_bus));
+    let mut coproc = Z80::new(Z80Type::Z80, Frequency::from_hz(3_579_545), BusPort::new(0, 16, 8, coproc_bus), None);
     coproc.set_debugging(true);
     let mut reset = coproc.reset.clone();
     let mut bus_request = coproc.bus_request.clone();

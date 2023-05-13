@@ -42,7 +42,8 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
     let video = Model1Video::new(host)?;
     system.add_addressable_device(0x37E0 + 0x420, wrap_transmutable(video)).unwrap();
 
-    let cpu = Z80::new(Z80Type::Z80, options.frequency, BusPort::new(0, 16, 8, system.bus.clone()));
+    // TODO the ioport needs to be hooked up
+    let cpu = Z80::new(Z80Type::Z80, options.frequency, BusPort::new(0, 16, 8, system.bus.clone()), None);
     //cpu.add_breakpoint(0x0);
     //cpu.add_breakpoint(0xb55);
     //cpu.add_breakpoint(0xb76);
