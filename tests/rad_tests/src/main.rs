@@ -41,6 +41,9 @@ struct Args {
     /// Check the Half Carry, F3, and F5 flags for accuracy
     #[clap(short = 'f', long)]
     check_extra_flags: bool,
+    /// Check undocumented instructions
+    #[clap(short = 'u', long)]
+    check_undocumented: bool,
     /// Directory to the test suite to run
     #[clap(long, default_value = DEFAULT_RAD_TESTS)]
     testsuite: String,
@@ -329,11 +332,17 @@ fn run_all_tests(args: &Args) {
             continue;
         }
 
+        let name = path.file_name().unwrap().to_str().unwrap();
+
         // If specified, only test files that start with a given string
         if let Some(filter) = &args.filter {
-            if !path.file_name().unwrap().to_str().unwrap().starts_with(filter) {
+            if !name.starts_with(filter) {
                 continue;
             }
+        }
+
+        if !args.check_undocumented && is_undocumented_instruction(name) {
+            continue;
         }
 
         // Run every test in the file
@@ -360,5 +369,40 @@ fn run_all_tests(args: &Args) {
     println!("");
     println!("passed: {}, failed: {}, total {:.0}%", passed, failed, ((passed as f32) / (passed as f32 + failed as f32)) * 100.0);
     println!("completed in {}m {}s", elapsed_secs / 60, elapsed_secs % 60);
+}
+
+fn is_undocumented_instruction(name: &str) -> bool {
+    let mut opcodes: Vec<u8> = name
+        .splitn(3, &[' ', '.'])
+        .filter_map(|s| u8::from_str_radix(s, 16).ok())
+        .collect();
+    opcodes.extend(vec![0; 3 - opcodes.len()]);
+
+    match (opcodes[0], opcodes[1]) {
+        (0xCB, _) => {
+            opcodes[1] >= 0x30 && opcodes[1] <= 0x37
+        },
+        (0xDD, 0xCB) |
+        (0xFD, 0xCB) => {
+            !(opcodes[2] & 0x07 == 0x06 && opcodes[2] != 0x36)
+        },
+        (0xDD, _) |
+        (0xFD, _) => {
+            let op = opcodes[1];
+            let upper3 = op & 0x70;
+            let upper4 = op & 0xF0;
+            let lower = op & 0x0F;
+            !(lower == 0x06 && upper3 >= 0x30 && upper3 <= 0x60) &&
+            !(lower == 0x0E && upper4 >= 0x40 && upper3 <= 0xB0) &&
+            !(op >= 0x70 && op <= 0x77 && op != 0x76) &&
+            !(op >= 0x21 && op <= 0x23 && op >= 0x34 && op <= 0x36 && op >= 0x29 && op <= 0x2B) &&
+            !(lower == 0x09 && upper4 <= 0x30) &&
+            !(op == 0xE1 || op == 0xE3 || op == 0xE5 || op == 0xE9 || op == 0xF9)
+        },
+        //0xED => {
+
+        //},
+        _ => false
+    }
 }
 
