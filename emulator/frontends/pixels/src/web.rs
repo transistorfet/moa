@@ -150,7 +150,6 @@ pub fn run_system_for(handle: &mut SystemHandle, nanos: u32) -> usize {
 
 pub fn create_window<T>(event_loop: &EventLoop<T>) -> Rc<Window> {
     use web_sys::HtmlCanvasElement;
-    use wasm_bindgen::JsCast;
     use winit::platform::web::{WindowExtWebSys, WindowBuilderExtWebSys};
 
     let canvas = web_sys::window()

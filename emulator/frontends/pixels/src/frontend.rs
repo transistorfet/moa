@@ -1,6 +1,4 @@
 
-use std::rc::Rc;
-
 use instant::Instant;
 use pixels::{Pixels, SurfaceTexture};
 use winit::event::{Event, VirtualKeyCode, WindowEvent, ElementState};
@@ -110,7 +108,7 @@ pub async fn run_loop(host: PixelsFrontend) {
                     pixels.resize_buffer(last_frame.width, last_frame.height);
                 }
 
-                let buffer = pixels.get_frame();
+                let buffer = pixels.frame_mut();
                 buffer.copy_from_slice(unsafe { std::slice::from_raw_parts(last_frame.bitmap.as_ptr() as *const u8, last_frame.bitmap.len() * 4) });
             }
 
@@ -159,7 +157,7 @@ pub async fn run_loop(host: PixelsFrontend) {
         // Check if the run flag is no longer true, and exit the loop
         if !settings::get().run {
             // Clear the screen
-            let buffer = pixels.get_frame();
+            let buffer = pixels.frame_mut();
             buffer.iter_mut().for_each(|byte| *byte = 0);
 
             if pixels

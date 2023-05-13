@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 log = "0.4"
-pixels = "0.9"
-winit = "0.26"
+pixels = "0.12"
+winit = "0.28"
 
 moa_core = { path = "../../core" }
 moa_common = { path = "../common", features = ["audio"] }
@@ -15,12 +15,12 @@ moa_systems_genesis = { path = "../../systems/genesis" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"
-console_log = "0.2"
-wasm-bindgen = "0.2.78"
+console_log = "1.0"
+wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3"
-wgpu = { version = "0.12", features = ["webgl"] }
-instant = { version = "0.1", features = [ "stdweb" ] }
+wgpu = { version = "0.15", features = ["webgl"] }
+instant = { version = "0.1", features = [ "wasm-bindgen" ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.9"
