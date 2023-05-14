@@ -3,6 +3,7 @@ use moa_core::{ClockTime, Address, BusPort, Signal, Frequency};
 
 use crate::decode::Z80Decoder;
 use crate::debugger::Z80Debugger;
+use crate::instructions::{Register, InterruptMode};
 
 
 #[allow(dead_code)]
@@ -18,26 +19,6 @@ pub enum Status {
     Halted,
 }
 
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum InterruptMode {
-    Mode0,
-    Mode1,
-    Mode2,
-    Unknown(u8),
-}
-
-impl From<u8> for InterruptMode {
-    fn from(im: u8) -> Self {
-        match im {
-            0 => InterruptMode::Mode0,
-            1 => InterruptMode::Mode1,
-            2 => InterruptMode::Mode2,
-            _ => InterruptMode::Unknown(im),
-        }
-    }
-}
-
 #[repr(u8)]
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -51,20 +32,6 @@ pub enum Flags {
     Zero        = 0x40,
     Sign        = 0x80,
 }
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Register {
-    B = 0,
-    C = 1,
-    D = 2,
-    E = 3,
-    H = 4,
-    L = 5,
-    A = 6,
-    F = 7,
-}
-
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Z80State {

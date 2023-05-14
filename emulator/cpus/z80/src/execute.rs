@@ -1,8 +1,8 @@
 
 use moa_core::{System, Error, ErrorType, ClockDuration, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
-use crate::decode::{Condition, Instruction, LoadTarget, Target, RegisterPair, IndexRegister, SpecialRegister, IndexRegisterHalf, Size, Direction};
-use crate::state::{Z80, Status, Flags, Register};
+use crate::instructions::{Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister, IndexRegisterHalf, Size, Direction, UndocumentedCopy};
+use crate::state::{Z80, Status, Flags};
 
 
 const DEV_NAME: &str = "z80-cpu";
@@ -16,7 +16,6 @@ enum RotateType {
     Bit8,
     Bit9,
 }
-
 
 impl Steppable for Z80 {
     fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
@@ -101,84 +100,16 @@ impl Z80 {
 
     pub fn execute_current(&mut self) -> Result<(), Error> {
         match self.decoder.instruction {
-            Instruction::ADCa(target) => {
-                let src = self.get_target_value(target)?;
-                let acc = self.get_register_value(Register::A);
-
-                let (result1, carry1, overflow1, half_carry1) = add_bytes(acc, self.get_flag(Flags::Carry) as u8);
-                let (result2, carry2, overflow2, half_carry2) = add_bytes(result1, src);
-                self.set_arithmetic_op_flags(result2 as u16, Size::Byte, false, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
-
-                self.set_register_value(Register::A, result2);
-            },
-            Instruction::ADC16(dest_pair, src_pair) => {
-                let src = self.get_register_pair_value(src_pair);
-                let dest = self.get_register_pair_value(dest_pair);
-
-                let (result1, carry1, overflow1, half_carry1) = add_words(dest, src);
-                let (result2, carry2, overflow2, half_carry2) = add_words(result1, self.get_flag(Flags::Carry) as u16);
-                self.set_arithmetic_op_flags(result2, Size::Word, false, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
-
-                self.set_register_pair_value(dest_pair, result2);
-            },
-            Instruction::ADDa(target) => {
-                let src = self.get_target_value(target)?;
-                let acc = self.get_register_value(Register::A);
-
-                let (result, carry, overflow, half_carry) = add_bytes(acc, src);
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, half_carry);
-
-                self.set_register_value(Register::A, result);
-            },
-            Instruction::ADD16(dest_pair, src_pair) => {
-                let src = self.get_register_pair_value(src_pair);
-                let dest = self.get_register_pair_value(dest_pair);
-
-                let (result, carry, _, half_carry) = add_words(dest, src);
-                self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::Carry, carry);
-                self.set_flag(Flags::HalfCarry, half_carry);
-
-                self.set_register_pair_value(dest_pair, result);
-            },
-            Instruction::AND(target) => {
-                let acc = self.get_register_value(Register::A);
-                let value = self.get_target_value(target)?;
-                let result = acc & value;
-                self.set_register_value(Register::A, result);
-                self.set_logic_op_flags(result, false, true);
-            },
-            Instruction::BIT(bit, target) => {
-                let value = self.get_target_value(target)?;
-                let result = value & (1 << bit);
-                self.set_flag(Flags::Zero, result == 0);
-                self.set_flag(Flags::Sign, bit == 7 && result != 0);
-                self.set_flag(Flags::Parity, result == 0);
-                self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::HalfCarry, true);
-            },
-            Instruction::CALL(addr) => {
-                self.push_word(self.decoder.end)?;
-                self.state.pc = addr;
-            },
-            Instruction::CALLcc(cond, addr) => {
-                if self.get_current_condition(cond) {
-                    self.push_word(self.decoder.end)?;
-                    self.state.pc = addr;
-                }
-            },
-            Instruction::CCF => {
-                self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::HalfCarry, self.get_flag(Flags::Carry));
-                self.set_flag(Flags::Carry, !self.get_flag(Flags::Carry));
-            },
-            Instruction::CP(target) => {
-                let src = self.get_target_value(target)?;
-                let acc = self.get_register_value(Register::A);
-
-                let (result, carry, overflow, half_carry) = sub_bytes(acc, src);
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
-            },
+            Instruction::ADCa(target) => self.execute_adca(target),
+            Instruction::ADC16(dest_pair, src_pair) => self.execute_adc16(dest_pair, src_pair),
+            Instruction::ADDa(target) => self.execute_adda(target),
+            Instruction::ADD16(dest_pair, src_pair) => self.execute_add16(dest_pair, src_pair),
+            Instruction::AND(target) => self.execute_and(target),
+            Instruction::BIT(bit, target) => self.execute_bit(bit, target),
+            Instruction::CALL(addr) => self.execute_call(addr),
+            Instruction::CALLcc(cond, addr) => self.execute_callcc(cond, addr),
+            Instruction::CCF => self.execute_ccf(),
+            Instruction::CP(target) => self.execute_cp(target),
             //Instruction::CPD => {
             //},
             //Instruction::CPDR => {
@@ -187,255 +118,45 @@ impl Z80 {
             //},
             //Instruction::CPIR => {
             //},
-            Instruction::CPL => {
-                let value = self.get_register_value(Register::A);
-                self.set_register_value(Register::A, !value);
-                self.set_flag(Flags::HalfCarry, true);
-                self.set_flag(Flags::AddSubtract, true);
-            },
-            Instruction::DAA => {
-                // From <http://z80-heaven.wikidot.com/instructions-set:daa>
-                // if the least significant four bits of A contain a non-BCD digit (i. e. it is
-                // greater than 9) or the H flag is set, then $06 is added to the register. Then
-                // the four most significant bits are checked. If this more significant digit
-                // also happens to be greater than 9 or the C flag is set, then $60 is added.
-
-                // From <http://www.z80.info/zip/z80-documented.pdf>
-                //
-                // CF |  high  | HF |  low   | diff
-                //    | nibble |    | nibble |
-                //----------------------------------
-                //  0 |    0-9 |  0 |    0-9 |  00
-                //  0 |    0-9 |  1 |    0-9 |  06
-                //  0 |    0-8 |  * |    a-f |  06
-                //  0 |    a-f |  0 |    0-9 |  60
-                //  1 |      * |  0 |    0-9 |  60
-                //  1 |      * |  1 |    0-9 |  66
-                //  1 |      * |  * |    a-f |  66
-                //  0 |    9-f |  * |    a-f |  66
-                //  0 |    a-f |  1 |    0-9 |  66
-
-                let mut value = self.get_register_value(Register::A);
-                let mut carry = false;
-                let mut half_carry = false;
-                if (value & 0x0F) > 9 || self.get_flag(Flags::HalfCarry) {
-                    let (result, _, _, half_carry1) = add_bytes(value, 6);
-                    value = result;
-                    half_carry = half_carry1;
-                }
-                if (value & 0xF0) > 0x90 || self.get_flag(Flags::Carry) {
-                    let (result, _, _, half_carry2) = add_bytes(value, 0x60);
-                    value = result;
-                    half_carry |= half_carry2;
-                    carry = true;
-                }
-                self.set_register_value(Register::A, value);
-
-                self.set_numeric_flags(value as u16, Size::Byte);
-                self.set_parity_flags(value);
-                self.set_flag(Flags::HalfCarry, half_carry);
-                self.set_flag(Flags::Carry, carry);
-            },
-            Instruction::DEC16(regpair) => {
-                let value = self.get_register_pair_value(regpair);
-
-                let (result, _, _, _) = sub_words(value, 1);
-
-                self.set_register_pair_value(regpair, result);
-            },
-            Instruction::DEC8(target) => {
-                let value = self.get_target_value(target)?;
-
-                let (result, _, overflow, half_carry) = sub_bytes(value, 1);
-                let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
-
-                self.set_target_value(target, result)?;
-            },
-            Instruction::DI => {
-                self.state.iff1 = false;
-                self.state.iff2 = false;
-            },
-            Instruction::DJNZ(offset) => {
-                let value = self.get_register_value(Register::B);
-                let result = value.wrapping_sub(1);
-                self.set_register_value(Register::B, result);
-
-                if result != 0 {
-                    self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
-                }
-            },
-            Instruction::EI => {
-                self.state.iff1 = true;
-                self.state.iff2 = true;
-            },
-            Instruction::EXX => {
-                for i in 0..6 {
-                    let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
-                    self.state.reg[i] = shadow;
-                    self.state.shadow_reg[i] = normal;
-                }
-            },
-            Instruction::EXafaf => {
-                for i in 6..8 {
-                    let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
-                    self.state.reg[i] = shadow;
-                    self.state.shadow_reg[i] = normal;
-                }
-            },
-            Instruction::EXhlde => {
-                let (hl, de) = (self.get_register_pair_value(RegisterPair::HL), self.get_register_pair_value(RegisterPair::DE));
-                self.set_register_pair_value(RegisterPair::DE, hl);
-                self.set_register_pair_value(RegisterPair::HL, de);
-            },
-            Instruction::EXsp(regpair) => {
-                let reg_value = self.get_register_pair_value(regpair);
-                let sp = self.get_register_pair_value(RegisterPair::SP);
-                let sp_value = self.read_port_u16(sp)?;
-                self.set_register_pair_value(regpair, sp_value);
-                self.write_port_u16(sp, reg_value)?;
-            },
-            Instruction::HALT => {
-                self.state.status = Status::Halted;
-                self.state.pc -= 1;
-            },
-            Instruction::IM(mode) => {
-                self.state.im = mode;
-            },
-            Instruction::INC16(regpair) => {
-                let value = self.get_register_pair_value(regpair);
-
-                let (result, _, _, _) = add_words(value, 1);
-
-                self.set_register_pair_value(regpair, result);
-            },
-            Instruction::INC8(target) => {
-                let value = self.get_target_value(target)?;
-
-                let (result, _, overflow, half_carry) = add_bytes(value, 1);
-                let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, half_carry);
-
-                self.set_target_value(target, result)?;
-            },
+            Instruction::CPL => self.execute_cpl(),
+            Instruction::DAA => self.execute_daa(),
+            Instruction::DEC16(regpair) => self.execute_dec16(regpair),
+            Instruction::DEC8(target) => self.execute_dec8(target),
+            Instruction::DI => self.execute_di(),
+            Instruction::DJNZ(offset) => self.execute_djnz(offset),
+            Instruction::EI => self.execute_ei(),
+            Instruction::EXX => self.execute_exx(),
+            Instruction::EXafaf => self.execute_ex_af_af(),
+            Instruction::EXhlde => self.execute_ex_hl_de(),
+            Instruction::EXsp(regpair) => self.execute_ex_sp(regpair),
+            Instruction::HALT => self.execute_halt(),
+            Instruction::IM(mode) => self.execute_im(mode),
+            Instruction::INC16(regpair) => self.execute_inc16(regpair),
+            Instruction::INC8(target) => self.execute_inc8(target),
             //Instruction::IND => {
             //},
             //Instruction::INDR => {
             //},
-            Instruction::INI => {
-                let b = self.get_register_value(Register::B);
-                let c = self.get_register_value(Register::C);
-                let value = self.get_ioport_value(b, c)?;
-
-                self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL), value as u16)?;
-                let hl = self.get_register_pair_value(RegisterPair::HL).wrapping_add(1);
-                self.set_register_pair_value(RegisterPair::HL, hl);
-                let b = self.get_register_value(Register::B).wrapping_sub(1);
-                self.set_register_value(Register::B, b);
-            },
+            Instruction::INI => self.execute_ini(),
             //Instruction::INIR => {
             //},
-            Instruction::INic(reg) => {
-                let b = self.get_register_value(Register::B);
-                let c = self.get_register_value(Register::C);
-                let value = self.get_ioport_value(b, c)?;
-
-                self.set_register_value(reg, value);
-                self.set_numeric_flags(value as u16, Size::Byte);
-                self.set_parity_flags(value);
-                self.set_flag(Flags::HalfCarry, false);
-                self.set_flag(Flags::AddSubtract, false);
-            },
+            Instruction::INic(reg) => self.execute_inic(reg),
             //Instruction::INicz => {
             //},
-            Instruction::INx(n) => {
-                let a = self.get_register_value(Register::A);
-                let value = self.get_ioport_value(a, n)?;
-                self.set_register_value(Register::A, value);
+            Instruction::INx(n) => self.execute_inx(n),
+            Instruction::JP(addr) => self.execute_jp(addr),
+            Instruction::JPIndirect(regpair) => self.execute_jp_indirect(regpair),
+            Instruction::JPcc(cond, addr) => self.execute_jpcc(cond, addr),
+            Instruction::JR(offset) => self.execute_jr(offset),
+            Instruction::JRcc(cond, offset) => self.execute_jrcc(cond, offset),
+            Instruction::LD(dest, src) => self.execute_ld(dest, src),
+            Instruction::LDsr(special_reg, dir) => self.execute_ldsr(special_reg, dir),
+            Instruction::LDD | Instruction::LDDR | Instruction::LDI | Instruction::LDIR => self.execute_ldx(),
+            Instruction::NEG => self.execute_neg(),
+            Instruction::NOP => {
+                Ok(())
             },
-            Instruction::JP(addr) => {
-                self.state.pc = addr;
-            },
-            Instruction::JPIndirect(regpair) => {
-                let value = self.get_register_pair_value(regpair);
-                self.state.pc = value;
-            },
-            Instruction::JPcc(cond, addr) => {
-                if self.get_current_condition(cond) {
-                    self.state.pc = addr;
-                }
-            },
-            Instruction::JR(offset) => {
-                self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
-            },
-            Instruction::JRcc(cond, offset) => {
-                if self.get_current_condition(cond) {
-                    self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
-                }
-            },
-            Instruction::LD(dest, src) => {
-                let src_value = self.get_load_target_value(src)?;
-                self.set_load_target_value(dest, src_value)?;
-            },
-            Instruction::LDsr(special_reg, dir) => {
-                let addr = match special_reg {
-                    SpecialRegister::I => &mut self.state.i,
-                    SpecialRegister::R => &mut self.state.r,
-                };
-
-                match dir {
-                    Direction::FromAcc => {
-                        *addr = self.state.reg[Register::A as usize];
-                    },
-                    Direction::ToAcc => {
-                        self.state.reg[Register::A as usize] = *addr;
-                        let value = self.state.reg[Register::A as usize];
-                        self.set_numeric_flags(value as u16, Size::Byte);
-                        self.set_flag(Flags::Parity, self.state.iff2);
-                        self.set_flag(Flags::AddSubtract, false);
-                        self.set_flag(Flags::HalfCarry, false);
-                    },
-                }
-
-            }
-            Instruction::LDD | Instruction::LDDR | Instruction::LDI | Instruction::LDIR => {
-                let diff = if self.decoder.instruction == Instruction::LDI || self.decoder.instruction == Instruction::LDIR {
-                    1
-                } else {
-                    -1
-                };
-
-                let src_value = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))?;
-                self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::DE), src_value)?;
-                self.add_to_regpair(RegisterPair::DE, diff);
-                self.add_to_regpair(RegisterPair::HL, diff);
-                let count = self.add_to_regpair(RegisterPair::BC, -1);
-                let mask = (Flags::AddSubtract as u8) | (Flags::HalfCarry as u8) | (Flags::Parity as u8);
-                let parity = if count != 0 { Flags::Parity as u8 } else { 0 };
-                self.set_flags(mask, parity);
-
-                if (self.decoder.instruction == Instruction::LDIR || self.decoder.instruction == Instruction::LDDR)
-                    && count != 0
-                {
-                    self.state.pc -= 2;
-                }
-            },
-            Instruction::NEG => {
-                let acc = self.get_register_value(Register::A);
-
-                let (result, carry, overflow, half_carry) = sub_bytes(0, acc);
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
-
-                self.set_register_value(Register::A, result);
-            },
-            Instruction::NOP => { },
-            Instruction::OR(target) => {
-                let acc = self.get_register_value(Register::A);
-                let value = self.get_target_value(target)?;
-                let result = acc | value;
-                self.set_register_value(Register::A, result);
-                self.set_logic_op_flags(result, false, false);
-            },
+            Instruction::OR(target) => self.execute_or(target),
             //Instruction::OTDR => {
             //},
             //Instruction::OTIR => {
@@ -444,252 +165,767 @@ impl Z80 {
             //},
             //Instruction::OUTI => {
             //},
-            Instruction::OUTic(reg) => {
-                let b = self.get_register_value(Register::B);
-                let c = self.get_register_value(Register::C);
-                let value = self.get_register_value(reg);
-                self.set_ioport_value(b, c, value)?;
-            },
+            Instruction::OUTic(reg) => self.execute_outic(reg),
             //Instruction::OUTicz => {
             //},
-            Instruction::OUTx(n) => {
-                let a = self.get_register_value(Register::A);
-                let value = self.get_register_value(Register::A);
-                self.set_ioport_value(a, n, value)?;
-            },
-            Instruction::POP(regpair) => {
-                let value = self.pop_word()?;
-                self.set_register_pair_value(regpair, value);
-            },
-            Instruction::PUSH(regpair) => {
-                let value = self.get_register_pair_value(regpair);
-                self.push_word(value)?;
-            },
-            Instruction::RES(bit, target, opt_copy) => {
-                let mut value = self.get_target_value(target)?;
-                value &= !(1 << bit);
-                self.set_target_value(target, value)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::RET => {
-                self.state.pc = self.pop_word()?;
-            },
-            Instruction::RETI => {
-                self.state.pc = self.pop_word()?;
-                self.state.iff1 = self.state.iff2;
-            },
-            Instruction::RETN => {
-                self.state.pc = self.pop_word()?;
-                self.state.iff1 = self.state.iff2;
-            },
-            Instruction::RETcc(cond) => {
-                if self.get_current_condition(cond) {
-                    self.state.pc = self.pop_word()?;
-                }
-            },
-            Instruction::RL(target, opt_copy) => {
-                let value = self.get_target_value(target)?;
-                let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::RLA => {
-                let value = self.get_register_value(Register::A);
-                let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
-                self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::HalfCarry, false);
-                self.set_flag(Flags::Carry, out_bit);
-                self.set_register_value(Register::A, result);
-            },
-            Instruction::RLC(target, opt_copy) => {
-                let value = self.get_target_value(target)?;
-                let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::RLCA => {
-                let value = self.get_register_value(Register::A);
-                let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
-                self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::HalfCarry, false);
-                self.set_flag(Flags::Carry, out_bit);
-                self.set_register_value(Register::A, result);
-            },
-            Instruction::RLD => {
-                let a = self.get_register_value(Register::A);
-                let mem = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))? as u8;
-
-                let lower_a = a & 0x0F;
-                let a = (a & 0xF0) | (mem >> 4);
-                let mem = (mem << 4) | lower_a;
-
-                self.set_register_value(Register::A, a);
-                self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL), mem as u16)?;
-
-                self.set_numeric_flags(a as u16, Size::Byte);
-                self.set_parity_flags(a);
-                self.set_flag(Flags::HalfCarry, false);
-                self.set_flag(Flags::AddSubtract, false);
-            },
-            Instruction::RR(target, opt_copy) => {
-                let value = self.get_target_value(target)?;
-                let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::RRA => {
-                let value = self.get_register_value(Register::A);
-                let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
-                self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::HalfCarry, false);
-                self.set_flag(Flags::Carry, out_bit);
-                self.set_register_value(Register::A, result);
-            },
-            Instruction::RRC(target, opt_copy) => {
-                let value = self.get_target_value(target)?;
-                let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::RRCA => {
-                let value = self.get_register_value(Register::A);
-                let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
-                self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::HalfCarry, false);
-                self.set_flag(Flags::Carry, out_bit);
-                self.set_register_value(Register::A, result);
-            },
-            Instruction::RRD => {
-                let a = self.get_register_value(Register::A);
-                let mem = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))? as u8;
-
-                let lower_mem = mem & 0x0F;
-                let mem = (a << 4) | (mem >> 4);
-                let a = (a & 0xF0) | lower_mem;
-
-                self.set_register_value(Register::A, a);
-                self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL), mem as u16)?;
-
-                self.set_numeric_flags(a as u16, Size::Byte);
-                self.set_parity_flags(a);
-                self.set_flag(Flags::HalfCarry, false);
-                self.set_flag(Flags::AddSubtract, false);
-            },
-            Instruction::RST(addr) => {
-                self.push_word(self.decoder.end)?;
-                self.state.pc = addr as u16;
-            },
-            Instruction::SBCa(target) => {
-                let src = self.get_target_value(target)?;
-                let acc = self.get_register_value(Register::A);
-
-                let (result1, carry1, overflow1, half_carry1) = sub_bytes(acc, src);
-                let (result2, carry2, overflow2, half_carry2) = sub_bytes(result1, self.get_flag(Flags::Carry) as u8);
-                self.set_arithmetic_op_flags(result2 as u16, Size::Byte, true, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
-
-                self.set_register_value(Register::A, result2);
-            },
-            Instruction::SBC16(dest_pair, src_pair) => {
-                let src = self.get_register_pair_value(src_pair);
-                let dest = self.get_register_pair_value(dest_pair);
-
-                let (result1, carry1, overflow1, half_carry1) = sub_words(dest, self.get_flag(Flags::Carry) as u16);
-                let (result2, carry2, overflow2, half_carry2) = sub_words(result1, src);
-                self.set_arithmetic_op_flags(result2, Size::Word, true, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
-
-                self.set_register_pair_value(dest_pair, result2);
-            },
-            Instruction::SCF => {
-                self.set_flag(Flags::AddSubtract, false);
-                self.set_flag(Flags::HalfCarry, false);
-                self.set_flag(Flags::Carry, true);
-            },
-            Instruction::SET(bit, target, opt_copy) => {
-                let mut value = self.get_target_value(target)?;
-                value |= 1 << bit;
-                self.set_target_value(target, value)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::SLA(target, opt_copy) => {
-                let value = self.get_target_value(target)?;
-                let out_bit = get_msb(value as u16, Size::Byte);
-                let result = value << 1;
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::SLL(target, opt_copy) => {
-                let value = self.get_target_value(target)?;
-                let out_bit = get_msb(value as u16, Size::Byte);
-                let result = (value << 1) | 0x01;
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::SRA(target, opt_copy) => {
-                let value = self.get_target_value(target)?;
-                let out_bit = (value & 0x01) != 0;
-                let msb_mask = if get_msb(value as u16, Size::Byte) { 0x80 } else { 0 };
-                let result = (value >> 1) | msb_mask;
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::SRL(target, opt_copy) => {
-                let value = self.get_target_value(target)?;
-                let out_bit = (value & 0x01) != 0;
-                let result = value >> 1;
-                self.set_logic_op_flags(result, out_bit, false);
-                self.set_target_value(target, result)?;
-                if let Some(target) = opt_copy {
-                    self.set_target_value(target, value)?;
-                }
-            },
-            Instruction::SUB(target) => {
-                let src = self.get_target_value(target)?;
-                let acc = self.get_register_value(Register::A);
-
-                let (result, carry, overflow, half_carry) = sub_bytes(acc, src);
-                self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
-
-                self.set_register_value(Register::A, result);
-            },
-            Instruction::XOR(target) => {
-                let acc = self.get_register_value(Register::A);
-                let value = self.get_target_value(target)?;
-                let result = acc ^ value;
-                self.set_register_value(Register::A, result);
-                self.set_logic_op_flags(result, false, false);
-            },
+            Instruction::OUTx(n) => self.execute_outx(n),
+            Instruction::POP(regpair) => self.execute_pop(regpair),
+            Instruction::PUSH(regpair) => self.execute_push(regpair),
+            Instruction::RES(bit, target, opt_copy) => self.execute_res(bit, target, opt_copy),
+            Instruction::RET => self.execute_ret(),
+            Instruction::RETI => self.execute_reti(),
+            Instruction::RETN => self.execute_retn(),
+            Instruction::RETcc(cond) => self.execute_retcc(cond),
+            Instruction::RL(target, opt_copy) => self.execute_rl(target, opt_copy),
+            Instruction::RLA => self.execute_rla(),
+            Instruction::RLC(target, opt_copy) => self.execute_rlc(target, opt_copy),
+            Instruction::RLCA => self.execute_rlca(),
+            Instruction::RLD => self.execute_rld(),
+            Instruction::RR(target, opt_copy) => self.execute_rr(target, opt_copy),
+            Instruction::RRA => self.execute_rra(),
+            Instruction::RRC(target, opt_copy) => self.execute_rrc(target, opt_copy),
+            Instruction::RRCA => self.execute_rrca(),
+            Instruction::RRD => self.execute_rrd(),
+            Instruction::RST(addr) => self.execute_rst(addr),
+            Instruction::SBCa(target) => self.execute_sbca(target),
+            Instruction::SBC16(dest_pair, src_pair) => self.execute_sbc16(dest_pair, src_pair),
+            Instruction::SCF => self.execute_scf(),
+            Instruction::SET(bit, target, opt_copy) => self.execute_set(bit, target, opt_copy),
+            Instruction::SLA(target, opt_copy) => self.execute_sla(target, opt_copy),
+            Instruction::SLL(target, opt_copy) => self.execute_sll(target, opt_copy),
+            Instruction::SRA(target, opt_copy) => self.execute_sra(target, opt_copy),
+            Instruction::SRL(target, opt_copy) => self.execute_srl(target, opt_copy),
+            Instruction::SUB(target) => self.execute_sub(target),
+            Instruction::XOR(target) => self.execute_xor(target),
             _ => {
-                return Err(Error::new(&format!("{}: unimplemented instruction: {:?}", DEV_NAME, self.decoder.instruction)));
+                Err(Error::new(&format!("{}: unimplemented instruction: {:?}", DEV_NAME, self.decoder.instruction)))
             }
+        }
+    }
+
+    fn execute_adca(&mut self, target: Target) -> Result<(), Error> {
+        let src = self.get_target_value(target)?;
+        let acc = self.get_register_value(Register::A);
+
+        let (result1, carry1, overflow1, half_carry1) = add_bytes(acc, self.get_flag(Flags::Carry) as u8);
+        let (result2, carry2, overflow2, half_carry2) = add_bytes(result1, src);
+        self.set_arithmetic_op_flags(result2 as u16, Size::Byte, false, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
+
+        self.set_register_value(Register::A, result2);
+        Ok(())
+    }
+
+    fn execute_adc16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Error> {
+        let src = self.get_register_pair_value(src_pair);
+        let dest = self.get_register_pair_value(dest_pair);
+
+        let (result1, carry1, overflow1, half_carry1) = add_words(dest, src);
+        let (result2, carry2, overflow2, half_carry2) = add_words(result1, self.get_flag(Flags::Carry) as u16);
+        self.set_arithmetic_op_flags(result2, Size::Word, false, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
+
+        self.set_register_pair_value(dest_pair, result2);
+        Ok(())
+    }
+
+    fn execute_adda(&mut self, target: Target) -> Result<(), Error> {
+        let src = self.get_target_value(target)?;
+        let acc = self.get_register_value(Register::A);
+
+        let (result, carry, overflow, half_carry) = add_bytes(acc, src);
+        self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, half_carry);
+
+        self.set_register_value(Register::A, result);
+        Ok(())
+    }
+
+    fn execute_add16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Error> {
+        let src = self.get_register_pair_value(src_pair);
+        let dest = self.get_register_pair_value(dest_pair);
+
+        let (result, carry, _, half_carry) = add_words(dest, src);
+        self.set_flag(Flags::AddSubtract, false);
+        self.set_flag(Flags::Carry, carry);
+        self.set_flag(Flags::HalfCarry, half_carry);
+
+        self.set_register_pair_value(dest_pair, result);
+        Ok(())
+    }
+
+    fn execute_and(&mut self, target: Target) -> Result<(), Error> {
+        let acc = self.get_register_value(Register::A);
+        let value = self.get_target_value(target)?;
+        let result = acc & value;
+        self.set_register_value(Register::A, result);
+        self.set_logic_op_flags(result, false, true);
+        Ok(())
+    }
+
+    fn execute_bit(&mut self, bit: u8, target: Target) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let result = value & (1 << bit);
+        self.set_flag(Flags::Zero, result == 0);
+        self.set_flag(Flags::Sign, bit == 7 && result != 0);
+        self.set_flag(Flags::Parity, result == 0);
+        self.set_flag(Flags::AddSubtract, false);
+        self.set_flag(Flags::HalfCarry, true);
+        Ok(())
+    }
+
+    fn execute_call(&mut self, addr: u16) -> Result<(), Error> {
+        self.push_word(self.decoder.end)?;
+        self.state.pc = addr;
+        Ok(())
+    }
+
+    fn execute_callcc(&mut self, cond: Condition, addr: u16) -> Result<(), Error> {
+        if self.get_current_condition(cond) {
+            self.push_word(self.decoder.end)?;
+            self.state.pc = addr;
+        }
+        Ok(())
+    }
+
+    fn execute_ccf(&mut self) -> Result<(), Error> {
+        self.set_flag(Flags::AddSubtract, false);
+        self.set_flag(Flags::HalfCarry, self.get_flag(Flags::Carry));
+        self.set_flag(Flags::Carry, !self.get_flag(Flags::Carry));
+        Ok(())
+    }
+
+    fn execute_cp(&mut self, target: Target) -> Result<(), Error> {
+        let src = self.get_target_value(target)?;
+        let acc = self.get_register_value(Register::A);
+
+        let (result, carry, overflow, half_carry) = sub_bytes(acc, src);
+        self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
+        Ok(())
+    }
+
+    //Instruction::CPD => {
+    //}
+    //Instruction::CPDR => {
+    //}
+    //Instruction::CPI => {
+    //}
+    //Instruction::CPIR => {
+    //}
+
+    fn execute_cpl(&mut self) -> Result<(), Error> {
+        let value = self.get_register_value(Register::A);
+        self.set_register_value(Register::A, !value);
+        self.set_flag(Flags::HalfCarry, true);
+        self.set_flag(Flags::AddSubtract, true);
+        Ok(())
+    }
+
+    fn execute_daa(&mut self) -> Result<(), Error> {
+        // From <http://z80-heaven.wikidot.com/instructions-set:daa>
+        // if the least significant four bits of A contain a non-BCD digit (i. e. it is
+        // greater than 9) or the H flag is set, then $06 is added to the register. Then
+        // the four most significant bits are checked. If this more significant digit
+        // also happens to be greater than 9 or the C flag is set, then $60 is added.
+
+        // From <http://www.z80.info/zip/z80-documented.pdf>
+        //
+        // CF |  high  | HF |  low   | diff
+        //    | nibble |    | nibble |
+        //----------------------------------
+        //  0 |    0-9 |  0 |    0-9 |  00
+        //  0 |    0-9 |  1 |    0-9 |  06
+        //  0 |    0-8 |  * |    a-f |  06
+        //  0 |    a-f |  0 |    0-9 |  60
+        //  1 |      * |  0 |    0-9 |  60
+        //  1 |      * |  1 |    0-9 |  66
+        //  1 |      * |  * |    a-f |  66
+        //  0 |    9-f |  * |    a-f |  66
+        //  0 |    a-f |  1 |    0-9 |  66
+
+        let mut value = self.get_register_value(Register::A);
+        let mut carry = false;
+        let mut half_carry = false;
+        if (value & 0x0F) > 9 || self.get_flag(Flags::HalfCarry) {
+            let (result, _, _, half_carry1) = add_bytes(value, 6);
+            value = result;
+            half_carry = half_carry1;
+        }
+        if (value & 0xF0) > 0x90 || self.get_flag(Flags::Carry) {
+            let (result, _, _, half_carry2) = add_bytes(value, 0x60);
+            value = result;
+            half_carry |= half_carry2;
+            carry = true;
+        }
+        self.set_register_value(Register::A, value);
+
+        self.set_numeric_flags(value as u16, Size::Byte);
+        self.set_parity_flags(value);
+        self.set_flag(Flags::HalfCarry, half_carry);
+        self.set_flag(Flags::Carry, carry);
+        Ok(())
+    }
+
+    fn execute_dec16(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+        let value = self.get_register_pair_value(regpair);
+
+        let (result, _, _, _) = sub_words(value, 1);
+
+        self.set_register_pair_value(regpair, result);
+        Ok(())
+    }
+
+    fn execute_dec8(&mut self, target: Target) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+
+        let (result, _, overflow, half_carry) = sub_bytes(value, 1);
+        let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
+        self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
+
+        self.set_target_value(target, result)?;
+        Ok(())
+    }
+
+    fn execute_di(&mut self) -> Result<(), Error> {
+        self.state.iff1 = false;
+        self.state.iff2 = false;
+        Ok(())
+    }
+
+    fn execute_djnz(&mut self, offset: i8) -> Result<(), Error> {
+        let value = self.get_register_value(Register::B);
+        let result = value.wrapping_sub(1);
+        self.set_register_value(Register::B, result);
+
+        if result != 0 {
+            self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
+        }
+        Ok(())
+    }
+
+    fn execute_ei(&mut self) -> Result<(), Error> {
+        self.state.iff1 = true;
+        self.state.iff2 = true;
+        Ok(())
+    }
+
+    fn execute_exx(&mut self) -> Result<(), Error> {
+        for i in 0..6 {
+            let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
+            self.state.reg[i] = shadow;
+            self.state.shadow_reg[i] = normal;
+        }
+        Ok(())
+    }
+
+    fn execute_ex_af_af(&mut self) -> Result<(), Error> {
+        for i in 6..8 {
+            let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
+            self.state.reg[i] = shadow;
+            self.state.shadow_reg[i] = normal;
+        }
+        Ok(())
+    }
+
+    fn execute_ex_hl_de(&mut self) -> Result<(), Error> {
+        let (hl, de) = (self.get_register_pair_value(RegisterPair::HL), self.get_register_pair_value(RegisterPair::DE));
+        self.set_register_pair_value(RegisterPair::DE, hl);
+        self.set_register_pair_value(RegisterPair::HL, de);
+        Ok(())
+    }
+
+    fn execute_ex_sp(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+        let reg_value = self.get_register_pair_value(regpair);
+        let sp = self.get_register_pair_value(RegisterPair::SP);
+        let sp_value = self.read_port_u16(sp)?;
+        self.set_register_pair_value(regpair, sp_value);
+        self.write_port_u16(sp, reg_value)?;
+        Ok(())
+    }
+
+    fn execute_halt(&mut self) -> Result<(), Error> {
+        self.state.status = Status::Halted;
+        self.state.pc -= 1;
+        Ok(())
+    }
+
+    fn execute_im(&mut self, mode: InterruptMode) -> Result<(), Error> {
+        self.state.im = mode;
+        Ok(())
+    }
+
+    fn execute_inc16(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+        let value = self.get_register_pair_value(regpair);
+
+        let (result, _, _, _) = add_words(value, 1);
+
+        self.set_register_pair_value(regpair, result);
+        Ok(())
+    }
+
+    fn execute_inc8(&mut self, target: Target) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+
+        let (result, _, overflow, half_carry) = add_bytes(value, 1);
+        let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
+        self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, half_carry);
+
+        self.set_target_value(target, result)?;
+        Ok(())
+    }
+
+    //Instruction::IND => {
+    //},
+    //Instruction::INDR => {
+    //}
+
+    fn execute_ini(&mut self) -> Result<(), Error> {
+        let b = self.get_register_value(Register::B);
+        let c = self.get_register_value(Register::C);
+        let value = self.get_ioport_value(b, c)?;
+
+        self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL), value as u16)?;
+        let hl = self.get_register_pair_value(RegisterPair::HL).wrapping_add(1);
+        self.set_register_pair_value(RegisterPair::HL, hl);
+        let b = self.get_register_value(Register::B).wrapping_sub(1);
+        self.set_register_value(Register::B, b);
+        Ok(())
+    }
+
+    //Instruction::INIR => {
+    //}
+
+    fn execute_inic(&mut self, reg: Register) -> Result<(), Error> {
+        let b = self.get_register_value(Register::B);
+        let c = self.get_register_value(Register::C);
+        let value = self.get_ioport_value(b, c)?;
+
+        self.set_register_value(reg, value);
+        self.set_numeric_flags(value as u16, Size::Byte);
+        self.set_parity_flags(value);
+        self.set_flag(Flags::HalfCarry, false);
+        self.set_flag(Flags::AddSubtract, false);
+        Ok(())
+    }
+
+    //Instruction::INicz => {
+    //}
+
+    fn execute_inx(&mut self, n: u8) -> Result<(), Error> {
+        let a = self.get_register_value(Register::A);
+        let value = self.get_ioport_value(a, n)?;
+        self.set_register_value(Register::A, value);
+        Ok(())
+    }
+
+    fn execute_jp(&mut self, addr: u16) -> Result<(), Error> {
+        self.state.pc = addr;
+        Ok(())
+    }
+
+    fn execute_jp_indirect(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+        let value = self.get_register_pair_value(regpair);
+        self.state.pc = value;
+        Ok(())
+    }
+
+    fn execute_jpcc(&mut self, cond: Condition, addr: u16) -> Result<(), Error> {
+        if self.get_current_condition(cond) {
+            self.state.pc = addr;
+        }
+        Ok(())
+    }
+
+    fn execute_jr(&mut self, offset: i8) -> Result<(), Error> {
+        self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
+        Ok(())
+    }
+
+    fn execute_jrcc(&mut self, cond: Condition, offset: i8) -> Result<(), Error> {
+        if self.get_current_condition(cond) {
+            self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
+        }
+        Ok(())
+    }
+
+    fn execute_ld(&mut self, dest: LoadTarget, src: LoadTarget) -> Result<(), Error> {
+        let src_value = self.get_load_target_value(src)?;
+        self.set_load_target_value(dest, src_value)?;
+        Ok(())
+    }
+
+    fn execute_ldsr(&mut self, special_reg: SpecialRegister, dir: Direction) -> Result<(), Error> {
+        let addr = match special_reg {
+            SpecialRegister::I => &mut self.state.i,
+            SpecialRegister::R => &mut self.state.r,
+        };
+
+        match dir {
+            Direction::FromAcc => {
+                *addr = self.state.reg[Register::A as usize];
+            },
+            Direction::ToAcc => {
+                self.state.reg[Register::A as usize] = *addr;
+                let value = self.state.reg[Register::A as usize];
+                self.set_numeric_flags(value as u16, Size::Byte);
+                self.set_flag(Flags::Parity, self.state.iff2);
+                self.set_flag(Flags::AddSubtract, false);
+                self.set_flag(Flags::HalfCarry, false);
+            },
         }
 
         Ok(())
     }
+
+    fn execute_ldx(&mut self) -> Result<(), Error> {
+        let diff = if self.decoder.instruction == Instruction::LDI || self.decoder.instruction == Instruction::LDIR {
+            1
+        } else {
+            -1
+        };
+
+        let src_value = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))?;
+        self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::DE), src_value)?;
+        self.add_to_regpair(RegisterPair::DE, diff);
+        self.add_to_regpair(RegisterPair::HL, diff);
+        let count = self.add_to_regpair(RegisterPair::BC, -1);
+        let mask = (Flags::AddSubtract as u8) | (Flags::HalfCarry as u8) | (Flags::Parity as u8);
+        let parity = if count != 0 { Flags::Parity as u8 } else { 0 };
+        self.set_flags(mask, parity);
+
+        if (self.decoder.instruction == Instruction::LDIR || self.decoder.instruction == Instruction::LDDR)
+            && count != 0
+        {
+            self.state.pc -= 2;
+        }
+        Ok(())
+    }
+
+    fn execute_neg(&mut self) -> Result<(), Error> {
+        let acc = self.get_register_value(Register::A);
+
+        let (result, carry, overflow, half_carry) = sub_bytes(0, acc);
+        self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
+
+        self.set_register_value(Register::A, result);
+        Ok(())
+    }
+
+    fn execute_or(&mut self, target: Target) -> Result<(), Error> {
+        let acc = self.get_register_value(Register::A);
+        let value = self.get_target_value(target)?;
+        let result = acc | value;
+        self.set_register_value(Register::A, result);
+        self.set_logic_op_flags(result, false, false);
+        Ok(())
+    }
+
+    //Instruction::OTDR => {
+    //},
+    //Instruction::OTIR => {
+    //},
+    //Instruction::OUTD => {
+    //},
+    //Instruction::OUTI => {
+    //}
+
+    fn execute_outic(&mut self, reg: Register) -> Result<(), Error> {
+        let b = self.get_register_value(Register::B);
+        let c = self.get_register_value(Register::C);
+        let value = self.get_register_value(reg);
+        self.set_ioport_value(b, c, value)?;
+        Ok(())
+    }
+
+    //Instruction::OUTicz => {
+    //}
+
+    fn execute_outx(&mut self, n: u8) -> Result<(), Error> {
+        let a = self.get_register_value(Register::A);
+        let value = self.get_register_value(Register::A);
+        self.set_ioport_value(a, n, value)?;
+        Ok(())
+    }
+
+    fn execute_pop(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+        let value = self.pop_word()?;
+        self.set_register_pair_value(regpair, value);
+        Ok(())
+    }
+
+    fn execute_push(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+        let value = self.get_register_pair_value(regpair);
+        self.push_word(value)?;
+        Ok(())
+    }
+
+    fn execute_res(&mut self, bit: u8, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let mut value = self.get_target_value(target)?;
+        value &= !(1 << bit);
+        self.set_target_value(target, value)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_ret(&mut self) -> Result<(), Error> {
+        self.state.pc = self.pop_word()?;
+        Ok(())
+    }
+
+    fn execute_reti(&mut self) -> Result<(), Error> {
+        self.state.pc = self.pop_word()?;
+        self.state.iff1 = self.state.iff2;
+        Ok(())
+    }
+
+    fn execute_retn(&mut self) -> Result<(), Error> {
+        self.state.pc = self.pop_word()?;
+        self.state.iff1 = self.state.iff2;
+        Ok(())
+    }
+
+    fn execute_retcc(&mut self, cond: Condition) -> Result<(), Error> {
+        if self.get_current_condition(cond) {
+            self.state.pc = self.pop_word()?;
+        }
+        Ok(())
+    }
+
+    fn execute_rl(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
+        self.set_logic_op_flags(result, out_bit, false);
+        self.set_target_value(target, result)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_rla(&mut self) -> Result<(), Error> {
+        let value = self.get_register_value(Register::A);
+        let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
+        self.set_flag(Flags::AddSubtract, false);
+        self.set_flag(Flags::HalfCarry, false);
+        self.set_flag(Flags::Carry, out_bit);
+        self.set_register_value(Register::A, result);
+        Ok(())
+    }
+
+    fn execute_rlc(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
+        self.set_logic_op_flags(result, out_bit, false);
+        self.set_target_value(target, result)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_rlca(&mut self) -> Result<(), Error> {
+        let value = self.get_register_value(Register::A);
+        let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
+        self.set_flag(Flags::AddSubtract, false);
+        self.set_flag(Flags::HalfCarry, false);
+        self.set_flag(Flags::Carry, out_bit);
+        self.set_register_value(Register::A, result);
+        Ok(())
+    }
+
+    fn execute_rld(&mut self) -> Result<(), Error> {
+        let a = self.get_register_value(Register::A);
+        let mem = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))? as u8;
+
+        let lower_a = a & 0x0F;
+        let a = (a & 0xF0) | (mem >> 4);
+        let mem = (mem << 4) | lower_a;
+
+        self.set_register_value(Register::A, a);
+        self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL), mem as u16)?;
+
+        self.set_numeric_flags(a as u16, Size::Byte);
+        self.set_parity_flags(a);
+        self.set_flag(Flags::HalfCarry, false);
+        self.set_flag(Flags::AddSubtract, false);
+        Ok(())
+    }
+
+    fn execute_rr(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
+        self.set_logic_op_flags(result, out_bit, false);
+        self.set_target_value(target, result)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_rra(&mut self) -> Result<(), Error> {
+        let value = self.get_register_value(Register::A);
+        let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
+        self.set_flag(Flags::AddSubtract, false);
+        self.set_flag(Flags::HalfCarry, false);
+        self.set_flag(Flags::Carry, out_bit);
+        self.set_register_value(Register::A, result);
+        Ok(())
+    }
+
+    fn execute_rrc(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
+        self.set_logic_op_flags(result, out_bit, false);
+        self.set_target_value(target, result)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_rrca(&mut self) -> Result<(), Error> {
+        let value = self.get_register_value(Register::A);
+        let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
+        self.set_flag(Flags::AddSubtract, false);
+        self.set_flag(Flags::HalfCarry, false);
+        self.set_flag(Flags::Carry, out_bit);
+        self.set_register_value(Register::A, result);
+        Ok(())
+    }
+
+    fn execute_rrd(&mut self) -> Result<(), Error> {
+        let a = self.get_register_value(Register::A);
+        let mem = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))? as u8;
+
+        let lower_mem = mem & 0x0F;
+        let mem = (a << 4) | (mem >> 4);
+        let a = (a & 0xF0) | lower_mem;
+
+        self.set_register_value(Register::A, a);
+        self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL), mem as u16)?;
+
+        self.set_numeric_flags(a as u16, Size::Byte);
+        self.set_parity_flags(a);
+        self.set_flag(Flags::HalfCarry, false);
+        self.set_flag(Flags::AddSubtract, false);
+        Ok(())
+    }
+
+    fn execute_rst(&mut self, addr: u8) -> Result<(), Error> {
+        self.push_word(self.decoder.end)?;
+        self.state.pc = addr as u16;
+        Ok(())
+    }
+
+    fn execute_sbca(&mut self, target: Target) -> Result<(), Error> {
+        let src = self.get_target_value(target)?;
+        let acc = self.get_register_value(Register::A);
+
+        let (result1, carry1, overflow1, half_carry1) = sub_bytes(acc, src);
+        let (result2, carry2, overflow2, half_carry2) = sub_bytes(result1, self.get_flag(Flags::Carry) as u8);
+        self.set_arithmetic_op_flags(result2 as u16, Size::Byte, true, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
+
+        self.set_register_value(Register::A, result2);
+        Ok(())
+    }
+
+    fn execute_sbc16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Error> {
+        let src = self.get_register_pair_value(src_pair);
+        let dest = self.get_register_pair_value(dest_pair);
+
+        let (result1, carry1, overflow1, half_carry1) = sub_words(dest, self.get_flag(Flags::Carry) as u16);
+        let (result2, carry2, overflow2, half_carry2) = sub_words(result1, src);
+        self.set_arithmetic_op_flags(result2, Size::Word, true, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
+
+        self.set_register_pair_value(dest_pair, result2);
+        Ok(())
+    }
+
+    fn execute_scf(&mut self) -> Result<(), Error> {
+        self.set_flag(Flags::AddSubtract, false);
+        self.set_flag(Flags::HalfCarry, false);
+        self.set_flag(Flags::Carry, true);
+        Ok(())
+    }
+
+    fn execute_set(&mut self, bit: u8, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let mut value = self.get_target_value(target)?;
+        value |= 1 << bit;
+        self.set_target_value(target, value)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_sla(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let out_bit = get_msb(value as u16, Size::Byte);
+        let result = value << 1;
+        self.set_logic_op_flags(result, out_bit, false);
+        self.set_target_value(target, result)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_sll(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let out_bit = get_msb(value as u16, Size::Byte);
+        let result = (value << 1) | 0x01;
+        self.set_logic_op_flags(result, out_bit, false);
+        self.set_target_value(target, result)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_sra(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let out_bit = (value & 0x01) != 0;
+        let msb_mask = if get_msb(value as u16, Size::Byte) { 0x80 } else { 0 };
+        let result = (value >> 1) | msb_mask;
+        self.set_logic_op_flags(result, out_bit, false);
+        self.set_target_value(target, result)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_srl(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+        let value = self.get_target_value(target)?;
+        let out_bit = (value & 0x01) != 0;
+        let result = value >> 1;
+        self.set_logic_op_flags(result, out_bit, false);
+        self.set_target_value(target, result)?;
+        if let Some(target) = opt_copy {
+            self.set_target_value(target, value)?;
+        }
+        Ok(())
+    }
+
+    fn execute_sub(&mut self, target: Target) -> Result<(), Error> {
+        let src = self.get_target_value(target)?;
+        let acc = self.get_register_value(Register::A);
+
+        let (result, carry, overflow, half_carry) = sub_bytes(acc, src);
+        self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
+
+        self.set_register_value(Register::A, result);
+        Ok(())
+    }
+
+    fn execute_xor(&mut self, target: Target) -> Result<(), Error> {
+        let acc = self.get_register_value(Register::A);
+        let value = self.get_target_value(target)?;
+        let result = acc ^ value;
+        self.set_register_value(Register::A, result);
+        self.set_logic_op_flags(result, false, false);
+        Ok(())
+    }
+
 
     fn rotate_left(&mut self, mut value: u8, rtype: RotateType) -> (u8, bool) {
         let out_bit = get_msb(value as u16, Size::Byte);

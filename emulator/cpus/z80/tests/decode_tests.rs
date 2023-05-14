@@ -2,8 +2,7 @@
 use moa_core::{System, MemoryBlock, BusPort, Frequency, Address, Addressable, wrap_transmutable};
 
 use moa_z80::{Z80, Z80Type};
-use moa_z80::state::Register;
-use moa_z80::decode::{Instruction, LoadTarget, Target, RegisterPair, IndexRegister, IndexRegisterHalf};
+use moa_z80::instructions::{Instruction, LoadTarget, Target, Register, RegisterPair, IndexRegister, IndexRegisterHalf};
 
 fn init_decode_test() -> (Z80, System) {
     let mut system = System::default();

@@ -15,7 +15,8 @@ use serde_derive::Deserialize;
 
 use moa_core::{System, Error, MemoryBlock, Bus, BusPort, Frequency, Address, Addressable, Steppable, wrap_transmutable};
 
-use moa_z80::{Z80, Z80Type, InterruptMode};
+use moa_z80::{Z80, Z80Type};
+use moa_z80::instructions::InterruptMode;
 use moa_z80::state::Flags;
 use moa_z80::state::Status;
 

@@ -3,6 +3,7 @@ use moa_core::{System, Error, Address, Debuggable};
 
 use crate::state::Z80;
 use crate::decode::Z80Decoder;
+use crate::instructions::Register;
 
 
 #[derive(Clone, Default)]
@@ -47,7 +48,6 @@ impl Debuggable for Z80 {
     fn execute_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
         match args[0] {
             "l" => {
-                use super::state::Register;
                 self.state.reg[Register::L as usize] = 0x05
             },
             _ => { return Ok(true); },
