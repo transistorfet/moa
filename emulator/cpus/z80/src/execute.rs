@@ -211,7 +211,8 @@ impl Z80 {
                 self.set_target_value(target, result)?;
             },
             Instruction::DI => {
-                self.state.interrupts_enabled = false;
+                self.state.iff1 = false;
+                self.state.iff2 = false;
             },
             Instruction::DJNZ(offset) => {
                 let value = self.get_register_value(Register::B);
@@ -223,7 +224,8 @@ impl Z80 {
                 }
             },
             Instruction::EI => {
-                self.state.interrupts_enabled = true;
+                self.state.iff1 = true;
+                self.state.iff2 = true;
             },
             Instruction::EXX => {
                 for i in 0..6 {
@@ -256,7 +258,7 @@ impl Z80 {
                 self.state.pc -= 1;
             },
             Instruction::IM(mode) => {
-                self.state.interrupt_mode = mode;
+                self.state.im = mode;
             },
             Instruction::INC16(regpair) => {
                 let value = self.get_register_pair_value(regpair);
@@ -335,6 +337,11 @@ impl Z80 {
                     Direction::FromAcc => { *addr = self.state.reg[Register::A as usize]; },
                     Direction::ToAcc => { self.state.reg[Register::A as usize] = *addr; },
                 }
+                let value = self.state.reg[Register::A as usize];
+                self.set_numeric_flags(value as u16, Size::Byte);
+                self.set_flag(Flags::Parity, self.state.iff2);
+                self.set_flag(Flags::AddSubtract, false);
+                self.set_flag(Flags::HalfCarry, false);
             }
             Instruction::LDD | Instruction::LDDR | Instruction::LDI | Instruction::LDIR => {
                 let diff = if self.decoder.instruction == Instruction::LDI || self.decoder.instruction == Instruction::LDIR {
@@ -416,9 +423,11 @@ impl Z80 {
             },
             Instruction::RETI => {
                 self.state.pc = self.pop_word()?;
+                self.state.iff1 = self.state.iff2;
             },
             Instruction::RETN => {
                 self.state.pc = self.pop_word()?;
+                self.state.iff1 = self.state.iff2;
             },
             Instruction::RETcc(cond) => {
                 if self.get_current_condition(cond) {

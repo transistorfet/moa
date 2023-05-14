@@ -22,9 +22,20 @@ pub enum Status {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum InterruptMode {
     Mode0,
-    Mode01,
     Mode1,
     Mode2,
+    Unknown(u8),
+}
+
+impl From<u8> for InterruptMode {
+    fn from(im: u8) -> Self {
+        match im {
+            0 => InterruptMode::Mode0,
+            1 => InterruptMode::Mode1,
+            2 => InterruptMode::Mode2,
+            _ => InterruptMode::Unknown(im),
+        }
+    }
 }
 
 #[repr(u8)]
@@ -58,8 +69,6 @@ pub enum Register {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Z80State {
     pub status: Status,
-    pub interrupts_enabled: bool,
-    pub interrupt_mode: InterruptMode,
 
     pub pc: u16,
     pub sp: u16,
@@ -71,14 +80,16 @@ pub struct Z80State {
 
     pub i: u8,
     pub r: u8,
+
+    pub iff1: bool,
+    pub iff2: bool,
+    pub im: InterruptMode,
 }
 
 impl Default for Z80State {
     fn default() -> Self {
         Self {
             status: Status::Init,
-            interrupts_enabled: false,
-            interrupt_mode: InterruptMode::Mode0,
 
             pc: 0,
             sp: 0,
@@ -90,6 +101,10 @@ impl Default for Z80State {
 
             i: 0,
             r: 0,
+
+            iff1: false,
+            iff2: false,
+            im: InterruptMode::Mode0,
         }
     }
 }
@@ -152,6 +167,9 @@ impl Z80 {
         println!("B: {:#04x}    C:  {:#04x}           B': {:#04x}    C':  {:#04x}", self.state.reg[Register::B as usize], self.state.reg[Register::C as usize], self.state.shadow_reg[Register::B as usize], self.state.shadow_reg[Register::C as usize]);
         println!("D: {:#04x}    E:  {:#04x}           D': {:#04x}    E':  {:#04x}", self.state.reg[Register::D as usize], self.state.reg[Register::E as usize], self.state.shadow_reg[Register::D as usize], self.state.shadow_reg[Register::E as usize]);
         println!("H: {:#04x}    L:  {:#04x}           H': {:#04x}    L':  {:#04x}", self.state.reg[Register::H as usize], self.state.reg[Register::L as usize], self.state.shadow_reg[Register::H as usize], self.state.shadow_reg[Register::L as usize]);
+
+        println!("I: {:#04x}    R:  {:#04x}", self.state.i, self.state.r);
+        println!("IM: {:?}  IFF1: {:?}  IFF2: {:?}", self.state.im, self.state.iff1, self.state.iff2);
 
         println!("Current Instruction: {} {:?}", self.decoder.format_instruction_bytes(&mut self.port), self.decoder.instruction);
         println!();

@@ -461,7 +461,7 @@ impl Z80Decoder {
                     6 => {
                         match get_ins_y(ins) & 0x03 {
                             0 => Ok(Instruction::IM(InterruptMode::Mode0)),
-                            1 => Ok(Instruction::IM(InterruptMode::Mode01)),
+                            1 => Ok(Instruction::IM(InterruptMode::Mode0)),
                             2 => Ok(Instruction::IM(InterruptMode::Mode1)),
                             3 => Ok(Instruction::IM(InterruptMode::Mode2)),
                             _ => panic!("InternalError: impossible value"),

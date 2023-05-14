@@ -15,7 +15,7 @@ use serde_derive::Deserialize;
 
 use moa_core::{System, Error, MemoryBlock, Bus, BusPort, Frequency, Address, Addressable, Steppable, wrap_transmutable};
 
-use moa_z80::{Z80, Z80Type};
+use moa_z80::{Z80, Z80Type, InterruptMode};
 use moa_z80::state::Flags;
 use moa_z80::state::Status;
 
@@ -71,8 +71,8 @@ struct TestState {
     f: u8,
     h: u8,
     l: u8,
-    //i: u8,
-    //r: u8,
+    i: u8,
+    r: u8,
     //ei: u8,
     //wz: u8,
     ix: u16,
@@ -81,11 +81,11 @@ struct TestState {
     bc_: u16,
     de_: u16,
     hl_: u16,
-    //im: u8,
+    im: u8,
     //p: u8,
     //q: u8,
-    //iff1: u8,
-    //iff2: u8,
+    iff1: u8,
+    iff2: u8,
     ram: Vec<(u16, u8)>,
 }
 
@@ -119,6 +119,8 @@ impl TestState {
         println!(" l: {:02x}   l': {:02x}", self.l, self.hl_ & 0xff);
         println!("pc: {:04x}   sp: {:04x}", self.pc, self.sp);
         println!("ix: {:04x}   iy: {:04x}", self.ix, self.iy);
+        println!(" i: {:02x}    r: {:02x}", self.i, self.r);
+        println!("im: {:02x} iff1: {:02x} iff2: {:02x}", self.im, self.iff1, self.iff2);
 
         println!("ram: ");
         for (addr, byte) in self.ram.iter() {
@@ -199,6 +201,11 @@ fn load_state(cpu: &mut Z80, system: &mut System, io_bus: Rc<RefCell<Bus>>, init
     cpu.state.iy = initial.iy;
     cpu.state.sp = initial.sp;
     cpu.state.pc = initial.pc;
+    cpu.state.i = initial.i;
+    cpu.state.r = initial.r;
+    cpu.state.im = initial.im.into();
+    cpu.state.iff1 = initial.iff1 != 0;
+    cpu.state.iff2 = initial.iff2 != 0;
 
     // Load data bytes into memory
     for (addr, byte) in initial.ram.iter() {
@@ -241,6 +248,16 @@ fn assert_state(cpu: &Z80, system: &System, io_bus: Rc<RefCell<Bus>>, expected: 
     assert_value(cpu.state.iy, expected.iy, "iy")?;
     assert_value(cpu.state.sp, expected.sp, "sp")?;
     assert_value(cpu.state.pc, expected.pc, "pc")?;
+    assert_value(cpu.state.i, expected.i, "i")?;
+    // TODO this isn't emulated yet, so it will cause all the tests to fail
+    //assert_value(cpu.state.r, expected.r, "r")?;
+
+    let expected_im: InterruptMode = expected.im.into();
+    if cpu.state.im != expected_im {
+        return Err(Error::assertion(&format!("{:?} != {:?}, im", cpu.state.im, expected_im)));
+    }
+    assert_value(cpu.state.iff1 as u8, expected.iff1, "iff1")?;
+    assert_value(cpu.state.iff2 as u8, expected.iff2, "iff2")?;
 
     let addr_mask = cpu.port.address_mask();
 
