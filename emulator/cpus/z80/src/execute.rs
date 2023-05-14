@@ -322,8 +322,17 @@ impl Z80 {
             //},
             //Instruction::INDR => {
             //},
-            //Instruction::INI => {
-            //},
+            Instruction::INI => {
+                let b = self.get_register_value(Register::B);
+                let c = self.get_register_value(Register::C);
+                let value = self.get_ioport_value(b, c)?;
+
+                self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL), value as u16)?;
+                let hl = self.get_register_pair_value(RegisterPair::HL).wrapping_add(1);
+                self.set_register_pair_value(RegisterPair::HL, hl);
+                let b = self.get_register_value(Register::B).wrapping_sub(1);
+                self.set_register_value(Register::B, b);
+            },
             //Instruction::INIR => {
             //},
             Instruction::INic(reg) => {
