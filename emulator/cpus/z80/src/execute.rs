@@ -151,6 +151,8 @@ impl Z80 {
                 let value = self.get_target_value(target)?;
                 let result = value & (1 << bit);
                 self.set_flag(Flags::Zero, result == 0);
+                self.set_flag(Flags::Sign, bit == 7 && result != 0);
+                self.set_flag(Flags::Parity, result == 0);
                 self.set_flag(Flags::AddSubtract, false);
                 self.set_flag(Flags::HalfCarry, true);
             },
