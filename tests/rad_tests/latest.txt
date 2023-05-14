@@ -1,4 +1,4 @@
-Last run on 2023-05-13 at commit e61e0cfe8f79c42b3ec232ddb3c97e63dbb40864
+Last run on 2023-05-13 at commit f3d1fd0ae2410a164c92150cc3caa0f525cbb4b7
 
 00.json completed, all passed!
 01.json completed, all passed!
@@ -524,7 +524,7 @@ ed 43.json completed, all passed!
 ed 44.json completed, all passed!
 ed 45.json completed, all passed!
 ed 46.json completed, all passed!
-ed 47.json completed: 34 passed, 966 FAILED
+ed 47.json completed, all passed!
 ed 48.json completed, all passed!
 ed 49.json completed, all passed!
 ed 4a.json completed, all passed!
@@ -532,7 +532,7 @@ ed 4b.json completed, all passed!
 ed 4c.json completed, all passed!
 ed 4d.json completed, all passed!
 ed 4e.json completed, all passed!
-ed 4f.json completed: 36 passed, 964 FAILED
+ed 4f.json completed, all passed!
 ed 50.json completed, all passed!
 ed 51.json completed, all passed!
 ed 52.json completed, all passed!
@@ -548,21 +548,21 @@ ed 5b.json completed, all passed!
 ed 5c.json completed, all passed!
 ed 5d.json completed, all passed!
 ed 5e.json completed, all passed!
-ed 5f.json completed: 0 passed, 1000 FAILED
+ed 5f.json completed, all passed!
 ed 60.json completed, all passed!
 ed 61.json completed, all passed!
 ed 62.json completed, all passed!
 ed 64.json completed, all passed!
 ed 65.json completed, all passed!
 ed 66.json completed, all passed!
-ed 67.json completed: 0 passed, 1000 FAILED
+ed 67.json completed, all passed!
 ed 68.json completed, all passed!
 ed 69.json completed, all passed!
 ed 6a.json completed, all passed!
 ed 6c.json completed, all passed!
 ed 6d.json completed, all passed!
 ed 6e.json completed, all passed!
-ed 6f.json completed: 0 passed, 1000 FAILED
+ed 6f.json completed, all passed!
 ed 72.json completed, all passed!
 ed 73.json completed, all passed!
 ed 74.json completed, all passed!
@@ -643,5 +643,5 @@ fd f9.json completed, all passed!
 fe.json completed, all passed!
 ff.json completed, all passed!
 
-passed: 624068, failed: 17932, total 97%
+passed: 628998, failed: 13002, total 98%
 completed in 0m 31s
