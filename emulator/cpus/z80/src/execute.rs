@@ -193,8 +193,49 @@ impl Z80 {
                 self.set_flag(Flags::HalfCarry, true);
                 self.set_flag(Flags::AddSubtract, true);
             },
-            //Instruction::DAA => {
-            //},
+            Instruction::DAA => {
+                // From <http://z80-heaven.wikidot.com/instructions-set:daa>
+                // if the least significant four bits of A contain a non-BCD digit (i. e. it is
+                // greater than 9) or the H flag is set, then $06 is added to the register. Then
+                // the four most significant bits are checked. If this more significant digit
+                // also happens to be greater than 9 or the C flag is set, then $60 is added.
+
+                // From <http://www.z80.info/zip/z80-documented.pdf>
+                //
+                // CF |  high  | HF |  low   | diff
+                //    | nibble |    | nibble |
+                //----------------------------------
+                //  0 |    0-9 |  0 |    0-9 |  00
+                //  0 |    0-9 |  1 |    0-9 |  06
+                //  0 |    0-8 |  * |    a-f |  06
+                //  0 |    a-f |  0 |    0-9 |  60
+                //  1 |      * |  0 |    0-9 |  60
+                //  1 |      * |  1 |    0-9 |  66
+                //  1 |      * |  * |    a-f |  66
+                //  0 |    9-f |  * |    a-f |  66
+                //  0 |    a-f |  1 |    0-9 |  66
+
+                let mut value = self.get_register_value(Register::A);
+                let mut carry = false;
+                let mut half_carry = false;
+                if (value & 0x0F) > 9 || self.get_flag(Flags::HalfCarry) {
+                    let (result, _, _, half_carry1) = add_bytes(value, 6);
+                    value = result;
+                    half_carry = half_carry1;
+                }
+                if (value & 0xF0) > 0x90 || self.get_flag(Flags::Carry) {
+                    let (result, _, _, half_carry2) = add_bytes(value, 0x60);
+                    value = result;
+                    half_carry |= half_carry2;
+                    carry = true;
+                }
+                self.set_register_value(Register::A, value);
+
+                self.set_numeric_flags(value as u16, Size::Byte);
+                self.set_parity_flags(value);
+                self.set_flag(Flags::HalfCarry, half_carry);
+                self.set_flag(Flags::Carry, carry);
+            },
             Instruction::DEC16(regpair) => {
                 let value = self.get_register_pair_value(regpair);
 
@@ -910,9 +951,8 @@ impl Z80 {
     }
 
     fn set_parity_flags(&mut self, value: u8) {
-        let mask = (Flags::Parity as u8) | (Flags::AddSubtract as u8);
         let parity = if (value.count_ones() & 0x01) == 0 { Flags::Parity as u8 } else { 0 };
-        self.set_flags(mask, parity);
+        self.set_flags(Flags::Parity as u8, parity);
     }
 
     fn set_arithmetic_op_flags(&mut self, value: u16, size: Size, addsub: bool, carry: bool, overflow: bool, half_carry: bool) {
