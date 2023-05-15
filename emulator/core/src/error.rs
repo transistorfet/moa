@@ -2,10 +2,17 @@
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ErrorType {
     Assertion,
-    Emulator,
+    Emulator(EmulatorErrorKind),
     Processor,
     Breakpoint,
 }
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum EmulatorErrorKind {
+    Misc,
+    MemoryAlignment,
+}
+
 
 #[derive(Debug)]
 pub struct Error {
@@ -15,11 +22,25 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(msg: &str) -> Error {
+    pub fn new<S>(msg: S) -> Error
+    where
+        S: Into<String>,
+    {
         Error {
-            err: ErrorType::Emulator,
+            err: ErrorType::Emulator(EmulatorErrorKind::Misc),
             native: 0,
-            msg: msg.to_string(),
+            msg: msg.into(),
+        }
+    }
+
+    pub fn emulator<S>(kind: EmulatorErrorKind, msg: S) -> Error
+    where
+        S: Into<String>,
+    {
+        Error {
+            err: ErrorType::Emulator(kind),
+            native: 0,
+            msg: msg.into(),
         }
     }
 
@@ -31,19 +52,25 @@ impl Error {
         }
     }
 
-    pub fn breakpoint(msg: &str) -> Error {
+    pub fn breakpoint<S>(msg: S) -> Error
+    where
+        S: Into<String>,
+    {
         Error {
             err: ErrorType::Breakpoint,
             native: 0,
-            msg: msg.to_string(),
+            msg: msg.into(),
         }
     }
 
-    pub fn assertion(msg: &str) -> Error {
+    pub fn assertion<S>(msg: S) -> Error
+    where
+        S: Into<String>,
+    {
         Error {
             err: ErrorType::Assertion,
             native: 0,
-            msg: msg.to_string(),
+            msg: msg.into(),
         }
     }
 }

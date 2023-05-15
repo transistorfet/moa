@@ -305,7 +305,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_abcd(&mut self, src: Target, dest: Target) -> Result<(), Error> {
         let src_val = self.get_target_value(src, Size::Byte, Used::Once)?;
         let dest_val = self.get_target_value(dest, Size::Byte, Used::Twice)?;
@@ -330,7 +329,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_add(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
@@ -342,7 +340,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_adda(&mut self, src: Target, dest: Register, size: Size) -> Result<(), Error> {
         let src_val = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
         let dest_val = *self.get_a_reg_mut(dest);
@@ -351,7 +348,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_addx(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
@@ -373,7 +369,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_and(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
@@ -383,20 +378,17 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_and_to_ccr(&mut self, value: u8) -> Result<(), Error> {
         self.state.sr = (self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) & (value as u16));
         Ok(())
     }
 
-    #[inline]
     fn execute_and_to_sr(&mut self, value: u16) -> Result<(), Error> {
         self.require_supervisor()?;
         self.set_sr(self.state.sr & value);
         Ok(())
     }
 
-    #[inline]
     fn execute_asd(&mut self, count: Target, target: Target, size: Size, shift_dir: ShiftDirection) -> Result<(), Error> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let value = self.get_target_value(target, size, Used::Twice)?;
@@ -430,7 +422,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bcc(&mut self, cond: Condition, offset: i32) -> Result<(), Error> {
         let should_branch = self.get_current_condition(cond);
         if should_branch {
@@ -442,7 +433,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bra(&mut self, offset: i32) -> Result<(), Error> {
         if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
             self.state.pc -= 2;
@@ -451,7 +441,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bsr(&mut self, offset: i32) -> Result<(), Error> {
         self.push_long(self.state.pc)?;
         let sp = *self.get_stack_pointer_mut();
@@ -463,7 +452,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bchg(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), Error> {
         let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
         let mut src_val = self.get_target_value(target, size, Used::Twice)?;
@@ -473,7 +461,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bclr(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), Error> {
         let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
         let mut src_val = self.get_target_value(target, size, Used::Twice)?;
@@ -483,7 +470,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bset(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), Error> {
         let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
         let mut value = self.get_target_value(target, size, Used::Twice)?;
@@ -493,7 +479,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_btst(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), Error> {
         let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
         let value = self.get_target_value(target, size, Used::Once)?;
@@ -501,7 +486,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bfchg(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), Error> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
@@ -512,7 +496,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bfclr(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), Error> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
@@ -523,7 +506,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bfexts(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate, reg: Register) -> Result<(), Error> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
@@ -540,7 +522,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bfextu(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate, reg: Register) -> Result<(), Error> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
@@ -551,7 +532,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bfset(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), Error> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
@@ -562,7 +542,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_bftst(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), Error> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
@@ -572,7 +551,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_chk(&mut self, target: Target, reg: Register, size: Size) -> Result<(), Error> {
         let upper_bound = sign_extend_to_long(self.get_target_value(target, size, Used::Once)?, size);
         let dreg = sign_extend_to_long(self.state.d_reg[reg as usize], size);
@@ -589,7 +567,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_clr(&mut self, target: Target, size: Size) -> Result<(), Error> {
         if self.cputype == M68kType::MC68000 {
             self.get_target_value(target, size, Used::Twice)?;
@@ -602,7 +579,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_cmp(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Once)?;
@@ -612,7 +588,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_cmpa(&mut self, src: Target, reg: Register, size: Size) -> Result<(), Error> {
         let src_val = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
         let dest_val = *self.get_a_reg_mut(reg);
@@ -622,7 +597,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_dbcc(&mut self, cond: Condition, reg: Register, offset: i16) -> Result<(), Error> {
         let condition_true = self.get_current_condition(cond);
         if !condition_true {
@@ -638,7 +612,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_divw(&mut self, src: Target, dest: Register, sign: Sign) -> Result<(), Error> {
         let src_val = self.get_target_value(src, Size::Word, Used::Once)?;
         if src_val == 0 {
@@ -679,7 +652,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_divl(&mut self, src: Target, dest_h: Option<Register>, dest_l: Register, sign: Sign) -> Result<(), Error> {
         let src_val = self.get_target_value(src, Size::Long, Used::Once)?;
         if src_val == 0 {
@@ -713,7 +685,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_eor(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
@@ -723,20 +694,17 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_eor_to_ccr(&mut self, value: u8) -> Result<(), Error> {
         self.set_sr((self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) ^ (value as u16)));
         Ok(())
     }
 
-    #[inline]
     fn execute_eor_to_sr(&mut self, value: u16) -> Result<(), Error> {
         self.require_supervisor()?;
         self.set_sr(self.state.sr ^ value);
         Ok(())
     }
 
-    #[inline]
     fn execute_exg(&mut self, target1: Target, target2: Target) -> Result<(), Error> {
         let value1 = self.get_target_value(target1, Size::Long, Used::Twice)?;
         let value2 = self.get_target_value(target2, Size::Long, Used::Twice)?;
@@ -745,7 +713,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_ext(&mut self, reg: Register, from_size: Size, to_size: Size) -> Result<(), Error> {
         let input = get_value_sized(self.state.d_reg[reg as usize], from_size);
         let result = match (from_size, to_size) {
@@ -759,13 +726,11 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_illegal(&mut self) -> Result<(), Error> {
         self.exception(Exceptions::IllegalInstruction as u8, false)?;
         Ok(())
     }
 
-    #[inline]
     fn execute_jmp(&mut self, target: Target) -> Result<(), Error> {
         let addr = self.get_target_address(target)?;
         if let Err(err) = self.set_pc(addr) {
@@ -775,7 +740,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_jsr(&mut self, target: Target) -> Result<(), Error> {
         let previous_pc = self.state.pc;
         let addr = self.get_target_address(target)?;
@@ -791,7 +755,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_lea(&mut self, target: Target, reg: Register) -> Result<(), Error> {
         let value = self.get_target_address(target)?;
         let addr = self.get_a_reg_mut(reg);
@@ -799,7 +762,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_link(&mut self, reg: Register, offset: i32) -> Result<(), Error> {
         *self.get_stack_pointer_mut() -= 4;
         let sp = *self.get_stack_pointer_mut();
@@ -810,7 +772,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_lsd(&mut self, count: Target, target: Target, size: Size, shift_dir: ShiftDirection) -> Result<(), Error> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
@@ -831,7 +792,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_move(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         self.set_logic_flags(src_val, size);
@@ -839,7 +799,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_movea(&mut self, src: Target, reg: Register, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let src_val = sign_extend_to_long(src_val, size) as u32;
@@ -848,14 +807,12 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_move_from_sr(&mut self, target: Target) -> Result<(), Error> {
         self.require_supervisor()?;
         self.set_target_value(target, self.state.sr as u32, Size::Word, Used::Once)?;
         Ok(())
     }
 
-    #[inline]
     fn execute_move_to_sr(&mut self, target: Target) -> Result<(), Error> {
         self.require_supervisor()?;
         let value = self.get_target_value(target, Size::Word, Used::Once)? as u16;
@@ -863,14 +820,12 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_move_to_ccr(&mut self, target: Target) -> Result<(), Error> {
         let value = self.get_target_value(target, Size::Word, Used::Once)? as u16;
         self.set_sr((self.state.sr & 0xFF00) | (value & 0x00FF));
         Ok(())
     }
 
-    #[inline]
     fn execute_movec(&mut self, target: Target, control_reg: ControlRegister, dir: Direction) -> Result<(), Error> {
         self.require_supervisor()?;
         match dir {
@@ -888,7 +843,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_movem(&mut self, target: Target, size: Size, dir: Direction, mask: u16) -> Result<(), Error> {
         let addr = self.get_target_address(target)?;
 
@@ -936,7 +890,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn move_memory_to_registers(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, Error> {
         for i in 0..8 {
             if (mask & 0x01) != 0 {
@@ -955,7 +908,6 @@ impl M68k {
         Ok(addr)
     }
 
-    #[inline]
     fn move_registers_to_memory(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, Error> {
         for i in 0..8 {
             if (mask & 0x01) != 0 {
@@ -975,7 +927,6 @@ impl M68k {
         Ok(addr)
     }
 
-    #[inline]
     fn move_registers_to_memory_reverse(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, Error> {
         for i in (0..8).rev() {
             if (mask & 0x01) != 0 {
@@ -995,7 +946,6 @@ impl M68k {
         Ok(addr)
     }
 
-    #[inline]
     fn execute_movep(&mut self, dreg: Register, areg: Register, offset: i16, size: Size, dir: Direction) -> Result<(), Error> {
         match dir {
             Direction::ToTarget => {
@@ -1022,7 +972,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_moveq(&mut self, data: u8, reg: Register) -> Result<(), Error> {
         let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
         self.state.d_reg[reg as usize] = value;
@@ -1030,7 +979,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_moveusp(&mut self, target: Target, dir: Direction) -> Result<(), Error> {
         self.require_supervisor()?;
         match dir {
@@ -1040,7 +988,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_mulw(&mut self, src: Target, dest: Register, sign: Sign) -> Result<(), Error> {
         let src_val = self.get_target_value(src, Size::Word, Used::Once)?;
         let dest_val = get_value_sized(self.state.d_reg[dest as usize], Size::Word);
@@ -1054,7 +1001,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_mull(&mut self, src: Target, dest_h: Option<Register>, dest_l: Register, sign: Sign) -> Result<(), Error> {
         let src_val = self.get_target_value(src, Size::Long, Used::Once)?;
         let dest_val = get_value_sized(self.state.d_reg[dest_l as usize], Size::Long);
@@ -1071,7 +1017,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_nbcd(&mut self, dest: Target) -> Result<(), Error> {
         let dest_val = self.get_target_value(dest, Size::Byte, Used::Twice)?;
         let result = self.execute_sbcd_val(dest_val, 0)?;
@@ -1079,7 +1024,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_neg(&mut self, target: Target, size: Size) -> Result<(), Error> {
         let original = self.get_target_value(target, size, Used::Twice)?;
         let (result, overflow) = overflowing_sub_signed_sized(0, original, size);
@@ -1090,7 +1034,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_negx(&mut self, dest: Target, size: Size) -> Result<(), Error> {
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let extend = self.get_flag(Flags::Extend) as u32;
@@ -1111,7 +1054,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_not(&mut self, target: Target, size: Size) -> Result<(), Error> {
         let mut value = self.get_target_value(target, size, Used::Twice)?;
         value = get_value_sized(!value, size);
@@ -1120,7 +1062,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_or(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
@@ -1130,34 +1071,29 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_or_to_ccr(&mut self, value: u8) -> Result<(), Error> {
         self.set_sr((self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) | (value as u16)));
         Ok(())
     }
 
-    #[inline]
     fn execute_or_to_sr(&mut self, value: u16) -> Result<(), Error> {
         self.require_supervisor()?;
         self.set_sr(self.state.sr | value);
         Ok(())
     }
 
-    #[inline]
     fn execute_pea(&mut self, target: Target) -> Result<(), Error> {
         let value = self.get_target_address(target)?;
         self.push_long(value)?;
         Ok(())
     }
 
-    #[inline]
     fn execute_reset(&mut self) -> Result<(), Error> {
         self.require_supervisor()?;
         // TODO this only resets external devices and not internal ones
         Ok(())
     }
 
-    #[inline]
     fn execute_rod(&mut self, count: Target, target: Target, size: Size, shift_dir: ShiftDirection) -> Result<(), Error> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
@@ -1174,7 +1110,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_roxd(&mut self, count: Target, target: Target, size: Size, shift_dir: ShiftDirection) -> Result<(), Error> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
@@ -1192,7 +1127,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_rte(&mut self) -> Result<(), Error> {
         self.require_supervisor()?;
         let sr = self.pop_word()?;
@@ -1210,7 +1144,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_rtr(&mut self) -> Result<(), Error> {
         let ccr = self.pop_word()?;
         let addr = self.pop_long()?;
@@ -1222,7 +1155,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_rts(&mut self) -> Result<(), Error> {
         self.debugger.stack_tracer.pop_return();
         let addr = self.pop_long()?;
@@ -1233,7 +1165,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_scc(&mut self, cond: Condition, target: Target) -> Result<(), Error> {
         let condition_true = self.get_current_condition(cond);
         if condition_true {
@@ -1244,7 +1175,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_stop(&mut self, flags: u16) -> Result<(), Error> {
         self.require_supervisor()?;
         self.set_sr(flags);
@@ -1252,7 +1182,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_sbcd(&mut self, src: Target, dest: Target) -> Result<(), Error> {
         let src_val = self.get_target_value(src, Size::Byte, Used::Once)?;
         let dest_val = self.get_target_value(dest, Size::Byte, Used::Twice)?;
@@ -1261,7 +1190,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_sbcd_val(&mut self, src_val: u32, dest_val: u32) -> Result<u32, Error> {
         let extend_flag = self.get_flag(Flags::Extend) as u32;
         let src_parts = get_nibbles_from_byte(src_val);
@@ -1283,7 +1211,6 @@ impl M68k {
         Ok(result)
     }
 
-    #[inline]
     fn execute_sub(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
@@ -1295,7 +1222,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_suba(&mut self, src: Target, dest: Register, size: Size) -> Result<(), Error> {
         let src_val = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
         let dest_val = *self.get_a_reg_mut(dest);
@@ -1304,7 +1230,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_subx(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
@@ -1326,7 +1251,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_swap(&mut self, reg: Register) -> Result<(), Error> {
         let value = self.state.d_reg[reg as usize];
         self.state.d_reg[reg as usize] = ((value & 0x0000FFFF) << 16) | ((value & 0xFFFF0000) >> 16);
@@ -1334,7 +1258,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_tas(&mut self, target: Target) -> Result<(), Error> {
         let value = self.get_target_value(target, Size::Byte, Used::Twice)?;
         self.set_flag(Flags::Negative, (value & 0x80) != 0);
@@ -1345,20 +1268,17 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_tst(&mut self, target: Target, size: Size) -> Result<(), Error> {
         let value = self.get_target_value(target, size, Used::Once)?;
         self.set_logic_flags(value, size);
         Ok(())
     }
 
-    #[inline]
     fn execute_trap(&mut self, number: u8) -> Result<(), Error> {
         self.exception(32 + number, false)?;
         Ok(())
     }
 
-    #[inline]
     fn execute_trapv(&mut self) -> Result<(), Error> {
         if self.get_flag(Flags::Overflow) {
             self.exception(Exceptions::TrapvInstruction as u8, false)?;
@@ -1366,7 +1286,6 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_unlk(&mut self, reg: Register) -> Result<(), Error> {
         let value = *self.get_a_reg_mut(reg);
         *self.get_stack_pointer_mut() = value;
@@ -1376,14 +1295,12 @@ impl M68k {
         Ok(())
     }
 
-    #[inline]
     fn execute_unimplemented_a(&mut self, _: u16) -> Result<(), Error> {
         self.state.pc -= 2;
         self.exception(Exceptions::LineAEmulator as u8, false)?;
         Ok(())
     }
 
-    #[inline]
     fn execute_unimplemented_f(&mut self, _: u16) -> Result<(), Error> {
         self.state.pc -= 2;
         self.exception(Exceptions::LineFEmulator as u8, false)?;
@@ -1658,12 +1575,10 @@ impl M68k {
         }
     }
 
-    #[inline(always)]
     fn get_stack_pointer_mut(&mut self) -> &mut u32 {
         if self.is_supervisor() { &mut self.state.ssp } else { &mut self.state.usp }
     }
 
-    #[inline(always)]
     fn get_a_reg(&self, reg: Register) -> u32 {
         if reg == 7 {
             if self.is_supervisor() { self.state.ssp } else { self.state.usp }
@@ -1672,7 +1587,6 @@ impl M68k {
         }
     }
 
-    #[inline(always)]
     fn get_a_reg_mut(&mut self, reg: Register) -> &mut u32 {
         if reg == 7 {
             if self.is_supervisor() { &mut self.state.ssp } else { &mut self.state.usp }
@@ -1681,12 +1595,10 @@ impl M68k {
         }
     }
 
-    #[inline(always)]
     fn is_supervisor(&self) -> bool {
         self.state.sr & (Flags:: Supervisor as u16) != 0
     }
 
-    #[inline(always)]
     fn require_supervisor(&self) -> Result<(), Error> {
         if self.is_supervisor() {
             Ok(())
@@ -1700,12 +1612,10 @@ impl M68k {
         self.state.sr = value & mask;
     }
 
-    #[inline(always)]
     fn get_flag(&self, flag: Flags) -> bool {
         (self.state.sr & (flag as u16)) != 0
     }
 
-    #[inline(always)]
     fn set_flag(&mut self, flag: Flags, value: bool) {
         self.state.sr = (self.state.sr & !(flag as u16)) | (if value { flag as u16 } else { 0 });
     }
@@ -1909,7 +1819,6 @@ fn get_sub_overflow(operand1: u32, operand2: u32, result: u32, size: Size) -> bo
     (msb1 && msb2 && !msb_res) || (!msb1 && !msb2 && msb_res)
 }
 
-#[inline(always)]
 fn get_msb(value: u32, size: Size) -> bool {
     match size {
         Size::Byte => (value & 0x00000080) != 0,
@@ -1918,7 +1827,6 @@ fn get_msb(value: u32, size: Size) -> bool {
     }
 }
 
-#[inline(always)]
 fn get_msb_mask(value: u32, size: Size) -> u32 {
     match size {
         Size::Byte => value & 0x00000080,

@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 use std::fs::{self, File};
 
-use clap::{Parser, ArgEnum};
+use clap::Parser;
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 
@@ -20,13 +20,6 @@ use moa_z80::instructions::InterruptMode;
 use moa_z80::state::Flags;
 use moa_z80::state::Status;
 
-#[derive(Copy, Clone, PartialEq, Eq, ArgEnum)]
-enum Selection {
-    Include,
-    Exclude,
-    ExcludeAddr,
-    Only,
-}
 
 #[derive(Parser)]
 struct Args {
@@ -47,11 +40,12 @@ struct Args {
     /// Check undocumented instructions
     #[clap(short = 'u', long)]
     check_undocumented: bool,
+    /// Check instruction timings
+    #[clap(short = 't', long)]
+    check_timings: bool,
     /// Directory to the test suite to run
     #[clap(long, default_value = DEFAULT_RAD_TESTS)]
     testsuite: String,
-    #[clap(long, short, arg_enum, default_value_t = Selection::Include)]
-    exceptions: Selection,
 }
 
 fn main() {
@@ -91,6 +85,9 @@ struct TestState {
 }
 
 #[derive(Debug, Deserialize)]
+struct TestCycle(u16, Option<u8>, String);
+
+#[derive(Debug, Deserialize)]
 struct TestPort {
     addr: u16,
     value: u8,
@@ -104,6 +101,8 @@ struct TestCase {
     initial_state: TestState,
     #[serde(rename(deserialize = "final"))]
     final_state: TestState,
+    #[serde(default)]
+    cycles: Vec<TestCycle>,
     #[serde(default)]
     ports: Vec<TestPort>,
 }
@@ -279,10 +278,16 @@ fn assert_state(cpu: &Z80, system: &System, io_bus: Rc<RefCell<Bus>>, expected: 
     Ok(())
 }
 
-fn step_cpu_and_assert(cpu: &mut Z80, system: &System, io_bus: Rc<RefCell<Bus>>, case: &TestCase, check_extra_flags: bool) -> Result<(), Error> {
-    let _clock_elapsed = cpu.step(&system)?;
+fn step_cpu_and_assert(cpu: &mut Z80, system: &System, io_bus: Rc<RefCell<Bus>>, case: &TestCase, args: &Args) -> Result<(), Error> {
+    let clock_elapsed = cpu.step(&system)?;
 
-    assert_state(&cpu, &system, io_bus, &case.final_state, check_extra_flags, &case.ports)?;
+    assert_state(&cpu, &system, io_bus, &case.final_state, args.check_extra_flags, &case.ports)?;
+    if args.check_timings {
+        let cycles = clock_elapsed / cpu.frequency.period_duration();
+        if cycles != case.cycles.len() as Address {
+            return Err(Error::assertion(&format!("expected instruction to take {} cycles, but took {}", case.cycles.len(), cycles)));
+        }
+    }
 
     Ok(())
 }
@@ -291,7 +296,7 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
     let (mut cpu, system, io_bus) = init_execute_test(Z80Type::Z80, &case.initial_state, &case.ports).unwrap();
     let mut initial_cpu = cpu.clone();
 
-    let result = step_cpu_and_assert(&mut cpu, &system, io_bus, case, args.check_extra_flags);
+    let result = step_cpu_and_assert(&mut cpu, &system, io_bus, case, args);
 
     match result {
         Ok(()) => Ok(()),

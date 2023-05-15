@@ -7,9 +7,12 @@
 
 * go through flags on m68k and see if you can fix the remaining ones and/or clean up the implementation
 
+* you could possibly make a Z80MemoryPort type that wraps the BusPort type and which impls Addressable, which can be passed into the decoder
+  to auto-insert things like the refresh counter, as well as the record all bus timings whenever any mem access is performed
 * should you make Address a newtype and add From impls for each type of numeric, and add utils to wrap address at certain boundaries and such
 * should you make a means of storing different kinds of buses?
 * should you make buses hide their RcRefCell?
+
 
 * address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
 * sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?

@@ -479,7 +479,7 @@ impl Z80 {
     fn execute_ini(&mut self) -> Result<(), Error> {
         let b = self.get_register_value(Register::B);
         let c = self.get_register_value(Register::C);
-        let value = self.get_ioport_value(b, c)?;
+        let value = self.read_ioport_value(b, c)?;
 
         self.set_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL), value as u16)?;
         let hl = self.get_register_pair_value(RegisterPair::HL).wrapping_add(1);
@@ -495,7 +495,7 @@ impl Z80 {
     fn execute_inic(&mut self, reg: Register) -> Result<(), Error> {
         let b = self.get_register_value(Register::B);
         let c = self.get_register_value(Register::C);
-        let value = self.get_ioport_value(b, c)?;
+        let value = self.read_ioport_value(b, c)?;
 
         self.set_register_value(reg, value);
         self.set_numeric_flags(value as u16, Size::Byte);
@@ -510,7 +510,7 @@ impl Z80 {
 
     fn execute_inx(&mut self, n: u8) -> Result<(), Error> {
         let a = self.get_register_value(Register::A);
-        let value = self.get_ioport_value(a, n)?;
+        let value = self.read_ioport_value(a, n)?;
         self.set_register_value(Register::A, value);
         Ok(())
     }
@@ -630,7 +630,7 @@ impl Z80 {
         let b = self.get_register_value(Register::B);
         let c = self.get_register_value(Register::C);
         let value = self.get_register_value(reg);
-        self.set_ioport_value(b, c, value)?;
+        self.write_ioport_value(b, c, value)?;
         Ok(())
     }
 
@@ -640,7 +640,7 @@ impl Z80 {
     fn execute_outx(&mut self, n: u8) -> Result<(), Error> {
         let a = self.get_register_value(Register::A);
         let value = self.get_register_value(Register::A);
-        self.set_ioport_value(a, n, value)?;
+        self.write_ioport_value(a, n, value)?;
         Ok(())
     }
 
@@ -1101,7 +1101,7 @@ impl Z80 {
         self.port.write_leu16(self.current_clock, addr as Address, value)
     }
 
-    fn get_ioport_value(&mut self, upper: u8, lower: u8) -> Result<u8, Error> {
+    fn read_ioport_value(&mut self, upper: u8, lower: u8) -> Result<u8, Error> {
         let addr = ((upper as Address) << 8) | (lower as Address);
         if let Some(io) = self.ioport.as_mut() {
             Ok(io.read_u8(self.current_clock, addr)?)
@@ -1110,7 +1110,7 @@ impl Z80 {
         }
     }
 
-    fn set_ioport_value(&mut self, upper: u8, lower: u8, value: u8) -> Result<(), Error> {
+    fn write_ioport_value(&mut self, upper: u8, lower: u8, value: u8) -> Result<(), Error> {
         let addr = ((upper as Address) << 8) | (lower as Address);
         if let Some(io) = self.ioport.as_mut() {
             io.write_u8(self.current_clock, addr, value)?
@@ -1221,12 +1221,10 @@ impl Z80 {
         self.set_flags(FLAGS_CARRY_HALF_CARRY, carry_flag | half_carry_flag);
     }
 
-    #[inline(always)]
     fn get_flag(&self, flag: Flags) -> bool {
         self.get_flags() & (flag as u8) != 0
     }
 
-    #[inline(always)]
     fn set_flag(&mut self, flag: Flags, value: bool) {
         self.state.reg[Register::F as usize] &= !(flag as u8);
         if value {
@@ -1234,12 +1232,10 @@ impl Z80 {
         }
     }
 
-    #[inline(always)]
     fn get_flags(&self) -> u8 {
         self.state.reg[Register::F as usize]
     }
 
-    #[inline(always)]
     fn set_flags(&mut self, mask: u8, values: u8) {
         self.state.reg[Register::F as usize] = (self.state.reg[Register::F as usize] & !mask) | values;
     }
@@ -1273,7 +1269,6 @@ fn sub_words(operand1: u16, operand2: u16) -> (u16, bool, bool, bool) {
     (result, carry, overflow, half_carry)
 }
 
-#[inline(always)]
 fn get_msb(value: u16, size: Size) -> bool {
     match size {
         Size::Byte => (value & 0x0080) != 0,

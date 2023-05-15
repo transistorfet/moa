@@ -1,11 +1,12 @@
 
 use std::fs;
+use std::cmp;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::fmt::Write;
 
 use crate::info;
-use crate::error::Error;
+use crate::error::{Error, EmulatorErrorKind};
 use crate::clock::ClockTime;
 use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, read_beu16};
 
@@ -274,20 +275,17 @@ pub struct BusPort {
     offset: Address,
     address_mask: Address,
     data_width: u8,
+    error_on_alignment: bool,
     subdevice: Rc<RefCell<Bus>>,
 }
 
 impl BusPort {
     pub fn new(offset: Address, address_bits: u8, data_bits: u8, bus: Rc<RefCell<Bus>>) -> Self {
-        let mut address_mask = 0;
-        for _ in 0..address_bits {
-            address_mask = (address_mask << 1) | 0x01;
-        }
-
         Self {
             offset,
-            address_mask,
+            address_mask: (1 << address_bits) - 1,
             data_width: data_bits / 8,
+            error_on_alignment: false,
             subdevice: bus,
         }
     }
@@ -311,21 +309,31 @@ impl Addressable for BusPort {
     }
 
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        if self.error_on_alignment && addr % self.data_width as Address != 0 {
+            return Err(Error::emulator(EmulatorErrorKind::MemoryAlignment, format!("misaligned memory access at {:x}", addr)));
+        }
+
         let addr = self.offset + (addr & self.address_mask);
         let mut subdevice = self.subdevice.borrow_mut();
         for i in (0..data.len()).step_by(self.data_width as usize) {
-            let end = std::cmp::min(i + self.data_width as usize, data.len());
-            subdevice.read(clock, addr + i as Address, &mut data[i..end])?;
+            let addr_index = (addr + i as Address) & self.address_mask;
+            let end = cmp::min(i + self.data_width as usize, data.len());
+            subdevice.read(clock, addr_index, &mut data[i..end])?;
         }
         Ok(())
     }
 
     fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
+        if self.error_on_alignment && addr % self.data_width as Address != 0 {
+            return Err(Error::emulator(EmulatorErrorKind::MemoryAlignment, format!("misaligned memory access at {:x}", addr)));
+        }
+
         let addr = self.offset + (addr & self.address_mask);
         let mut subdevice = self.subdevice.borrow_mut();
         for i in (0..data.len()).step_by(self.data_width as usize) {
+            let addr_index = (addr + i as Address) & self.address_mask;
             let end = std::cmp::min(i + self.data_width as usize, data.len());
-            subdevice.write(clock, addr + i as Address, &data[i..end])?;
+            subdevice.write(clock, addr_index, &data[i..end])?;
         }
         Ok(())
     }
