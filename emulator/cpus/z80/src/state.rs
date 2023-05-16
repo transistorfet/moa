@@ -3,6 +3,7 @@ use moa_core::{ClockTime, Address, BusPort, Signal, Frequency};
 
 use crate::decode::Z80Decoder;
 use crate::debugger::Z80Debugger;
+use crate::execute::Z80Executor;
 use crate::instructions::{Register, InterruptMode};
 
 
@@ -93,11 +94,11 @@ pub struct Z80 {
     pub state: Z80State,
     pub decoder: Z80Decoder,
     pub debugger: Z80Debugger,
+    pub executor: Z80Executor,
     pub port: BusPort,
     pub ioport: Option<BusPort>,
     pub reset: Signal<bool>,
     pub bus_request: Signal<bool>,
-    pub current_clock: ClockTime,
 }
 
 impl Z80 {
@@ -108,11 +109,11 @@ impl Z80 {
             state: Z80State::default(),
             decoder: Z80Decoder::default(),
             debugger: Z80Debugger::default(),
+            executor: Z80Executor::at_time(ClockTime::START),
             port,
             ioport,
             reset: Signal::new(false),
             bus_request: Signal::new(false),
-            current_clock: ClockTime::START,
         }
     }
 
@@ -121,6 +122,7 @@ impl Z80 {
         self.state = Z80State::default();
         self.decoder = Z80Decoder::default();
         self.debugger = Z80Debugger::default();
+        self.executor = Z80Executor::at_time(ClockTime::START);
     }
 
     pub fn dump_state(&mut self, clock: ClockTime) {

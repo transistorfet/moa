@@ -9,7 +9,6 @@ pub struct Z80Decoder {
     pub start: u16,
     pub end: u16,
     pub instruction: Instruction,
-    pub execution_time: u16,
 }
 
 impl Default for Z80Decoder {
@@ -19,7 +18,6 @@ impl Default for Z80Decoder {
             start: 0,
             end: 0,
             instruction: Instruction::NOP,
-            execution_time: 0,
         }
     }
 }
@@ -29,7 +27,6 @@ impl Z80Decoder {
         self.clock = clock;
         self.start = start;
         self.end = start;
-        self.execution_time = 0;
         self.instruction = self.decode_one(memory)?;
         Ok(())
     }
@@ -509,20 +506,18 @@ impl Z80Decoder {
     fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Error> {
         let byte = device.read_u8(self.clock, self.end as Address)?;
         self.end = self.end.wrapping_add(1);
-        self.execution_time += 4;
         Ok(byte)
     }
 
     fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Error> {
         let word = device.read_leu16(self.clock, self.end as Address)?;
         self.end = self.end.wrapping_add(2);
-        self.execution_time += 8;
         Ok(word)
     }
 
     pub fn format_instruction_bytes(&mut self, memory: &mut dyn Addressable) -> String {
         let ins_data: String =
-            (0..(self.end - self.start)).map(|offset|
+            (0..self.end.saturating_sub(self.start)).map(|offset|
                 format!("{:02x} ", memory.read_u8(self.clock, (self.start + offset) as Address).unwrap())
             ).collect();
         ins_data
