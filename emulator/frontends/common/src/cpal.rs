@@ -1,7 +1,7 @@
 
 use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, StreamInstant, OutputCallbackInfo, traits::{DeviceTrait, HostTrait, StreamTrait}};
 
-use moa_core::{warn, error};
+use moa_core::{debug, error};
 
 use crate::audio::{AudioOutput, SAMPLE_RATE};
 
@@ -41,7 +41,7 @@ impl CpalAudioOutput {
                         output.put_back(clock, frame);
                     }
                 } else {
-                    warn!("missed an audio frame");
+                    debug!("missed an audio frame");
                     break;
                 }
             }

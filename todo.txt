@@ -1,4 +1,8 @@
 
+* the way you're doing debugging is so bad, and something's broken with the Z80
+* debugger should return a breakpoint error to the frontend, so that the frontend still runs, instead of suspending the current execution
+* can you make the debugger workable in the web ui in some way?  So you can have a debug window open while playing the game or something
+
 * I like making address adapters like this (below)
 * you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
   in order to implement the correct behaviour for address exceptions in 68k, transparently
@@ -12,6 +16,8 @@
 * should you make Address a newtype and add From impls for each type of numeric, and add utils to wrap address at certain boundaries and such
 * should you make a means of storing different kinds of buses?
 * should you make buses hide their RcRefCell?
+* make functions for creating a processor instance from the cpu type (M68k::from_type()), ie. initialize the busport internally with the correct
+  bitwidths, but it would still be possible to initialize the CPU manually to create one that never existed as such
 
 
 * address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used

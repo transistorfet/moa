@@ -204,7 +204,8 @@ impl M68kInstructionTiming {
             Instruction::ANDtoCCR(_) => self.add_internal(20),
             Instruction::ANDtoSR(_) => self.add_internal(20),
 
-            Instruction::ASd(_, target, size, _) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
+            Instruction::ASL(_, target, size) |
+            Instruction::ASR(_, target, size) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
 
             Instruction::Bcc(_, _) => self.add_internal(8).add_on_branch(2),
             Instruction::BRA(_) => self.add_internal(10),
@@ -255,7 +256,8 @@ impl M68kInstructionTiming {
 
             Instruction::LEA(target, _) => self.add_indirect_set(target, 4, 8, 12, 8, 12),
             Instruction::LINK(_, _) => self.add_internal(16),
-            Instruction::LSd(_, target, size, _) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
+            Instruction::LSL(_, target, size) |
+            Instruction::LSR(_, target, size) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
 
             Instruction::MOVE(src, dest, size) => self.add_internal(4).add_two_targets(*size, src, dest),
             Instruction::MOVEA(target, _, size) => self.add_internal(4).add_target(*size, target),
@@ -287,8 +289,10 @@ impl M68kInstructionTiming {
 
             Instruction::RESET => self.add_internal(132),
 
-            Instruction::ROd(_, target, size, _) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
-            Instruction::ROXd(_, target, size, _) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
+            Instruction::ROL(_, target, size) |
+            Instruction::ROR(_, target, size) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
+            Instruction::ROXL(_, target, size) |
+            Instruction::ROXR(_, target, size) => self.add_word_v_long(*size, 6, 8).add_per_rep(2).add_target(*size, target),
 
             Instruction::RTE => self.add_internal(20),
             Instruction::RTR => self.add_internal(20),

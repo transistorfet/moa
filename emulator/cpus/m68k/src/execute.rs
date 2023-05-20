@@ -8,7 +8,6 @@ use crate::instructions::{
     Size,
     Sign,
     Direction,
-    ShiftDirection,
     XRegister,
     BaseRegister,
     IndexRegister,
@@ -222,7 +221,8 @@ impl M68k {
             Instruction::AND(src, dest, size) => self.execute_and(src, dest, size),
             Instruction::ANDtoCCR(value) => self.execute_and_to_ccr(value),
             Instruction::ANDtoSR(value) => self.execute_and_to_sr(value),
-            Instruction::ASd(count, target, size, shift_dir) => self.execute_asd(count, target, size, shift_dir),
+            Instruction::ASL(count, target, size) => self.execute_asl(count, target, size),
+            Instruction::ASR(count, target, size) => self.execute_asr(count, target, size),
             Instruction::Bcc(cond, offset) => self.execute_bcc(cond, offset),
             Instruction::BRA(offset) => self.execute_bra(offset),
             Instruction::BSR(offset) => self.execute_bsr(offset),
@@ -256,7 +256,8 @@ impl M68k {
             Instruction::JSR(target) => self.execute_jsr(target),
             Instruction::LEA(target, reg) => self.execute_lea(target, reg),
             Instruction::LINK(reg, offset) => self.execute_link(reg, offset),
-            Instruction::LSd(count, target, size, shift_dir) => self.execute_lsd(count, target, size, shift_dir),
+            Instruction::LSL(count, target, size) => self.execute_lsl(count, target, size),
+            Instruction::LSR(count, target, size) => self.execute_lsr(count, target, size),
             Instruction::MOVE(src, dest, size) => self.execute_move(src, dest, size),
             Instruction::MOVEA(src, reg, size) => self.execute_movea(src, reg, size),
             Instruction::MOVEfromSR(target) => self.execute_move_from_sr(target),
@@ -279,8 +280,10 @@ impl M68k {
             Instruction::ORtoSR(value) => self.execute_or_to_sr(value),
             Instruction::PEA(target) => self.execute_pea(target),
             Instruction::RESET => self.execute_reset(),
-            Instruction::ROd(count, target, size, shift_dir) => self.execute_rod(count, target, size, shift_dir),
-            Instruction::ROXd(count, target, size, shift_dir) => self.execute_roxd(count, target, size, shift_dir),
+            Instruction::ROL(count, target, size) => self.execute_rol(count, target, size),
+            Instruction::ROR(count, target, size) => self.execute_rol(count, target, size),
+            Instruction::ROXL(count, target, size) => self.execute_roxl(count, target, size),
+            Instruction::ROXR(count, target, size) => self.execute_roxr(count, target, size),
             Instruction::RTE => self.execute_rte(),
             Instruction::RTR => self.execute_rtr(),
             Instruction::RTS => self.execute_rts(),
@@ -389,7 +392,7 @@ impl M68k {
         Ok(())
     }
 
-    fn execute_asd(&mut self, count: Target, target: Target, size: Size, shift_dir: ShiftDirection) -> Result<(), Error> {
+    fn execute_asl(&mut self, count: Target, target: Target, size: Size) -> Result<(), Error> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let value = self.get_target_value(target, size, Used::Twice)?;
 
@@ -397,7 +400,7 @@ impl M68k {
         let mut pair = (value, false);
         let mut previous_msb = get_msb(pair.0, size);
         for _ in 0..count {
-            pair = shift_operation(pair.0, size, shift_dir, true);
+            pair = shift_left(pair.0, size, true);
             if get_msb(pair.0, size) != previous_msb {
                 overflow = true;
             }
@@ -405,21 +408,40 @@ impl M68k {
         }
         self.set_target_value(target, pair.0, size, Used::Twice)?;
 
-        let carry = match shift_dir {
-            ShiftDirection::Left => pair.1,
-            ShiftDirection::Right => if count < size.in_bits() { pair.1 } else { false }
-        };
+        self.set_arithmetic_shift_flags(pair.0, count, pair.1, overflow, size);
+        Ok(())
+    }
 
-        // Adjust flags
-        self.set_logic_flags(pair.0, size);
+    fn execute_asr(&mut self, count: Target, target: Target, size: Size) -> Result<(), Error> {
+        let count = self.get_target_value(count, size, Used::Once)? % 64;
+        let value = self.get_target_value(target, size, Used::Twice)?;
+
+        let mut overflow = false;
+        let mut pair = (value, false);
+        let mut previous_msb = get_msb(pair.0, size);
+        for _ in 0..count {
+            pair = shift_right(pair.0, size, true);
+            if get_msb(pair.0, size) != previous_msb {
+                overflow = true;
+            }
+            previous_msb = get_msb(pair.0, size);
+        }
+        self.set_target_value(target, pair.0, size, Used::Twice)?;
+
+        let last_bit = if count < size.in_bits() { pair.1 } else { false };
+        self.set_arithmetic_shift_flags(pair.0, count, last_bit, overflow, size);
+        Ok(())
+    }
+
+    fn set_arithmetic_shift_flags(&mut self, result: u32, count: u32, last_bit_out: bool, overflow: bool, size: Size) {
+        self.set_logic_flags(result, size);
         self.set_flag(Flags::Overflow, overflow);
         if count != 0 {
-            self.set_flag(Flags::Extend, carry);
-            self.set_flag(Flags::Carry, carry);
+            self.set_flag(Flags::Extend, last_bit_out);
+            self.set_flag(Flags::Carry, last_bit_out);
         } else {
             self.set_flag(Flags::Carry, false);
         }
-        Ok(())
     }
 
     fn execute_bcc(&mut self, cond: Condition, offset: i32) -> Result<(), Error> {
@@ -772,24 +794,39 @@ impl M68k {
         Ok(())
     }
 
-    fn execute_lsd(&mut self, count: Target, target: Target, size: Size, shift_dir: ShiftDirection) -> Result<(), Error> {
+    fn execute_lsl(&mut self, count: Target, target: Target, size: Size) -> Result<(), Error> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
-            pair = shift_operation(pair.0, size, shift_dir, false);
+            pair = shift_left(pair.0, size, false);
         }
         self.set_target_value(target, pair.0, size, Used::Twice)?;
 
-        // Adjust flags
-        self.set_logic_flags(pair.0, size);
+        self.set_shift_flags(pair.0, count, pair.1, size);
+        Ok(())
+    }
+
+    fn execute_lsr(&mut self, count: Target, target: Target, size: Size) -> Result<(), Error> {
+        let count = self.get_target_value(count, size, Used::Once)? % 64;
+        let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
+        for _ in 0..count {
+            pair = shift_right(pair.0, size, false);
+        }
+        self.set_target_value(target, pair.0, size, Used::Twice)?;
+
+        self.set_shift_flags(pair.0, count, pair.1, size);
+        Ok(())
+    }
+
+    fn set_shift_flags(&mut self, result: u32, count: u32, last_bit_out: bool, size: Size) {
+        self.set_logic_flags(result, size);
         self.set_flag(Flags::Overflow, false);
         if count != 0 {
-            self.set_flag(Flags::Extend, pair.1);
-            self.set_flag(Flags::Carry, pair.1);
+            self.set_flag(Flags::Extend, last_bit_out);
+            self.set_flag(Flags::Carry, last_bit_out);
         } else {
             self.set_flag(Flags::Carry, false);
         }
-        Ok(())
     }
 
     fn execute_move(&mut self, src: Target, dest: Target, size: Size) -> Result<(), Error> {
@@ -1094,37 +1131,57 @@ impl M68k {
         Ok(())
     }
 
-    fn execute_rod(&mut self, count: Target, target: Target, size: Size, shift_dir: ShiftDirection) -> Result<(), Error> {
+    fn execute_rol(&mut self, count: Target, target: Target, size: Size) -> Result<(), Error> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
-            pair = rotate_operation(pair.0, size, shift_dir, None);
+            pair = rotate_left(pair.0, size, None);
         }
         self.set_target_value(target, pair.0, size, Used::Twice)?;
-
-        // Adjust flags
-        self.set_logic_flags(pair.0, size);
-        if pair.1 {
-            self.set_flag(Flags::Carry, true);
-        }
+        self.set_rotate_flags(pair.0, pair.1, size);
         Ok(())
     }
 
-    fn execute_roxd(&mut self, count: Target, target: Target, size: Size, shift_dir: ShiftDirection) -> Result<(), Error> {
+    fn execute_ror(&mut self, count: Target, target: Target, size: Size) -> Result<(), Error> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
-            pair = rotate_operation(pair.0, size, shift_dir, Some(self.get_flag(Flags::Extend)));
+            pair = rotate_right(pair.0, size, None);
+        }
+        self.set_target_value(target, pair.0, size, Used::Twice)?;
+        self.set_rotate_flags(pair.0, pair.1, size);
+        Ok(())
+    }
+
+    fn execute_roxl(&mut self, count: Target, target: Target, size: Size) -> Result<(), Error> {
+        let count = self.get_target_value(count, size, Used::Once)? % 64;
+        let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
+        for _ in 0..count {
+            pair = rotate_left(pair.0, size, Some(self.get_flag(Flags::Extend)));
             self.set_flag(Flags::Extend, pair.1);
         }
         self.set_target_value(target, pair.0, size, Used::Twice)?;
+        self.set_rotate_flags(pair.0, pair.1, size);
+        Ok(())
+    }
 
-        // Adjust flags
-        self.set_logic_flags(pair.0, size);
-        if pair.1 {
+    fn execute_roxr(&mut self, count: Target, target: Target, size: Size) -> Result<(), Error> {
+        let count = self.get_target_value(count, size, Used::Once)? % 64;
+        let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
+        for _ in 0..count {
+            pair = rotate_right(pair.0, size, Some(self.get_flag(Flags::Extend)));
+            self.set_flag(Flags::Extend, pair.1);
+        }
+        self.set_target_value(target, pair.0, size, Used::Twice)?;
+        self.set_rotate_flags(pair.0, pair.1, size);
+        Ok(())
+    }
+
+    fn set_rotate_flags(&mut self, result: u32, last_bit_out: bool, size: Size) {
+        self.set_logic_flags(result, size);
+        if last_bit_out {
             self.set_flag(Flags::Carry, true);
         }
-        Ok(())
     }
 
     fn execute_rte(&mut self) -> Result<(), Error> {
@@ -1747,40 +1804,34 @@ fn overflowing_sub_signed_sized(operand1: u32, operand2: u32, size: Size) -> (u3
     }
 }
 
-fn shift_operation(value: u32, size: Size, dir: ShiftDirection, arithmetic: bool) -> (u32, bool) {
-    match dir {
-        ShiftDirection::Left => {
-            let bit = get_msb(value, size);
-            match size {
-                Size::Byte => (((value as u8) << 1) as u32, bit),
-                Size::Word => (((value as u16) << 1) as u32, bit),
-                Size::Long => (value << 1, bit),
-            }
-        },
-        ShiftDirection::Right => {
-            let mask = if arithmetic { get_msb_mask(value, size) } else { 0 };
-            ((value >> 1) | mask, (value & 0x1) != 0)
-        },
+fn shift_left(value: u32, size: Size, arithmetic: bool) -> (u32, bool) {
+    let bit = get_msb(value, size);
+    match size {
+        Size::Byte => (((value as u8) << 1) as u32, bit),
+        Size::Word => (((value as u16) << 1) as u32, bit),
+        Size::Long => (value << 1, bit),
     }
 }
 
-fn rotate_operation(value: u32, size: Size, dir: ShiftDirection, use_extend: Option<bool>) -> (u32, bool) {
-    match dir {
-        ShiftDirection::Left => {
-            let bit = get_msb(value, size);
-            let mask = if use_extend.unwrap_or(bit) { 0x01 } else { 0x00 };
-            match size {
-                Size::Byte => (mask | ((value as u8) << 1) as u32, bit),
-                Size::Word => (mask | ((value as u16) << 1) as u32, bit),
-                Size::Long => (mask | value << 1, bit),
-            }
-        },
-        ShiftDirection::Right => {
-            let bit = (value & 0x01) != 0;
-            let mask = if use_extend.unwrap_or(bit) { get_msb_mask(0xffffffff, size) } else { 0x0 };
-            ((value >> 1) | mask, bit)
-        },
+fn shift_right(value: u32, size: Size, arithmetic: bool) -> (u32, bool) {
+    let mask = if arithmetic { get_msb_mask(value, size) } else { 0 };
+    ((value >> 1) | mask, (value & 0x1) != 0)
+}
+
+fn rotate_left(value: u32, size: Size, use_extend: Option<bool>) -> (u32, bool) {
+    let bit = get_msb(value, size);
+    let mask = if use_extend.unwrap_or(bit) { 0x01 } else { 0x00 };
+    match size {
+        Size::Byte => (mask | ((value as u8) << 1) as u32, bit),
+        Size::Word => (mask | ((value as u16) << 1) as u32, bit),
+        Size::Long => (mask | value << 1, bit),
     }
+}
+
+fn rotate_right(value: u32, size: Size, use_extend: Option<bool>) -> (u32, bool) {
+    let bit = (value & 0x01) != 0;
+    let mask = if use_extend.unwrap_or(bit) { get_msb_mask(0xffffffff, size) } else { 0x0 };
+    ((value >> 1) | mask, bit)
 }
 
 fn get_nibbles_from_byte(value: u32) -> (u32, u32) {

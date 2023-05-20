@@ -2,7 +2,7 @@
 const DEFAULT_HARTE_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
 
 use std::io::prelude::*;
-use std::fmt::Debug;
+use std::fmt::{Debug, UpperHex};
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::fs::{self, File};
@@ -157,11 +157,14 @@ fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, Syst
     Ok((cpu, system))
 }
 
-fn assert_value<T: PartialEq + Debug>(actual: T, expected: T, message: &str) -> Result<(), Error> {
+fn assert_value<T>(actual: T, expected: T, message: &str) -> Result<(), Error>
+where
+    T: PartialEq + Debug + UpperHex
+{
     if actual == expected {
         Ok(())
     } else {
-        Err(Error::assertion(&format!("{:?} != {:?}, {}", actual, expected, message)))
+        Err(Error::assertion(&format!("{:#X} != {:#X}, {}", actual, expected, message)))
     }
 }
 

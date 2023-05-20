@@ -24,12 +24,6 @@ pub enum Direction {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ShiftDirection {
-    Right,
-    Left,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum XRegister {
     DReg(u8),
     AReg(u8),
@@ -103,7 +97,8 @@ pub enum Instruction {
     AND(Target, Target, Size),
     ANDtoCCR(u8),
     ANDtoSR(u16),
-    ASd(Target, Target, Size, ShiftDirection),
+    ASL(Target, Target, Size),
+    ASR(Target, Target, Size),
 
     Bcc(Condition, i32),
     BRA(i32),
@@ -144,7 +139,8 @@ pub enum Instruction {
 
     LEA(Target, Register),
     LINK(Register, i32),
-    LSd(Target, Target, Size, ShiftDirection),
+    LSL(Target, Target, Size),
+    LSR(Target, Target, Size),
 
     MOVE(Target, Target, Size),
     MOVEA(Target, Register, Size),
@@ -174,8 +170,10 @@ pub enum Instruction {
     PEA(Target),
 
     RESET,
-    ROd(Target, Target, Size, ShiftDirection),
-    ROXd(Target, Target, Size, ShiftDirection),
+    ROL(Target, Target, Size),
+    ROR(Target, Target, Size),
+    ROXL(Target, Target, Size),
+    ROXR(Target, Target, Size),
     RTE,
     RTR,
     RTS,
@@ -231,15 +229,6 @@ impl fmt::Display for Sign {
         match self {
             Sign::Signed => write!(f, "s"),
             Sign::Unsigned => write!(f, "u"),
-        }
-    }
-}
-
-impl fmt::Display for ShiftDirection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ShiftDirection::Right => write!(f, "r"),
-            ShiftDirection::Left => write!(f, "l"),
         }
     }
 }
@@ -405,7 +394,8 @@ impl fmt::Display for Instruction {
             Instruction::AND(src, dest, size) => write!(f, "and{}\t{}, {}", size, src, dest),
             Instruction::ANDtoCCR(value) => write!(f, "andib\t#{:#02x}, %ccr", value),
             Instruction::ANDtoSR(value) => write!(f, "andiw\t#{:#04x}, %sr", value),
-            Instruction::ASd(src, dest, size, dir) => write!(f, "as{}{}\t{}, {}", dir, size, src, dest),
+            Instruction::ASL(src, dest, size) => write!(f, "asl{}\t{}, {}", size, src, dest),
+            Instruction::ASR(src, dest, size) => write!(f, "asr{}\t{}, {}", size, src, dest),
 
             Instruction::Bcc(cond, offset) => write!(f, "b{}\t{}", cond, offset),
             Instruction::BRA(offset) => write!(f, "bra\t{}", offset),
@@ -451,7 +441,8 @@ impl fmt::Display for Instruction {
 
             Instruction::LEA(target, reg) => write!(f, "lea\t{}, %a{}", target, reg),
             Instruction::LINK(reg, offset) => write!(f, "link\t%a{}, {}", reg, offset),
-            Instruction::LSd(src, dest, size, dir) => write!(f, "ls{}{}\t{}, {}", dir, size, src, dest),
+            Instruction::LSL(src, dest, size) => write!(f, "lsl{}\t{}, {}", size, src, dest),
+            Instruction::LSR(src, dest, size) => write!(f, "lsr{}\t{}, {}", size, src, dest),
 
             Instruction::MOVE(src, dest, size) => write!(f, "move{}\t{}, {}", size, src, dest),
             Instruction::MOVEA(target, reg, size) => write!(f, "movea{}\t{}, %a{}", size, target, reg),
@@ -497,8 +488,10 @@ impl fmt::Display for Instruction {
             Instruction::PEA(target) => write!(f, "pea\t{}", target),
 
             Instruction::RESET => write!(f, "reset"),
-            Instruction::ROd(src, dest, size, dir) => write!(f, "ro{}{}\t{}, {}", dir, size, src, dest),
-            Instruction::ROXd(src, dest, size, dir) => write!(f, "rox{}{}\t{}, {}", dir, size, src, dest),
+            Instruction::ROL(src, dest, size) => write!(f, "rol{}\t{}, {}", size, src, dest),
+            Instruction::ROR(src, dest, size) => write!(f, "ror{}\t{}, {}", size, src, dest),
+            Instruction::ROXL(src, dest, size) => write!(f, "roxl{}\t{}, {}", size, src, dest),
+            Instruction::ROXR(src, dest, size) => write!(f, "roxr{}\t{}, {}", size, src, dest),
             Instruction::RTE => write!(f, "rte"),
             Instruction::RTR => write!(f, "rtr"),
             Instruction::RTS => write!(f, "rts"),

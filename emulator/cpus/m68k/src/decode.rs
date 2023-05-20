@@ -6,7 +6,6 @@ use super::instructions::{
     Size,
     Sign,
     Direction,
-    ShiftDirection,
     XRegister,
     BaseRegister,
     IndexRegister,
@@ -583,10 +582,9 @@ impl M68kDecoder {
     }
 
     fn decode_group_shift(&mut self, memory: &mut dyn Addressable, ins: u16) -> Result<Instruction, Error> {
-        let dir = if (ins & 0x0100) == 0 { ShiftDirection::Right } else { ShiftDirection::Left };
         match get_size(ins) {
             Some(size) => {
-                let reg = get_low_reg(ins);
+                let target = Target::DirectDReg(get_low_reg(ins));
                 let rotation = get_high_reg(ins);
                 let count = if (ins & 0x0020) == 0 {
                     Target::Immediate(if rotation != 0 { rotation as u32 } else { 8 })
@@ -594,24 +592,46 @@ impl M68kDecoder {
                     Target::DirectDReg(rotation)
                 };
 
-                match (ins & 0x0018) >> 3 {
-                    0b00 => Ok(Instruction::ASd(count, Target::DirectDReg(reg), size, dir)),
-                    0b01 => Ok(Instruction::LSd(count, Target::DirectDReg(reg), size, dir)),
-                    0b10 => Ok(Instruction::ROXd(count, Target::DirectDReg(reg), size, dir)),
-                    0b11 => Ok(Instruction::ROd(count, Target::DirectDReg(reg), size, dir)),
-                    _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                if (ins & 0x0100) == 0 {
+                    match (ins & 0x0018) >> 3 {
+                        0b00 => Ok(Instruction::ASR(count, target, size)),
+                        0b01 => Ok(Instruction::LSR(count, target, size)),
+                        0b10 => Ok(Instruction::ROXR(count, target, size)),
+                        0b11 => Ok(Instruction::ROR(count, target, size)),
+                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                    }
+                } else {
+                    match (ins & 0x0018) >> 3 {
+                        0b00 => Ok(Instruction::ASL(count, target, size)),
+                        0b01 => Ok(Instruction::LSL(count, target, size)),
+                        0b10 => Ok(Instruction::ROXL(count, target, size)),
+                        0b11 => Ok(Instruction::ROL(count, target, size)),
+                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                    }
                 }
             },
             None => {
                 if (ins & 0x800) == 0 {
                     let target = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
                     let count = Target::Immediate(1);
-                    match (ins & 0x0600) >> 9 {
-                        0b00 => Ok(Instruction::ASd(count, target, Size::Word, dir)),
-                        0b01 => Ok(Instruction::LSd(count, target, Size::Word, dir)),
-                        0b10 => Ok(Instruction::ROXd(count, target, Size::Word, dir)),
-                        0b11 => Ok(Instruction::ROd(count, target, Size::Word, dir)),
-                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                    let size = Size::Word;
+
+                    if (ins & 0x0100) == 0 {
+                        match (ins & 0x0600) >> 9 {
+                            0b00 => Ok(Instruction::ASR(count, target, size)),
+                            0b01 => Ok(Instruction::LSR(count, target, size)),
+                            0b10 => Ok(Instruction::ROXR(count, target, size)),
+                            0b11 => Ok(Instruction::ROR(count, target, size)),
+                            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        }
+                    } else {
+                        match (ins & 0x0600) >> 9 {
+                            0b00 => Ok(Instruction::ASL(count, target, size)),
+                            0b01 => Ok(Instruction::LSL(count, target, size)),
+                            0b10 => Ok(Instruction::ROXL(count, target, size)),
+                            0b11 => Ok(Instruction::ROL(count, target, size)),
+                            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        }
                     }
                 } else if self.cputype > M68kType::MC68020 {
                     // Bitfield instructions (MC68020+)

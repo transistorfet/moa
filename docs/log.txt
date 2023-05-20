@@ -428,3 +428,16 @@ General Work
   doesn't make a heck of a lot of sense to be changing the volume level but nothing else all the
   time.  It doesn't seem to set the initial frequencies.  So it's possible that a bug in the Z80
   code is making it run incorrectly and thus not producing correct register commands to the ym2612
+
+2023-05-16
+- I spent a bunch of time getting the Z80 tests running and fixing bugs in the implementation.  It's
+  generally gone well.  I started with 45% of the tests passing with all checks, 60% with the
+  undocumented flags ignored, 83% with undocumented instructions also ignored, and timing wasn't
+  even checked.  It's now 98% passing with undocumented instructions and timing checks, but is still
+  only 65% passing on all tests
+- Now that I added timings to the Z80, and fixed instructions, Sonic 1 has the drums in the intro,
+  but there's still no bass, and it still sounds incorrect in spots.  But most other games still
+  have no sound which is baffling
+- it must be a problem with either the bus architecture in the genesis, or a probably with the
+  CPU/coproc interface, banking, etc
+

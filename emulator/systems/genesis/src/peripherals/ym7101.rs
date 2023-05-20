@@ -4,61 +4,76 @@ use moa_core::{System, Error, EdgeSignal, ClockTime, ClockDuration, Frequency, S
 use moa_core::host::{self, Host, Pixel, PixelEncoding, Frame, FrameSender};
 
 
-const REG_MODE_SET_1: usize             = 0x00;
-const REG_MODE_SET_2: usize             = 0x01;
-const REG_SCROLL_A_ADDR: usize          = 0x02;
-const REG_WINDOW_ADDR: usize            = 0x03;
-const REG_SCROLL_B_ADDR: usize          = 0x04;
-const REG_SPRITES_ADDR: usize           = 0x05;
-// Register 0x06 Unused
-const REG_BACKGROUND: usize             = 0x07;
-// Register 0x08 Unused
-// Register 0x09 Unused
-const REG_H_INTERRUPT: usize            = 0x0A;
-const REG_MODE_SET_3: usize             = 0x0B;
-const REG_MODE_SET_4: usize             = 0x0C;
-const REG_HSCROLL_ADDR: usize           = 0x0D;
-// Register 0x0E Unused
-const REG_AUTO_INCREMENT: usize         = 0x0F;
-const REG_SCROLL_SIZE: usize            = 0x10;
-const REG_WINDOW_H_POS: usize           = 0x11;
-const REG_WINDOW_V_POS: usize           = 0x12;
-const REG_DMA_COUNTER_LOW: usize        = 0x13;
-const REG_DMA_COUNTER_HIGH: usize       = 0x14;
-const REG_DMA_ADDR_LOW: usize           = 0x15;
-const REG_DMA_ADDR_MID: usize           = 0x16;
-const REG_DMA_ADDR_HIGH: usize          = 0x17;
-
-
-//const STATUS_PAL_MODE: u16              = 0x0001;
-const STATUS_DMA_BUSY: u16              = 0x0002;
-const STATUS_IN_HBLANK: u16             = 0x0004;
-const STATUS_IN_VBLANK: u16             = 0x0008;
-//const STATUS_ODD_FRAME: u16             = 0x0010;
-//const STATUS_SPRITE_COLLISION: u16      = 0x0020;
-//const STATUS_SPRITE_OVERFLOW: u16       = 0x0040;
-//const STATUS_V_INTERRUPT: u16           = 0x0080;
-//const STATUS_FIFO_FULL: u16             = 0x0100;
-const STATUS_FIFO_EMPTY: u16            = 0x0200;
-
-const MODE1_BF_DISABLE_DISPLAY: u8      = 0x01;
-//const MODE1_BF_ENABLE_HV_COUNTER: u8    = 0x02;
-const MODE1_BF_HSYNC_INTERRUPT: u8      = 0x10;
-
-const MODE2_BF_V_CELL_MODE: u8          = 0x08;
-const MODE2_BF_DMA_ENABLED: u8          = 0x10;
-const MODE2_BF_VSYNC_INTERRUPT: u8      = 0x20;
-
-const MODE3_BF_EXTERNAL_INTERRUPT: u8   = 0x08;
-const MODE3_BF_V_SCROLL_MODE: u8        = 0x04;
-const MODE3_BF_H_SCROLL_MODE: u8        = 0x03;
-
-const MODE4_BF_H_CELL_MODE: u8          = 0x01;
-const MODE4_BF_SHADOW_HIGHLIGHT: u8     = 0x08;
-
-
-
 const DEV_NAME: &str = "ym7101";
+
+#[rustfmt::skip]
+mod reg {
+    pub(super) const MODE_SET_1: usize              = 0x00;
+    pub(super) const MODE_SET_2: usize              = 0x01;
+    pub(super) const SCROLL_A_ADDR: usize           = 0x02;
+    pub(super) const WINDOW_ADDR: usize             = 0x03;
+    pub(super) const SCROLL_B_ADDR: usize           = 0x04;
+    pub(super) const SPRITES_ADDR: usize            = 0x05;
+    // Register 0x06 Unused
+    pub(super) const BACKGROUND: usize              = 0x07;
+    // Register 0x08 Unused
+    // Register 0x09 Unused
+    pub(super) const H_INTERRUPT: usize             = 0x0A;
+    pub(super) const MODE_SET_3: usize              = 0x0B;
+    pub(super) const MODE_SET_4: usize              = 0x0C;
+    pub(super) const HSCROLL_ADDR: usize            = 0x0D;
+    // Register 0x0E Unused
+    pub(super) const AUTO_INCREMENT: usize          = 0x0F;
+    pub(super) const SCROLL_SIZE: usize             = 0x10;
+    pub(super) const WINDOW_H_POS: usize            = 0x11;
+    pub(super) const WINDOW_V_POS: usize            = 0x12;
+    pub(super) const DMA_COUNTER_LOW: usize         = 0x13;
+    pub(super) const DMA_COUNTER_HIGH: usize        = 0x14;
+    pub(super) const DMA_ADDR_LOW: usize            = 0x15;
+    pub(super) const DMA_ADDR_MID: usize            = 0x16;
+    pub(super) const DMA_ADDR_HIGH: usize           = 0x17;
+}
+
+#[rustfmt::skip]
+mod status {
+    //pub(super) const PAL_MODE: u16                = 0x0001;
+    pub(super) const DMA_BUSY: u16                  = 0x0002;
+    pub(super) const IN_HBLANK: u16                 = 0x0004;
+    pub(super) const IN_VBLANK: u16                 = 0x0008;
+    //pub(super) const ODD_FRAME: u16               = 0x0010;
+    //pub(super) const SPRITE_COLLISION: u16        = 0x0020;
+    //pub(super) const SPRITE_OVERFLOW: u16         = 0x0040;
+    //pub(super) const V_INTERRUPT: u16             = 0x0080;
+    //pub(super) const FIFO_FULL: u16               = 0x0100;
+    pub(super) const FIFO_EMPTY: u16                = 0x0200;
+}
+
+#[rustfmt::skip]
+mod mode1 {
+    pub(super) const BF_DISABLE_DISPLAY: u8         = 0x01;
+    //const BF_ENABLE_HV_COUNTER: u8                = 0x02;
+    pub(super) const BF_HSYNC_INTERRUPT: u8         = 0x10;
+}
+
+#[rustfmt::skip]
+mod mode2 {
+    pub(super) const BF_V_CELL_MODE: u8             = 0x08;
+    pub(super) const BF_DMA_ENABLED: u8             = 0x10;
+    pub(super) const BF_VSYNC_INTERRUPT: u8         = 0x20;
+}
+
+#[rustfmt::skip]
+mod mode3 {
+    pub(super) const BF_EXTERNAL_INTERRUPT: u8      = 0x08;
+    pub(super) const BF_V_SCROLL_MODE: u8           = 0x04;
+    pub(super) const BF_H_SCROLL_MODE: u8           = 0x03;
+}
+
+#[rustfmt::skip]
+mod mode4 {
+    pub(super) const BF_H_CELL_MODE: u8             = 0x01;
+    pub(super) const BF_SHADOW_HIGHLIGHT: u8        = 0x08;
+}
 
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -134,12 +149,12 @@ impl Ym7101Memory {
     fn set_dma_mode(&mut self, mode: DmaType) {
         match mode {
             DmaType::None => {
-                //self.status &= !STATUS_DMA_BUSY;
+                //self.status &= !status::DMA_BUSY;
                 self.transfer_dma_busy = false;
                 self.transfer_run = DmaType::None;
             },
             _ => {
-                //self.status |= STATUS_DMA_BUSY;
+                //self.status |= status::DMA_BUSY;
                 self.transfer_dma_busy = true;
                 self.transfer_run = mode;
             },
@@ -328,7 +343,7 @@ struct Ym7101State {
 impl Default for Ym7101State {
     fn default() -> Self {
         Self {
-            status: 0x3400 | STATUS_FIFO_EMPTY,
+            status: 0x3400 | status::FIFO_EMPTY,
             memory: Ym7101Memory::default(),
 
             mode_1: 0,
@@ -365,22 +380,22 @@ impl Default for Ym7101State {
 impl Ym7101State {
     #[inline(always)]
     fn hsync_int_enabled(&self) -> bool {
-        (self.mode_1 & MODE1_BF_HSYNC_INTERRUPT) != 0
+        (self.mode_1 & mode1::BF_HSYNC_INTERRUPT) != 0
     }
 
     #[inline(always)]
     fn vsync_int_enabled(&self) -> bool {
-        (self.mode_2 & MODE2_BF_VSYNC_INTERRUPT) != 0
+        (self.mode_2 & mode2::BF_VSYNC_INTERRUPT) != 0
     }
 
     #[inline(always)]
     fn external_int_enabled(&self) -> bool {
-        (self.mode_3 & MODE3_BF_EXTERNAL_INTERRUPT) != 0
+        (self.mode_3 & mode3::BF_EXTERNAL_INTERRUPT) != 0
     }
 
     fn update_screen_size(&mut self) {
-        let h_cells = if (self.mode_4 & MODE4_BF_H_CELL_MODE) == 0 { 32 } else { 40 };
-        let v_cells = if (self.mode_2 & MODE2_BF_V_CELL_MODE) == 0 { 28 } else { 30 };
+        let h_cells = if (self.mode_4 & mode4::BF_H_CELL_MODE) == 0 { 32 } else { 40 };
+        let v_cells = if (self.mode_2 & mode2::BF_V_CELL_MODE) == 0 { 28 } else { 30 };
         self.screen_size = (h_cells, v_cells);
     }
 
@@ -404,7 +419,7 @@ impl Ym7101State {
     }
 
     fn get_palette_colour(&self, palette: u8, colour: u8, mode: ColourMode, encoding: PixelEncoding) -> u32 {
-        let shift_enabled = (self.mode_4 & MODE4_BF_SHADOW_HIGHLIGHT) != 0;
+        let shift_enabled = (self.mode_4 & mode4::BF_SHADOW_HIGHLIGHT) != 0;
         let rgb = self.memory.read_beu16(Memory::Cram, (((palette * 16) + colour) * 2) as usize);
         if !shift_enabled || mode == ColourMode::Normal {
             Pixel::Rgb(((rgb & 0x00F) << 4) as u8, (rgb & 0x0F0) as u8, ((rgb & 0xF00) >> 4) as u8).encode(encoding)
@@ -415,7 +430,7 @@ impl Ym7101State {
     }
 
     fn get_hscroll(&self, hcell: usize, line: usize) -> (usize, usize) {
-        let scroll_addr = match self.mode_3 & MODE3_BF_H_SCROLL_MODE {
+        let scroll_addr = match self.mode_3 & mode3::BF_H_SCROLL_MODE {
             0 => self.hscroll_addr,
             2 => self.hscroll_addr + (hcell << 5),
             3 => self.hscroll_addr + (hcell << 5) + (line * 2 * 2),
@@ -428,7 +443,7 @@ impl Ym7101State {
     }
 
     fn get_vscroll(&self, vcell: usize) -> (usize, usize) {
-        let scroll_addr = if (self.mode_3 & MODE3_BF_V_SCROLL_MODE) == 0 {
+        let scroll_addr = if (self.mode_3 & mode3::BF_V_SCROLL_MODE) == 0 {
             0
         } else {
             vcell >> 1
@@ -505,19 +520,29 @@ impl Ym7101State {
         for x in 0..(self.screen_size.0 * 8) {
             let (vscrolling_a, vscrolling_b) = self.get_vscroll(x / 8);
 
-            let pixel_b_x = (x - hscrolling_b) % (self.scroll_size.0 * 8);
-            let pixel_b_y = (y + vscrolling_b) % (self.scroll_size.1 * 8);
-            let pattern_b_addr = self.get_pattern_addr(self.scroll_b_addr, pixel_b_x / 8, pixel_b_y / 8);
-            let pattern_b_word = self.memory.read_beu16(Memory::Vram, pattern_b_addr);
-            let priority_b = (pattern_b_word & 0x8000) != 0;
-            let pixel_b = self.get_pattern_pixel(pattern_b_word, pixel_b_x % 8, pixel_b_y % 8);
+            let (priority_b, pixel_b) = if self.scroll_size != (0, 0) {
+                let pixel_b_x = (x - hscrolling_b) % (self.scroll_size.0 * 8);
+                let pixel_b_y = (y + vscrolling_b) % (self.scroll_size.1 * 8);
+                let pattern_b_addr = self.get_pattern_addr(self.scroll_b_addr, pixel_b_x / 8, pixel_b_y / 8);
+                let pattern_b_word = self.memory.read_beu16(Memory::Vram, pattern_b_addr);
+                let priority_b = (pattern_b_word & 0x8000) != 0;
+                let pixel_b = self.get_pattern_pixel(pattern_b_word, pixel_b_x % 8, pixel_b_y % 8);
+                (priority_b, pixel_b)
+            } else {
+                (false, (0, 0))
+            };
 
-            let pixel_a_x = (x - hscrolling_a) % (self.scroll_size.0 * 8);
-            let pixel_a_y = (y + vscrolling_a) % (self.scroll_size.1 * 8);
-            let pattern_a_addr = self.get_pattern_addr(self.scroll_a_addr, pixel_a_x / 8, pixel_a_y / 8);
-            let pattern_a_word = self.memory.read_beu16(Memory::Vram, pattern_a_addr);
-            let mut priority_a = (pattern_a_word & 0x8000) != 0;
-            let mut pixel_a = self.get_pattern_pixel(pattern_a_word, pixel_a_x % 8, pixel_a_y % 8);
+            let (mut priority_a, mut pixel_a) = if self.scroll_size != (0, 0) {
+                let pixel_a_x = (x - hscrolling_a) % (self.scroll_size.0 * 8);
+                let pixel_a_y = (y + vscrolling_a) % (self.scroll_size.1 * 8);
+                let pattern_a_addr = self.get_pattern_addr(self.scroll_a_addr, pixel_a_x / 8, pixel_a_y / 8);
+                let pattern_a_word = self.memory.read_beu16(Memory::Vram, pattern_a_addr);
+                let priority_a = (pattern_a_word & 0x8000) != 0;
+                let pixel_a = self.get_pattern_pixel(pattern_a_word, pixel_a_x % 8, pixel_a_y % 8);
+                (priority_a, pixel_a)
+            } else {
+                (false, (0, 0))
+            };
 
             if self.window_addr != 0 && self.is_inside_window(x, y) {
                 let pixel_win_x = x - self.window_pos.0.0 * 8;
@@ -548,6 +573,7 @@ impl Ym7101State {
                 }
             }
 
+            #[rustfmt::skip]
             let pixels = match (priority_sprite, priority_a, priority_b) {
                 (false, false, true)  => [ pixel_b,      pixel_sprite, pixel_a,      bg_colour ],
                 (true,  false, true)  => [ pixel_sprite, pixel_b,      pixel_a,      bg_colour ],
@@ -628,12 +654,12 @@ impl Steppable for Ym7101 {
         }
 
         self.state.h_clock += diff;
-        if (self.state.status & STATUS_IN_HBLANK) != 0 && self.state.h_clock >= 2_340 && self.state.h_clock <= 61_160 {
-            self.state.status &= !STATUS_IN_HBLANK;
+        if (self.state.status & status::IN_HBLANK) != 0 && self.state.h_clock >= 2_340 && self.state.h_clock <= 61_160 {
+            self.state.status &= !status::IN_HBLANK;
             self.state.current_x = 0;
         }
-        if (self.state.status & STATUS_IN_HBLANK) == 0 && self.state.h_clock >= 61_160 {
-            self.state.status |= STATUS_IN_HBLANK;
+        if (self.state.status & status::IN_HBLANK) == 0 && self.state.h_clock >= 61_160 {
+            self.state.status |= status::IN_HBLANK;
             self.state.current_y += 1;
 
             self.state.h_scanlines = self.state.h_scanlines.wrapping_sub(1);
@@ -647,18 +673,18 @@ impl Steppable for Ym7101 {
         }
 
         self.state.v_clock += diff;
-        if (self.state.status & STATUS_IN_VBLANK) != 0 && self.state.v_clock >= 1_205_992 && self.state.v_clock <= 15_424_008 {
-            self.state.status &= !STATUS_IN_VBLANK;
+        if (self.state.status & status::IN_VBLANK) != 0 && self.state.v_clock >= 1_205_992 && self.state.v_clock <= 15_424_008 {
+            self.state.status &= !status::IN_VBLANK;
             self.state.current_y = 0;
         }
-        if (self.state.status & STATUS_IN_VBLANK) == 0 && self.state.v_clock >= 15_424_008 {
-            self.state.status |= STATUS_IN_VBLANK;
+        if (self.state.status & status::IN_VBLANK) == 0 && self.state.v_clock >= 15_424_008 {
+            self.state.status |= status::IN_VBLANK;
 
             if self.state.vsync_int_enabled() {
                 system.get_interrupt_controller().set(true, 6, 30)?;
             }
 
-            if (self.state.mode_1 & MODE1_BF_DISABLE_DISPLAY) == 0 {
+            if (self.state.mode_1 & mode1::BF_DISABLE_DISPLAY) == 0 && self.state.screen_size != (0, 0) {
                 let mut frame = Frame::new(self.state.screen_size.0 as u32 * 8, self.state.screen_size.1 as u32 * 8, self.sender.encoding());
                 self.state.draw_frame(&mut frame);
                 self.sender.add(system.clock, frame);
@@ -670,9 +696,9 @@ impl Steppable for Ym7101 {
             self.state.v_clock -= 16_630_000;
         }
 
-        if (self.state.mode_2 & MODE2_BF_DMA_ENABLED) != 0 {
+        if (self.state.mode_2 & mode2::BF_DMA_ENABLED) != 0 {
             self.state.memory.step_dma(system)?;
-            self.state.status = (self.state.status & !STATUS_DMA_BUSY) | (if self.state.memory.transfer_dma_busy { STATUS_DMA_BUSY } else { 0 });
+            self.state.status = (self.state.status & !status::DMA_BUSY) | (if self.state.memory.transfer_dma_busy { status::DMA_BUSY } else { 0 });
         }
 
         Ok(Frequency::from_hz(13_423_294).period_duration() * 4)
@@ -712,52 +738,52 @@ impl Ym7101 {
 
     fn update_register_value(&mut self, reg: usize, data: u8) {
         match reg {
-            REG_MODE_SET_1 => { self.state.mode_1 = data; },
-            REG_MODE_SET_2 => {
+            reg::MODE_SET_1 => { self.state.mode_1 = data; },
+            reg::MODE_SET_2 => {
                 self.state.mode_2 = data;
                 self.state.update_screen_size();
             },
-            REG_SCROLL_A_ADDR => { self.state.scroll_a_addr = (data as usize) << 10; },
-            REG_WINDOW_ADDR => { self.state.window_addr = (data as usize) << 10; },
-            REG_SCROLL_B_ADDR => { self.state.scroll_b_addr = (data as usize) << 13; },
-            REG_SPRITES_ADDR => { self.state.sprites_addr = (data as usize) << 9; },
-            REG_BACKGROUND => { self.state.background = data; },
-            REG_H_INTERRUPT => { self.state.h_int_lines = data; },
-            REG_MODE_SET_3 => { self.state.mode_3 = data; },
-            REG_MODE_SET_4 => {
+            reg::SCROLL_A_ADDR => { self.state.scroll_a_addr = (data as usize) << 10; },
+            reg::WINDOW_ADDR => { self.state.window_addr = (data as usize) << 10; },
+            reg::SCROLL_B_ADDR => { self.state.scroll_b_addr = (data as usize) << 13; },
+            reg::SPRITES_ADDR => { self.state.sprites_addr = (data as usize) << 9; },
+            reg::BACKGROUND => { self.state.background = data; },
+            reg::H_INTERRUPT => { self.state.h_int_lines = data; },
+            reg::MODE_SET_3 => { self.state.mode_3 = data; },
+            reg::MODE_SET_4 => {
                 self.state.mode_4 = data;
                 self.state.update_screen_size();
             },
-            REG_HSCROLL_ADDR => { self.state.hscroll_addr = (data as usize) << 10; },
-            REG_AUTO_INCREMENT => { self.state.memory.transfer_auto_inc = data as u32; },
-            REG_SCROLL_SIZE => {
+            reg::HSCROLL_ADDR => { self.state.hscroll_addr = (data as usize) << 10; },
+            reg::AUTO_INCREMENT => { self.state.memory.transfer_auto_inc = data as u32; },
+            reg::SCROLL_SIZE => {
                 let h = decode_scroll_size(data & 0x03);
                 let v = decode_scroll_size((data >> 4) & 0x03);
                 self.state.scroll_size = (h, v);
             },
-            REG_WINDOW_H_POS => {
+            reg::WINDOW_H_POS => {
                 self.state.window_values.0 = data;
                 self.state.update_window_position();
             },
-            REG_WINDOW_V_POS => {
+            reg::WINDOW_V_POS => {
                 self.state.window_values.1 = data;
                 self.state.update_window_position();
             },
-            REG_DMA_COUNTER_LOW => {
+            reg::DMA_COUNTER_LOW => {
                 self.state.memory.transfer_count = (self.state.memory.transfer_count & 0xFF00) | data as u32;
                 self.state.memory.transfer_remain = self.state.memory.transfer_count;
             },
-            REG_DMA_COUNTER_HIGH => {
+            reg::DMA_COUNTER_HIGH => {
                 self.state.memory.transfer_count = (self.state.memory.transfer_count & 0x00FF) | ((data as u32) << 8);
                 self.state.memory.transfer_remain = self.state.memory.transfer_count;
             },
-            REG_DMA_ADDR_LOW => {
+            reg::DMA_ADDR_LOW => {
                 self.state.memory.transfer_src_addr = (self.state.memory.transfer_src_addr & 0xFFFE00) | ((data as u32) << 1);
             },
-            REG_DMA_ADDR_MID => {
+            reg::DMA_ADDR_MID => {
                 self.state.memory.transfer_src_addr = (self.state.memory.transfer_src_addr & 0xFE01FF) | ((data as u32) << 9);
             },
-            REG_DMA_ADDR_HIGH => {
+            reg::DMA_ADDR_HIGH => {
                 let mask = if (data & 0x80) == 0 { 0x7F } else { 0x3F };
                 self.state.memory.transfer_bits = data & 0xC0;
                 self.state.memory.transfer_src_addr = (self.state.memory.transfer_src_addr & 0x01FFFF) | (((data & mask) as u32) << 17);
@@ -834,7 +860,7 @@ impl Addressable for Ym7101 {
                     }
                 } else {
                     self.state.memory.write_control_port(data)?;
-                    self.state.status = (self.state.status & !STATUS_DMA_BUSY) | (if self.state.memory.transfer_dma_busy { STATUS_DMA_BUSY } else { 0 });
+                    self.state.status = (self.state.status & !status::DMA_BUSY) | (if self.state.memory.transfer_dma_busy { status::DMA_BUSY } else { 0 });
                 }
             },
 
