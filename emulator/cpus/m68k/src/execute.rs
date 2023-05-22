@@ -1,8 +1,11 @@
 
 use moa_core::debug;
-use moa_core::{System, Error, ErrorType, ClockDuration, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
+use moa_core::{System, Error, ErrorType, ClockTime, ClockDuration, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
-use crate::state::{M68k, M68kType, Status, Flags, Exceptions, InterruptPriority, FunctionCode, MemType, MemAccess};
+use crate::state::{M68k, M68kType, ClockCycles, Status, Flags, Exceptions, InterruptPriority};
+use crate::memory::{MemType, MemAccess};
+use crate::decode::M68kDecoder;
+use crate::timing::M68kInstructionTiming;
 use crate::instructions::{
     Register,
     Size,
@@ -30,11 +33,12 @@ pub enum Used {
 
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
-        self.step_internal(system)
+        let clocks = self.step_internal(system)?;
+        Ok(self.frequency.period_duration() * clocks as u64)
     }
 
-    fn on_error(&mut self, system: &System) {
-        self.dump_state(system.clock);
+    fn on_error(&mut self, _system: &System) {
+        self.dump_state();
     }
 }
 
@@ -56,15 +60,11 @@ impl Transmutable for M68k {
 
 
 impl M68k {
-    #[allow(dead_code)]
-    pub fn is_running(&self) -> bool {
-        self.state.status != Status::Stopped
-    }
-
-    pub fn step_internal(&mut self, system: &System) -> Result<ClockDuration, Error> {
-        self.current_clock = system.clock;
+    pub fn step_internal(&mut self, system: &System) -> Result<ClockCycles, Error> {
+        //self.current_clock = system.clock;
+        self.init_cycle(system.clock);
         match self.state.status {
-            Status::Init => self.init(),
+            Status::Init => self.reset_cpu(),
             Status::Stopped => Err(Error::new("CPU stopped")),
             Status::Running => {
                 match self.cycle_one(system) {
@@ -73,7 +73,7 @@ impl M68k {
                     // TODO match arm conditional is temporary: illegal instructions generate a top level error in order to debug and fix issues with decode
                     //Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
                         self.exception(native as u8, false)?;
-                        Ok(self.frequency.period_duration() * 4)
+                        Ok(4)
                     },
                     Err(err) => Err(err),
                 }
@@ -81,20 +81,27 @@ impl M68k {
         }
     }
 
-    pub fn init(&mut self) -> Result<ClockDuration, Error> {
-        self.state.ssp = self.port.read_beu32(self.current_clock, 0)?;
-        self.state.pc = self.port.read_beu32(self.current_clock, 4)?;
-        self.state.status = Status::Running;
-        Ok(self.frequency.period_duration() * 16)
+    pub fn init_cycle(&mut self, clock: ClockTime) {
+        self.current_clock = clock;
+        self.decoder = M68kDecoder::new(self.cputype, self.is_supervisor(), self.state.pc);
+        self.timing = M68kInstructionTiming::new(self.cputype, self.port.data_width());
+        self.port.init_cycle(clock);
     }
 
-    pub fn cycle_one(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    pub fn reset_cpu(&mut self) -> Result<ClockCycles, Error> {
+        self.state.ssp = self.get_address_sized(0, Size::Long)?;
+        self.state.pc = self.get_address_sized(4, Size::Long)?;
+        self.state.status = Status::Running;
+        Ok(16)
+    }
+
+    pub fn cycle_one(&mut self, system: &System) -> Result<ClockCycles, Error> {
         self.decode_next()?;
         self.execute_current()?;
 
         self.check_pending_interrupts(system)?;
         self.check_breakpoints(system);
-        Ok(self.frequency.period_duration() * self.timing.calculate_clocks(false, 1) as u64)
+        Ok(self.timing.calculate_clocks(false, 1))
     }
 
     pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), Error> {
@@ -144,9 +151,9 @@ impl M68k {
     pub fn setup_group0_exception(&mut self, number: u8) -> Result<(), Error> {
         let sr = self.state.sr;
         let ins_word = self.decoder.instruction_word;
-        let extra_code = self.state.request.get_type_code();
-        let fault_size = self.state.request.size.in_bytes();
-        let fault_address = self.state.request.address;
+        let extra_code = self.port.request.get_type_code();
+        let fault_size = self.port.request.size.in_bytes();
+        let fault_address = self.port.request.address;
 
         // Changes to the flags must happen after the previous value has been pushed to the stack
         self.set_flag(Flags::Supervisor, true);
@@ -164,7 +171,7 @@ impl M68k {
         self.push_word((ins_word & 0xFFF0) | extra_code)?;
 
         let vector = self.state.vbr + offset as u32;
-        let addr = self.port.read_beu32(self.current_clock, vector as Address)?;
+        let addr = self.get_address_sized(vector as Address, Size::Long)?;
         self.set_pc(addr)?;
 
         Ok(())
@@ -172,7 +179,7 @@ impl M68k {
 
     pub fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), Error> {
         let sr = self.state.sr;
-        self.state.request.i_n_bit = true;
+        self.port.request.i_n_bit = true;
 
         // Changes to the flags must happen after the previous value has been pushed to the stack
         self.set_flag(Flags::Supervisor, true);
@@ -189,7 +196,7 @@ impl M68k {
         self.push_word(sr)?;
 
         let vector = self.state.vbr + offset as u32;
-        let addr = self.port.read_beu32(self.current_clock, vector as Address)?;
+        let addr = self.get_address_sized(vector as Address, Size::Long)?;
         self.set_pc(addr)?;
 
         Ok(())
@@ -198,8 +205,8 @@ impl M68k {
     pub fn decode_next(&mut self) -> Result<(), Error> {
         self.timing.reset();
 
-        self.start_instruction_request(self.state.pc)?;
-        self.decoder.decode_at(&mut self.port, self.current_clock, self.state.pc)?;
+        let is_supervisor = self.is_supervisor();
+        self.decoder.decode_at(&mut self.port, is_supervisor, self.state.pc)?;
 
         self.timing.add_instruction(&self.decoder.instruction);
 
@@ -281,7 +288,7 @@ impl M68k {
             Instruction::PEA(target) => self.execute_pea(target),
             Instruction::RESET => self.execute_reset(),
             Instruction::ROL(count, target, size) => self.execute_rol(count, target, size),
-            Instruction::ROR(count, target, size) => self.execute_rol(count, target, size),
+            Instruction::ROR(count, target, size) => self.execute_ror(count, target, size),
             Instruction::ROXL(count, target, size) => self.execute_roxl(count, target, size),
             Instruction::ROXR(count, target, size) => self.execute_roxr(count, target, size),
             Instruction::RTE => self.execute_rte(),
@@ -400,7 +407,7 @@ impl M68k {
         let mut pair = (value, false);
         let mut previous_msb = get_msb(pair.0, size);
         for _ in 0..count {
-            pair = shift_left(pair.0, size, true);
+            pair = shift_left(pair.0, size);
             if get_msb(pair.0, size) != previous_msb {
                 overflow = true;
             }
@@ -798,7 +805,7 @@ impl M68k {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
-            pair = shift_left(pair.0, size, false);
+            pair = shift_left(pair.0, size);
         }
         self.set_target_value(target, pair.0, size, Used::Twice)?;
 
@@ -989,8 +996,8 @@ impl M68k {
                 let mut shift = (size.in_bits() as i32) - 8;
                 let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32) as Address;
                 while shift >= 0 {
-                    let byte = (self.state.d_reg[dreg as usize] >> shift) as u8;
-                    self.port.write_u8(self.current_clock, addr, byte)?;
+                    let byte = self.state.d_reg[dreg as usize] >> shift;
+                    self.set_address_sized(addr, byte, Size::Byte)?;
                     addr += 2;
                     shift -= 8;
                 }
@@ -999,7 +1006,7 @@ impl M68k {
                 let mut shift = (size.in_bits() as i32) - 8;
                 let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32) as Address;
                 while shift >= 0 {
-                    let byte = self.port.read_u8(self.current_clock, addr)?;
+                    let byte = self.get_address_sized(addr, Size::Byte)?;
                     self.state.d_reg[dreg as usize] |= (byte as u32) << shift;
                     addr += 2;
                     shift -= 8;
@@ -1506,60 +1513,24 @@ impl M68k {
     }
 
     fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, Error> {
-        self.start_request(addr as u32, size, MemAccess::Read, MemType::Data, false)?;
-        match size {
-            Size::Byte => self.port.read_u8(self.current_clock, addr).map(|value| value as u32),
-            Size::Word => self.port.read_beu16(self.current_clock, addr).map(|value| value as u32),
-            Size::Long => self.port.read_beu32(self.current_clock, addr),
-        }
+        self.port.read_data_sized(self.is_supervisor(), addr, size)
     }
 
     fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), Error> {
-        self.start_request(addr as u32, size, MemAccess::Write, MemType::Data, false)?;
-        match size {
-            Size::Byte => self.port.write_u8(self.current_clock, addr, value as u8),
-            Size::Word => self.port.write_beu16(self.current_clock, addr, value as u16),
-            Size::Long => self.port.write_beu32(self.current_clock, addr, value),
-        }
-    }
-
-    fn start_instruction_request(&mut self, addr: u32) -> Result<u32, Error> {
-        self.state.request.i_n_bit = false;
-        self.state.request.code = FunctionCode::program(self.state.sr);
-        self.state.request.access = MemAccess::Read;
-        self.state.request.address = addr;
-
-        validate_address(addr)
-    }
-
-    fn start_request(&mut self, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, Error> {
-        self.state.request.i_n_bit = i_n_bit;
-        self.state.request.code = match mtype {
-            MemType::Program => FunctionCode::program(self.state.sr),
-            MemType::Data => FunctionCode::data(self.state.sr),
-        };
-
-        self.state.request.access = access;
-        self.state.request.address = addr;
-
-        if size == Size::Byte {
-            Ok(addr)
-        } else {
-            validate_address(addr)
-        }
+        self.port.write_data_sized(self.is_supervisor(), addr, value, size)
     }
 
     fn push_word(&mut self, value: u16) -> Result<(), Error> {
         *self.get_stack_pointer_mut() -= 2;
         let addr = *self.get_stack_pointer_mut();
-        self.start_request(addr, Size::Word, MemAccess::Write, MemType::Data, false)?;
-        self.port.write_beu16(self.current_clock, addr as Address, value)
+        self.port.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Write, MemType::Data, false)?;
+        self.port.port.write_beu16(self.current_clock, addr as Address, value)
     }
 
     fn pop_word(&mut self) -> Result<u16, Error> {
         let addr = *self.get_stack_pointer_mut();
-        let value = self.port.read_beu16(self.current_clock, addr as Address)?;
-        self.start_request(addr, Size::Word, MemAccess::Read, MemType::Data, false)?;
+        self.port.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Read, MemType::Data, false)?;
+        let value = self.port.port.read_beu16(self.current_clock, addr as Address)?;
         *self.get_stack_pointer_mut() += 2;
         Ok(value)
     }
@@ -1567,21 +1538,21 @@ impl M68k {
     fn push_long(&mut self, value: u32) -> Result<(), Error> {
         *self.get_stack_pointer_mut() -= 4;
         let addr = *self.get_stack_pointer_mut();
-        self.start_request(addr, Size::Long, MemAccess::Write, MemType::Data, false)?;
-        self.port.write_beu32(self.current_clock, addr as Address, value)
+        self.port.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Write, MemType::Data, false)?;
+        self.port.port.write_beu32(self.current_clock, addr as Address, value)
     }
 
     fn pop_long(&mut self) -> Result<u32, Error> {
         let addr = *self.get_stack_pointer_mut();
-        let value = self.port.read_beu32(self.current_clock, addr as Address)?;
-        self.start_request(addr, Size::Long, MemAccess::Read, MemType::Data, false)?;
+        self.port.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Read, MemType::Data, false)?;
+        let value = self.port.port.read_beu32(self.current_clock, addr as Address)?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }
 
     fn set_pc(&mut self, value: u32) -> Result<(), Error> {
         self.state.pc = value;
-        self.start_request(self.state.pc, Size::Word, MemAccess::Read, MemType::Program, true)?;
+        self.port.start_request(self.is_supervisor(), self.state.pc, Size::Word, MemAccess::Read, MemType::Program, true)?;
         Ok(())
     }
 
@@ -1751,14 +1722,6 @@ impl M68k {
     }
 }
 
-fn validate_address(addr: u32) -> Result<u32, Error> {
-    if addr & 0x1 == 0 {
-        Ok(addr)
-    } else {
-        Err(Error::processor(Exceptions::AddressError as u32))
-    }
-}
-
 fn overflowing_add_sized(operand1: u32, operand2: u32, size: Size) -> (u32, bool) {
     match size {
         Size::Byte => {
@@ -1804,7 +1767,7 @@ fn overflowing_sub_signed_sized(operand1: u32, operand2: u32, size: Size) -> (u3
     }
 }
 
-fn shift_left(value: u32, size: Size, arithmetic: bool) -> (u32, bool) {
+fn shift_left(value: u32, size: Size) -> (u32, bool) {
     let bit = get_msb(value, size);
     match size {
         Size::Byte => (((value as u8) << 1) as u32, bit),

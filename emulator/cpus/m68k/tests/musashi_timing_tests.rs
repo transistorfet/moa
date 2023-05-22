@@ -26,7 +26,7 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
         BusPort::new(0, 24, 16, system.bus.clone())
     };
     let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
-    cpu.init().unwrap();
+    cpu.init_cycle().unwrap();
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
 

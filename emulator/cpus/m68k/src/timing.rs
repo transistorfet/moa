@@ -1,5 +1,6 @@
 
 use crate::M68kType;
+use crate::state::ClockCycles;
 use crate::instructions::{Size, Sign, Direction, Target, Instruction};
 
 
@@ -337,12 +338,12 @@ impl M68kInstructionTiming {
         self.add_internal(4)
     }
 
-    pub fn calculate_clocks(&self, branched: bool, reps: u16) -> u16 {
+    pub fn calculate_clocks(&self, branched: bool, reps: u16) -> ClockCycles {
         //println!("{:?}", self);
-        (self.accesses as u16 * 4)
-        + self.internal as u16
-        + (if branched { self.on_branch as u16 } else { 0 })
-        + self.per_rep as u16 * reps
+        (self.accesses as ClockCycles * 4)
+        + self.internal as ClockCycles
+        + (if branched { self.on_branch as ClockCycles } else { 0 })
+        + self.per_rep as ClockCycles * reps
     }
 
     #[inline(always)]

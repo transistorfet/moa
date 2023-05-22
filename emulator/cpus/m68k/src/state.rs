@@ -1,11 +1,13 @@
 
-use moa_core::{ClockTime, Address, BusPort, Frequency};
+use moa_core::{ClockTime, BusPort, Frequency};
 
-use crate::instructions::Size;
 use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
+use crate::memory::M68kBusPort;
 use crate::timing::M68kInstructionTiming;
 
+
+pub type ClockCycles = u16;
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -49,20 +51,6 @@ pub enum Exceptions {
     LineFEmulator       = 11,
 }
 
-#[repr(u8)]
-#[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum FunctionCode {
-    Reserved0           = 0,
-    UserData            = 1,
-    UserProgram         = 2,
-    Reserved3           = 3,
-    Reserved4           = 4,
-    SupervisorData      = 5,
-    SupervisorProgram   = 6,
-    CpuSpace            = 7,
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     Init,
@@ -83,31 +71,9 @@ pub enum InterruptPriority {
     Level7 = 7,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum MemType {
-    Program,
-    Data,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum MemAccess {
-    Read,
-    Write,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct MemoryRequest {
-    pub i_n_bit: bool,
-    pub access: MemAccess,
-    pub code: FunctionCode,
-    pub size: Size,
-    pub address: u32,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct M68kState {
     pub status: Status,
-    pub request: MemoryRequest,
     pub current_ipl: InterruptPriority,
     pub pending_ipl: InterruptPriority,
 
@@ -129,7 +95,7 @@ pub struct M68k {
     pub decoder: M68kDecoder,
     pub timing: M68kInstructionTiming,
     pub debugger: M68kDebugger,
-    pub port: BusPort,
+    pub port: M68kBusPort,
     pub current_clock: ClockTime,
 }
 
@@ -137,7 +103,6 @@ impl Default for M68kState {
     fn default() -> M68kState {
         M68kState {
             status: Status::Init,
-            request: MemoryRequest::default(),
             current_ipl: InterruptPriority::NoInterrupt,
             pending_ipl: InterruptPriority::NoInterrupt,
 
@@ -159,23 +124,15 @@ impl M68k {
             cputype,
             frequency,
             state: M68kState::default(),
-            decoder: M68kDecoder::new(cputype, ClockTime::START, 0),
+            decoder: M68kDecoder::new(cputype, true, 0),
             timing: M68kInstructionTiming::new(cputype, port.data_width()),
             debugger: M68kDebugger::default(),
-            port,
+            port: M68kBusPort::new(port),
             current_clock: ClockTime::START,
         }
     }
 
-    #[allow(dead_code)]
-    pub fn reset(&mut self) {
-        self.state = M68kState::default();
-        self.decoder = M68kDecoder::new(self.cputype, ClockTime::START, 0);
-        self.timing = M68kInstructionTiming::new(self.cputype, self.port.data_width());
-        self.debugger = M68kDebugger::default();
-    }
-
-    pub fn dump_state(&mut self, clock: ClockTime) {
+    pub fn dump_state(&mut self) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#010x}", self.state.pc);
         println!("SR: {:#06x}", self.state.sr);
@@ -187,7 +144,7 @@ impl M68k {
 
         println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
         println!();
-        self.port.dump_memory(clock, self.state.ssp as Address, 0x40);
+        self.port.dump_memory(self.state.ssp, 0x40);
         println!();
     }
 }
@@ -204,52 +161,6 @@ impl InterruptPriority {
             6 => InterruptPriority::Level6,
             _ => InterruptPriority::Level7,
         }
-    }
-}
-
-impl FunctionCode {
-    pub fn program(sr: u16) -> Self {
-        if sr & Flags::Supervisor as u16 != 0 {
-            FunctionCode::SupervisorProgram
-        } else {
-            FunctionCode::UserProgram
-        }
-    }
-
-    pub fn data(sr: u16) -> Self {
-        if sr & Flags::Supervisor as u16 != 0 {
-            FunctionCode::SupervisorData
-        } else {
-            FunctionCode::UserData
-        }
-    }
-}
-
-impl Default for MemoryRequest {
-    fn default() -> Self {
-        Self {
-            i_n_bit: false,
-            access: MemAccess::Read,
-            code: FunctionCode::Reserved0,
-            size: Size::Word,
-            address: 0,
-        }
-    }
-}
-
-impl MemoryRequest {
-    pub fn get_type_code(&self) -> u16 {
-        let ins = match self.i_n_bit {
-            false => 0x0000,
-            true => 0x0008,
-        };
-
-        let rw = match self.access {
-            MemAccess::Write => 0x0000,
-            MemAccess::Read => 0x0010,
-        };
-
-        ins | rw | (self.code as u16)
     }
 }
 

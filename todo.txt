@@ -1,4 +1,8 @@
 
+* I want to make some kind of memory transaction object that does everything in a contained but logical way, including handling exception
+  information needed about the last access, and adjusting the pre/post inc/dec
+
+* the debug dump things should not used the clocked addressing, but use a debugging mode thing of some kind so as not to influence the sim state
 * the way you're doing debugging is so bad, and something's broken with the Z80
 * debugger should return a breakpoint error to the frontend, so that the frontend still runs, instead of suspending the current execution
 * can you make the debugger workable in the web ui in some way?  So you can have a debug window open while playing the game or something

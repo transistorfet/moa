@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::fmt::Write;
 
 use crate::info;
-use crate::error::{Error, EmulatorErrorKind};
+use crate::error::Error;
 use crate::clock::ClockTime;
 use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, read_beu16};
 
@@ -275,7 +275,6 @@ pub struct BusPort {
     offset: Address,
     address_mask: Address,
     data_width: u8,
-    error_on_alignment: bool,
     subdevice: Rc<RefCell<Bus>>,
 }
 
@@ -285,7 +284,6 @@ impl BusPort {
             offset,
             address_mask: (1 << address_bits) - 1,
             data_width: data_bits / 8,
-            error_on_alignment: false,
             subdevice: bus,
         }
     }
@@ -294,10 +292,12 @@ impl BusPort {
         self.subdevice.borrow_mut().dump_memory(clock, self.offset + (addr & self.address_mask), count)
     }
 
+    #[inline]
     pub fn address_mask(&self) -> Address {
         self.address_mask
     }
 
+    #[inline]
     pub fn data_width(&self) -> u8 {
         self.data_width
     }
@@ -309,10 +309,6 @@ impl Addressable for BusPort {
     }
 
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        if self.error_on_alignment && addr % self.data_width as Address != 0 {
-            return Err(Error::emulator(EmulatorErrorKind::MemoryAlignment, format!("misaligned memory access at {:x}", addr)));
-        }
-
         let addr = self.offset + (addr & self.address_mask);
         let mut subdevice = self.subdevice.borrow_mut();
         for i in (0..data.len()).step_by(self.data_width as usize) {
@@ -324,10 +320,6 @@ impl Addressable for BusPort {
     }
 
     fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        if self.error_on_alignment && addr % self.data_width as Address != 0 {
-            return Err(Error::emulator(EmulatorErrorKind::MemoryAlignment, format!("misaligned memory access at {:x}", addr)));
-        }
-
         let addr = self.offset + (addr & self.address_mask);
         let mut subdevice = self.subdevice.borrow_mut();
         for i in (0..data.len()).step_by(self.data_width as usize) {

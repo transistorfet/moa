@@ -225,7 +225,7 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
     assert_value(cpu.state.sr, expected.sr, "sr")?;
     assert_value(cpu.state.pc, expected.pc, "pc")?;
 
-    let addr_mask = cpu.port.address_mask();
+    let addr_mask = cpu.port.port.address_mask();
 
     // Load instructions into memory
     for (i, ins) in expected.prefetch.iter().enumerate() {
@@ -268,8 +268,8 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                 if args.debug {
                     case.dump();
                     println!("");
-                    initial_cpu.dump_state(system.clock);
-                    cpu.dump_state(system.clock);
+                    initial_cpu.dump_state();
+                    cpu.dump_state();
                 }
                 println!("FAILED: {}",  err.msg);
             }

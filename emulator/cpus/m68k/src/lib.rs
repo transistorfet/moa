@@ -5,6 +5,7 @@ pub mod decode;
 pub mod execute;
 pub mod debugger;
 pub mod instructions;
+pub mod memory;
 pub mod timing;
 pub mod tests;
 

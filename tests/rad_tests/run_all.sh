@@ -7,5 +7,5 @@ RESULTS=latest.txt
     cd $LOCATION
     echo "Last run on $DATE at commit $COMMIT" | tee $RESULTS
     echo "" | tee -a $RESULTS
-    cargo run -- -q --testsuite "../jsmoo/misc/tests/GeneratedTests/z80/v1/" --check-timings | tee -a $RESULTS
+    cargo run -- -q --testsuite "../jsmoo/misc/tests/GeneratedTests/z80/v1/" --check-undocumented | tee -a $RESULTS
 }

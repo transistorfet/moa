@@ -829,7 +829,7 @@ impl Ym2612 {
     pub fn set_register(&mut self, clock: ClockTime, bank: u8, reg: u8, data: u8) {
         // Keep a copy for debugging purposes, and if the original values are needed
         self.registers[bank as usize * 256 + reg as usize] = data;
-        //println!("set {:x} to {:x}", bank as usize * 256 + reg as usize, data);
+        println!("set {:x} to {:x}", bank as usize * 256 + reg as usize, data);
 
         //warn!("{}: set reg {}{:x} to {:x}", DEV_NAME, bank, reg, data);
         match reg {
