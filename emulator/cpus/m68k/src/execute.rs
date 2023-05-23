@@ -61,7 +61,6 @@ impl Transmutable for M68k {
 
 impl M68k {
     pub fn step_internal(&mut self, system: &System) -> Result<ClockCycles, Error> {
-        //self.current_clock = system.clock;
         self.init_cycle(system.clock);
         match self.state.status {
             Status::Init => self.reset_cpu(),
@@ -70,8 +69,6 @@ impl M68k {
                 match self.cycle_one(system) {
                     Ok(diff) => Ok(diff),
                     Err(Error { err: ErrorType::Processor, native, .. }) => {
-                    // TODO match arm conditional is temporary: illegal instructions generate a top level error in order to debug and fix issues with decode
-                    //Err(Error { err: ErrorType::Processor, native, .. }) if native != Exceptions::IllegalInstruction as u32 => {
                         self.exception(native as u8, false)?;
                         Ok(4)
                     },
@@ -86,6 +83,7 @@ impl M68k {
         self.decoder = M68kDecoder::new(self.cputype, self.is_supervisor(), self.state.pc);
         self.timing = M68kInstructionTiming::new(self.cputype, self.port.data_width());
         self.port.init_cycle(clock);
+        self.timing.reset();
     }
 
     pub fn reset_cpu(&mut self) -> Result<ClockCycles, Error> {
@@ -203,8 +201,6 @@ impl M68k {
     }
 
     pub fn decode_next(&mut self) -> Result<(), Error> {
-        self.timing.reset();
-
         let is_supervisor = self.is_supervisor();
         self.decoder.decode_at(&mut self.port, is_supervisor, self.state.pc)?;
 

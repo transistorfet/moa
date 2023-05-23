@@ -479,7 +479,6 @@ impl Z80 {
 
     fn execute_inc8(&mut self, target: Target) -> Result<(), Error> {
         let value = self.get_target_value(target)?;
-
         let (result, _, overflow, half_carry) = add_bytes(value, 1);
         let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
         self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, half_carry);
@@ -717,7 +716,7 @@ impl Z80 {
         self.set_logic_op_flags(result, out_bit, false);
         self.set_target_value(target, result)?;
         if let Some(target) = opt_copy {
-            self.set_target_value(target, value)?;
+            self.set_target_value(target, result)?;
         }
         Ok(())
     }
@@ -738,7 +737,7 @@ impl Z80 {
         self.set_logic_op_flags(result, out_bit, false);
         self.set_target_value(target, result)?;
         if let Some(target) = opt_copy {
-            self.set_target_value(target, value)?;
+            self.set_target_value(target, result)?;
         }
         Ok(())
     }
@@ -777,7 +776,7 @@ impl Z80 {
         self.set_logic_op_flags(result, out_bit, false);
         self.set_target_value(target, result)?;
         if let Some(target) = opt_copy {
-            self.set_target_value(target, value)?;
+            self.set_target_value(target, result)?;
         }
         Ok(())
     }
@@ -798,7 +797,7 @@ impl Z80 {
         self.set_logic_op_flags(result, out_bit, false);
         self.set_target_value(target, result)?;
         if let Some(target) = opt_copy {
-            self.set_target_value(target, value)?;
+            self.set_target_value(target, result)?;
         }
         Ok(())
     }
@@ -885,7 +884,7 @@ impl Z80 {
         self.set_logic_op_flags(result, out_bit, false);
         self.set_target_value(target, result)?;
         if let Some(target) = opt_copy {
-            self.set_target_value(target, value)?;
+            self.set_target_value(target, result)?;
         }
         Ok(())
     }
@@ -897,7 +896,7 @@ impl Z80 {
         self.set_logic_op_flags(result, out_bit, false);
         self.set_target_value(target, result)?;
         if let Some(target) = opt_copy {
-            self.set_target_value(target, value)?;
+            self.set_target_value(target, result)?;
         }
         Ok(())
     }
@@ -910,7 +909,7 @@ impl Z80 {
         self.set_logic_op_flags(result, out_bit, false);
         self.set_target_value(target, result)?;
         if let Some(target) = opt_copy {
-            self.set_target_value(target, value)?;
+            self.set_target_value(target, result)?;
         }
         Ok(())
     }
@@ -922,7 +921,7 @@ impl Z80 {
         self.set_logic_op_flags(result, out_bit, false);
         self.set_target_value(target, result)?;
         if let Some(target) = opt_copy {
-            self.set_target_value(target, value)?;
+            self.set_target_value(target, result)?;
         }
         Ok(())
     }
@@ -1159,10 +1158,10 @@ impl Z80 {
 
     fn set_index_register_half_value(&mut self, reg: IndexRegisterHalf, value: u8) {
         match reg {
-            IndexRegisterHalf::IXH => { self.state.ix |= (value as u16) << 8; },
-            IndexRegisterHalf::IXL => { self.state.ix |= value as u16; },
-            IndexRegisterHalf::IYH => { self.state.iy |= (value as u16) << 8; },
-            IndexRegisterHalf::IYL => { self.state.iy |= value as u16; },
+            IndexRegisterHalf::IXH => { self.state.ix = (self.state.ix & 0x00FF) | (value as u16) << 8; },
+            IndexRegisterHalf::IXL => { self.state.ix = (self.state.ix & 0xFF00) | value as u16; },
+            IndexRegisterHalf::IYH => { self.state.iy = (self.state.iy & 0x00FF) | (value as u16) << 8; },
+            IndexRegisterHalf::IYL => { self.state.iy = (self.state.iy & 0xFF00) | value as u16; },
         }
     }
 

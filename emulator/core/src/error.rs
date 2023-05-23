@@ -73,5 +73,9 @@ impl Error {
             msg: msg.into(),
         }
     }
+
+    pub fn is_processor(&self, native: u32) -> bool {
+        self.err == ErrorType::Processor && self.native == native
+    }
 }
 

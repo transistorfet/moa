@@ -1,4 +1,4 @@
- 
+
 2021/10/21:
 
 Frontend/Backend Interface
@@ -70,5 +70,39 @@ Signals, Etc.
     - one or more setters and one listeners (reset, bus_request for the CPUs)
     - one one-shot setter (no reset) with one active listener that resets the signal (certain interrupts, including a vsync interrupt)
     - what about interrupt controller?
+
+
+2023/05/22:
+
+Refactoring Execution of m68k
+-----------------------------
+
+* would it be possible to construct something that behaves more like the microcode executor using steps in chained form,
+  with side effects and quirks and flags (and exceptions) handled as such
+
+```
+// ADD
+executor.start()
+    .fetch_src(src)
+    .fetch_dest(dest)
+    .add()
+    .write_dest(dest)
+    .set_flags("XCNVS")
+    .finish()?;
+
+
+// BRA
+executor.start()
+    .branch_offset(offset)
+    .finish()?;
+
+// JMP
+executor.start()
+    .fetch_src(target)
+    .branch_absolute()
+    .finish()?;
+
+```
+
 
 

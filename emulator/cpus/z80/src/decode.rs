@@ -33,7 +33,10 @@ impl Z80Decoder {
 
     pub fn decode_one(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
         let ins = self.read_instruction_byte(memory)?;
+        self.decode_bare(memory, ins)
+    }
 
+    pub fn decode_bare(&mut self, memory: &mut dyn Addressable, ins: u8) -> Result<Instruction, Error> {
         match get_ins_x(ins) {
             0 => {
                 match get_ins_z(ins) {
@@ -380,19 +383,28 @@ impl Z80Decoder {
                                 let data = self.read_instruction_byte(memory)?;
                                 Ok(Instruction::LD(to_load_target(half_target), LoadTarget::ImmediateByte(data)))
                             },
-                            _ => Ok(Instruction::NOP),
+                            _ => self.decode_bare(memory, ins),
                         }
                     },
                     3 => {
-                        let offset = self.read_instruction_byte(memory)? as i8;
                         match ins {
-                            0x34 => Ok(Instruction::INC8(Target::IndirectOffset(index_reg, offset))),
-                            0x35 => Ok(Instruction::DEC8(Target::IndirectOffset(index_reg, offset))),
-                            0x36 => Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), LoadTarget::ImmediateByte(self.read_instruction_byte(memory)?))),
-                            _ => Ok(Instruction::NOP),
+                            0x34 => {
+                                let offset = self.read_instruction_byte(memory)? as i8;
+                                Ok(Instruction::INC8(Target::IndirectOffset(index_reg, offset)))
+                            },
+                            0x35 => {
+                                let offset = self.read_instruction_byte(memory)? as i8;
+                                Ok(Instruction::DEC8(Target::IndirectOffset(index_reg, offset)))
+                            },
+                            0x36 => {
+                                let offset = self.read_instruction_byte(memory)? as i8;
+                                let immediate = self.read_instruction_byte(memory)?;
+                                Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), LoadTarget::ImmediateByte(immediate)))
+                            },
+                            _ => self.decode_bare(memory, ins),
                         }
                     },
-                    _ => Ok(Instruction::NOP),
+                    _ => self.decode_bare(memory, ins),
                 }
             },
             1 => {
@@ -400,7 +412,7 @@ impl Z80Decoder {
                     0 | 1 => {
                         let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
                             Some(target) => target,
-                            None => return Ok(Instruction::NOP),
+                            None => return self.decode_bare(memory, ins),
                         };
 
                         match (ins & 0x18) >> 3 {
@@ -438,7 +450,7 @@ impl Z80Decoder {
                     3 => {
                         if get_ins_q(ins) == 0 {
                             if get_ins_z(ins) == 6 {
-                                return Ok(Instruction::NOP);
+                                return self.decode_bare(memory, ins);
                             }
                             let src = get_register(get_ins_z(ins));
                             let offset = self.read_instruction_byte(memory)? as i8;
@@ -446,7 +458,7 @@ impl Z80Decoder {
                         } else {
                             let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
                                 Some(target) => target,
-                                None => return Ok(Instruction::NOP),
+                                None => return self.decode_bare(memory, ins),
                             };
 
                             Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), to_load_target(target)))
@@ -458,7 +470,7 @@ impl Z80Decoder {
             2 => {
                 let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
                     Some(target) => target,
-                    None => return Ok(Instruction::NOP),
+                    None => return self.decode_bare(memory, ins),
                 };
 
 
@@ -481,7 +493,7 @@ impl Z80Decoder {
                     0xE5 => Ok(Instruction::PUSH(index_reg.into())),
                     0xE9 => Ok(Instruction::JPIndirect(index_reg.into())),
                     0xF9 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::SP), LoadTarget::DirectRegWord(index_reg.into()))),
-                    _ => Ok(Instruction::NOP),
+                    _ => self.decode_bare(memory, ins),
                 }
             },
             _ => panic!("InternalError: impossible value"),

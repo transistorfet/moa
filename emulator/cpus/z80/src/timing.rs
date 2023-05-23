@@ -38,11 +38,11 @@ impl Z80InstructionCycles {
             Instruction::XOR(target) => {
                 match target {
                     // TODO the undocumented DD version of this instruction is actually 8 cycles
-                    Target::DirectReg(_) => 4,
+                    Target::DirectReg(_) |
+                    Target::DirectRegHalf(_) => 4,
                     Target::IndirectReg(_) => 7,
                     Target::Immediate(_) => 7,
                     Target::IndirectOffset(_, _) => 19,
-                    _ => return Err(Error::new(format!("unexpected instruction: {:?}", instruction))),
                 }
             },
 
@@ -107,7 +107,8 @@ impl Z80InstructionCycles {
             Instruction::INC8(target) => {
                 // TODO the undocumented DD version of this instruction is actually 8 cycles
                 match target {
-                    Target::DirectReg(_) => 4,
+                    Target::DirectReg(_) |
+                    Target::DirectRegHalf(_) => 4,
                     Target::IndirectReg(_) => 11,
                     Target::IndirectOffset(_, _) => 23,
                     _ => return Err(Error::new(format!("unexpected instruction: {:?}", instruction))),
@@ -182,7 +183,11 @@ impl Z80InstructionCycles {
 
                     (LoadTarget::DirectRegByte(_), LoadTarget::DirectRegByte(_)) => 4,
 
-                    (LoadTarget::DirectRegByte(_), LoadTarget::ImmediateByte(_)) => 7,
+                    (LoadTarget::DirectRegHalfByte(_), LoadTarget::DirectRegByte(_)) |
+                    (LoadTarget::DirectRegByte(_), LoadTarget::DirectRegHalfByte(_)) |
+                    (LoadTarget::DirectRegHalfByte(_), LoadTarget::DirectRegHalfByte(_)) => 8,
+
+                    (LoadTarget::DirectRegByte(_) | LoadTarget::DirectRegHalfByte(_), LoadTarget::ImmediateByte(_)) => 7,
                     (LoadTarget::IndirectRegByte(_), LoadTarget::ImmediateByte(_)) => 10,
 
                     (LoadTarget::IndirectOffsetByte(_, _), _) |
