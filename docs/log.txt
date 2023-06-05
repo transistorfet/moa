@@ -441,3 +441,28 @@ General Work
 - it must be a problem with either the bus architecture in the genesis, or a probably with the
   CPU/coproc interface, banking, etc
 
+2023-05-27
+- turns out the tests for the ASL and ASR instructions are known to be incorrect, and there is no
+  fix as of yet.  https://github.com/TomHarte/ProcessorTests/issues/21
+- I starting working on a test running for computie to verify the tests on hardware, and possible
+  make some equivalent tests for 68010 and 68030, but it might be tricky because computie has the
+  flash chip in the lower area of memory, where the tests put the instructions and stack, but it
+  looks like they have use the same values, so it might be possible to search for them in all the
+  test values and modify anything that's within 0x100 bytes of 0xc00 (instruction) and 0x800
+  (stack).
+
+2023-06-04
+- it also turns out that there were many updates to the tests since I downloaded them in September,
+  and for some reason I didn't check until now.  After I got a test program running against real
+  hardware, running on computie with a python script and a sqlite3 database to record the test
+  results.  It isn't the best because a jump or exception-causing instruction can't be tested, so
+  really I would need custom hardware, or I'd need to use Fidget to hook into the SBC Rev.2 board
+  with the address select chip out of the socket, and a custom verilog config that would allow it
+  to control and intercept the CPU and thus know exactly what address it tries to access immediately
+  after the instruction is directly fed to it.  Custom hardware would be simpler, but if I get off
+  my ass and learn verilog, I could do it with stuff i have now.
+- But... yeah, maybe most of that wasn't needed because some of the tests are already fixed.
+  Running against the latest tests, excluding address errors, 99% pass.  All the rotate and logical
+  shift instructions pass now, but there are lots but fewer than before failures for the asl and
+  asr instructions, some movem and movep errors and some bcd instruction errors, mostly
+

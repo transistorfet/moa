@@ -1,0 +1,129 @@
+Last run on 2023-06-04 at commit 708e7706f3c36aead6fb08505480031f7dba61b4
+
+ABCD.json.gz completed: 7993 passed, 72 FAILED
+ADD.b.json.gz completed, all passed!
+ADD.l.json.gz completed, all passed!
+ADD.w.json.gz completed, all passed!
+ADDA.l.json.gz completed, all passed!
+ADDA.w.json.gz completed, all passed!
+ADDX.b.json.gz completed, all passed!
+ADDX.l.json.gz completed, all passed!
+ADDX.w.json.gz completed, all passed!
+AND.b.json.gz completed, all passed!
+AND.l.json.gz completed, all passed!
+AND.w.json.gz completed, all passed!
+ANDItoCCR.json.gz completed, all passed!
+ANDItoSR.json.gz completed, all passed!
+ASL.b.json.gz completed: 7524 passed, 541 FAILED
+ASL.l.json.gz completed: 7507 passed, 558 FAILED
+ASL.w.json.gz completed: 6159 passed, 968 FAILED
+ASR.b.json.gz completed: 7783 passed, 282 FAILED
+ASR.l.json.gz completed: 8029 passed, 36 FAILED
+ASR.w.json.gz completed: 7119 passed, 23 FAILED
+BCHG.json.gz completed, all passed!
+BCLR.json.gz completed, all passed!
+BSET.json.gz completed, all passed!
+BSR.json.gz completed, all passed!
+BTST.json.gz completed: 8052 passed, 13 FAILED
+Bcc.json.gz completed, all passed!
+CHK.json.gz completed: 4627 passed, 321 FAILED
+CLR.b.json.gz completed, all passed!
+CLR.l.json.gz completed, all passed!
+CLR.w.json.gz completed, all passed!
+CMP.b.json.gz completed, all passed!
+CMP.l.json.gz completed, all passed!
+CMP.w.json.gz completed, all passed!
+CMPA.l.json.gz completed, all passed!
+CMPA.w.json.gz completed, all passed!
+DBcc.json.gz completed, all passed!
+DIVS.json.gz completed, all passed!
+DIVU.json.gz completed: 4963 passed, 1 FAILED
+EOR.b.json.gz completed, all passed!
+EOR.l.json.gz completed, all passed!
+EOR.w.json.gz completed, all passed!
+EORItoCCR.json.gz completed, all passed!
+EORItoSR.json.gz completed, all passed!
+EXG.json.gz completed, all passed!
+EXT.l.json.gz completed, all passed!
+EXT.w.json.gz completed, all passed!
+JMP.json.gz completed, all passed!
+JSR.json.gz completed, all passed!
+LEA.json.gz completed, all passed!
+LINK.json.gz completed, all passed!
+LSL.b.json.gz completed, all passed!
+LSL.l.json.gz completed, all passed!
+LSL.w.json.gz completed, all passed!
+LSR.b.json.gz completed, all passed!
+LSR.l.json.gz completed, all passed!
+LSR.w.json.gz completed, all passed!
+MOVE.b.json.gz completed, all passed!
+MOVE.l.json.gz completed, all passed!
+MOVE.q.json.gz completed, all passed!
+MOVE.w.json.gz completed, all passed!
+MOVEA.l.json.gz completed, all passed!
+MOVEA.w.json.gz completed, all passed!
+MOVEM.l.json.gz completed: 3975 passed, 124 FAILED
+MOVEM.w.json.gz completed: 4025 passed, 109 FAILED
+MOVEP.l.json.gz completed: 4036 passed, 4029 FAILED
+MOVEP.w.json.gz completed: 4046 passed, 4019 FAILED
+MOVEfromSR.json.gz completed, all passed!
+MOVEfromUSP.json.gz completed, all passed!
+MOVEtoCCR.json.gz completed, all passed!
+MOVEtoSR.json.gz completed, all passed!
+MOVEtoUSP.json.gz completed, all passed!
+MULS.json.gz completed, all passed!
+MULU.json.gz completed, all passed!
+NBCD.json.gz completed: 8037 passed, 28 FAILED
+NEG.b.json.gz completed, all passed!
+NEG.l.json.gz completed, all passed!
+NEG.w.json.gz completed, all passed!
+NEGX.b.json.gz completed, all passed!
+NEGX.l.json.gz completed, all passed!
+NEGX.w.json.gz completed, all passed!
+NOP.json.gz completed, all passed!
+NOT.b.json.gz completed, all passed!
+NOT.l.json.gz completed: 4924 passed, 1 FAILED
+NOT.w.json.gz completed, all passed!
+OR.b.json.gz completed, all passed!
+OR.l.json.gz completed, all passed!
+OR.w.json.gz completed, all passed!
+ORItoCCR.json.gz completed, all passed!
+ORItoSR.json.gz completed, all passed!
+PEA.json.gz completed, all passed!
+RESET.json.gz completed, all passed!
+ROL.b.json.gz completed, all passed!
+ROL.l.json.gz completed, all passed!
+ROL.w.json.gz completed, all passed!
+ROR.b.json.gz completed, all passed!
+ROR.l.json.gz completed, all passed!
+ROR.w.json.gz completed, all passed!
+ROXL.b.json.gz completed, all passed!
+ROXL.l.json.gz completed, all passed!
+ROXL.w.json.gz completed, all passed!
+ROXR.b.json.gz completed, all passed!
+ROXR.l.json.gz completed, all passed!
+ROXR.w.json.gz completed, all passed!
+RTE.json.gz completed, all passed!
+RTR.json.gz completed, all passed!
+RTS.json.gz completed, all passed!
+SBCD.json.gz completed: 6809 passed, 1256 FAILED
+SUB.b.json.gz completed, all passed!
+SUB.l.json.gz completed, all passed!
+SUB.w.json.gz completed, all passed!
+SUBA.l.json.gz completed, all passed!
+SUBA.w.json.gz completed, all passed!
+SUBX.b.json.gz completed, all passed!
+SUBX.l.json.gz completed, all passed!
+SUBX.w.json.gz completed, all passed!
+SWAP.json.gz completed, all passed!
+Scc.json.gz completed, all passed!
+TAS.json.gz completed, all passed!
+TRAP.json.gz completed, all passed!
+TRAPV.json.gz completed, all passed!
+TST.b.json.gz completed, all passed!
+TST.l.json.gz completed, all passed!
+TST.w.json.gz completed, all passed!
+UNLINK.json.gz completed, all passed!
+
+passed: 817042, failed: 12381, total 99%
+completed in 15m 40s
