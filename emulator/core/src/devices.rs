@@ -29,64 +29,73 @@ pub trait Interruptable {
 
 /// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
-    #[inline]
     fn size(&self) -> usize;
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error>;
     fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error>;
 
+    #[inline]
     fn read_u8(&mut self, clock: ClockTime, addr: Address) -> Result<u8, Error> {
         let mut data = [0; 1];
         self.read(clock, addr, &mut data)?;
         Ok(data[0])
     }
 
+    #[inline]
     fn read_beu16(&mut self, clock: ClockTime, addr: Address) -> Result<u16, Error> {
         let mut data = [0; 2];
         self.read(clock, addr, &mut data)?;
         Ok(read_beu16(&data))
     }
 
+    #[inline]
     fn read_leu16(&mut self, clock: ClockTime, addr: Address) -> Result<u16, Error> {
         let mut data = [0; 2];
         self.read(clock, addr, &mut data)?;
         Ok(read_leu16(&data))
     }
 
+    #[inline]
     fn read_beu32(&mut self, clock: ClockTime, addr: Address) -> Result<u32, Error> {
         let mut data = [0; 4];
         self.read(clock, addr, &mut data)?;
         Ok(read_beu32(&data))
     }
 
+    #[inline]
     fn read_leu32(&mut self, clock: ClockTime, addr: Address) -> Result<u32, Error> {
         let mut data = [0; 4];
         self.read(clock, addr, &mut data)?;
         Ok(read_leu32(&data))
     }
 
+    #[inline]
     fn write_u8(&mut self, clock: ClockTime, addr: Address, value: u8) -> Result<(), Error> {
         let data = [value];
         self.write(clock, addr, &data)
     }
 
+    #[inline]
     fn write_beu16(&mut self, clock: ClockTime, addr: Address, value: u16) -> Result<(), Error> {
         let mut data = [0; 2];
         write_beu16(&mut data, value);
         self.write(clock, addr, &data)
     }
 
+    #[inline]
     fn write_leu16(&mut self, clock: ClockTime, addr: Address, value: u16) -> Result<(), Error> {
         let mut data = [0; 2];
         write_leu16(&mut data, value);
         self.write(clock, addr, &data)
     }
 
+    #[inline]
     fn write_beu32(&mut self, clock: ClockTime, addr: Address, value: u32) -> Result<(), Error> {
         let mut data = [0; 4];
         write_beu32(&mut data, value);
         self.write(clock, addr, &data)
     }
 
+    #[inline]
     fn write_leu32(&mut self, clock: ClockTime, addr: Address, value: u32) -> Result<(), Error> {
         let mut data = [0; 4];
         write_leu32(&mut data, value);
@@ -94,19 +103,19 @@ pub trait Addressable {
     }
 }
 
-#[inline(always)]
+#[inline]
 pub fn read_beu16(data: &[u8]) -> u16 {
     (data[0] as u16) << 8 |
     (data[1] as u16)
 }
 
-#[inline(always)]
+#[inline]
 pub fn read_leu16(data: &[u8]) -> u16 {
     (data[1] as u16) << 8 |
     (data[0] as u16)
 }
 
-#[inline(always)]
+#[inline]
 pub fn read_beu32(data: &[u8]) -> u32 {
     (data[0] as u32) << 24 |
     (data[1] as u32) << 16 |
@@ -114,7 +123,7 @@ pub fn read_beu32(data: &[u8]) -> u32 {
     (data[3] as u32)
 }
 
-#[inline(always)]
+#[inline]
 pub fn read_leu32(data: &[u8]) -> u32 {
     (data[3] as u32) << 24 |
     (data[2] as u32) << 16 |
@@ -124,21 +133,21 @@ pub fn read_leu32(data: &[u8]) -> u32 {
 
 
 
-#[inline(always)]
+#[inline]
 pub fn write_beu16(data: &mut [u8], value: u16) -> &mut [u8] {
     data[0] = (value >> 8) as u8;
     data[1] = value as u8;
     data
 }
 
-#[inline(always)]
+#[inline]
 pub fn write_leu16(data: &mut [u8], value: u16) -> &mut [u8] {
     data[0] = value as u8;
     data[1] = (value >> 8) as u8;
     data
 }
 
-#[inline(always)]
+#[inline]
 pub fn write_beu32(data: &mut [u8], value: u32) -> &mut [u8] {
     data[0] = (value >> 24) as u8;
     data[1] = (value >> 16) as u8;
@@ -147,7 +156,7 @@ pub fn write_beu32(data: &mut [u8], value: u32) -> &mut [u8] {
     data
 }
 
-#[inline(always)]
+#[inline]
 pub fn write_leu32(data: &mut [u8], value: u32) -> &mut [u8] {
     data[0] = value as u8;
     data[1] = (value >> 8) as u8;

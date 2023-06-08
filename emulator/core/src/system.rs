@@ -19,6 +19,7 @@ pub struct System {
 
     pub debug_enabled: Cell<bool>,
     pub debugger: RefCell<Debugger>,
+    pub debuggables: Vec<Device>,
 
     pub bus: Rc<RefCell<Bus>>,
     pub buses: HashMap<String, Rc<RefCell<Bus>>>,
@@ -36,6 +37,7 @@ impl Default for System {
 
             debug_enabled: Cell::new(false),
             debugger: RefCell::new(Debugger::default()),
+            debuggables: Vec::new(),
 
             bus: Rc::new(RefCell::new(Bus::default())),
             buses: HashMap::new(),
@@ -60,6 +62,7 @@ impl System {
     }
 
     pub fn add_device(&mut self, name: &str, device: Device) -> Result<(), Error> {
+        self.try_add_debuggable(device.clone());
         self.try_queue_device(device.clone());
         self.devices.insert(name.to_string(), device);
         Ok(())
@@ -71,12 +74,14 @@ impl System {
 
     pub fn add_peripheral(&mut self, name: &str, addr: Address, device: Device) -> Result<(), Error> {
         self.bus.borrow_mut().insert(addr, device.clone());
+        self.try_add_debuggable(device.clone());
         self.try_queue_device(device.clone());
         self.devices.insert(name.to_string(), device);
         Ok(())
     }
 
     pub fn add_interruptable_device(&mut self, name: &str, device: Device) -> Result<(), Error> {
+        self.try_add_debuggable(device.clone());
         self.try_queue_device(device.clone());
         self.devices.insert(name.to_string(), device);
         Ok(())
@@ -84,7 +89,9 @@ impl System {
 
     pub fn enable_debugging(&self) {
         self.debug_enabled.set(true);
-        self.devices.get("cpu").map(|result| result.try_borrow_mut().map(|mut borrow| borrow.as_debuggable().map(|debug| debug.set_debugging(true))));
+        for device in &self.debuggables {
+            device.borrow_mut().as_debuggable().map(|device| device.set_debugging(true));
+        }
         self.debugger.borrow_mut().breakpoint_occurred();
     }
 
@@ -158,6 +165,12 @@ impl System {
             if let Some(dev) = dev.borrow_mut().as_steppable() {
                 dev.on_error(self);
             }
+        }
+    }
+
+    fn try_add_debuggable(&mut self, device: Device) {
+        if device.borrow_mut().as_debuggable().is_some() {
+            self.debuggables.push(device);
         }
     }
 
