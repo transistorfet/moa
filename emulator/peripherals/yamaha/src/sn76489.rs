@@ -135,7 +135,7 @@ impl Steppable for Sn76489 {
 }
 
 impl Addressable for Sn76489 {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x01
     }
 

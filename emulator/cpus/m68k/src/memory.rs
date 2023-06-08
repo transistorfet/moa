@@ -2,7 +2,7 @@
 use moa_core::{Error, ClockTime, Address, Addressable, BusPort};
 
 use crate::state::{M68k, Exceptions};
-use crate::instructions::{Target, Size};
+use crate::instructions::Size;
 
 #[repr(u8)]
 #[allow(dead_code)]

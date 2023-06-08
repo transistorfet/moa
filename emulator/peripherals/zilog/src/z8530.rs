@@ -9,7 +9,7 @@ pub struct Z8530 {
 }
 
 impl Addressable for Z8530 {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x10
     }
 

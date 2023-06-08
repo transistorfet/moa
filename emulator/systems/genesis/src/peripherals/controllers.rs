@@ -142,7 +142,7 @@ impl GenesisControllers {
 }
 
 impl Addressable for GenesisControllers {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x30
     }
 

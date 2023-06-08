@@ -57,7 +57,7 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     //let mut rom = MemoryBlock::load("binaries/genesis/Ghostbusters (REV 00) (JUE).bin").unwrap();
     //let mut rom = MemoryBlock::load("binaries/genesis/Teenage Mutant Ninja Turtles - The Hyperstone Heist (U) [!].bin").unwrap();
     //rom.read_only();
-    let rom_end = rom.len();
+    let rom_end = rom.size();
     system.add_addressable_device(0x00000000, wrap_transmutable(rom)).unwrap();
 
     let cartridge_nvram = MemoryBlock::new(vec![0; 0x400000 - rom_end]);

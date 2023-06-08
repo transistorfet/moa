@@ -1016,7 +1016,7 @@ fn get_ch(bank: u8, reg: u8) -> usize {
 }
 
 impl Addressable for Ym2612 {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x04
     }
 

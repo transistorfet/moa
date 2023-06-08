@@ -53,7 +53,7 @@ impl AtaDevice {
 }
 
 impl Addressable for AtaDevice {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x30
     }
 

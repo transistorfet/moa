@@ -51,7 +51,7 @@ impl MemoryBlock {
 }
 
 impl Addressable for MemoryBlock {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         self.contents.len()
     }
 
@@ -92,9 +92,9 @@ impl AddressRightShifter {
 }
 
 impl Addressable for AddressRightShifter {
-    fn len(&self) -> usize {
-        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len();
-        len << self.shift
+    fn size(&self) -> usize {
+        let size = self.subdevice.borrow_mut().as_addressable().unwrap().size();
+        size << self.shift
     }
 
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
@@ -128,18 +128,18 @@ impl AddressRepeater {
 }
 
 impl Addressable for AddressRepeater {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         self.range as usize
     }
 
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len() as Address;
-        self.subdevice.borrow_mut().as_addressable().unwrap().read(clock, addr % len, data)
+        let size = self.subdevice.borrow_mut().as_addressable().unwrap().size() as Address;
+        self.subdevice.borrow_mut().as_addressable().unwrap().read(clock, addr % size, data)
     }
 
     fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        let len = self.subdevice.borrow_mut().as_addressable().unwrap().len() as Address;
-        self.subdevice.borrow_mut().as_addressable().unwrap().write(clock, addr % len, data)
+        let size = self.subdevice.borrow_mut().as_addressable().unwrap().size() as Address;
+        self.subdevice.borrow_mut().as_addressable().unwrap().write(clock, addr % size, data)
     }
 }
 
@@ -153,7 +153,7 @@ impl Transmutable for AddressRepeater {
 #[derive(Clone)]
 pub struct Block {
     pub base: Address,
-    pub length: usize,
+    pub size: usize,
     pub dev: TransmutableBox,
 }
 
@@ -175,17 +175,17 @@ impl Bus {
     }
 
     pub fn insert(&mut self, base: Address, dev: TransmutableBox) {
-        let length = dev.borrow_mut().as_addressable().unwrap().len();
-        let block = Block { base, length, dev };
+        let size = dev.borrow_mut().as_addressable().unwrap().size();
+        let block = Block { base, size, dev };
         let i = self.blocks.iter().position(|cur| cur.base > block.base).unwrap_or(self.blocks.len());
         self.blocks.insert(i, block);
     }
 
     pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(TransmutableBox, Address), Error> {
         for block in &self.blocks {
-            if addr >= block.base && addr < (block.base + block.length as Address) {
+            if addr >= block.base && addr < (block.base + block.size as Address) {
                 let relative_addr = addr - block.base;
-                if relative_addr as usize + count <= block.length {
+                if relative_addr as usize + count <= block.size {
                     return Ok((block.dev.clone(), relative_addr));
                 } else {
                     return Err(Error::new(&format!("Error reading address {:#010x}", addr)));
@@ -233,9 +233,9 @@ impl Bus {
 }
 
 impl Addressable for Bus {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         let block = &self.blocks[self.blocks.len() - 1];
-        (block.base as usize) + block.length
+        (block.base as usize) + block.size
     }
 
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
@@ -304,8 +304,8 @@ impl BusPort {
 }
 
 impl Addressable for BusPort {
-    fn len(&self) -> usize {
-        self.subdevice.borrow().len()
+    fn size(&self) -> usize {
+        self.subdevice.borrow().size()
     }
 
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {

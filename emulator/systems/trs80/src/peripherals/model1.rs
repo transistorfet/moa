@@ -28,7 +28,7 @@ impl Model1Keyboard {
 }
 
 impl Addressable for Model1Keyboard {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x420
     }
 
@@ -113,7 +113,7 @@ impl Steppable for Model1Video {
 }
 
 impl Addressable for Model1Video {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x400
     }
 

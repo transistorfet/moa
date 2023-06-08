@@ -27,9 +27,8 @@ pub trait Interruptable {
 }
 
 /// A device that can be addressed to read data from or write data to the device.
-#[allow(clippy::len_without_is_empty)]
 pub trait Addressable {
-    fn len(&self) -> usize;
+    fn size(&self) -> usize;
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error>;
     fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error>;
 

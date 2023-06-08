@@ -65,7 +65,7 @@ impl Mainboard {
 }
 
 impl Addressable for Mainboard {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x01000000
     }
 
@@ -142,7 +142,7 @@ pub struct PhaseRead {
 }
 
 impl Addressable for PhaseRead {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x80000
     }
 

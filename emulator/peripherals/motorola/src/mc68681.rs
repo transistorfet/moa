@@ -246,7 +246,7 @@ impl Steppable for MC68681 {
 }
 
 impl Addressable for MC68681 {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x30
     }
 

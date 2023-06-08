@@ -24,7 +24,7 @@ impl CoprocessorCoordinator {
 }
 
 impl Addressable for CoprocessorCoordinator {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x4000
     }
 
@@ -75,7 +75,7 @@ impl CoprocessorBankRegister {
 }
 
 impl Addressable for CoprocessorBankRegister {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x01
     }
 
@@ -114,7 +114,7 @@ impl CoprocessorBankArea {
 }
 
 impl Addressable for CoprocessorBankArea {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x8000
     }
 

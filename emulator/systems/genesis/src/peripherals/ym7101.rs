@@ -804,7 +804,7 @@ fn decode_scroll_size(size: u8) -> usize {
 }
 
 impl Addressable for Ym7101 {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x20
     }
 

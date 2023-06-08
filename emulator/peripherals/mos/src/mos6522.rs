@@ -53,7 +53,7 @@ impl Default for Mos6522 {
 }
 
 impl Addressable for Mos6522 {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x10
     }
 

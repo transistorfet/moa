@@ -34,7 +34,7 @@ impl IWM {
 }
 
 impl Addressable for IWM {
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         0x10
     }
 
