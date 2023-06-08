@@ -3,7 +3,7 @@ use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Error, Frequency, Signal, MemoryBlock, Bus, BusPort, Address, Addressable, Debuggable, wrap_transmutable};
+use moa_core::{System, Error, Frequency, Signal, MemoryBlock, Bus, BusPort, Address, Addressable, Debuggable, Device};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -58,22 +58,22 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     //let mut rom = MemoryBlock::load("binaries/genesis/Teenage Mutant Ninja Turtles - The Hyperstone Heist (U) [!].bin").unwrap();
     //rom.read_only();
     let rom_end = rom.size();
-    system.add_addressable_device(0x00000000, wrap_transmutable(rom)).unwrap();
+    system.add_addressable_device(0x00000000, Device::new(rom)).unwrap();
 
     let cartridge_nvram = MemoryBlock::new(vec![0; 0x400000 - rom_end]);
-    system.add_addressable_device(rom_end as Address, wrap_transmutable(cartridge_nvram)).unwrap();
+    system.add_addressable_device(rom_end as Address, Device::new(cartridge_nvram)).unwrap();
 
     let ram = MemoryBlock::new(vec![0; 0x00010000]);
-    system.add_addressable_device(0x00ff0000, wrap_transmutable(ram)).unwrap();
+    system.add_addressable_device(0x00ff0000, Device::new(ram)).unwrap();
 
 
     // Build the Coprocessor's Bus
     let bank_register = Signal::new(0);
-    let coproc_ram = wrap_transmutable(MemoryBlock::new(vec![0; 0x00002000]));
-    let coproc_ym_sound = wrap_transmutable(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
-    let coproc_sn_sound = wrap_transmutable(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
-    let coproc_register = wrap_transmutable(CoprocessorBankRegister::new(bank_register.clone()));
-    let coproc_area = wrap_transmutable(CoprocessorBankArea::new(bank_register, system.bus.clone()));
+    let coproc_ram = Device::new(MemoryBlock::new(vec![0; 0x00002000]));
+    let coproc_ym_sound = Device::new(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
+    let coproc_sn_sound = Device::new(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
+    let coproc_register = Device::new(CoprocessorBankRegister::new(bank_register.clone()));
+    let coproc_area = Device::new(CoprocessorBankArea::new(bank_register, system.bus.clone()));
 
     let coproc_bus = Rc::new(RefCell::new(Bus::default()));
     coproc_bus.borrow_mut().set_ignore_unmapped(true);
@@ -95,22 +95,22 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     system.add_addressable_device(0x00a06000, coproc_register)?;
     //system.add_addressable_device(0x00c00010, coproc_sn_sound)?;
     system.add_device("sn_sound", coproc_sn_sound.clone())?;
-    system.add_device("coproc", wrap_transmutable(coproc))?;
+    system.add_device("coproc", Device::new(coproc))?;
 
 
     let controllers = GenesisControllers::new(host)?;
     let interrupt = controllers.get_interrupt_signal();
-    system.add_addressable_device(0x00a10000, wrap_transmutable(controllers)).unwrap();
+    system.add_addressable_device(0x00a10000, Device::new(controllers)).unwrap();
 
     let coproc = CoprocessorCoordinator::new(reset, bus_request);
-    system.add_addressable_device(0x00a11000, wrap_transmutable(coproc)).unwrap();
+    system.add_addressable_device(0x00a11000, Device::new(coproc)).unwrap();
 
     let vdp = Ym7101::new(host, interrupt, coproc_sn_sound);
     system.break_signal = Some(vdp.frame_complete.clone());
-    system.add_peripheral("vdp", 0x00c00000, wrap_transmutable(vdp)).unwrap();
+    system.add_peripheral("vdp", 0x00c00000, Device::new(vdp)).unwrap();
 
     let cpu = M68k::new(M68kType::MC68000, Frequency::from_hz(7_670_454), BusPort::new(0, 24, 16, system.bus.clone()));
-    system.add_interruptable_device("cpu", wrap_transmutable(cpu)).unwrap();
+    system.add_interruptable_device("cpu", Device::new(cpu)).unwrap();
 
     Ok(system)
 }

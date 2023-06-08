@@ -3,7 +3,7 @@ use std::io::Write;
 
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Address, Addressable, Debuggable, TransmutableBox};
+use crate::devices::{Address, Addressable, Debuggable, Device};
 
 
 #[derive(Default)]
@@ -19,7 +19,7 @@ impl Debugger {
         self.trace_only = false;
     }
 
-    pub fn run_debugger(&mut self, system: &System, target: TransmutableBox) -> Result<(), Error> {
+    pub fn run_debugger(&mut self, system: &System, target: Device) -> Result<(), Error> {
         let mut target = target.borrow_mut();
         let debug_obj = target.as_debuggable().unwrap();
         println!("@ {} ns", system.clock.as_duration().as_nanos());

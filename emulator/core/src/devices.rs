@@ -1,6 +1,7 @@
 
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut, BorrowMutError};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::error::Error;
 use crate::system::System;
@@ -28,6 +29,7 @@ pub trait Interruptable {
 
 /// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
+    #[inline]
     fn size(&self) -> usize;
     fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error>;
     fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error>;
@@ -174,22 +176,27 @@ pub trait Inspectable {
 
 
 pub trait Transmutable {
+    #[inline]
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
         None
     }
 
+    #[inline]
     fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
         None
     }
 
+    #[inline]
     fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
         None
     }
 
+    #[inline]
     fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
         None
     }
 
+    #[inline]
     fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
         None
     }
@@ -201,12 +208,70 @@ pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox
     Rc::new(RefCell::new(Box::new(value)))
 }
 
+static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+
+#[derive(Copy, Clone, Debug)]
+pub struct DeviceId(usize);
+
+impl DeviceId {
+    pub fn new() -> Self {
+        let next = NEXT_ID.load(Ordering::Acquire);
+        NEXT_ID.store(next + 1, Ordering::Release);
+        Self(next)
+    }
+}
+
+impl Default for DeviceId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[derive(Clone)]
-pub struct Device(TransmutableBox);
+pub struct Device(DeviceId, TransmutableBox);
 
 impl Device {
+    pub fn new<T>(value: T) -> Self
+    where
+        T: Transmutable + 'static
+    {
+        Self(DeviceId::new(), wrap_transmutable(value))
+    }
 
+    pub fn borrow_mut(&self) -> RefMut<'_, Box<dyn Transmutable>> {
+        self.1.borrow_mut()
+    }
+
+    pub fn try_borrow_mut(&self) -> Result<RefMut<'_, Box<dyn Transmutable>>, BorrowMutError> {
+        self.1.try_borrow_mut()
+    }
+
+    /*
+    #[inline]
+    pub fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        self.1.borrow_mut().as_steppable()
+    }
+
+    #[inline]
+    pub fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        None
+    }
+
+    #[inline]
+    pub fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
+        None
+    }
+
+    #[inline]
+    pub fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
+        None
+    }
+
+    #[inline]
+    pub fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
+        None
+    }
+    */
 }
 
 

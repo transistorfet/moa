@@ -8,7 +8,7 @@ use std::fmt::Write;
 use crate::info;
 use crate::error::Error;
 use crate::clock::ClockTime;
-use crate::devices::{Address, Addressable, Transmutable, TransmutableBox, read_beu16};
+use crate::devices::{Address, Addressable, Transmutable, Device, read_beu16};
 
 
 pub struct MemoryBlock {
@@ -78,12 +78,12 @@ impl Transmutable for MemoryBlock {
 
 
 pub struct AddressRightShifter {
-    subdevice: TransmutableBox,
+    subdevice: Device,
     shift: u8,
 }
 
 impl AddressRightShifter {
-    pub fn new(subdevice: TransmutableBox, shift: u8) -> Self {
+    pub fn new(subdevice: Device, shift: u8) -> Self {
         Self {
             subdevice,
             shift,
@@ -114,12 +114,12 @@ impl Transmutable for AddressRightShifter {
 
 
 pub struct AddressRepeater {
-    subdevice: TransmutableBox,
+    subdevice: Device,
     range: Address,
 }
 
 impl AddressRepeater {
-    pub fn new(subdevice: TransmutableBox, range: Address) -> Self {
+    pub fn new(subdevice: Device, range: Address) -> Self {
         Self {
             subdevice,
             range,
@@ -154,7 +154,7 @@ impl Transmutable for AddressRepeater {
 pub struct Block {
     pub base: Address,
     pub size: usize,
-    pub dev: TransmutableBox,
+    pub dev: Device,
 }
 
 #[derive(Clone, Default)]
@@ -174,14 +174,14 @@ impl Bus {
         self.blocks.clear();
     }
 
-    pub fn insert(&mut self, base: Address, dev: TransmutableBox) {
+    pub fn insert(&mut self, base: Address, dev: Device) {
         let size = dev.borrow_mut().as_addressable().unwrap().size();
         let block = Block { base, size, dev };
         let i = self.blocks.iter().position(|cur| cur.base > block.base).unwrap_or(self.blocks.len());
         self.blocks.insert(i, block);
     }
 
-    pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(TransmutableBox, Address), Error> {
+    pub fn get_device_at(&self, addr: Address, count: usize) -> Result<(Device, Address), Error> {
         for block in &self.blocks {
             if addr >= block.base && addr < (block.base + block.size as Address) {
                 let relative_addr = addr - block.base;

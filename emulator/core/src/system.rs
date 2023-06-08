@@ -9,12 +9,12 @@ use crate::signals::EdgeSignal;
 use crate::error::{Error, ErrorType};
 use crate::interrupts::InterruptController;
 use crate::clock::{ClockTime, ClockDuration};
-use crate::devices::{Address, TransmutableBox};
+use crate::devices::{Address, Device};
 
 
 pub struct System {
     pub clock: ClockTime,
-    pub devices: HashMap<String, TransmutableBox>,
+    pub devices: HashMap<String, Device>,
     pub event_queue: Vec<NextStep>,
 
     pub debug_enabled: Cell<bool>,
@@ -55,28 +55,28 @@ impl System {
         self.interrupt_controller.borrow_mut()
     }
 
-    pub fn get_device(&self, name: &str) -> Result<TransmutableBox, Error> {
+    pub fn get_device(&self, name: &str) -> Result<Device, Error> {
         self.devices.get(name).cloned().ok_or_else(|| Error::new(&format!("system: no device named {}", name)))
     }
 
-    pub fn add_device(&mut self, name: &str, device: TransmutableBox) -> Result<(), Error> {
+    pub fn add_device(&mut self, name: &str, device: Device) -> Result<(), Error> {
         self.try_queue_device(device.clone());
         self.devices.insert(name.to_string(), device);
         Ok(())
     }
 
-    pub fn add_addressable_device(&mut self, addr: Address, device: TransmutableBox) -> Result<(), Error> {
+    pub fn add_addressable_device(&mut self, addr: Address, device: Device) -> Result<(), Error> {
         self.add_peripheral(&format!("mem{:x}", addr), addr, device)
     }
 
-    pub fn add_peripheral(&mut self, name: &str, addr: Address, device: TransmutableBox) -> Result<(), Error> {
+    pub fn add_peripheral(&mut self, name: &str, addr: Address, device: Device) -> Result<(), Error> {
         self.bus.borrow_mut().insert(addr, device.clone());
         self.try_queue_device(device.clone());
         self.devices.insert(name.to_string(), device);
         Ok(())
     }
 
-    pub fn add_interruptable_device(&mut self, name: &str, device: TransmutableBox) -> Result<(), Error> {
+    pub fn add_interruptable_device(&mut self, name: &str, device: Device) -> Result<(), Error> {
         self.try_queue_device(device.clone());
         self.devices.insert(name.to_string(), device);
         Ok(())
@@ -172,7 +172,7 @@ impl System {
         }
     }
 
-    fn try_queue_device(&mut self, device: TransmutableBox) {
+    fn try_queue_device(&mut self, device: Device) {
         if device.borrow_mut().as_steppable().is_some() {
             self.queue_device(NextStep::new(device));
         }
@@ -192,11 +192,11 @@ impl System {
 
 pub struct NextStep {
     pub next_clock: ClockTime,
-    pub device: TransmutableBox,
+    pub device: Device,
 }
 
 impl NextStep {
-    pub fn new(device: TransmutableBox) -> Self {
+    pub fn new(device: Device) -> Self {
         Self {
             next_clock: ClockTime::START,
             device,

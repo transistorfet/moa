@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, Frequency, MemoryBlock, BusPort, Debuggable, wrap_transmutable};
+use moa_core::{System, Error, Frequency, MemoryBlock, BusPort, Debuggable, Device};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -63,10 +63,10 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     rom.read_only();
 
     let video = MacVideo::new(host)?;
-    system.add_device("video", wrap_transmutable(video)).unwrap();
+    system.add_device("video", Device::new(video)).unwrap();
 
-    let mainboard = Mainboard::new(wrap_transmutable(ram), wrap_transmutable(rom))?;
-    system.add_addressable_device(0x00000000, wrap_transmutable(mainboard))?;
+    let mainboard = Mainboard::new(Device::new(ram), Device::new(rom))?;
+    system.add_addressable_device(0x00000000, Device::new(mainboard))?;
 
 
     let mut cpu = M68k::new(M68kType::MC68000, Frequency::from_hz(7_833_600), BusPort::new(0, 24, 16, system.bus.clone()));
@@ -121,7 +121,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     panic!("");
     */
 
-    system.add_interruptable_device("cpu", wrap_transmutable(cpu))?;
+    system.add_interruptable_device("cpu", Device::new(cpu))?;
 
     Ok(system)
 }

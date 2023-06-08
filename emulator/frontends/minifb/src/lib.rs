@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{App, Arg, ArgMatches};
 
-use moa_core::{System, Error, ClockDuration, wrap_transmutable};
+use moa_core::{System, Error, ClockDuration, Device};
 use moa_core::host::{Host, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame, FrameReceiver};
 
 use moa_common::{AudioMixer, AudioSource};
@@ -216,7 +216,7 @@ impl MiniFrontend {
 
         if self.mixer.borrow_mut().num_sources() != 0 && matches.occurrences_of("disable-audio") == 0 {
             if let Some(system) = system.as_mut() {
-                system.add_device("mixer", wrap_transmutable(self.mixer.clone())).unwrap();
+                system.add_device("mixer", Device::new(self.mixer.clone())).unwrap();
             }
             self.audio = Some(CpalAudioOutput::create_audio_output(self.mixer.borrow_mut().get_sink()));
         }

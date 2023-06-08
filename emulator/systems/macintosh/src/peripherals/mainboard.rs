@@ -2,7 +2,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Bus, Error, Observable, ClockTime, ClockDuration, Address, Addressable, AddressRepeater, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
+use moa_core::{System, Bus, Error, Observable, ClockTime, ClockDuration, Address, Addressable, AddressRepeater, Steppable, Transmutable, Device};
 
 use moa_peripherals_mos::Mos6522;
 use moa_peripherals_zilog::Z8530;
@@ -22,7 +22,7 @@ pub struct Mainboard {
 }
 
 impl Mainboard {
-    pub fn new(ram: TransmutableBox, rom: TransmutableBox) -> Result<Self, Error> {
+    pub fn new(ram: Device, rom: Device) -> Result<Self, Error> {
         let scc1 = Z8530::default();
         let scc2 = Z8530::default();
         let iwm = IWM::default();
@@ -45,16 +45,16 @@ impl Mainboard {
             if (port.data & 0x10) == 0 {
                 println!("{}: overlay is 0 (normal)", DEV_NAME);
                 lower_bus.borrow_mut().clear_all_bus_devices();
-                lower_bus.borrow_mut().insert(0x000000, wrap_transmutable(AddressRepeater::new(ram.clone(), 0x400000)));
-                lower_bus.borrow_mut().insert(0x400000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
-                lower_bus.borrow_mut().insert(0x600000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x000000, Device::new(AddressRepeater::new(ram.clone(), 0x400000)));
+                lower_bus.borrow_mut().insert(0x400000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x600000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
             } else {
                 println!("{}: overlay is 1 (startup)", DEV_NAME);
                 lower_bus.borrow_mut().clear_all_bus_devices();
-                lower_bus.borrow_mut().insert(0x000000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
-                lower_bus.borrow_mut().insert(0x200000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
-                lower_bus.borrow_mut().insert(0x400000, wrap_transmutable(AddressRepeater::new(rom.clone(), 0x100000)));
-                lower_bus.borrow_mut().insert(0x600000, wrap_transmutable(AddressRepeater::new(ram.clone(), 0x200000)));
+                lower_bus.borrow_mut().insert(0x000000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x200000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x400000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus.borrow_mut().insert(0x600000, Device::new(AddressRepeater::new(ram.clone(), 0x200000)));
             }
         });
 

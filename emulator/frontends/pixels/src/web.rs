@@ -12,7 +12,7 @@ use web_sys::Event;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
-use moa_core::{ClockDuration, System, wrap_transmutable};
+use moa_core::{ClockDuration, System, Device};
 use moa_core::host::{ControllerInput, ControllerDevice, ControllerEvent, EventSender};
 
 use crate::settings;
@@ -130,7 +130,7 @@ pub fn load_system(handle: &mut HostHandle, load: LoadSystemFnHandle) -> SystemH
     let mut system = load.0(&mut handle.0, settings::get().rom_data.clone()).unwrap();
     let mixer = handle.0.get_mixer();
     if mixer.borrow_mut().num_sources() > 0 {
-        system.add_device("mixer", wrap_transmutable(mixer.clone())).unwrap();
+        system.add_device("mixer", Device::new(mixer.clone())).unwrap();
     }
     SystemHandle(system)
 }
