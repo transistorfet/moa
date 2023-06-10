@@ -76,7 +76,7 @@ impl Z80 {
             Status::Init => self.init(),
             Status::Halted => Err(Error::new("CPU stopped")),
             Status::Running => {
-                match self.cycle_one(system) {
+                match self.cycle_one() {
                     Ok(clocks) => Ok(clocks),
                     Err(Error { err: ErrorType::Processor, .. }) => {
                         Ok(4)
@@ -98,10 +98,11 @@ impl Z80 {
         Ok(16)
     }
 
-    pub fn cycle_one(&mut self, system: &System) -> Result<u16, Error> {
+    pub fn cycle_one(&mut self) -> Result<u16, Error> {
+        self.check_breakpoints()?;
+
         self.decode_next()?;
         self.execute_current()?;
-        self.check_breakpoints(system);
         Ok(Z80InstructionCycles::from_instruction(&self.decoder.instruction)?
             .calculate_cycles(self.executor.took_branch))
     }

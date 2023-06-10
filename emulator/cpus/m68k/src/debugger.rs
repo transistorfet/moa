@@ -22,36 +22,25 @@ impl StackTracer {
 
 #[derive(Clone, Default)]
 pub struct M68kDebugger {
-    pub enabled: bool,
-    pub breakpoints: Vec<u32>,
-    pub use_tracing: bool,
-    pub step_until_return: Option<usize>,
-    pub stack_tracer: StackTracer,
+    pub(crate) skip_breakpoint: usize,
+    pub(crate) breakpoints: Vec<u32>,
+    pub(crate) step_until_return: Option<usize>,
+    pub(crate) stack_tracer: StackTracer,
 }
 
 impl Debuggable for M68k {
-    fn debugging_enabled(&mut self) -> bool {
-        self.debugger.enabled
-    }
-
-    fn set_debugging(&mut self, enable: bool) {
-        self.debugger.enabled = enable;
-    }
-
     fn add_breakpoint(&mut self, addr: Address) {
         self.debugger.breakpoints.push(addr as u32);
-        self.debugger.enabled = true;
     }
 
     fn remove_breakpoint(&mut self, addr: Address) {
         if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == addr as u32) {
             self.debugger.breakpoints.remove(index);
-            self.debugger.enabled = !self.debugger.breakpoints.is_empty();
         }
     }
 
     fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
-        self.decoder.decode_at(&mut self.port, true, self.state.pc)?;
+        let _ = self.decoder.decode_at(&mut self.port, true, self.state.pc);
         self.decoder.dump_decoded(&mut self.port);
         self.dump_state();
         Ok(())
@@ -62,7 +51,7 @@ impl Debuggable for M68k {
         decoder.dump_disassembly(&mut self.port, addr as u32, count as u32);
     }
 
-    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
+    fn run_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
         match args[0] {
             "ds" | "stack" | "dumpstack" => {
                 println!("Stack:");
@@ -80,19 +69,19 @@ impl Debuggable for M68k {
 }
 
 impl M68k {
-    #[allow(dead_code)]
-    pub fn enable_tracing(&mut self) {
-        self.debugger.use_tracing = true;
-    }
-
-    pub fn check_breakpoints(&mut self, system: &System) {
+    pub fn check_breakpoints(&mut self) -> Result<(), Error> {
         for breakpoint in &self.debugger.breakpoints {
             if *breakpoint == self.state.pc {
-                println!("Breakpoint reached: {:08x}", *breakpoint);
-                system.enable_debugging();
-                break;
+                if self.debugger.skip_breakpoint > 0 {
+                    self.debugger.skip_breakpoint -= 1;
+                    return Ok(());
+                } else {
+                    self.debugger.skip_breakpoint = 1;
+                    return Err(Error::breakpoint(format!("breakpoint reached: {:08x}", *breakpoint)));
+                }
             }
         }
+        Ok(())
     }
 }
 

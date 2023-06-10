@@ -5,9 +5,9 @@ edition = "2021"
 default-run = "moa-computie"
 
 [dependencies]
-log = "0.4"
-clap = "3.2.20"
-simple_logger = "2.3.0"
+log = "^0.4"
+clap = "^4"
+simple_logger = "^2"
 
 moa_core = { path = "../../core" }
 moa_common = { path = "../common", features = ["tty"] }

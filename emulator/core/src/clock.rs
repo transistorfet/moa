@@ -24,6 +24,7 @@ pub struct ClockDuration {
 
 impl ClockDuration {
     pub const ZERO: Self = Self::from_femtos(0);
+    pub const MAX: Self = Self::from_femtos(Femtos::MAX);
 
     pub const FEMTOS_PER_SEC: Femtos = 1_000_000_000_000_000;
     pub const FEMTOS_PER_MILLISEC: Femtos = 1_000_000_000_000;
@@ -207,6 +208,7 @@ pub struct ClockTime(ClockDuration);
 
 impl ClockTime {
     pub const START: Self = Self(ClockDuration::ZERO);
+    pub const FOREVER: Self = Self(ClockDuration::MAX);
 
     #[inline]
     pub const fn as_duration(self) -> ClockDuration {

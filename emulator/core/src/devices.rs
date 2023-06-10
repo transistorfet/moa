@@ -168,14 +168,12 @@ pub fn write_leu32(data: &mut [u8], value: u32) -> &mut [u8] {
 
 /// A device (cpu) that can debugged using the built-in debugger
 pub trait Debuggable {
-    fn debugging_enabled(&mut self) -> bool;
-    fn set_debugging(&mut self, enable: bool);
     fn add_breakpoint(&mut self, addr: Address);
     fn remove_breakpoint(&mut self, addr: Address);
 
     fn print_current_step(&mut self, system: &System) -> Result<(), Error>;
     fn print_disassembly(&mut self, addr: Address, count: usize);
-    fn execute_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error>;
+    fn run_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error>;
 }
 
 /// A device (peripheral) that can inspected using the built-in debugger
@@ -219,7 +217,7 @@ pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeviceId(usize);
 
 impl DeviceId {
@@ -247,6 +245,10 @@ impl Device {
         Self(DeviceId::new(), wrap_transmutable(value))
     }
 
+    pub fn id(&self) -> DeviceId {
+        self.0
+    }
+
     pub fn borrow_mut(&self) -> RefMut<'_, Box<dyn Transmutable>> {
         self.1.borrow_mut()
     }
@@ -254,33 +256,6 @@ impl Device {
     pub fn try_borrow_mut(&self) -> Result<RefMut<'_, Box<dyn Transmutable>>, BorrowMutError> {
         self.1.try_borrow_mut()
     }
-
-    /*
-    #[inline]
-    pub fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
-        self.1.borrow_mut().as_steppable()
-    }
-
-    #[inline]
-    pub fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
-        None
-    }
-
-    #[inline]
-    pub fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
-        None
-    }
-
-    #[inline]
-    pub fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
-        None
-    }
-
-    #[inline]
-    pub fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
-        None
-    }
-    */
 }
 
 

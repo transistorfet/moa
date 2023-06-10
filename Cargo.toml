@@ -15,4 +15,5 @@ default-members = ["emulator/frontends/minifb"]
 
 [profile.release]
 debug = true
+#overflow-checks = true
 

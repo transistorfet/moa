@@ -10,7 +10,7 @@ fn main() {
         .get_matches();
 
     let mut options = SegaGenesisOptions::default();
-    if let Some(filename) = matches.value_of("ROM") {
+    if let Some(filename) = matches.get_one::<String>("ROM") {
         options.rom = filename.to_string();
     }
 

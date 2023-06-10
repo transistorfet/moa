@@ -1,10 +1,9 @@
 
 use std::rc::Rc;
-use std::cell::{Cell, RefCell, RefMut};
+use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 
 use crate::memory::Bus;
-use crate::debugger::Debugger;
 use crate::signals::EdgeSignal;
 use crate::error::{Error, ErrorType};
 use crate::interrupts::InterruptController;
@@ -17,8 +16,6 @@ pub struct System {
     pub devices: HashMap<String, Device>,
     pub event_queue: Vec<NextStep>,
 
-    pub debug_enabled: Cell<bool>,
-    pub debugger: RefCell<Debugger>,
     pub debuggables: Vec<Device>,
 
     pub bus: Rc<RefCell<Bus>>,
@@ -35,8 +32,6 @@ impl Default for System {
             devices: HashMap::new(),
             event_queue: vec![],
 
-            debug_enabled: Cell::new(false),
-            debugger: RefCell::new(Debugger::default()),
             debuggables: Vec::new(),
 
             bus: Rc::new(RefCell::new(Bus::default())),
@@ -87,18 +82,6 @@ impl System {
         Ok(())
     }
 
-    pub fn enable_debugging(&self) {
-        self.debug_enabled.set(true);
-        for device in &self.debuggables {
-            device.borrow_mut().as_debuggable().map(|device| device.set_debugging(true));
-        }
-        self.debugger.borrow_mut().breakpoint_occurred();
-    }
-
-    pub fn disable_debugging(&self) {
-        self.debug_enabled.set(false);
-    }
-
     fn process_one_event(&mut self) -> Result<(), Error> {
         let mut event_device = self.event_queue.pop().unwrap();
         self.clock = event_device.next_clock;
@@ -114,28 +97,50 @@ impl System {
     }
 
     pub fn step(&mut self) -> Result<(), Error> {
-        self.check_debugger();
-
         match self.process_one_event() {
-            Ok(()) => {
-                if self.get_bus().check_and_reset_watcher_modified() {
-                    self.enable_debugging();
-                }
-            },
+            Ok(()) => {},
             Err(err) if err.err == ErrorType::Breakpoint => {
-                println!("Breakpoint reached: {}", err.msg);
-                self.enable_debugging();
+                return Err(err);
             },
             Err(err) => {
                 self.exit_error();
-                println!("{:?}", err);
+                log::error!("{:?}", err);
                 return Err(err);
             },
         }
         Ok(())
     }
 
-    pub fn run_for(&mut self, elapsed: ClockDuration) -> Result<(), Error> {
+    pub fn step_until_device(&mut self, device: Device) -> Result<(), Error> {
+        loop {
+            self.step()?;
+
+            if self.get_next_event_device().id() == device.id() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn step_until_debuggable(&mut self) -> Result<(), Error> {
+        loop {
+            self.step()?;
+
+            if self.get_next_event_device().borrow_mut().as_debuggable().is_some() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn run_until_clock(&mut self, clock: ClockTime) -> Result<(), Error> {
+        while self.clock < clock {
+            self.step()?;
+        }
+        Ok(())
+    }
+
+    pub fn run_for_duration(&mut self, elapsed: ClockDuration) -> Result<(), Error> {
         let target = self.clock + elapsed;
 
         while self.clock < target {
@@ -144,6 +149,11 @@ impl System {
         Ok(())
     }
 
+    pub fn run_forever(&mut self) -> Result<(), Error> {
+        self.run_until_clock(ClockTime::FOREVER)
+    }
+
+    // TODO rename this run_until_signal, and make it take a signal as argument
     pub fn run_until_break(&mut self) -> Result<(), Error> {
         let mut signal = match &self.break_signal {
             Some(signal) => signal.clone(),
@@ -156,10 +166,6 @@ impl System {
         Ok(())
     }
 
-    pub fn run_loop(&mut self) {
-        self.run_for(ClockDuration::from_nanos(u64::MAX)).unwrap();
-    }
-
     pub fn exit_error(&mut self) {
         for (_, dev) in self.devices.iter() {
             if let Some(dev) = dev.borrow_mut().as_steppable() {
@@ -168,20 +174,22 @@ impl System {
         }
     }
 
+    pub fn get_next_event_device(&self) -> Device {
+        self.event_queue[self.event_queue.len() - 1].device.clone()
+    }
+
+    pub fn get_next_debuggable_device(&self) -> Option<Device> {
+        for event in self.event_queue.iter().rev() {
+            if event.device.borrow_mut().as_debuggable().is_some() {
+                return Some(event.device.clone());
+            }
+        }
+        None
+    }
+
     fn try_add_debuggable(&mut self, device: Device) {
         if device.borrow_mut().as_debuggable().is_some() {
             self.debuggables.push(device);
-        }
-    }
-
-    fn check_debugger(&mut self) {
-        if self.debug_enabled.get() {
-            let top = self.event_queue[self.event_queue.len() - 1].device.clone();
-            if top.borrow_mut().as_debuggable().map(|debug| debug.debugging_enabled()).unwrap_or(false) {
-                if let Err(err) = self.debugger.borrow_mut().run_debugger(self, top.clone()) {
-                    println!("Error: {:?}", err);
-                }
-            }
         }
     }
 

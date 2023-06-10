@@ -1,15 +1,23 @@
 
-use std::io::Write;
-
 use crate::error::Error;
 use crate::system::System;
-use crate::devices::{Address, Addressable, Debuggable, Device};
+use crate::devices::{Address, Addressable};
+
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DebugControl {
+    /// Wait for the next user command
+    Wait,
+    /// Continue looping without accepting input
+    Continue,
+    /// Exit the debugger and return to normal operation
+    Exit,
+}
 
 
 #[derive(Default)]
 pub struct Debugger {
-    last_command: Option<String>,
-    repeat: u32,
+    repeat_command: Option<(u32, String)>,
     trace_only: bool,
 }
 
@@ -19,44 +27,42 @@ impl Debugger {
         self.trace_only = false;
     }
 
-    pub fn run_debugger(&mut self, system: &System, target: Device) -> Result<(), Error> {
-        let mut target = target.borrow_mut();
-        let debug_obj = target.as_debuggable().unwrap();
+    pub fn print_step(&mut self, system: &mut System) -> Result<(), Error> {
         println!("@ {} ns", system.clock.as_duration().as_nanos());
-        debug_obj.print_current_step(system)?;
-
-        if self.trace_only {
-            return Ok(());
+        if let Some(device) = system.get_next_debuggable_device() {
+            device.borrow_mut().as_debuggable().unwrap().print_current_step(system)?;
         }
-
-        if self.repeat > 0 {
-            self.repeat -= 1;
-            let last_command = self.last_command.clone().unwrap();
-            let args: Vec<&str> = vec![&last_command];
-            self.run_debugger_command(system, debug_obj, &args)?;
-            return Ok(());
-        }
-
-        loop {
-            let mut buffer = String::new();
-            std::io::stdout().write_all(b"> ").unwrap();
-            std::io::stdin().read_line(&mut buffer).unwrap();
-            let args: Vec<&str> = buffer.split_whitespace().collect();
-            match self.run_debugger_command(system, debug_obj, &args) {
-                Ok(true) => return Ok(()),
-                Ok(false) => { },
-                Err(err) => {
-                    println!("Error: {}", err.msg);
-                },
-            }
-        }
+        Ok(())
     }
 
-    pub fn run_debugger_command(&mut self, system: &System, debug_obj: &mut dyn Debuggable, args: &[&str]) -> Result<bool, Error> {
-        if args.is_empty() {
-            // The Default Command
-            return Ok(true);
+    pub fn check_auto_command(&mut self, system: &mut System) -> Result<DebugControl, Error> {
+        if self.trace_only {
+            return Ok(DebugControl::Continue);
         }
+
+        if let Some((count, command)) = self.repeat_command.take() {
+            self.run_command(system, &command)?;
+            let next_count = count - 1;
+            if next_count == 0 {
+                self.repeat_command = None;
+            } else {
+                self.repeat_command = Some((next_count, command));
+            }
+            return Ok(DebugControl::Continue);
+        }
+
+        Ok(DebugControl::Wait)
+    }
+
+    pub fn run_command(&mut self, system: &mut System, command: &str) -> Result<DebugControl, Error> {
+        let args: Vec<&str> = command.split_whitespace().collect();
+
+        // If no command given, then run the `step` command
+        let args = if args.is_empty() {
+            vec!["step"]
+        } else {
+            args
+        };
 
         match args[0] {
             "b" | "break" | "breakpoint" => {
@@ -71,8 +77,10 @@ impl Debugger {
                             println!("Breakpoint set for devices {:?} at {:08x}", name, addr);
                         },
                         None => {
-                            debug_obj.add_breakpoint(addr);
-                            println!("Breakpoint set for {:08x}", addr);
+                            if let Some(device) = system.get_next_debuggable_device() {
+                                device.borrow_mut().as_debuggable().unwrap().add_breakpoint(addr);
+                                println!("Breakpoint set for {:08x}", addr);
+                            }
                         },
                     }
                 }
@@ -89,8 +97,10 @@ impl Debugger {
                             println!("Breakpoint removed for devices {:?} at {:08x}", name, addr);
                         },
                         None => {
-                            debug_obj.remove_breakpoint(addr);
-                            println!("Breakpoint removed for {:08x}", addr);
+                            if let Some(device) = system.get_next_debuggable_device() {
+                                device.borrow_mut().as_debuggable().unwrap().remove_breakpoint(addr);
+                                println!("Breakpoint removed for {:08x}", addr);
+                            }
                         },
                     }
                 }
@@ -145,20 +155,23 @@ impl Debugger {
                     0x1000
                 };
 
-                debug_obj.print_disassembly(addr, count);
+                if let Some(device) = system.get_next_debuggable_device() {
+                    device.borrow_mut().as_debuggable().unwrap().print_disassembly(addr, count);
+                }
             },
             "c" | "continue" => {
-                self.check_repeat_arg(args)?;
-                system.disable_debugging();
-                return Ok(true);
+                self.check_repeat_arg(&args)?;
+                return Ok(DebugControl::Exit);
             },
             "s" | "step" => {
-                self.check_repeat_arg(args)?;
-                return Ok(true);
+                self.check_repeat_arg(&args)?;
+                system.step_until_debuggable()?;
+                return Ok(DebugControl::Wait);
             },
             "t" | "trace" => {
                 self.trace_only = true;
-                return Ok(true);
+                system.step_until_debuggable()?;
+                return Ok(DebugControl::Continue);
             }
             "setb" | "setw" | "setl" => {
                 if args.len() != 3 {
@@ -185,18 +198,20 @@ impl Debugger {
             //    return Ok(true);
             //},
             _ => {
-                if debug_obj.execute_command(system, args)? {
-                    println!("Error: unknown command {}", args[0]);
+                if let Some(device) = system.get_next_debuggable_device() {
+                    if device.borrow_mut().as_debuggable().unwrap().run_command(system, &args)? {
+                        println!("Error: unknown command {}", args[0]);
+                    }
                 }
             },
         }
-        Ok(false)
+        Ok(DebugControl::Wait)
     }
 
     fn check_repeat_arg(&mut self, args: &[&str]) -> Result<(), Error> {
         if args.len() > 1 {
-            self.repeat = args[1].parse::<u32>().map_err(|_| Error::new("Unable to parse repeat number"))?;
-            self.last_command = Some(args[0].to_string());
+            let count = args[1].parse::<u32>().map_err(|_| Error::new("Unable to parse repeat number"))?;
+            self.repeat_command = Some((count, args[0].to_string()));
         }
         Ok(())
     }

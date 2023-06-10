@@ -94,11 +94,12 @@ impl M68k {
     }
 
     pub fn cycle_one(&mut self, system: &System) -> Result<ClockCycles, Error> {
+        self.check_breakpoints()?;
+
         self.decode_next()?;
         self.execute_current()?;
 
         self.check_pending_interrupts(system)?;
-        self.check_breakpoints(system);
         Ok(self.timing.calculate_clocks(false, 1))
     }
 
@@ -205,10 +206,6 @@ impl M68k {
         self.decoder.decode_at(&mut self.port, is_supervisor, self.state.pc)?;
 
         self.timing.add_instruction(&self.decoder.instruction);
-
-        if self.debugger.use_tracing {
-            self.decoder.dump_decoded(&mut self.port);
-        }
 
         self.state.pc = self.decoder.end;
 

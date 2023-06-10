@@ -140,7 +140,7 @@ pub fn run_system_for(handle: &mut SystemHandle, nanos: u32) -> usize {
     let run_timer = Instant::now();
     let nanoseconds_per_frame = ClockDuration::from_nanos(nanos as u64);
     //let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as Clock;
-    if let Err(err) = handle.0.run_for(nanoseconds_per_frame) {
+    if let Err(err) = handle.0.run_for_duration(nanoseconds_per_frame) {
         log::error!("{:?}", err);
     }
     let run_time = run_timer.elapsed().as_millis();
@@ -267,7 +267,7 @@ fn update(emulator: Rc<RefCell<Emulator>>) {
     let diff = run_timer.duration_since(last_update);
     let nanoseconds_per_frame = ClockDuration::from_nanos(diff.as_nanos() as u64);
     //let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as Clock;
-    if let Err(err) = emulator.borrow_mut().system.run_for(nanoseconds_per_frame) {
+    if let Err(err) = emulator.borrow_mut().system.run_for_duration(nanoseconds_per_frame) {
         log::error!("{:?}", err);
     }
     let run_time = run_timer.elapsed().as_millis();
@@ -285,7 +285,7 @@ fn update(emulator: Rc<RefCell<Emulator>>) {
 fn update(emulator: Rc<RefCell<Emulator>>) {
     let run_timer = Instant::now();
     let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as u64;
-    if let Err(err) = emulator.borrow_mut().system.run_for(ClockDuration::from_nanos(nanoseconds_per_frame)) {
+    if let Err(err) = emulator.borrow_mut().system.run_for_duration(ClockDuration::from_nanos(nanoseconds_per_frame)) {
         log::error!("{:?}", err);
     }
     log::info!("ran simulation for {:?}ms in {:?}ms", nanoseconds_per_frame / 1_000_000, run_timer.elapsed().as_millis());

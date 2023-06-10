@@ -8,28 +8,18 @@ use crate::instructions::Register;
 
 #[derive(Clone, Default)]
 pub struct Z80Debugger {
-    pub enabled: bool,
-    pub breakpoints: Vec<u16>,
+    pub(crate) skip_breakpoint: usize,
+    pub(crate) breakpoints: Vec<u16>,
 }
 
 impl Debuggable for Z80 {
-    fn debugging_enabled(&mut self) -> bool {
-        self.debugger.enabled
-    }
-
-    fn set_debugging(&mut self, enable: bool) {
-        self.debugger.enabled = enable;
-    }
-
     fn add_breakpoint(&mut self, addr: Address) {
         self.debugger.breakpoints.push(addr as u16);
-        self.debugger.enabled = true;
     }
 
     fn remove_breakpoint(&mut self, addr: Address) {
         if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == addr as u16) {
             self.debugger.breakpoints.remove(index);
-            self.debugger.enabled = !self.debugger.breakpoints.is_empty();
         }
     }
 
@@ -45,7 +35,7 @@ impl Debuggable for Z80 {
         decoder.dump_disassembly(&mut self.port, addr as u16, count as u16);
     }
 
-    fn execute_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
+    fn run_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
         match args[0] {
             "l" => {
                 self.state.reg[Register::L as usize] = 0x05
@@ -57,14 +47,19 @@ impl Debuggable for Z80 {
 }
 
 impl Z80 {
-    pub fn check_breakpoints(&mut self, system: &System) {
+    pub fn check_breakpoints(&mut self) -> Result<(), Error> {
         for breakpoint in &self.debugger.breakpoints {
             if *breakpoint == self.state.pc {
-                println!("Breakpoint reached: {:08x}", *breakpoint);
-                system.enable_debugging();
-                break;
+                if self.debugger.skip_breakpoint > 0 {
+                    self.debugger.skip_breakpoint -= 1;
+                    return Ok(());
+                } else {
+                    self.debugger.skip_breakpoint = 1;
+                    return Err(Error::breakpoint(format!("breakpoint reached: {:08x}", *breakpoint)));
+                }
             }
         }
+        Ok(())
     }
 }
 

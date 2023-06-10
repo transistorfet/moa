@@ -3,14 +3,12 @@ use moa_console::ConsoleFrontend;
 use moa_systems_computie::build_computie;
 
 fn main() {
-    simple_logger::SimpleLogger::new()
-        .with_level(log::Level::Debug.to_level_filter())
-        .without_timestamps()
-        .init().unwrap();
+    let matches = ConsoleFrontend::args("Computie68k Emulator")
+        .get_matches();
 
-    let mut frontend = ConsoleFrontend;
+    let mut frontend = ConsoleFrontend::new();
 
     let mut system = build_computie(&mut frontend).unwrap();
-    system.run_loop();
+    frontend.start(matches, system);
 }
 

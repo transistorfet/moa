@@ -1,13 +1,13 @@
 
 use std::thread;
-use std::str::FromStr;
+use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use minifb::{self, Key, MouseMode, MouseButton};
-use clap::{App, Arg, ArgMatches};
+use clap::{Command, Arg, ArgAction, ArgMatches};
 
-use moa_core::{System, Error, ClockDuration, Device};
+use moa_core::{System, Error, ErrorType, ClockDuration, Device, Debugger, DebugControl};
 use moa_core::host::{Host, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame, FrameReceiver};
 
 use moa_common::{AudioMixer, AudioSource};
@@ -24,34 +24,39 @@ const WIDTH: u32 = 320;
 const HEIGHT: u32 = 224;
 
 
-pub fn new(name: &str) -> App {
-    App::new(name)
+pub fn new(name: &'static str) -> Command {
+    Command::new(name)
         .arg(Arg::new("scale")
             .short('s')
             .long("scale")
-            .takes_value(true)
             .help("Scale the screen"))
-        .arg(Arg::new("threaded")
-            .short('t')
-            .long("threaded")
-            .help("Run the simulation in a separate thread"))
         .arg(Arg::new("speed")
             .short('x')
             .long("speed")
-            .takes_value(true)
             .help("Adjust the speed of the simulation"))
+        .arg(Arg::new("threaded")
+            .short('t')
+            .long("threaded")
+            .action(ArgAction::SetTrue)
+            .help("Run the simulation in a separate thread"))
+        .arg(Arg::new("log-level")
+            .short('l')
+            .long("log-level")
+            .help("Set the type of log messages to print"))
         .arg(Arg::new("debugger")
             .short('d')
             .long("debugger")
+            .action(ArgAction::SetTrue)
             .help("Start the debugger before running machine"))
         .arg(Arg::new("disable-audio")
             .short('a')
             .long("disable-audio")
+            .action(ArgAction::SetTrue)
             .help("Disable audio output"))
 }
 
 pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
-    if matches.occurrences_of("threaded") > 0 {
+    if matches.get_flag("threaded") {
         run_threaded(matches, init);
     } else {
         run_inline(matches, init);
@@ -75,7 +80,7 @@ pub fn run_threaded<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFr
         thread::spawn(move || {
             let mut system = init(&mut frontend.lock().unwrap()).unwrap();
             frontend.lock().unwrap().finalize();
-            system.run_loop();
+            system.run_forever().unwrap();
         });
     }
 
@@ -203,18 +208,22 @@ impl MiniFrontend {
     }
 
     pub fn start(&mut self, matches: ArgMatches, mut system: Option<System>) {
+        let log_level = match matches.get_one("log-level").map(|s: &String| s.as_str()) {
+            Some("trace") => log::Level::Trace,
+            Some("debug") => log::Level::Debug,
+            Some("info") => log::Level::Info,
+            Some("warn") => log::Level::Warn,
+            Some("error") => log::Level::Error,
+            _ => log::Level::Warn,
+        };
+
         simple_logger::SimpleLogger::new()
-            .with_level(log::Level::Warn.to_level_filter())
+            .with_level(log_level.to_level_filter())
             .without_timestamps()
-            .init().unwrap();
+            .init()
+            .unwrap();
 
-        if matches.occurrences_of("debugger") > 0 {
-            if let Some(system) = system.as_mut() {
-                system.enable_debugging();
-            }
-        }
-
-        if self.mixer.borrow_mut().num_sources() != 0 && matches.occurrences_of("disable-audio") == 0 {
+        if self.mixer.borrow_mut().num_sources() != 0 && !matches.get_flag("disable-audio") {
             if let Some(system) = system.as_mut() {
                 system.add_device("mixer", Device::new(self.mixer.clone())).unwrap();
             }
@@ -222,7 +231,7 @@ impl MiniFrontend {
         }
 
         let options = minifb::WindowOptions {
-            scale: match matches.value_of("scale").map(|s| s.parse::<u8>().unwrap()) {
+            scale: match matches.get_one::<String>("scale").map(|s| s.parse::<u8>().unwrap()) {
                 Some(1) => minifb::Scale::X1,
                 Some(2) => minifb::Scale::X2,
                 Some(4) => minifb::Scale::X4,
@@ -232,10 +241,7 @@ impl MiniFrontend {
             ..Default::default()
         };
 
-        let speed = match matches.value_of("speed") {
-            Some(x) => f32::from_str(x).unwrap(),
-            None => 1.0,
-        };
+        let speed = matches.get_one::<f32>("speed").cloned().unwrap_or(1.0);
 
         let mut size = (WIDTH, HEIGHT);
         if let Some(queue) = self.video.as_mut() {
@@ -257,21 +263,49 @@ impl MiniFrontend {
         window.limit_update_rate(Some(Duration::from_micros(16600)));
         //let nanoseconds_per_frame = (16_600_000 as f32 * speed) as u64;
 
+        let mut debugger = Debugger::default();
+        let mut run_debugger = matches.get_flag("debugger");
         let mut update_timer = Instant::now();
         let mut last_frame = Frame::new(size.0, size.1, PixelEncoding::ARGB);
         while window.is_open() && !window.is_key_down(Key::Escape) {
-            let frame_time = update_timer.elapsed();
-            update_timer = Instant::now();
-            //println!("new frame after {:?}us", frame_time.as_micros());
+            if run_debugger {
+                if let Some(mut system) = system.as_mut() {
+                    debugger.print_step(&mut system).unwrap();
+                    if debugger.check_auto_command(&mut system).unwrap() != DebugControl::Continue {
+                        let mut buffer = String::new();
+                        io::stdout().write_all(b"> ").unwrap();
+                        io::stdin().read_line(&mut buffer).unwrap();
+                        match debugger.run_command(&mut system, &buffer) {
+                            Ok(DebugControl::Exit) => {
+                                run_debugger = false;
+                            },
+                            Ok(_) => {},
+                            Err(err) => {
+                                println!("Error: {}", err.msg);
+                            },
+                        }
+                    }
+                }
+            } else {
+                let frame_time = update_timer.elapsed();
+                update_timer = Instant::now();
+                //println!("new frame after {:?}us", frame_time.as_micros());
 
-            //let run_timer = Instant::now();
-            if let Some(system) = system.as_mut() {
-                //system.run_for(nanoseconds_per_frame).unwrap();
-                system.run_for(ClockDuration::from_nanos((frame_time.as_nanos() as f32 * speed) as u64)).unwrap();
-                //system.run_until_break().unwrap();
+                //let run_timer = Instant::now();
+                if let Some(system) = system.as_mut() {
+                    //system.run_for(nanoseconds_per_frame).unwrap();
+                    match system.run_for_duration(ClockDuration::from_nanos((frame_time.as_nanos() as f32 * speed) as u64)) {
+                        Ok(()) => {},
+                        Err(err) if err.err == ErrorType::Breakpoint => {
+                            run_debugger = true;
+                        },
+                        Err(err) => panic!("{:?}", err),
+                    }
+                    //system.run_until_break().unwrap();
+                }
+                //let sim_time = run_timer.elapsed().as_micros();
+                //println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_micros(), sim_time, frame_time.as_micros() as f64 / sim_time as f64);
             }
-            //let sim_time = run_timer.elapsed().as_micros();
-            //println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_micros(), sim_time, frame_time.as_micros() as f64 / sim_time as f64);
 
             if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::No) {
                 for key in keys {
@@ -279,9 +313,7 @@ impl MiniFrontend {
 
                     // Process special keys
                     if let Key::D = key {
-                        if let Some(system) = system.as_ref() {
-                            system.enable_debugging();
-                        }
+                        run_debugger = true;
                     }
                 }
             }
@@ -306,7 +338,7 @@ impl MiniFrontend {
             }
 
             if let Some(queue) = self.video.as_mut() {
-                if let Some((clock, frame)) = queue.latest() {
+                if let Some((_clock, frame)) = queue.latest() {
                     last_frame = frame
                 }
                 window.update_with_buffer(&last_frame.bitmap, last_frame.width as usize, last_frame.height as usize).unwrap();

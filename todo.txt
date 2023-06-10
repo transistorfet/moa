@@ -1,11 +1,24 @@
 
-* I want to make some kind of memory transaction object that does everything in a contained but logical way, including handling exception
-  information needed about the last access, and adjusting the pre/post inc/dec
+* rename System::run_until_break into run_until_signal, and make it take a signal as argument
 
-* the debug dump things should not used the clocked addressing, but use a debugging mode thing of some kind so as not to influence the sim state
-* the way you're doing debugging is so bad, and something's broken with the Z80
-* debugger should return a breakpoint error to the frontend, so that the frontend still runs, instead of suspending the current execution
+* make errors be enums to make for easier matching
+* test m68k cycle timing again
+* fix tests
+
+* you really need a full web-based debugger
+    * breakpoints should be in the CPU implementation, and get checked before an instruction starts executing
+    * there should be a list of "debuggable" objects in the system to make it easier to list them and iterate over them
+    * a breakpoint should escape the system and return to the frontend, which should handle everything (not inline because the frontend won't update)
+
 * can you make the debugger workable in the web ui in some way?  So you can have a debug window open while playing the game or something
+* the way you're doing debugging is so bad, and something's broken with the Z80
+* the debug dump things should not used the clocked addressing, but use a debugging mode thing of some kind so as not to influence the sim state
+* there needs to be a better way of finding devices, and getting names/refs out of them
+* debugger should return a breakpoint error to the frontend, so that the frontend still runs, instead of suspending the current execution
+
+
+* for 68k impl, I want to make some kind of memory transaction object that does everything in a contained but logical way, including handling exception
+  information needed about the last access, and adjusting the pre/post inc/dec
 
 * I like making address adapters like this (below)
 * you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
@@ -50,9 +63,9 @@
 * AudioFrame (and possibly the mixer and source) should be moved to the core, it should probably have the sample rate
 * split AudioOutput into a sender and receiver
 * can you eliminate the source-to-mixer queues?
+* add audio support to the console, but it needs to be conditionally compilable so that audio can be disabled (computie doesn't need it, only genesis)
 
 
-* should you rename devices.rs traits.rs?
 * the interrupt controller stuff is really not good.  It should be more like busport, and connected to a device at startup (eg. create
   interrupt controller, then create objects that use that controller and pass in values, maybe an option so that the controller doesn't
   have to be hooked up, meaning hardware interrupts would not be used.
@@ -60,10 +73,7 @@
   transmutable abstraction, so that you can avoid the need for explicit borrows
 
 * add rust runtime checks for math to look for overflow errors
-* I think the overflowing add and subs return the original number and not the overflowed result.  I might have already checked that
-  in the m68k impl but I should check again
 * double check the functioning of the banked areas and register settings for Z80 coprocessor
-* test the Z80 more, add tests like jsmoo's
 * add opentelemetry if it can be wasm compatible, or some kind of timing for giving an average framerate
 * improve performance
 
@@ -76,7 +86,6 @@
 * get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion
 
 
-* add ability to serialize/deserialize state into something, so it can be restored... (maybe not worth it though)
 
 
 * can you make the debugger more accessible, so a web interface could access the data and display it, in light of the fact that println isn't available in wasm
@@ -100,6 +109,8 @@ System/Traits:
       of taking up a whole range of addresses
     * you could modify read()/write() in Addressable to return the number of bytes read or written for dynamic bus sizing used by the MC68020+
 
+    * add ability to serialize/deserialize state into something, so it can be restored... (maybe not worth it though)
+
 
 Debugger:
 
@@ -115,12 +126,13 @@ Debugger:
 
 Genesis/Mega Drive:
 
-    * there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
-      stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
-
     * the 68000/Z80 bank switching is probably buggy
     * the H/V counters are not accurate because it seems to count at different speeds in the blanking period (time vs return value numbers don't divide properly)
     * make the ym7101 set/reset the v_int occurred flag based on the interrupt controller
+
+    * there is an issue with Mortal Kombat 2 where it will crash randomly at the start of a fight.  The code is actually swapping
+      stacks a bunch of times, and at some point, the stack is corrupted or something and it `rts`s to the wrong address...
+
     * add support for the sprite overflow flag (low priority)
     * still possibly a bug with the shadow/highlight colours
 
@@ -143,8 +155,7 @@ Macintosh:
 
 Z80:
 
-    * add instruction timings to Z80
-    * unimplemented: CPD, CPDR, CPI, CPIR, DAA, IND, INDR, INI, INIR, INic, INx, OTDR, OTIR, OUTD, OUTI, OUTic, OUTx, RETI, RETN, RLD, RRD
+    * unimplemented: CPD, CPDR, CPI, CPIR, DAA, IND, INDR, INI, INIR, INic, INx, OTDR, OTIR, OUTD, OUTI, OUTic, OUTx
 
 Synth:
 
