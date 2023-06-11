@@ -11,7 +11,7 @@ pub fn smd_to_bin(input: Vec<u8>) -> Result<Vec<u8>, Error> {
     let mut output = vec![0; input.len() - SMD_HEADER];
 
     if &input[8..10] != SMD_MAGIC {
-        return Err(Error::new(&format!("smd: magic not found: {:?}", &input[8..10])));
+        return Err(Error::new(format!("smd: magic not found: {:?}", &input[8..10])));
     }
 
     let calculated_blocks = (input.len() - SMD_HEADER) / SMD_BLOCK_SIZE;
@@ -31,7 +31,7 @@ pub fn smd_to_bin(input: Vec<u8>) -> Result<Vec<u8>, Error> {
 }
 
 pub fn load_rom_file(filename: &str) -> Result<Vec<u8>, Error> {
-    let mut contents = fs::read(filename).map_err(|_| Error::new(&format!("Error reading contents of {}", filename)))?;
+    let mut contents = fs::read(filename).map_err(|_| Error::new(format!("Error reading contents of {}", filename)))?;
 
     if filename.ends_with(".smd") {
         contents = smd_to_bin(contents)?;

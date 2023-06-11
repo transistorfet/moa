@@ -269,13 +269,13 @@ impl MiniFrontend {
         let mut last_frame = Frame::new(size.0, size.1, PixelEncoding::ARGB);
         while window.is_open() && !window.is_key_down(Key::Escape) {
             if run_debugger {
-                if let Some(mut system) = system.as_mut() {
-                    debugger.print_step(&mut system).unwrap();
-                    if debugger.check_auto_command(&mut system).unwrap() != DebugControl::Continue {
+                if let Some(system) = system.as_mut() {
+                    debugger.print_step(system).unwrap();
+                    if debugger.check_auto_command(system).unwrap() != DebugControl::Continue {
                         let mut buffer = String::new();
                         io::stdout().write_all(b"> ").unwrap();
                         io::stdin().read_line(&mut buffer).unwrap();
-                        match debugger.run_command(&mut system, &buffer) {
+                        match debugger.run_command(system, &buffer) {
                             Ok(DebugControl::Exit) => {
                                 run_debugger = false;
                             },

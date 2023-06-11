@@ -38,7 +38,7 @@ impl Disallow {
         if (*self as usize) & (disallow as usize) == 0 {
             Ok(())
         } else {
-            Err(Error::new(&format!("error at line {}: invalid addressing mode for the instruction", lineno)))
+            Err(Error::new(format!("error at line {}: invalid addressing mode for the instruction", lineno)))
         }
     }
 }
@@ -122,7 +122,7 @@ impl M68kAssembler {
             match reloc.rtype {
                 RelocationType::Displacement => {
                     // TODO this doesn't yet take into accound the origin
-                    let location = *self.labels.get(&reloc.label).ok_or_else(|| Error::new(&format!("error during relocation, label undefined {:?}", reloc.label)))?;
+                    let location = *self.labels.get(&reloc.label).ok_or_else(|| Error::new(format!("error during relocation, label undefined {:?}", reloc.label)))?;
                     self.output[reloc.index] |= ((self.output[reloc.index] as i8 * 2 + 2) - (location as i8 * 2)) as u16 & 0x00ff;
                 },
                 _ => panic!("relocation type unimplemented"),
@@ -199,7 +199,7 @@ impl M68kAssembler {
     }
 
     fn convert_sized_instruction(&mut self, lineno: usize, mneumonic: &str, args: &[AssemblyOperand]) -> Result<(), Error> {
-        let operation_size = get_size_from_mneumonic(mneumonic).ok_or_else(|| Error::new(&format!("error at line {}: expected a size specifier (b/w/l)", lineno)));
+        let operation_size = get_size_from_mneumonic(mneumonic).ok_or_else(|| Error::new(format!("error at line {}: expected a size specifier (b/w/l)", lineno)));
         match &mneumonic[..mneumonic.len() - 1] {
             "addi" => {
                 self.convert_common_immediate_instruction(lineno, 0x0600, args, operation_size?, Disallow::NoARegImmediateOrPC)?;
@@ -300,7 +300,7 @@ impl M68kAssembler {
             },
 
             // TODO complete remaining instructions
-            _ => return Err(Error::new(&format!("unrecognized instruction at line {}: {:?}", lineno, mneumonic))),
+            _ => return Err(Error::new(format!("unrecognized instruction at line {}: {:?}", lineno, mneumonic))),
         }
         Ok(())
     }
@@ -369,14 +369,14 @@ impl M68kAssembler {
         } else if dirstr == "l" {
             1 << 8
         } else {
-            return Err(Error::new(&format!("error at line {}: expected direction of (l)eft or (r)ight, but found {:?}", lineno, dirstr)));
+            return Err(Error::new(format!("error at line {}: expected direction of (l)eft or (r)ight, but found {:?}", lineno, dirstr)));
         };
 
         match &args {
             [AssemblyOperand::Immediate(_), AssemblyOperand::Register(_)] => {
                 let mut immediate = parser::expect_immediate(lineno, &args[0])?;
                 if !(1..=8).contains(&immediate) {
-                    return Err(Error::new(&format!("error at line {}: immediate value must be between 1 and 8, found {:?}", lineno, args)));
+                    return Err(Error::new(format!("error at line {}: immediate value must be between 1 and 8, found {:?}", lineno, args)));
                 } else if immediate == 8 {
                     immediate = 0;
                 }
@@ -394,7 +394,7 @@ impl M68kAssembler {
             //    self.output.push(opcode | effective_address);
             //    self.output.extend(additional_words);
             //},
-            _ => return Err(Error::new(&format!("error at line {}: unexpected addressing mode, found {:?}", lineno, args))),
+            _ => return Err(Error::new(format!("error at line {}: unexpected addressing mode, found {:?}", lineno, args))),
         }
         Ok(())
     }
@@ -422,7 +422,7 @@ fn convert_target(lineno: usize, operand: &AssemblyOperand, size: Size, disallow
                     }
                 }
             }
-            Err(Error::new(&format!("error at line {}: post-increment operator can only be used with a single address register", lineno)))
+            Err(Error::new(format!("error at line {}: post-increment operator can only be used with a single address register", lineno)))
         },
         AssemblyOperand::IndirectPre(operator, args) => {
             disallow.check(lineno, Disallow::NoIndirectPre)?;
@@ -436,9 +436,9 @@ fn convert_target(lineno: usize, operand: &AssemblyOperand, size: Size, disallow
                     }
                 }
             }
-            Err(Error::new(&format!("error at line {}: pre-decrement operator can only be used with a single address register", lineno)))
+            Err(Error::new(format!("error at line {}: pre-decrement operator can only be used with a single address register", lineno)))
         },
-        _ => Err(Error::new(&format!("not implemented: {:?}", operand))),
+        _ => Err(Error::new(format!("not implemented: {:?}", operand))),
     }
 }
 
@@ -458,7 +458,7 @@ fn convert_register(lineno: usize, name: &str, disallow: Disallow) -> Result<(u1
             disallow.check(lineno, Disallow::NoAReg)?;
             Ok(((0b001 << 3) | 7, vec![]))
         },
-        _ => Err(Error::new(&format!("error at line {}: invalid register {:?}", lineno, name))),
+        _ => Err(Error::new(format!("error at line {}: invalid register {:?}", lineno, name))),
     }
 }
 
@@ -501,7 +501,7 @@ fn convert_indirect(lineno: usize, args: &[AssemblyOperand], disallow: Disallow)
         },
         // TODO add the MC68020 address options
         _ => {
-            Err(Error::new(&format!("error at line {}: expected valid indirect addressing mode, but found {:?}", lineno, args)))
+            Err(Error::new(format!("error at line {}: expected valid indirect addressing mode, but found {:?}", lineno, args)))
         }
     }
 }
@@ -515,7 +515,7 @@ fn convert_reg_and_other(lineno: usize, args: &[AssemblyOperand], _disallow: Dis
             Ok(((0b0 << 8), expect_reg_num(lineno, reg)?, effective_address))
         },
         _ => {
-            Err(Error::new(&format!("error at line {}: expected register and effective address, but found {:?}", lineno, args)))
+            Err(Error::new(format!("error at line {}: expected register and effective address, but found {:?}", lineno, args)))
         }
     }
 }
@@ -526,14 +526,14 @@ fn convert_immediate(lineno: usize, value: usize, size: Size) -> Result<Vec<u16>
             if value <= u8::MAX as usize {
                 Ok(vec![value as u16])
             } else {
-                Err(Error::new(&format!("error at line {}: immediate number is out of range; must be less than {}, but number is {:?}", lineno, u8::MAX, value)))
+                Err(Error::new(format!("error at line {}: immediate number is out of range; must be less than {}, but number is {:?}", lineno, u8::MAX, value)))
             }
         },
         Size::Word => {
             if value <= u16::MAX as usize {
                 Ok(vec![value as u16])
             } else {
-                Err(Error::new(&format!("error at line {}: immediate number is out of range; must be less than {}, but number is {:?}", lineno, u16::MAX, value)))
+                Err(Error::new(format!("error at line {}: immediate number is out of range; must be less than {}, but number is {:?}", lineno, u16::MAX, value)))
             }
         },
         Size::Long => Ok(vec![(value >> 16) as u16, value as u16]),
@@ -546,7 +546,7 @@ fn expect_data_register(lineno: usize, operand: &AssemblyOperand) -> Result<u16,
             return expect_reg_num(lineno, name);
         }
     }
-    Err(Error::new(&format!("error at line {}: expected a data register, but found {:?}", lineno, operand)))
+    Err(Error::new(format!("error at line {}: expected a data register, but found {:?}", lineno, operand)))
 }
 
 fn expect_address_register(lineno: usize, operand: &AssemblyOperand) -> Result<u16, Error> {
@@ -555,14 +555,14 @@ fn expect_address_register(lineno: usize, operand: &AssemblyOperand) -> Result<u
             return expect_reg_num(lineno, name);
         }
     }
-    Err(Error::new(&format!("error at line {}: expected an address register, but found {:?}", lineno, operand)))
+    Err(Error::new(format!("error at line {}: expected an address register, but found {:?}", lineno, operand)))
 }
 
 fn expect_address_reg_num(lineno: usize, name: &str) -> Result<u16, Error> {
     if name.starts_with('a') {
         return expect_reg_num(lineno, name);
     }
-    Err(Error::new(&format!("error at line {}: expected an address register, but found {:?}", lineno, name)))
+    Err(Error::new(format!("error at line {}: expected an address register, but found {:?}", lineno, name)))
 }
 
 fn expect_reg_num(lineno: usize, name: &str) -> Result<u16, Error> {
@@ -571,14 +571,14 @@ fn expect_reg_num(lineno: usize, name: &str) -> Result<u16, Error> {
             return Ok(number);
         }
     }
-    Err(Error::new(&format!("error at line {}: no such register {:?}", lineno, name)))
+    Err(Error::new(format!("error at line {}: no such register {:?}", lineno, name)))
 }
 
 fn expect_a_instruction_size(lineno: usize, size: Size) -> Result<u16, Error> {
     match size {
         Size::Word => Ok(0),
         Size::Long => Ok(0b1 << 8),
-        _ => Err(Error::new(&format!("error at line {}: address instructions can only be word or long size", lineno))),
+        _ => Err(Error::new(format!("error at line {}: address instructions can only be word or long size", lineno))),
     }
 }
 
@@ -614,7 +614,7 @@ fn encode_size_bit(size: Size) -> Result<u16, Error> {
     match size {
         Size::Word => Ok(0b01 << 6),
         Size::Long => Ok(0b10 << 6),
-        _ => Err(Error::new(&format!("invalid size for this operation: {:?}", size)))
+        _ => Err(Error::new(format!("invalid size for this operation: {:?}", size)))
     }
 }
 

@@ -854,7 +854,7 @@ impl Addressable for Ym7101 {
                     if data.len() == 4 {
                         let value = read_beu16(&data[2..]);
                         if (value & 0xC000) != 0x8000 {
-                            return Err(Error::new(&format!("{}: unexpected second byte {:x}", DEV_NAME, value)));
+                            return Err(Error::new(format!("{}: unexpected second byte {:x}", DEV_NAME, value)));
                         }
                         self.set_register(value);
                     }

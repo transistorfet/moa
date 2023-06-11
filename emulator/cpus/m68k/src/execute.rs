@@ -897,13 +897,13 @@ impl M68k {
         let post_addr = match target {
             Target::IndirectARegInc(_) => {
                 if dir != Direction::FromTarget {
-                    return Err(Error::new(&format!("Cannot use {:?} with {:?}", target, dir)));
+                    return Err(Error::new(format!("Cannot use {:?} with {:?}", target, dir)));
                 }
                 self.move_memory_to_registers(addr, size, mask)?
             },
             Target::IndirectARegDec(_) => {
                 if dir != Direction::ToTarget {
-                    return Err(Error::new(&format!("Cannot use {:?} with {:?}", target, dir)));
+                    return Err(Error::new(format!("Cannot use {:?} with {:?}", target, dir)));
                 }
                 self.move_registers_to_memory_reverse(addr, size, mask)?
             },
@@ -1000,7 +1000,7 @@ impl M68k {
                 let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32) as Address;
                 while shift >= 0 {
                     let byte = self.get_address_sized(addr, Size::Byte)?;
-                    self.state.d_reg[dreg as usize] |= (byte as u32) << shift;
+                    self.state.d_reg[dreg as usize] |= byte << shift;
                     addr += 2;
                     shift -= 8;
                 }
@@ -1445,7 +1445,7 @@ impl M68k {
             Target::IndirectMemory(addr, _) => {
                 self.set_address_sized(addr as Address, value, size)?;
             },
-            _ => return Err(Error::new(&format!("Unimplemented addressing target: {:?}", target))),
+            _ => return Err(Error::new(format!("Unimplemented addressing target: {:?}", target))),
         }
         Ok(())
     }
@@ -1473,7 +1473,7 @@ impl M68k {
             Target::IndirectMemory(addr, _) => {
                 addr
             },
-            _ => return Err(Error::new(&format!("Invalid addressing target: {:?}", target))),
+            _ => return Err(Error::new(format!("Invalid addressing target: {:?}", target))),
         };
         Ok(addr)
     }

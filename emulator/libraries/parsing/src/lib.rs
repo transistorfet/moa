@@ -73,7 +73,7 @@ impl<'input> AssemblyParser<'input> {
                 }
             },
             _ => {
-                return Err(Error::new(&format!("parse error at line {}: expected word, found {:?}", self.lexer.lineno(), token)));
+                return Err(Error::new(format!("parse error at line {}: expected word, found {:?}", self.lexer.lineno(), token)));
             },
         };
 
@@ -174,7 +174,7 @@ fn parse_any_number(lineno: usize, string: &str) -> Result<usize, Error> {
         (10, string)
     };
     usize::from_str_radix(numeric, radix)
-        .map_err(|_| Error::new(&format!("parse error at line {}: expected number after #, but found {:?}", lineno, string)))
+        .map_err(|_| Error::new(format!("parse error at line {}: expected number after #, but found {:?}", lineno, string)))
 }
 
 
@@ -204,7 +204,7 @@ impl<'input> AssemblyLexer<'input> {
 
     pub fn get_next(&mut self) -> Option<String> {
         if self.peeked.is_some() {
-            let result = std::mem::replace(&mut self.peeked, None);
+            let result = self.peeked.take();
             return result;
         }
 
@@ -231,7 +231,7 @@ impl<'input> AssemblyLexer<'input> {
     }
 
     pub fn expect_next(&mut self) -> Result<String, Error> {
-        self.get_next().ok_or_else(|| Error::new(&format!("unexpected end of input at line {}", self.lineno)))
+        self.get_next().ok_or_else(|| Error::new(format!("unexpected end of input at line {}", self.lineno)))
     }
 
     pub fn expect_token(&mut self, expected: &str) -> Result<(), Error> {
@@ -239,7 +239,7 @@ impl<'input> AssemblyLexer<'input> {
         if token == expected {
             Ok(())
         } else {
-            Err(Error::new(&format!("parse error at line {}: expected {:?}, found {:?}", self.lineno, expected, token)))
+            Err(Error::new(format!("parse error at line {}: expected {:?}, found {:?}", self.lineno, expected, token)))
         }
     }
 
@@ -248,7 +248,7 @@ impl<'input> AssemblyLexer<'input> {
         if token.is_none() || token.as_ref().unwrap() == "\n" {
             Ok(())
         } else {
-            Err(Error::new(&format!("expected end of line at {}: found {:?}", self.lineno, token)))
+            Err(Error::new(format!("expected end of line at {}: found {:?}", self.lineno, token)))
         }
     }
 
@@ -294,18 +294,18 @@ impl<'input> AssemblyLexer<'input> {
 }
 
 fn is_word(ch: char) -> bool {
-    ('a'..='z').contains(&ch) || ('A'..='Z').contains(&ch) || ('0'..='9').contains(&ch) || (ch == '_')
+    ch.is_ascii_lowercase() || ch.is_ascii_uppercase() || ch.is_ascii_digit() || (ch == '_')
 }
 
 fn is_digit(ch: char) -> bool {
-    ('0'..='9').contains(&ch)
+    ch.is_ascii_digit()
 }
 
 pub fn expect_args(lineno: usize, args: &[AssemblyOperand], expected: usize) -> Result<(), Error> {
     if args.len() == expected {
         Ok(())
     } else {
-        Err(Error::new(&format!("error at line {}: expected {} args, but found {}", lineno, expected, args.len())))
+        Err(Error::new(format!("error at line {}: expected {} args, but found {}", lineno, expected, args.len())))
     }
 }
 
@@ -314,7 +314,7 @@ pub fn expect_label(lineno: usize, args: &[AssemblyOperand]) -> Result<String, E
     if let AssemblyOperand::Label(name) = &args[0] {
         Ok(name.clone())
     } else {
-        Err(Error::new(&format!("error at line {}: expected a label, but found {:?}", lineno, args)))
+        Err(Error::new(format!("error at line {}: expected a label, but found {:?}", lineno, args)))
     }
 }
 
@@ -322,7 +322,7 @@ pub fn expect_immediate(lineno: usize, operand: &AssemblyOperand) -> Result<usiz
     if let AssemblyOperand::Immediate(value) = operand {
         Ok(*value)
     } else {
-        Err(Error::new(&format!("error at line {}: expected an immediate value, but found {:?}", lineno, operand)))
+        Err(Error::new(format!("error at line {}: expected an immediate value, but found {:?}", lineno, operand)))
     }
 }
 

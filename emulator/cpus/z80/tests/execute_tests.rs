@@ -1,5 +1,5 @@
 
-use moa_core::{System, MemoryBlock, BusPort, Frequency, Address, Addressable, wrap_transmutable};
+use moa_core::{System, MemoryBlock, BusPort, Frequency, Address, Addressable, Device};
 
 use moa_z80::{Z80, Z80Type};
 use moa_z80::state::Z80State;
@@ -486,7 +486,7 @@ fn init_execute_test() -> (Z80, System) {
     // Insert basic initialization
     let data = vec![0; 0x10000];
     let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x0000, wrap_transmutable(mem)).unwrap();
+    system.add_addressable_device(0x0000, Device::new(mem)).unwrap();
 
     // Initialize the CPU and make sure it's in the expected state
     let mut cpu = Z80::new(Z80Type::Z80, Frequency::from_mhz(4), BusPort::new(0, 16, 8, system.bus.clone()), None);

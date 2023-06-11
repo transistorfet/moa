@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, MemoryBlock, BusPort, ClockTime, Frequency, Address, Addressable, wrap_transmutable};
+use moa_core::{System, Error, MemoryBlock, BusPort, ClockTime, Frequency, Address, Addressable, Device};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::instructions::{Instruction, Target, Size};
@@ -27,7 +27,7 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
     // Insert basic initialization
     let data = vec![0; 0x00100000];
     let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
+    system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
     system.get_bus().write_beu32(ClockTime::START, 0, INIT_STACK as u32).unwrap();
     system.get_bus().write_beu32(ClockTime::START, 4, INIT_ADDR as u32).unwrap();
 
@@ -38,11 +38,11 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
         BusPort::new(0, 24, 16, system.bus.clone())
     };
     let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
-    cpu.init().unwrap();
+    cpu.reset_cpu().unwrap();
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
 
-    cpu.decoder.init(ClockTime::START, INIT_ADDR as u32);
+    cpu.decoder.init(true, INIT_ADDR as u32);
     assert_eq!(cpu.decoder.start, INIT_ADDR as u32);
     assert_eq!(cpu.decoder.instruction, Instruction::NOP);
     (cpu, system)
@@ -77,7 +77,7 @@ fn run_timing_test(case: &TimingCase) -> Result<(), Error> {
         Ok(())
     } else {
         println!("{:?}", timing);
-        Err(Error::new(&format!("expected {} but found {}", expected, result)))
+        Err(Error::new(format!("expected {} but found {}", expected, result)))
     }
 }
 

@@ -408,9 +408,9 @@ impl PhaseGenerator {
         let detune_index = (self.detune & 0x03) as usize;
         let detune = DETUNE_TABLE[keycode * 4 + detune_index] as u32;
         let increment = if sign == 0 {
-            increment + detune
+            increment.saturating_add(detune)
         } else {
-            increment - detune
+            increment.saturating_sub(detune)
         }.min(0x1FFFF);
 
         // Apply multiple

@@ -27,7 +27,7 @@ impl MemoryBlock {
     pub fn load(filename: &str) -> Result<MemoryBlock, Error> {
         match fs::read(filename) {
             Ok(contents) => Ok(MemoryBlock::new(contents)),
-            Err(_) => Err(Error::new(&format!("Error reading contents of {}", filename))),
+            Err(_) => Err(Error::new(format!("Error reading contents of {}", filename))),
         }
     }
 
@@ -37,7 +37,7 @@ impl MemoryBlock {
                 self.contents[(addr as usize)..(addr as usize) + contents.len()].copy_from_slice(&contents);
                 Ok(())
             },
-            Err(_) => Err(Error::new(&format!("Error reading contents of {}", filename))),
+            Err(_) => Err(Error::new(format!("Error reading contents of {}", filename))),
         }
     }
 
@@ -62,7 +62,7 @@ impl Addressable for MemoryBlock {
 
     fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
         if self.read_only {
-            return Err(Error::breakpoint(&format!("Attempt to write to read-only memory at {:x} with data {:?}", addr, data)));
+            return Err(Error::breakpoint(format!("Attempt to write to read-only memory at {:x} with data {:?}", addr, data)));
         }
 
         self.contents[(addr as usize) .. (addr as usize) + data.len()].copy_from_slice(data);
@@ -188,11 +188,11 @@ impl Bus {
                 if relative_addr as usize + count <= block.size {
                     return Ok((block.dev.clone(), relative_addr));
                 } else {
-                    return Err(Error::new(&format!("Error reading address {:#010x}", addr)));
+                    return Err(Error::new(format!("Error reading address {:#010x}", addr)));
                 }
             }
         }
-        Err(Error::new(&format!("No segment found at {:#010x}", addr)))
+        Err(Error::new(format!("No segment found at {:#010x}", addr)))
     }
 
     pub fn dump_memory(&mut self, clock: ClockTime, mut addr: Address, mut count: Address) {

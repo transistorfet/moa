@@ -203,11 +203,7 @@ impl From<u8> for InterruptMode {
 
 impl RegisterPair {
     pub(crate) fn is_index_reg(&self) -> bool {
-        match self {
-            RegisterPair::IX |
-            RegisterPair::IY => true,
-            _ => false,
-        }
+        matches!(self, RegisterPair::IX | RegisterPair::IY)
     }
 }
 

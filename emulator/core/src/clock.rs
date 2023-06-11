@@ -95,6 +95,7 @@ impl ClockDuration {
     }
 
     #[inline]
+    #[allow(clippy::unnecessary_cast)]
     pub const fn as_picos(self) -> u128 {
         (self.femtos / Self::FEMTOS_PER_PICOSEC) as u128
     }

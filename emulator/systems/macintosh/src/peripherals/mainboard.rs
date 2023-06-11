@@ -86,7 +86,7 @@ impl Addressable for Mainboard {
             // Debugger
             Ok(())
         } else {
-            Err(Error::new(&format!("Error reading address {:#010x}", addr)))
+            Err(Error::new(format!("Error reading address {:#010x}", addr)))
         }
     }
 
@@ -104,7 +104,7 @@ impl Addressable for Mainboard {
         } else if (0xF00000..0xF80000).contains(&addr) {
             self.phase_read.write(clock, addr, data)
         } else {
-            Err(Error::new(&format!("Error writing address {:#010x}", addr)))
+            Err(Error::new(format!("Error writing address {:#010x}", addr)))
         }
     }
 }

@@ -8,7 +8,7 @@ fn main() {
 
     let mut frontend = ConsoleFrontend::new();
 
-    let mut system = build_computie(&mut frontend).unwrap();
+    let system = build_computie(&mut frontend).unwrap();
     frontend.start(matches, system);
 }
 

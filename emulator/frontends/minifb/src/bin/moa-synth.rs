@@ -2,7 +2,7 @@
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
 use moa_core::host::{self, Host, Frame, FrameSender, PixelEncoding, Key, KeyEvent, EventReceiver};
-use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable, TransmutableBox, wrap_transmutable};
+use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable, Device};
 
 const SCREEN_WIDTH: u32 = 384;
 const SCREEN_HEIGHT: u32 = 128;
@@ -61,7 +61,7 @@ fn set_register(device: &mut dyn Addressable, bank: u8, reg: u8, data: u8) -> Re
     Ok(())
 }
 
-fn initialize_ym(ym_sound: TransmutableBox) -> Result<(), Error> {
+fn initialize_ym(ym_sound: Device) -> Result<(), Error> {
     let mut borrow = ym_sound.borrow_mut();
     let device = borrow.as_addressable().unwrap();
 
@@ -85,14 +85,14 @@ fn main() {
 
         let (frame_sender, frame_receiver) = host::frame_queue(SCREEN_WIDTH, SCREEN_HEIGHT);
         let (key_sender, key_receiver) = host::event_queue();
-        let control = wrap_transmutable(SynthControl::new(key_receiver, frame_sender));
+        let control = Device::new(SynthControl::new(key_receiver, frame_sender));
         system.add_device("control", control)?;
 
-        let ym_sound = wrap_transmutable(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
+        let ym_sound = Device::new(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
         initialize_ym(ym_sound.clone())?;
         system.add_addressable_device(0x00, ym_sound)?;
 
-        let sn_sound = wrap_transmutable(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
+        let sn_sound = Device::new(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
         system.add_addressable_device(0x10, sn_sound)?;
 
         host.add_video_source(frame_receiver)?;

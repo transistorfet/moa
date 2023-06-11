@@ -1,5 +1,5 @@
 
-use clap::Arg;
+use clap::{Arg, ArgAction};
 
 use moa_systems_trs80::{build_trs80, Trs80Options};
 
@@ -8,13 +8,13 @@ fn main() {
         .arg(Arg::new("ROM")
             .short('r')
             .long("rom")
-            .takes_value(true)
+            .action(ArgAction::SetTrue)
             .value_name("FILE")
             .help("ROM file to load at the start of memory"))
         .get_matches();
 
     let mut options = Trs80Options::default();
-    if let Some(filename) = matches.value_of("ROM") {
+    if let Some(filename) = matches.get_one::<String>("ROM") {
         options.rom = filename.to_string();
     }
 

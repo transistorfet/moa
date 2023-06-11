@@ -1,9 +1,9 @@
 
-use moa_core::{System, MemoryBlock, BusPort, ClockTime, Frequency, Address, Addressable, Steppable, wrap_transmutable};
+use moa_core::{System, MemoryBlock, BusPort, ClockTime, Frequency, Address, Addressable, Steppable, Device};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::M68kState;
-use moa_m68k::instructions::{Instruction, Target, Size, Sign, ShiftDirection, Direction, Condition};
+use moa_m68k::instructions::{Instruction, Target, Size, Sign, Direction, Condition};
 
 const INIT_STACK: Address = 0x00002000;
 const INIT_ADDR: Address = 0x00000010;
@@ -38,7 +38,7 @@ fn init_execute_test(cputype: M68kType) -> (M68k, System) {
     // Insert basic initialization
     let data = vec![0; 0x00100000];
     let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
+    system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
     system.get_bus().write_beu32(ClockTime::START, 0, INIT_STACK as u32).unwrap();
     system.get_bus().write_beu32(ClockTime::START, 4, INIT_ADDR as u32).unwrap();
 
@@ -49,7 +49,7 @@ fn init_execute_test(cputype: M68kType) -> (M68k, System) {
     };
     let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
     cpu.step(&system).unwrap();
-    cpu.decoder.init(system.clock, cpu.state.pc);
+    cpu.decoder.init(true, cpu.state.pc);
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
     assert_eq!(cpu.decoder.instruction, Instruction::NOP);
@@ -79,7 +79,7 @@ fn run_test(case: &TestCase) {
     let (mut cpu, system) = init_execute_test(case.cputype);
 
     let init_state = build_state(&case.init);
-    let mut expected_state = build_state(&case.fini);
+    let expected_state = build_state(&case.fini);
     system.get_bus().write_beu32(system.clock, MEM_ADDR as Address, case.init.mem).unwrap();
 
     load_memory(&system, case.data);
@@ -89,7 +89,6 @@ fn run_test(case: &TestCase) {
     assert_eq!(cpu.decoder.instruction, case.ins);
 
     cpu.execute_current().unwrap();
-    expected_state.request = cpu.state.request.clone();
     assert_eq!(cpu.state, expected_state);
 
     let mem = system.get_bus().read_beu32(system.clock, MEM_ADDR as Address).unwrap();
@@ -237,7 +236,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "asl",
-        ins: Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+        ins: Instruction::ASL(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE300 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -245,7 +244,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "asr",
-        ins: Instruction::ASd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+        ins: Instruction::ASR(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE200 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000081, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -414,7 +413,7 @@ const TEST_CASES: &'static [TestCase] = &[
 
     TestCase {
         name: "lsl",
-        ins: Instruction::LSd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+        ins: Instruction::LSL(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE308 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x271F, mem: 0x00000000 },
@@ -422,7 +421,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "lsl with bit out",
-        ins: Instruction::LSd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+        ins: Instruction::LSL(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE308 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000081, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -430,7 +429,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "lsr",
-        ins: Instruction::LSd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+        ins: Instruction::LSR(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE208 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000081, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -604,7 +603,7 @@ const TEST_CASES: &'static [TestCase] = &[
 
     TestCase {
         name: "rol",
-        ins: Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+        ins: Instruction::ROL(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE318 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -612,7 +611,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "ror",
-        ins: Instruction::ROd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+        ins: Instruction::ROR(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE218 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -620,7 +619,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "roxl",
-        ins: Instruction::ROXd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+        ins: Instruction::ROXL(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE310 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -628,7 +627,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "roxr",
-        ins: Instruction::ROXd(Target::Immediate(1), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+        ins: Instruction::ROXR(Target::Immediate(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE210 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -636,7 +635,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "roxl two bits",
-        ins: Instruction::ROXd(Target::Immediate(2), Target::DirectDReg(0), Size::Byte, ShiftDirection::Left),
+        ins: Instruction::ROXL(Target::Immediate(2), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE510 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },
@@ -644,7 +643,7 @@ const TEST_CASES: &'static [TestCase] = &[
     },
     TestCase {
         name: "roxr two bits",
-        ins: Instruction::ROXd(Target::Immediate(2), Target::DirectDReg(0), Size::Byte, ShiftDirection::Right),
+        ins: Instruction::ROXR(Target::Immediate(2), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xE410 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000001, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0x2700, mem: 0x00000000 },

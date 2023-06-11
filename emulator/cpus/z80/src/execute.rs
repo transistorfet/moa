@@ -214,7 +214,7 @@ impl Z80 {
             Instruction::SUB(target) => self.execute_sub(target),
             Instruction::XOR(target) => self.execute_xor(target),
             _ => {
-                Err(Error::new(&format!("{}: unimplemented instruction: {:?}", DEV_NAME, self.decoder.instruction)))
+                Err(Error::new(format!("{}: unimplemented instruction: {:?}", DEV_NAME, self.decoder.instruction)))
             }
         }
     }

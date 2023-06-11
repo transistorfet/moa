@@ -47,7 +47,7 @@ impl AtaDevice {
                 self.contents = contents;
                 Ok(())
             },
-            Err(_) => Err(Error::new(&format!("Error reading contents of {}", filename))),
+            Err(_) => Err(Error::new(format!("Error reading contents of {}", filename))),
         }
     }
 }

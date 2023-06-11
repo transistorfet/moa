@@ -2,7 +2,7 @@
 use std::thread;
 use std::time::Duration;
 
-use moa_core::{System, Frequency, MemoryBlock, BusPort, wrap_transmutable};
+use moa_core::{System, Frequency, MemoryBlock, BusPort, Device};
 
 use moa_m68k::{M68k, M68kType};
 use moa_peripherals_generic::AtaDevice;
@@ -13,18 +13,18 @@ fn main() {
         let mut system = System::default();
 
         let monitor = MemoryBlock::load("binaries/computie/monitor.bin").unwrap();
-        system.add_addressable_device(0x00000000, wrap_transmutable(monitor)).unwrap();
+        system.add_addressable_device(0x00000000, Device::new(monitor)).unwrap();
 
         let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
         ram.load_at(0, "binaries/computie/kernel.bin").unwrap();
-        system.add_addressable_device(0x00100000, wrap_transmutable(ram)).unwrap();
+        system.add_addressable_device(0x00100000, Device::new(ram)).unwrap();
 
         let mut ata = AtaDevice::default();
         ata.load("binaries/computie/disk-with-partition-table.img").unwrap();
-        system.add_addressable_device(0x00600000, wrap_transmutable(ata)).unwrap();
+        system.add_addressable_device(0x00600000, Device::new(ata)).unwrap();
 
         let serial = MC68681::default();
-        system.add_addressable_device(0x00700000, wrap_transmutable(serial)).unwrap();
+        system.add_addressable_device(0x00700000, Device::new(serial)).unwrap();
 
 
         let cpu = M68k::new(M68kType::MC68010, Frequency::from_mhz(8), BusPort::new(0, 24, 16, system.bus.clone()));
@@ -38,9 +38,9 @@ fn main() {
         //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
         //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
-        system.add_interruptable_device("cpu", wrap_transmutable(cpu)).unwrap();
+        system.add_interruptable_device("cpu", Device::new(cpu)).unwrap();
 
-        system.run_loop();
+        system.run_forever().unwrap();
     });
     thread::sleep(Duration::from_secs(10));
 }

@@ -11,7 +11,7 @@ use clap::{Parser, ArgEnum};
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 
-use moa_core::{System, Error, MemoryBlock, BusPort, Frequency, Address, Addressable, Steppable, wrap_transmutable};
+use moa_core::{System, Error, MemoryBlock, BusPort, Frequency, Address, Addressable, Steppable, Device};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::Status;
@@ -142,7 +142,7 @@ fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, Syst
     // Insert basic initialization
     let data = vec![0; 0x01000000];
     let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x00000000, wrap_transmutable(mem)).unwrap();
+    system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
 
     let port = if cputype <= M68kType::MC68010 {
         BusPort::new(0, 24, 16, system.bus.clone())
