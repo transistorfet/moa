@@ -1,6 +1,6 @@
 
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use moa_core::{warn, info};
 use moa_core::{Bus, Signal, Error, ClockTime, Address, Addressable, Transmutable};
@@ -62,16 +62,10 @@ impl Transmutable for CoprocessorCoordinator {
 }
 
 
-pub struct CoprocessorBankRegister {
-    base: Signal<Address>,
-}
+type CoprocessorRegister = Rc<Cell<Address>>;
 
-impl CoprocessorBankRegister {
-    pub fn new(base: Signal<Address>) -> Self {
-        Self {
-            base,
-        }
-    }
+pub struct CoprocessorBankRegister {
+    base: CoprocessorRegister,
 }
 
 impl Addressable for CoprocessorBankRegister {
@@ -100,16 +94,19 @@ impl Transmutable for CoprocessorBankRegister {
 
 
 pub struct CoprocessorBankArea {
-    base: Signal<Address>,
+    base: CoprocessorRegister,
     bus: Rc<RefCell<Bus>>,
 }
 
 impl CoprocessorBankArea {
-    pub fn new(base: Signal<Address>, bus: Rc<RefCell<Bus>>) -> Self {
-        Self {
+    pub fn new(bus: Rc<RefCell<Bus>>) -> (Self, CoprocessorBankRegister) {
+        let base = Rc::new(Cell::new(0));
+        let register = CoprocessorBankRegister { base: base.clone() };
+        let bank = Self {
             base,
             bus,
-        }
+        };
+        (bank, register)
     }
 }
 

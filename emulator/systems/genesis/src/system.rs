@@ -3,7 +3,7 @@ use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Error, Frequency, Signal, MemoryBlock, Bus, Address, Addressable, Device};
+use moa_core::{System, Error, Frequency, MemoryBlock, Bus, Address, Addressable, Device};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -14,7 +14,7 @@ use moa_peripherals_yamaha::Sn76489;
 use crate::utils;
 use crate::peripherals::ym7101::Ym7101;
 use crate::peripherals::controllers::GenesisControllers;
-use crate::peripherals::coprocessor::{CoprocessorCoordinator, CoprocessorBankRegister, CoprocessorBankArea};
+use crate::peripherals::coprocessor::{CoprocessorCoordinator, CoprocessorBankArea};
 
 
 pub struct SegaGenesisOptions {
@@ -68,12 +68,12 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
 
 
     // Build the Coprocessor's Bus
-    let bank_register = Signal::new(0);
     let coproc_ram = Device::new(MemoryBlock::new(vec![0; 0x00002000]));
     let coproc_ym_sound = Device::new(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
     let coproc_sn_sound = Device::new(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
-    let coproc_register = Device::new(CoprocessorBankRegister::new(bank_register.clone()));
-    let coproc_area = Device::new(CoprocessorBankArea::new(bank_register, system.bus.clone()));
+    let (coproc_area, coproc_register) = CoprocessorBankArea::new(system.bus.clone());
+    let coproc_area = Device::new(coproc_area);
+    let coproc_register = Device::new(coproc_register);
 
     let coproc_bus = Rc::new(RefCell::new(Bus::default()));
     coproc_bus.borrow_mut().set_ignore_unmapped(true);
