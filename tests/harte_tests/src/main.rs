@@ -271,7 +271,7 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                     initial_cpu.dump_state();
                     cpu.dump_state();
                 }
-                println!("FAILED: {}",  err.msg);
+                println!("FAILED: {:?}",  err);
             }
             Err(err)
         },

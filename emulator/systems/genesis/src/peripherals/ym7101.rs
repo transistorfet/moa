@@ -690,7 +690,7 @@ impl Steppable for Ym7101 {
                 self.sender.add(system.clock, frame);
             }
 
-            self.frame_complete.signal();
+            self.vsync_interrupt.signal();
         }
         if self.state.v_clock > 16_630_000 {
             self.state.v_clock -= 16_630_000;
@@ -712,7 +712,7 @@ pub struct Ym7101 {
     sn_sound: Device,
 
     pub external_interrupt: Signal<bool>,
-    pub frame_complete: EdgeSignal,
+    pub vsync_interrupt: EdgeSignal,
 }
 
 impl Ym7101 {
@@ -725,7 +725,7 @@ impl Ym7101 {
             state: Ym7101State::default(),
             sn_sound,
             external_interrupt,
-            frame_complete: EdgeSignal::default(),
+            vsync_interrupt: EdgeSignal::default(),
         }
     }
 

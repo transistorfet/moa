@@ -308,7 +308,7 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                     initial_cpu.dump_state(system.clock);
                     cpu.dump_state(system.clock);
                 }
-                println!("FAILED: {}",  err.msg);
+                println!("FAILED: {:?}",  err);
             }
             Err(err)
         },

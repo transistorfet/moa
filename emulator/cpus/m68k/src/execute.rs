@@ -1,6 +1,6 @@
 
 use moa_core::debug;
-use moa_core::{System, Error, ErrorType, ClockTime, ClockDuration, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
+use moa_core::{System, Error, ClockTime, ClockDuration, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
 use crate::state::{M68k, M68kType, ClockCycles, Status, Flags, Exceptions, InterruptPriority};
 use crate::memory::{MemType, MemAccess};
@@ -68,7 +68,7 @@ impl M68k {
             Status::Running => {
                 match self.cycle_one(system) {
                     Ok(diff) => Ok(diff),
-                    Err(Error { err: ErrorType::Processor, native, .. }) => {
+                    Err(Error::Processor(native)) => {
                         self.exception(native as u8, false)?;
                         Ok(4)
                     },

@@ -20,7 +20,7 @@ fn main() {
             println!("");
         },
         Err(err) => {
-            println!("{}", err.msg);
+            println!("{:?}", err);
         },
     };
 }

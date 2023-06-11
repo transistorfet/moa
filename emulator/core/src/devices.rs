@@ -3,9 +3,7 @@ use std::rc::Rc;
 use std::cell::{RefCell, RefMut, BorrowMutError};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::error::Error;
-use crate::system::System;
-use crate::clock::{ClockTime, ClockDuration};
+use crate::{Error, System, ClockTime, ClockDuration};
 
 
 /// A universal memory address used by the Addressable trait

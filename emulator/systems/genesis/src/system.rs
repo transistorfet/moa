@@ -105,7 +105,6 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     system.add_addressable_device(0x00a11000, Device::new(coproc)).unwrap();
 
     let vdp = Ym7101::new(host, interrupt, coproc_sn_sound);
-    system.break_signal = Some(vdp.frame_complete.clone());
     system.add_peripheral("vdp", 0x00c00000, Device::new(vdp)).unwrap();
 
     let cpu = M68k::new(M68kType::MC68000, Frequency::from_hz(7_670_454), BusPort::new(0, 24, 16, system.bus.clone()));

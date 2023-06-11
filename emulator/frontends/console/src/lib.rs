@@ -2,7 +2,7 @@
 use clap::{Command, Arg, ArgAction, ArgMatches};
 use std::io::{self, Write};
 
-use moa_core::{Error, ErrorType, System, ClockDuration, DebugControl, Debugger};
+use moa_core::{Error, System, ClockDuration, DebugControl, Debugger};
 use moa_core::host::{Host, Tty, ControllerEvent, Audio, DummyAudio, FrameReceiver, EventSender};
 
 pub struct ConsoleFrontend;
@@ -84,7 +84,7 @@ impl ConsoleFrontend {
                         Ok(DebugControl::Exit) => break,
                         Ok(_) => {},
                         Err(err) => {
-                            println!("Error: {}", err.msg);
+                            println!("Error: {:?}", err);
                         },
                     }
                 }
@@ -92,7 +92,7 @@ impl ConsoleFrontend {
 
             match system.run_for_duration(ClockDuration::MAX - system.clock.as_duration()) {
                 Ok(()) => {},
-                Err(err) if err.err == ErrorType::Breakpoint => {
+                Err(Error::Breakpoint(_)) => {
                     run_debugger = true;
                 },
                 Err(err) => {

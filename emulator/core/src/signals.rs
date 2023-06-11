@@ -1,6 +1,8 @@
 use std::cell::{Cell, RefCell, RefMut};
 use std::rc::Rc;
 
+use crate::ClockTime;
+
 pub trait Observable<T> {
     fn set_observer<F>(&self, f: F)
     where
@@ -120,3 +122,17 @@ impl Observable<bool> for ObservableEdgeSignal {
         self.0.notify()
     }
 }
+
+
+pub trait SignalReceiver<T> {
+    fn get_next(&self) -> (ClockTime, T);
+    fn get_at(clock: ClockTime) -> T;
+}
+
+pub trait SignalDriver<T> {
+    fn set_at(clock: ClockTime, value: T);
+}
+
+
+//pub struct LevelTriggeredOutput
+

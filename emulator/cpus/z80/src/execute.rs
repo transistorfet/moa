@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, ErrorType, ClockTime, ClockDuration, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
+use moa_core::{System, Error, ClockTime, ClockDuration, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
 use crate::instructions::{Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister, IndexRegisterHalf, Size, Direction, UndocumentedCopy};
 use crate::state::{Z80, Status, Flags};
@@ -78,7 +78,7 @@ impl Z80 {
             Status::Running => {
                 match self.cycle_one() {
                     Ok(clocks) => Ok(clocks),
-                    Err(Error { err: ErrorType::Processor, .. }) => {
+                    Err(Error::Processor(_)) => {
                         Ok(4)
                     },
                     Err(err) => Err(err),

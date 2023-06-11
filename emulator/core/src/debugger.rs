@@ -1,7 +1,5 @@
 
-use crate::error::Error;
-use crate::system::System;
-use crate::devices::{Address, Addressable};
+use crate::{Error, System, Address, Addressable};
 
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

@@ -3,12 +3,7 @@ use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 
-use crate::memory::Bus;
-use crate::signals::EdgeSignal;
-use crate::error::{Error, ErrorType};
-use crate::interrupts::InterruptController;
-use crate::clock::{ClockTime, ClockDuration};
-use crate::devices::{Address, Device};
+use crate::{Bus, EdgeSignal, Error, InterruptController, ClockTime, ClockDuration, Address, Device};
 
 
 pub struct System {
@@ -96,10 +91,11 @@ impl System {
         result
     }
 
+    /// Step the simulation one event exactly
     pub fn step(&mut self) -> Result<(), Error> {
         match self.process_one_event() {
             Ok(()) => {},
-            Err(err) if err.err == ErrorType::Breakpoint => {
+            Err(err @ Error::Breakpoint(_)) => {
                 return Err(err);
             },
             Err(err) => {
@@ -111,6 +107,7 @@ impl System {
         Ok(())
     }
 
+    /// Step through the simulation until the next event is for the given device
     pub fn step_until_device(&mut self, device: Device) -> Result<(), Error> {
         loop {
             self.step()?;
@@ -122,6 +119,7 @@ impl System {
         Ok(())
     }
 
+    /// Step through the simulation until the next event scheduled is for a debuggable device
     pub fn step_until_debuggable(&mut self) -> Result<(), Error> {
         loop {
             self.step()?;
@@ -133,6 +131,7 @@ impl System {
         Ok(())
     }
 
+    /// Run the simulation until the given simulation clock time has been reached
     pub fn run_until_clock(&mut self, clock: ClockTime) -> Result<(), Error> {
         while self.clock < clock {
             self.step()?;
@@ -140,6 +139,7 @@ impl System {
         Ok(())
     }
 
+    /// Run the simulation for `elapsed` amount of simulation time
     pub fn run_for_duration(&mut self, elapsed: ClockDuration) -> Result<(), Error> {
         let target = self.clock + elapsed;
 
@@ -149,21 +149,9 @@ impl System {
         Ok(())
     }
 
+    /// Run the simulation forever, or until there is an error
     pub fn run_forever(&mut self) -> Result<(), Error> {
         self.run_until_clock(ClockTime::FOREVER)
-    }
-
-    // TODO rename this run_until_signal, and make it take a signal as argument
-    pub fn run_until_break(&mut self) -> Result<(), Error> {
-        let mut signal = match &self.break_signal {
-            Some(signal) => signal.clone(),
-            None => return Ok(()),
-        };
-
-        while !signal.get() {
-            self.step()?;
-        }
-        Ok(())
     }
 
     pub fn exit_error(&mut self) {

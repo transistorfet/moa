@@ -1,20 +1,11 @@
 
-* rename System::run_until_break into run_until_signal, and make it take a signal as argument
+* the genesis coprocessor stuff will be a good reference point for things that make multiple devices, and how to add them correctly to the system
 
-* make errors be enums to make for easier matching
 * test m68k cycle timing again
-* fix tests
 
 * you really need a full web-based debugger
-    * breakpoints should be in the CPU implementation, and get checked before an instruction starts executing
-    * there should be a list of "debuggable" objects in the system to make it easier to list them and iterate over them
-    * a breakpoint should escape the system and return to the frontend, which should handle everything (not inline because the frontend won't update)
 
-* can you make the debugger workable in the web ui in some way?  So you can have a debug window open while playing the game or something
-* the way you're doing debugging is so bad, and something's broken with the Z80
 * the debug dump things should not used the clocked addressing, but use a debugging mode thing of some kind so as not to influence the sim state
-* there needs to be a better way of finding devices, and getting names/refs out of them
-* debugger should return a breakpoint error to the frontend, so that the frontend still runs, instead of suspending the current execution
 
 
 * for 68k impl, I want to make some kind of memory transaction object that does everything in a contained but logical way, including handling exception

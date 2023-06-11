@@ -813,7 +813,7 @@ impl M68kDecoder {
                 Err(err) => {
                     println!("{:?}", err);
                     match err {
-                        Error { native, .. } if native == Exceptions::IllegalInstruction as u32 => {
+                        Error::Processor(native) if native == Exceptions::IllegalInstruction as u32 => {
                             println!("    at {:08x}: {:04x}", self.start, memory.port.read_beu16(memory.current_clock, self.start as Address).unwrap());
                         },
                         _ => { },

@@ -1,24 +1,16 @@
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ErrorType {
-    Assertion,
-    Emulator(EmulatorErrorKind),
-    Processor,
-    Breakpoint,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EmulatorErrorKind {
     Misc,
     MemoryAlignment,
 }
 
-
-#[derive(Debug)]
-pub struct Error {
-    pub err: ErrorType,
-    pub native: u32,
-    pub msg: String,
+#[derive(Clone, Debug)]
+pub enum Error {
+    Assertion(String),
+    Breakpoint(String),
+    Emulator(EmulatorErrorKind, String),
+    Processor(u32),
 }
 
 impl Error {
@@ -26,56 +18,41 @@ impl Error {
     where
         S: Into<String>,
     {
-        Error {
-            err: ErrorType::Emulator(EmulatorErrorKind::Misc),
-            native: 0,
-            msg: msg.into(),
-        }
+        Error::Emulator(EmulatorErrorKind::Misc, msg.into())
     }
 
     pub fn emulator<S>(kind: EmulatorErrorKind, msg: S) -> Error
     where
         S: Into<String>,
     {
-        Error {
-            err: ErrorType::Emulator(kind),
-            native: 0,
-            msg: msg.into(),
-        }
+        Error::Emulator(kind, msg.into())
     }
 
     pub fn processor(native: u32) -> Error {
-        Error {
-            err: ErrorType::Processor,
-            native,
-            msg: "".to_string(),
-        }
+        Error::Processor(native)
     }
 
     pub fn breakpoint<S>(msg: S) -> Error
     where
         S: Into<String>,
     {
-        Error {
-            err: ErrorType::Breakpoint,
-            native: 0,
-            msg: msg.into(),
-        }
+        Error::Breakpoint(msg.into())
     }
 
     pub fn assertion<S>(msg: S) -> Error
     where
         S: Into<String>,
     {
-        Error {
-            err: ErrorType::Assertion,
-            native: 0,
-            msg: msg.into(),
-        }
+        Error::Assertion(msg.into())
     }
 
-    pub fn is_processor(&self, native: u32) -> bool {
-        self.err == ErrorType::Processor && self.native == native
+    pub fn msg(&self) -> &str {
+        match self {
+            Error::Assertion(msg) |
+            Error::Breakpoint(msg) |
+            Error::Emulator(_, msg) => msg.as_str(),
+            Error::Processor(_) => "native exception",
+        }
     }
 }
 
