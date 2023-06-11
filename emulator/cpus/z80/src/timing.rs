@@ -26,7 +26,7 @@ impl Z80InstructionCycles {
         }
     }
 
-    pub fn from_instruction(instruction: &Instruction) -> Result<Z80InstructionCycles, Error> {
+    pub fn from_instruction(instruction: &Instruction, extra: u16) -> Result<Z80InstructionCycles, Error> {
         let cycles = match instruction {
             Instruction::ADCa(target) |
             Instruction::ADDa(target) |
@@ -37,7 +37,6 @@ impl Z80InstructionCycles {
             Instruction::OR(target) |
             Instruction::XOR(target) => {
                 match target {
-                    // TODO the undocumented DD version of this instruction is actually 8 cycles
                     Target::DirectReg(_) |
                     Target::DirectRegHalf(_) => 4,
                     Target::IndirectReg(_) => 7,
@@ -70,8 +69,8 @@ impl Z80InstructionCycles {
 
             Instruction::CALLcc(_, _) => {
                 return Ok(Z80InstructionCycles::Branch {
-                    taken: 17,
-                    not_taken: 10,
+                    taken: 17 + extra,
+                    not_taken: 10 + extra,
                 });
             },
 
@@ -95,8 +94,8 @@ impl Z80InstructionCycles {
             Instruction::OTDR |
             Instruction::OTIR => {
                 return Ok(Z80InstructionCycles::Repeating {
-                    repeating: 21,
-                    terminating: 16,
+                    repeating: 21 + extra,
+                    terminating: 16 + extra,
                 })
             },
 
@@ -105,7 +104,6 @@ impl Z80InstructionCycles {
 
             Instruction::DEC8(target) |
             Instruction::INC8(target) => {
-                // TODO the undocumented DD version of this instruction is actually 8 cycles
                 match target {
                     Target::DirectReg(_) |
                     Target::DirectRegHalf(_) => 4,
@@ -129,8 +127,8 @@ impl Z80InstructionCycles {
 
             Instruction::DJNZ(_) => {
                 return Ok(Z80InstructionCycles::Branch {
-                    taken: 13,
-                    not_taken: 8,
+                    taken: 13 + extra,
+                    not_taken: 8 + extra,
                 });
             },
 
@@ -171,13 +169,12 @@ impl Z80InstructionCycles {
 
             Instruction::JRcc(_, _) => {
                 return Ok(Z80InstructionCycles::Branch {
-                    taken: 12,
-                    not_taken: 7,
+                    taken: 12 + extra,
+                    not_taken: 7 + extra,
                 });
             },
 
             Instruction::LD(dest, src) => {
-                // TODO the undocumented DD version of this instruction is actually 8 cycles
                 match (dest, src) {
                     // 8-Bit Operations
 
@@ -265,8 +262,8 @@ impl Z80InstructionCycles {
 
             Instruction::RETcc(_) => {
                 return Ok(Z80InstructionCycles::Branch {
-                    taken: 11,
-                    not_taken: 5,
+                    taken: 11 + extra,
+                    not_taken: 5 + extra,
                 });
             },
 
@@ -298,7 +295,7 @@ impl Z80InstructionCycles {
 
             Instruction::SCF => 4,
         };
-        Ok(Z80InstructionCycles::Single(cycles))
+        Ok(Z80InstructionCycles::Single(cycles + extra))
     }
 }
 

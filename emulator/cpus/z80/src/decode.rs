@@ -8,6 +8,7 @@ pub struct Z80Decoder {
     pub clock: ClockTime,
     pub start: u16,
     pub end: u16,
+    pub extra_instruction_bytes: u16,
     pub instruction: Instruction,
 }
 
@@ -17,6 +18,7 @@ impl Default for Z80Decoder {
             clock: ClockTime::START,
             start: 0,
             end: 0,
+            extra_instruction_bytes: 0,
             instruction: Instruction::NOP,
         }
     }
@@ -27,16 +29,18 @@ impl Z80Decoder {
         self.clock = clock;
         self.start = start;
         self.end = start;
+        self.extra_instruction_bytes = 0;
         self.instruction = self.decode_one(memory)?;
         Ok(())
     }
 
     pub fn decode_one(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
         let ins = self.read_instruction_byte(memory)?;
-        self.decode_bare(memory, ins)
+        self.decode_bare(memory, ins, 0)
     }
 
-    pub fn decode_bare(&mut self, memory: &mut dyn Addressable, ins: u8) -> Result<Instruction, Error> {
+    pub fn decode_bare(&mut self, memory: &mut dyn Addressable, ins: u8, extra_instruction_bytes: u16) -> Result<Instruction, Error> {
+        self.extra_instruction_bytes = extra_instruction_bytes;
         match get_ins_x(ins) {
             0 => {
                 match get_ins_z(ins) {
@@ -371,19 +375,22 @@ impl Z80Decoder {
                                 }
                             },
                             4 => {
+                                self.extra_instruction_bytes = 4;
                                 let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
                                 Ok(Instruction::INC8(half_target))
                             },
                             5 => {
+                                self.extra_instruction_bytes = 4;
                                 let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
                                 Ok(Instruction::DEC8(half_target))
                             },
                             6 => {
+                                self.extra_instruction_bytes = 4;
                                 let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
                                 let data = self.read_instruction_byte(memory)?;
                                 Ok(Instruction::LD(to_load_target(half_target), LoadTarget::ImmediateByte(data)))
                             },
-                            _ => self.decode_bare(memory, ins),
+                            _ => self.decode_bare(memory, ins, 4),
                         }
                     },
                     3 => {
@@ -401,10 +408,10 @@ impl Z80Decoder {
                                 let immediate = self.read_instruction_byte(memory)?;
                                 Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), LoadTarget::ImmediateByte(immediate)))
                             },
-                            _ => self.decode_bare(memory, ins),
+                            _ => self.decode_bare(memory, ins, 4),
                         }
                     },
-                    _ => self.decode_bare(memory, ins),
+                    _ => self.decode_bare(memory, ins, 4),
                 }
             },
             1 => {
@@ -412,7 +419,7 @@ impl Z80Decoder {
                     0 | 1 => {
                         let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
                             Some(target) => target,
-                            None => return self.decode_bare(memory, ins),
+                            None => return self.decode_bare(memory, ins, 4),
                         };
 
                         match (ins & 0x18) >> 3 {
@@ -450,7 +457,7 @@ impl Z80Decoder {
                     3 => {
                         if get_ins_q(ins) == 0 {
                             if get_ins_z(ins) == 6 {
-                                return self.decode_bare(memory, ins);
+                                return self.decode_bare(memory, ins, 4);
                             }
                             let src = get_register(get_ins_z(ins));
                             let offset = self.read_instruction_byte(memory)? as i8;
@@ -458,7 +465,7 @@ impl Z80Decoder {
                         } else {
                             let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
                                 Some(target) => target,
-                                None => return self.decode_bare(memory, ins),
+                                None => return self.decode_bare(memory, ins, 4),
                             };
 
                             Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), to_load_target(target)))
@@ -468,11 +475,12 @@ impl Z80Decoder {
                 }
             },
             2 => {
+                self.extra_instruction_bytes = 4;
+
                 let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
                     Some(target) => target,
-                    None => return self.decode_bare(memory, ins),
+                    None => return self.decode_bare(memory, ins, 4),
                 };
-
 
                 match get_ins_y(ins) {
                     0 => Ok(Instruction::ADDa(target)),
@@ -493,7 +501,7 @@ impl Z80Decoder {
                     0xE5 => Ok(Instruction::PUSH(index_reg.into())),
                     0xE9 => Ok(Instruction::JPIndirect(index_reg.into())),
                     0xF9 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::SP), LoadTarget::DirectRegWord(index_reg.into()))),
-                    _ => self.decode_bare(memory, ins),
+                    _ => self.decode_bare(memory, ins, 4),
                 }
             },
             _ => panic!("InternalError: impossible value"),

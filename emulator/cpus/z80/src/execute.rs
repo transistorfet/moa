@@ -103,7 +103,7 @@ impl Z80 {
 
         self.decode_next()?;
         self.execute_current()?;
-        Ok(Z80InstructionCycles::from_instruction(&self.decoder.instruction)?
+        Ok(Z80InstructionCycles::from_instruction(&self.decoder.instruction, self.decoder.extra_instruction_bytes)?
             .calculate_cycles(self.executor.took_branch))
     }
 
