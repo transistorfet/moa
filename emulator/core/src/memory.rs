@@ -11,6 +11,7 @@ use crate::clock::ClockTime;
 use crate::devices::{Address, Addressable, Transmutable, Device, read_beu16};
 
 
+/// A contiguous block of `Addressable` memory, backed by a `Vec`
 pub struct MemoryBlock {
     read_only: bool,
     contents: Vec<u8>,
@@ -77,42 +78,7 @@ impl Transmutable for MemoryBlock {
 }
 
 
-pub struct AddressRightShifter {
-    subdevice: Device,
-    shift: u8,
-}
-
-impl AddressRightShifter {
-    pub fn new(subdevice: Device, shift: u8) -> Self {
-        Self {
-            subdevice,
-            shift,
-        }
-    }
-}
-
-impl Addressable for AddressRightShifter {
-    fn size(&self) -> usize {
-        let size = self.subdevice.borrow_mut().as_addressable().unwrap().size();
-        size << self.shift
-    }
-
-    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        self.subdevice.borrow_mut().as_addressable().unwrap().read(clock, addr >> self.shift, data)
-    }
-
-    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        self.subdevice.borrow_mut().as_addressable().unwrap().write(clock, addr >> self.shift, data)
-    }
-}
-
-impl Transmutable for AddressRightShifter {
-    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
-        Some(self)
-    }
-}
-
-
+/// An address adapter that repeats the address space of the subdevice over the given range
 pub struct AddressRepeater {
     subdevice: Device,
     range: Address,
@@ -150,6 +116,47 @@ impl Transmutable for AddressRepeater {
 }
 
 
+/// An address adapter that uses a closure to translate the address before accessing the subdevice
+pub struct AddressTranslator {
+    subdevice: Device,
+    size: usize,
+    func: Box<dyn Fn(Address) -> Address>,
+}
+
+impl AddressTranslator {
+    pub fn new<F>(subdevice: Device, size: usize, func: F) -> Self
+    where
+        F: Fn(Address) -> Address + 'static
+    {
+        Self {
+            subdevice,
+            size,
+            func: Box::new(func),
+        }
+    }
+}
+
+impl Addressable for AddressTranslator {
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        self.subdevice.borrow_mut().as_addressable().unwrap().read(clock, (self.func)(addr), data)
+    }
+
+    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
+        self.subdevice.borrow_mut().as_addressable().unwrap().write(clock, (self.func)(addr), data)
+    }
+}
+
+impl Transmutable for AddressTranslator {
+    fn as_addressable(&mut self) -> Option<&mut dyn Addressable> {
+        Some(self)
+    }
+}
+
+
 #[derive(Clone)]
 pub struct Block {
     pub base: Address,
@@ -157,6 +164,9 @@ pub struct Block {
     pub dev: Device,
 }
 
+/// A bus-like collection of `Addressable` `Device`s mapped to different address ranges
+///
+/// This is the fundamental means of connecting devices together to a CPU implementation.
 #[derive(Clone, Default)]
 pub struct Bus {
     blocks: Vec<Block>,
@@ -270,6 +280,8 @@ impl Addressable for Bus {
     }
 }
 
+/// An adapter for limiting the access requests of a device (eg. CPU) on a `Bus` to the address
+/// and data widths of the device
 #[derive(Clone)]
 pub struct BusPort {
     offset: Address,
@@ -324,7 +336,7 @@ impl Addressable for BusPort {
         let mut subdevice = self.subdevice.borrow_mut();
         for i in (0..data.len()).step_by(self.data_width as usize) {
             let addr_index = (addr + i as Address) & self.address_mask;
-            let end = std::cmp::min(i + self.data_width as usize, data.len());
+            let end = cmp::min(i + self.data_width as usize, data.len());
             subdevice.write(clock, addr_index, &data[i..end])?;
         }
         Ok(())

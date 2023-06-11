@@ -8,12 +8,9 @@
 * can you somehow make devices have two step functions for running things at different times? (I'm thinking ym2612 audio gen vs timers)
 * the genesis coprocessor stuff will be a good reference point for things that make multiple devices, and how to add them correctly to the system
 
-* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
-* I like making address adapters like this (below)
-* you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
-  in order to implement the correct behaviour for address exceptions in 68k, transparently
-
 * make Signal directional, by making SignalDriver and SignalInput or SignalReceiver
+
+* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
 
 
 * fix the m68k timings
