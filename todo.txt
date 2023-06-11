@@ -1,40 +1,8 @@
 
+* add rust runtime checks for math to look for overflow errors
+* fix the watchers in the Bus, maybe make them manual
+* make Signal directional, by making SignalDriver and SignalInput or SignalReceiver
 * the genesis coprocessor stuff will be a good reference point for things that make multiple devices, and how to add them correctly to the system
-
-* test m68k cycle timing again
-
-* you really need a full web-based debugger
-
-* the debug dump things should not used the clocked addressing, but use a debugging mode thing of some kind so as not to influence the sim state
-
-
-* for 68k impl, I want to make some kind of memory transaction object that does everything in a contained but logical way, including handling exception
-  information needed about the last access, and adjusting the pre/post inc/dec
-
-* I like making address adapters like this (below)
-* you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
-  in order to implement the correct behaviour for address exceptions in 68k, transparently
-
-* go through Z80 and see if you can replace functions with From<>/Into
-
-* go through flags on m68k and see if you can fix the remaining ones and/or clean up the implementation
-
-* you could possibly make a Z80MemoryPort type that wraps the BusPort type and which impls Addressable, which can be passed into the decoder
-  to auto-insert things like the refresh counter, as well as the record all bus timings whenever any mem access is performed
-* should you make Address a newtype and add From impls for each type of numeric, and add utils to wrap address at certain boundaries and such
-* should you make a means of storing different kinds of buses?
-* should you make buses hide their RcRefCell?
-* make functions for creating a processor instance from the cpu type (M68k::from_type()), ie. initialize the busport internally with the correct
-  bitwidths, but it would still be possible to initialize the CPU manually to create one that never existed as such
-
-
-* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
-* sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
-* make the ym generate audio in sync so the DAC timings can be more accurate
-* add stereo output to ym2612
-* you need to scale the output sample to be +/- 1.0 instead of 0-1.0
-* fix ym2612 sound generation (no drums/bass, no LFO, etc)
-
 * what if, to allow a device to have multiple steppable functions, you pass the system in, or otherwise provide some mechanism for
   each device to create sub devices which are scheduled independently
 * should it be possible to reschedule multiple events at different intervals to reduce the times a given step function is called?  Some have
@@ -42,13 +10,13 @@
   the cost of having more events on the queue when re-scheduling.  There needs to be a mechanism to avoid the event queue ballooning due to
   an error
 * can you somehow make devices have two step functions for running things at different times? (I'm thinking ym2612 audio gen vs timers)
+* address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
+* make it possible to compile without audio support (minifb frontend requires it atm)
+* can you make it so you don't need borrow_mut() so much? 
 
-* for some unknown reason, the js-based updater works much better than the rust based one, but the rust based one just goes back to
-  a fixed time per loop instead of trying to speed up
-* can you refactor the update timeout to put it in rust?  Would that make it faster? (the tricky part is the closure)
 
-* make Signal directional, by making SignalDriver and SignalInput or SignalReceiver
-* clean up pixels frontend
+
+* make the keys easier to config...
 
 * modify cpal code to skip audio until caught up
 * AudioFrame (and possibly the mixer and source) should be moved to the core, it should probably have the sample rate
@@ -56,42 +24,51 @@
 * can you eliminate the source-to-mixer queues?
 * add audio support to the console, but it needs to be conditionally compilable so that audio can be disabled (computie doesn't need it, only genesis)
 
-
 * the interrupt controller stuff is really not good.  It should be more like busport, and connected to a device at startup (eg. create
   interrupt controller, then create objects that use that controller and pass in values, maybe an option so that the controller doesn't
   have to be hooked up, meaning hardware interrupts would not be used.
-* I'm kind of thinking of packaging things a bit differently, like using a tuple struct for the rc refcell
-  transmutable abstraction, so that you can avoid the need for explicit borrows
 
-* add rust runtime checks for math to look for overflow errors
-* double check the functioning of the banked areas and register settings for Z80 coprocessor
-* add opentelemetry if it can be wasm compatible, or some kind of timing for giving an average framerate
-* improve performance
+* I like making address adapters like this (below)
+* you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
+  in order to implement the correct behaviour for address exceptions in 68k, transparently
 
-* can you make the frontend more adaptive to the input that the devices are using
-* maybe I should make ClockDuration use picos as the base instead, and use u64 since that gives like 212 days or something instead of 5h
-  and should prevent split nanoseconds which is the main concern
-* make the keys easier to config...
+* you could possibly make a Z80MemoryPort type that wraps the BusPort type and which impls Addressable, which can be passed into the decoder
+  to auto-insert things like the refresh counter, as well as the record all bus timings whenever any mem access is performed
+* should you make Address a newtype and add From impls for each type of numeric, and add utils to wrap address at certain boundaries and such
+* should you make a means of storing different kinds of buses?
+* should you make buses hide their RcRefCell?
+
+* sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
+* make the ym generate audio in sync so the DAC timings can be more accurate
+* add stereo output to ym2612
+* you need to scale the output sample to be +/- 1.0 instead of 0-1.0
+* fix ym2612 sound generation (no bass, no LFO, etc)
+
+* for some unknown reason, the js-based updater works much better than the rust based one, but the rust based one just goes back to
+  a fixed time per loop instead of trying to speed up
+* clean up pixels frontend
 
 * add doc strings everywhere
 * get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion
 
+* you really need a full web-based debugger
+* test m68k cycle timing again
 
 
-
-* can you make the debugger more accessible, so a web interface could access the data and display it, in light of the fact that println isn't available in wasm
 
 Web Assembly:
-    * can you make the web interface nicer with like... a picture of a genesis or something
 
-* make it possible to compile without audio support (minifb frontend requires it atm)
+    * can you make the web interface nicer with like... a picture of a genesis or something
 
 
 System/Traits:
 
+    * maybe I should make ClockDuration use picos as the base instead, and use u64 since that gives like 212 days or something instead of 5h
+      and should prevent split nanoseconds which is the main concern
+
+    * add opentelemetry if it can be wasm compatible, or some kind of timing for giving an average framerate
     * can you make the connections between things (like memory adapters), be expressed in a way that's more similar to the electrical design?
       like specifying that address pins 10-7 should be ignored/unconnected, pin 11 will connect to "chip select", etc
-    * should you add a unique ID to devices, such that they can be indexed, and their step functions can reset the next_run count and run them immediately
 
     * should you simulate bus arbitration?
     * interrupts could be done in a better way
@@ -105,13 +82,12 @@ System/Traits:
 
 Debugger:
 
+    * the debug dump things should not used the clocked addressing, but use a debugging mode thing of some kind so as not to influence the sim state
+
     * i need a way to debug only the cpu and not the coprocessor, but that's tricky without a way to id or compare Transmutables
     * add a way to delete a watcher
-    * can you improve how the watcher implementation in the Bus works, instead of setting a flag and then checking it every cycle, pass in the System to Addressable??
-    * can you use the breakpoint address parser in other commands?
     * get stack tracing working again, but can you do it with just data?
     * how can you improve the debugger?
-    * the command line definitely needs to be fixed so it prints the prompt correctly
     * debugger could maybe even allows arrows left/right for editing, and up/down for history
 
 
@@ -135,6 +111,9 @@ Macintosh:
 
 
 68000:
+
+    * for 68k impl, I want to make some kind of memory transaction object that does everything in a contained but logical way, including handling exception
+      information needed about the last access, and adjusting the pre/post inc/dec
 
     * unimplemented:  BFFFO, BFINS, NBCD, RTD
     * >=MC68020 undecoded & unimplemented: BKPT, CALLM, CAS, CAS2, CHK2, CMP2, RTM, PACK, TRAPcc, UNPK

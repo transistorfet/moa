@@ -269,12 +269,7 @@ mod execute_unit_tests {
         system.get_bus().write_beu32(system.clock, 0, INIT_STACK as u32).unwrap();
         system.get_bus().write_beu32(system.clock, 4, INIT_ADDR as u32).unwrap();
 
-        let port = if cputype <= M68kType::MC68010 {
-            BusPort::new(0, 24, 16, system.bus.clone())
-        } else {
-            BusPort::new(0, 24, 16, system.bus.clone())
-        };
-        let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
+        let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
         cpu.step(&system).unwrap();
         cpu.decoder.init(true, cpu.state.pc);
         assert_eq!(cpu.state.pc, INIT_ADDR as u32);

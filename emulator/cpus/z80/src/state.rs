@@ -1,5 +1,8 @@
 
-use moa_core::{ClockTime, Address, BusPort, Signal, Frequency};
+use std::rc::Rc;
+use std::cell::RefCell;
+
+use moa_core::{ClockTime, Address, Bus, BusPort, Signal, Frequency};
 
 use crate::decode::Z80Decoder;
 use crate::debugger::Z80Debugger;
@@ -114,6 +117,12 @@ impl Z80 {
             ioport,
             reset: Signal::new(false),
             bus_request: Signal::new(false),
+        }
+    }
+
+    pub fn from_type(cputype: Z80Type, frequency: Frequency, bus: Rc<RefCell<Bus>>, addr_offset: Address, io_bus: Option<(Rc<RefCell<Bus>>, Address)>) -> Self {
+        match cputype {
+            Z80Type::Z80 => Self::new(cputype, frequency, BusPort::new(addr_offset, 16, 8, bus), io_bus.map(|(io_bus, io_offset)| BusPort::new(io_offset, 16, 8, io_bus))),
         }
     }
 

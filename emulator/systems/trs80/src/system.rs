@@ -1,5 +1,5 @@
 
-use moa_core::{System, Error, Frequency, MemoryBlock, BusPort, Device};
+use moa_core::{System, Error, Frequency, MemoryBlock, Device};
 use moa_core::host::Host;
 
 use moa_z80::{Z80, Z80Type};
@@ -43,7 +43,7 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
     system.add_addressable_device(0x37E0 + 0x420, Device::new(video)).unwrap();
 
     // TODO the ioport needs to be hooked up
-    let cpu = Z80::new(Z80Type::Z80, options.frequency, BusPort::new(0, 16, 8, system.bus.clone()), None);
+    let cpu = Z80::from_type(Z80Type::Z80, options.frequency, system.bus.clone(), 0, None);
     //cpu.add_breakpoint(0x0);
     //cpu.add_breakpoint(0xb55);
     //cpu.add_breakpoint(0xb76);

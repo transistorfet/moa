@@ -3,7 +3,7 @@ use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Error, Frequency, Signal, MemoryBlock, Bus, BusPort, Address, Addressable, Device};
+use moa_core::{System, Error, Frequency, Signal, MemoryBlock, Bus, Address, Addressable, Device};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -82,7 +82,7 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     coproc_bus.borrow_mut().insert(0x6000, coproc_register.clone());
     coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
     coproc_bus.borrow_mut().insert(0x8000, coproc_area);
-    let coproc = Z80::new(Z80Type::Z80, Frequency::from_hz(3_579_545), BusPort::new(0, 16, 8, coproc_bus), None);
+    let coproc = Z80::from_type(Z80Type::Z80, Frequency::from_hz(3_579_545), coproc_bus, 0, None);
     let mut reset = coproc.reset.clone();
     let mut bus_request = coproc.bus_request.clone();
     reset.set(true);
@@ -107,7 +107,7 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     let vdp = Ym7101::new(host, interrupt, coproc_sn_sound);
     system.add_peripheral("vdp", 0x00c00000, Device::new(vdp)).unwrap();
 
-    let cpu = M68k::new(M68kType::MC68000, Frequency::from_hz(7_670_454), BusPort::new(0, 24, 16, system.bus.clone()));
+    let cpu = M68k::from_type(M68kType::MC68000, Frequency::from_hz(7_670_454), system.bus.clone(), 0);
     system.add_interruptable_device("cpu", Device::new(cpu)).unwrap();
 
     Ok(system)

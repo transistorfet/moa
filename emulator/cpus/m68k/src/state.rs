@@ -1,5 +1,8 @@
 
-use moa_core::{ClockTime, BusPort, Frequency};
+use std::rc::Rc;
+use std::cell::RefCell;
+
+use moa_core::{ClockTime, Address, Bus, BusPort, Frequency};
 
 use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
@@ -129,6 +132,15 @@ impl M68k {
             debugger: M68kDebugger::default(),
             port: M68kBusPort::new(port),
             current_clock: ClockTime::START,
+        }
+    }
+
+    pub fn from_type(cputype: M68kType, frequency: Frequency, bus: Rc<RefCell<Bus>>, addr_offset: Address) -> Self {
+        match cputype {
+            M68kType::MC68000 |
+            M68kType::MC68010 => Self::new(cputype, frequency, BusPort::new(addr_offset, 24, 16, bus)),
+            M68kType::MC68020 |
+            M68kType::MC68030 => Self::new(cputype, frequency, BusPort::new(addr_offset, 32, 32, bus)),
         }
     }
 

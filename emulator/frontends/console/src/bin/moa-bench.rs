@@ -27,7 +27,7 @@ fn main() {
         system.add_addressable_device(0x00700000, Device::new(serial)).unwrap();
 
 
-        let cpu = M68k::new(M68kType::MC68010, Frequency::from_mhz(8), BusPort::new(0, 24, 16, system.bus.clone()));
+        let cpu = M68k::from_type(M68kType::MC68010, Frequency::from_mhz(8), system.bus.clone(), 0);
 
         //cpu.enable_tracing();
         //cpu.add_breakpoint(0x10781a);
