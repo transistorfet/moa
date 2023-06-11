@@ -1,8 +1,4 @@
 
-* add rust runtime checks for math to look for overflow errors
-* fix the watchers in the Bus, maybe make them manual
-* make Signal directional, by making SignalDriver and SignalInput or SignalReceiver
-* the genesis coprocessor stuff will be a good reference point for things that make multiple devices, and how to add them correctly to the system
 * what if, to allow a device to have multiple steppable functions, you pass the system in, or otherwise provide some mechanism for
   each device to create sub devices which are scheduled independently
 * should it be possible to reschedule multiple events at different intervals to reduce the times a given step function is called?  Some have
@@ -10,8 +6,18 @@
   the cost of having more events on the queue when re-scheduling.  There needs to be a mechanism to avoid the event queue ballooning due to
   an error
 * can you somehow make devices have two step functions for running things at different times? (I'm thinking ym2612 audio gen vs timers)
+
 * address repeater on ym2612 doesn't seem to work the same, when it's on the 68000 device.  The Z80 device doesn't have an affect, but maybe it's not being used
+* I like making address adapters like this (below)
+* you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
+  in order to implement the correct behaviour for address exceptions in 68k, transparently
+
+* add rust runtime checks for math to look for overflow errors
+* fix the watchers in the Bus, maybe make them manual
+* make Signal directional, by making SignalDriver and SignalInput or SignalReceiver
+* the genesis coprocessor stuff will be a good reference point for things that make multiple devices, and how to add them correctly to the system
 * make it possible to compile without audio support (minifb frontend requires it atm)
+* does Z80 need a customized Z80BusPort like the 68k?
 * can you make it so you don't need borrow_mut() so much? 
 
 
@@ -23,30 +29,21 @@
 * split AudioOutput into a sender and receiver
 * can you eliminate the source-to-mixer queues?
 * add audio support to the console, but it needs to be conditionally compilable so that audio can be disabled (computie doesn't need it, only genesis)
-
-* the interrupt controller stuff is really not good.  It should be more like busport, and connected to a device at startup (eg. create
-  interrupt controller, then create objects that use that controller and pass in values, maybe an option so that the controller doesn't
-  have to be hooked up, meaning hardware interrupts would not be used.
-
-* I like making address adapters like this (below)
-* you could have busport take a closure or something which translates the address, and returns an error that will be passed up if it occurs
-  in order to implement the correct behaviour for address exceptions in 68k, transparently
-
-* you could possibly make a Z80MemoryPort type that wraps the BusPort type and which impls Addressable, which can be passed into the decoder
-  to auto-insert things like the refresh counter, as well as the record all bus timings whenever any mem access is performed
-* should you make Address a newtype and add From impls for each type of numeric, and add utils to wrap address at certain boundaries and such
-* should you make a means of storing different kinds of buses?
-* should you make buses hide their RcRefCell?
-
 * sound doesn't work on a lot of games... is it a problem with the Z80 accessing the YM2612, or the lack of YM timers? or something else?
 * make the ym generate audio in sync so the DAC timings can be more accurate
 * add stereo output to ym2612
 * you need to scale the output sample to be +/- 1.0 instead of 0-1.0
 * fix ym2612 sound generation (no bass, no LFO, etc)
 
-* for some unknown reason, the js-based updater works much better than the rust based one, but the rust based one just goes back to
-  a fixed time per loop instead of trying to speed up
-* clean up pixels frontend
+
+* the interrupt controller stuff is really not good.  It should be more like busport, and connected to a device at startup (eg. create
+  interrupt controller, then create objects that use that controller and pass in values, maybe an option so that the controller doesn't
+  have to be hooked up, meaning hardware interrupts would not be used.
+
+* should you make Address a newtype and add From impls for each type of numeric, and add utils to wrap address at certain boundaries and such
+* should you make a means of storing different kinds of buses?
+* should you make buses hide their RcRefCell?
+
 
 * add doc strings everywhere
 * get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion
@@ -59,6 +56,9 @@
 Web Assembly:
 
     * can you make the web interface nicer with like... a picture of a genesis or something
+    * for some unknown reason, the js-based updater works much better than the rust based one, but the rust based one just goes back to
+      a fixed time per loop instead of trying to speed up
+    * clean up pixels frontend
 
 
 System/Traits:
