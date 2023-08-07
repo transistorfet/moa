@@ -1,4 +1,16 @@
 
+* change all the inspection and debugging things to return a struct which can then be printed by the frontend
+
+* there are many issues with the coprocessor address space, and the VDP
+* I mapped the sn sound chip into 0xC00010, in the middle of the VDP's address space, and didn't get a runtime error!!! needs fixing
+* there should be a better way of aliasing addresses.  Can you make the actual Z80 bus get mapped into 0xA00000?
+* turn on warnings about unmapped addresses being accessed
+
+* could have a trait with more housekeeping-type functions, like querying, adding, removing child devices, maybe registering them even
+* if you make Bus device just another device, then the coproc bus can be bridged to the main bus of genesis
+* the macintosh mainboard has no way of changing the layout if the bus is a generic device (it swaps memory around based on an I/O bit)
+* there needs to be a way of doing disparate reads or aliased reads... the sn sound chip being mapped into VDP memory is not the best
+
 * what if, to allow a device to have multiple steppable functions, you pass the system in, or otherwise provide some mechanism for
   each device to create sub devices which are scheduled independently
 * should it be possible to reschedule multiple events at different intervals to reduce the times a given step function is called?  Some have
@@ -18,7 +30,7 @@
 * fix the watchers in the Bus, maybe make them manual
 * make it possible to compile without audio support (minifb frontend requires it atm)
 * does Z80 need a customized Z80BusPort like the 68k?
-* can you make it so you don't need borrow_mut() so much? 
+* can you make it so you don't need borrow_mut() so much?
 
 
 
