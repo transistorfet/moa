@@ -6,14 +6,30 @@ use moa_m68k::{M68k, M68kType};
 use moa_peripherals_generic::AtaDevice;
 use moa_peripherals_motorola::MC68681;
 
+pub struct ComputieOptions {
+    pub rom: String,
+    pub ram: usize,
+    pub frequency: Frequency,
+}
 
-pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
+impl Default for ComputieOptions {
+    fn default() -> Self {
+        Self {
+            rom: "binaries/computie/monitor.bin".to_string(),
+            ram: 0x10_0000,
+            frequency: Frequency::from_hz(10_000_000),
+        }
+    }
+}
+
+pub fn build_computie<H: Host>(host: &H, options: ComputieOptions) -> Result<System, Error> {
     let mut system = System::default();
 
-    let monitor = MemoryBlock::load("binaries/computie/monitor.bin")?;
-    system.add_addressable_device(0x00000000, Device::new(monitor))?;
+    let mut rom = MemoryBlock::new(vec![0; 0x10000]);
+    rom.load_at(0x0000, &options.rom)?;
+    system.add_addressable_device(0x00000000, Device::new(rom))?;
 
-    let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
+    let mut ram = MemoryBlock::new(vec![0; options.ram]);
     ram.load_at(0, "binaries/computie/kernel.bin")?;
     system.add_addressable_device(0x00100000, Device::new(ram))?;
 
@@ -27,7 +43,7 @@ pub fn build_computie<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00700000, Device::new(serial))?;
 
 
-    let mut cpu = M68k::from_type(M68kType::MC68010, Frequency::from_hz(10_000_000), system.bus.clone(), 0);
+    let mut cpu = M68k::from_type(M68kType::MC68010, options.frequency, system.bus.clone(), 0);
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);

@@ -41,21 +41,6 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     };
 
     let rom = MemoryBlock::new(rom_data);
-    //let mut rom = MemoryBlock::load("binaries/genesis/GenTestV3.0.bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/HDRV_Genesis_Test_v1_4.bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/ComradeOj's tiny demo.bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Digital Rain demo.bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Sonic The Hedgehog (W) (REV 00) [!].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Sonic The Hedgehog (W) (REV 01) [!].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Sonic the Hedgehog 2 (JUE) [!].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Sonic the Hedgehog 3 (U) [!].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Earthworm Jim (U) [h1].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Home Alone (beta).bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/F1 World Championship (JUE) [!].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Ren and Stimpy's Invention (U) [!].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Out of this World (U) [!].bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Ghostbusters (REV 00) (JUE).bin").unwrap();
-    //let mut rom = MemoryBlock::load("binaries/genesis/Teenage Mutant Ninja Turtles - The Hyperstone Heist (U) [!].bin").unwrap();
     //rom.read_only();
     let rom_end = rom.size();
     system.add_addressable_device(0x00000000, Device::new(rom)).unwrap();

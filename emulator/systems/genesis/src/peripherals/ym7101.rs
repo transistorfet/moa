@@ -864,7 +864,7 @@ impl Addressable for Ym7101 {
                 }
             },
 
-            0x11 | 0x12 => {
+            addr if (0x11..0x17).contains(&addr) => {
                 self.sn_sound.borrow_mut().as_addressable().unwrap().write(clock, 0, data)?;
             },
 
