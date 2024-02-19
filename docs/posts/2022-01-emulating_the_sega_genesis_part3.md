@@ -762,7 +762,7 @@ not pressed and 0 means it is).  I also needed to reset the counter when the con
 written to, for the count to be in sync with what the ROM was expecting.  Not all ROMs progressed
 through the entire count, if they only needed to read a few buttons.  Eventually I got it sorted out
 and buttons were working but it took a while to get them right.  The latest code for the controllers
-is [here](https://github.com/transistorfet/moa/blob/main/src/peripherals/genesis/controllers.rs)
+is [here](https://github.com/transistorfet/moa/blob/c3951999771bbb56f45e1a8c5cd0b61758aed778/src/peripherals/genesis/controllers.rs)
 
 
 Fixing Sprites

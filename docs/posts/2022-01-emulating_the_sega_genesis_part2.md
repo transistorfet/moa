@@ -243,9 +243,9 @@ There's not much to it.  Only one window can be created at the moment, and input
 supported.  The threaded option is also not shown here.  Before long, the code grew more
 complicated, and now includes parsing of command line arguments with the `clap` crate.  To see the
 latest version, check out the [Genesis machine-specific
-binary](https://github.com/transistorfet/moa/blob/main/frontends/moa-minifb/src/bin/moa-genesis.rs)
+binary](https://github.com/transistorfet/moa/blob/c3951999771bbb56f45e1a8c5cd0b61758aed778/frontends/moa-minifb/src/bin/moa-genesis.rs)
 and the [MiniFB host impl and main
-loop](https://github.com/transistorfet/moa/blob/main/frontends/moa-minifb/src/lib.rs)
+loop](https://github.com/transistorfet/moa/blob/c3951999771bbb56f45e1a8c5cd0b61758aed778/frontends/moa-minifb/src/lib.rs)
 
 
 Updating Windows

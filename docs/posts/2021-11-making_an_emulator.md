@@ -396,7 +396,7 @@ than having a match arm for each of the 65536 combinations.  There is a really h
 GoldenCrystal](http://goldencrystal.free.fr/M68kOpcodes-v2.3.pdf) which shows the full breakdown of
 opcodes for the 68000.  We can look at the first 4 bits of the instruction word to separate it into
 16 broad categories of instruction, and then further break it down from there.  The full code can be
-seen [here](https://github.com/transistorfet/moa/blob/main/src/cpus/m68k/decode.rs)
+seen [here](https://github.com/transistorfet/moa/blob/c3951999771bbb56f45e1a8c5cd0b61758aed778/src/cpus/m68k/decode.rs)
 
 We can extend our `Instruction` type to contain more instructions, including the addressing modes
 that the 68000 supports.  A `MOVE` instruction for example can move data to or from a data or
@@ -474,7 +474,7 @@ pub enum Instruction {
 }
 ```
 This is just an example of the instruction type definitions.  The full code can be found
-[here](https://github.com/transistorfet/moa/blob/main/src/cpus/m68k/instructions.rs).  Note: it's
+[here](https://github.com/transistorfet/moa/blob/c3951999771bbb56f45e1a8c5cd0b61758aed778/src/cpus/m68k/instructions.rs).  Note: it's
 possible to express more combinations with these instruction types than there are legal instruction
 combinations.  Some combinations are illegal on the 68000 but allowed on the 68020 and up, which the
 emulator supports using an enum to represent the different 68000 model numbers.  Most of the error
@@ -533,7 +533,7 @@ before writing data because the real MC68681 can't transmit fast enough to avoid
 so as long as we return a value with those bits set, the software will write characters to the
 `REG_TBA_WR` register.  This example also shows the `REG_RBA_RD` register for reading serial data
 in, but setting the `port_a_input` field is not shown for simplicity.  The full code has be viewed
-[here](https://github.com/transistorfet/moa/blob/main/src/peripherals/mc68681.rs)
+[here](https://github.com/transistorfet/moa/blob/c3951999771bbb56f45e1a8c5cd0b61758aed778/src/peripherals/mc68681.rs)
 
 ```rust
 // Register Addresses (relative to mapped address)
@@ -624,7 +624,7 @@ I originally implemented this using non-blocking input to check for a new charac
 machine-end of the pseudoterm, and then storing it in a single byte in the MC68681 object, but I
 later changed this to use a separate thread for polling, and `mpsc` channels to communicate with the
 simulation thread.  It's a bit too much code to include here but you can see the full tty
-implementation [here](https://github.com/transistorfet/moa/blob/main/src/host/tty.rs)
+implementation [here](https://github.com/transistorfet/moa/blob/c3951999771bbb56f45e1a8c5cd0b61758aed778/src/host/traits.rs)
 
 
 Box It Up
