@@ -18,9 +18,9 @@ use std::f32;
 use std::num::NonZeroU8;
 use std::collections::VecDeque;
 use lazy_static::lazy_static;
+use femtos::{Instant, Duration, Frequency};
 
-use moa_core::{debug, warn};
-use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
+use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio, Sample};
 
 
@@ -718,7 +718,7 @@ pub struct Ym2612 {
     selected_reg_0: Option<NonZeroU8>,
     selected_reg_1: Option<NonZeroU8>,
 
-    fm_clock_period: ClockDuration,
+    fm_clock_period: Duration,
     next_fm_clock: FmClock,
     envelope_clock: EnvelopeClock,
 
@@ -772,10 +772,10 @@ impl Ym2612 {
 }
 
 impl Steppable for Ym2612 {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let rate = self.source.samples_per_second();
         let samples = rate / 1000;
-        let sample_duration = ClockDuration::from_secs(1) / rate as u64;
+        let sample_duration = Duration::from_secs(1) / rate as u64;
 
         let mut sample = 0.0;
         let mut buffer = vec![Sample(0.0, 0.0); samples];
@@ -800,7 +800,7 @@ impl Steppable for Ym2612 {
         }
         self.source.write_samples(system.clock, &buffer);
 
-        Ok(ClockDuration::from_millis(1))          // Every 1ms of simulated time
+        Ok(Duration::from_millis(1))          // Every 1ms of simulated time
     }
 }
 
@@ -826,12 +826,12 @@ impl Ym2612 {
 }
 
 impl Ym2612 {
-    pub fn set_register(&mut self, clock: ClockTime, bank: u8, reg: u8, data: u8) {
+    pub fn set_register(&mut self, clock: Instant, bank: u8, reg: u8, data: u8) {
         // Keep a copy for debugging purposes, and if the original values are needed
         self.registers[bank as usize * 256 + reg as usize] = data;
         println!("set {:x} to {:x}", bank as usize * 256 + reg as usize, data);
 
-        //warn!("{}: set reg {}{:x} to {:x}", DEV_NAME, bank, reg, data);
+        //log::warn!("{}: set reg {}{:x} to {:x}", DEV_NAME, bank, reg, data);
         match reg {
             0x24 => {
                 self.timer_a = (self.timer_a & 0x3) | ((data as u16) << 2);
@@ -846,7 +846,7 @@ impl Ym2612 {
                 //if (data >> 5) & 0x1 {
                 //    self.timer_b
                 if data >> 6 == 0x01 {
-                    warn!("{}: ch 3 special mode requested, but not implemented", DEV_NAME);
+                    log::warn!("{}: ch 3 special mode requested, but not implemented", DEV_NAME);
                 }
             },
 
@@ -856,7 +856,7 @@ impl Ym2612 {
                     0 | 1 | 2 => num,
                     4 | 5 | 6 => num - 1,
                     _ => {
-                        warn!("{}: attempted key on/off to invalid channel {}", DEV_NAME, num);
+                        log::warn!("{}: attempted key on/off to invalid channel {}", DEV_NAME, num);
                         return;
                     },
                 };
@@ -969,7 +969,7 @@ impl Ym2612 {
             },
 
             _ => {
-                warn!("{}: !!! unhandled write to register {:0x} with {:0x}", DEV_NAME, reg, data);
+                log::warn!("{}: !!! unhandled write to register {:0x} with {:0x}", DEV_NAME, reg, data);
             },
         }
     }
@@ -1020,22 +1020,22 @@ impl Addressable for Ym2612 {
         0x04
     }
 
-    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             0 | 1 | 2 | 3 => {
                 // Read the status byte (busy/overflow)
                 data[0] = ((self.timer_a_overflow as u8) << 1) | (self.timer_b_overflow as u8);
             }
             _ => {
-                warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+                log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
             },
         }
-        debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
+        log::debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
         Ok(())
     }
 
-    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+    fn write(&mut self, clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        log::debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             0 => {
                 self.selected_reg_0 = NonZeroU8::new(data[0]);
@@ -1054,7 +1054,7 @@ impl Addressable for Ym2612 {
                 }
             },
             _ => {
-                warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+                log::warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
             },
         }
         Ok(())

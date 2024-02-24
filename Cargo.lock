@@ -461,6 +461,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "femtos"
+version = "0.1.0"
+
+[[package]]
 name = "flate2"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -481,6 +485,7 @@ name = "harte_tests"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
+ "femtos",
  "flate2",
  "moa_core",
  "moa_m68k",
@@ -728,6 +733,8 @@ name = "moa_common"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "femtos",
+ "log",
  "moa_core",
  "nix 0.25.1",
 ]
@@ -737,6 +744,7 @@ name = "moa_console"
 version = "0.1.0"
 dependencies = [
  "clap 4.3.3",
+ "femtos",
  "log",
  "moa_common",
  "moa_core",
@@ -752,6 +760,7 @@ dependencies = [
 name = "moa_core"
 version = "0.1.0"
 dependencies = [
+ "femtos",
  "log",
 ]
 
@@ -759,6 +768,8 @@ dependencies = [
 name = "moa_m68k"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
  "moa_parsing",
 ]
@@ -768,6 +779,7 @@ name = "moa_minifb"
 version = "0.1.0"
 dependencies = [
  "clap 4.3.3",
+ "femtos",
  "log",
  "minifb",
  "moa_common",
@@ -791,6 +803,8 @@ dependencies = [
 name = "moa_peripherals_generic"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
 ]
 
@@ -798,6 +812,8 @@ dependencies = [
 name = "moa_peripherals_mos"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
 ]
 
@@ -805,6 +821,8 @@ dependencies = [
 name = "moa_peripherals_motorola"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
 ]
 
@@ -812,7 +830,9 @@ dependencies = [
 name = "moa_peripherals_yamaha"
 version = "0.1.0"
 dependencies = [
+ "femtos",
  "lazy_static",
+ "log",
  "moa_audio",
  "moa_core",
 ]
@@ -821,6 +841,8 @@ dependencies = [
 name = "moa_peripherals_zilog"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
 ]
 
@@ -828,6 +850,8 @@ dependencies = [
 name = "moa_systems_computie"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
  "moa_m68k",
  "moa_peripherals_generic",
@@ -838,6 +862,8 @@ dependencies = [
 name = "moa_systems_genesis"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
  "moa_m68k",
  "moa_peripherals_yamaha",
@@ -848,6 +874,8 @@ dependencies = [
 name = "moa_systems_macintosh"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
  "moa_m68k",
  "moa_peripherals_mos",
@@ -858,6 +886,8 @@ dependencies = [
 name = "moa_systems_trs80"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
  "moa_z80",
 ]
@@ -866,6 +896,8 @@ dependencies = [
 name = "moa_z80"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
 ]
 
@@ -1174,6 +1206,7 @@ name = "rad_tests"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
+ "femtos",
  "flate2",
  "moa_core",
  "moa_z80",

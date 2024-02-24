@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 log = "0.4"
+femtos = { path = "../libraries/femtos" }
 

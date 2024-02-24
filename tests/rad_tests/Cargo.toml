@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+femtos = { path = "../../emulator/libraries/femtos" }
 moa_core = { path = "../../emulator/core" }
 moa_z80 = { path = "../../emulator/cpus/z80" }
 serde = "1.0"

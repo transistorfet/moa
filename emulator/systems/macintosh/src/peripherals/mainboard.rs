@@ -1,8 +1,9 @@
 
 use std::rc::Rc;
 use std::cell::RefCell;
+use femtos::{Instant, Duration};
 
-use moa_core::{System, Bus, Error, Observable, ClockTime, ClockDuration, Address, Addressable, AddressRepeater, Steppable, Transmutable, Device};
+use moa_core::{System, Bus, Error, Observable, Address, Addressable, AddressRepeater, Steppable, Transmutable, Device};
 
 use moa_peripherals_mos::Mos6522;
 use moa_peripherals_zilog::Z8530;
@@ -18,7 +19,7 @@ pub struct Mainboard {
     iwm: IWM,
     via: Mos6522,
     phase_read: PhaseRead,
-    last_sec: ClockTime,
+    last_sec: Instant,
 }
 
 impl Mainboard {
@@ -38,7 +39,7 @@ impl Mainboard {
             iwm,
             via,
             phase_read,
-            last_sec: ClockTime::START,
+            last_sec: Instant::START,
         };
 
         mainboard.via.port_a.set_observer(move |port| {
@@ -69,7 +70,7 @@ impl Addressable for Mainboard {
         0x01000000
     }
 
-    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         if addr < 0x800000 {
             self.lower_bus.borrow_mut().read(clock, addr, data)
         } else if (0x900000..0xA00000).contains(&addr) {
@@ -90,7 +91,7 @@ impl Addressable for Mainboard {
         }
     }
 
-    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
         if addr < 0x800000 {
             self.lower_bus.borrow_mut().write(clock, addr, data)
         } else if (0x900000..0xA00000).contains(&addr) {
@@ -110,12 +111,12 @@ impl Addressable for Mainboard {
 }
 
 impl Steppable for Mainboard {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let elapsed = self.via.step(system)?;
 
         // TODO should this be 1 second, or a multiple of 979_200, which is an 8th of the CPU clock
-        if self.last_sec + ClockDuration::from_secs(1) > system.clock {
-            self.last_sec += ClockDuration::from_secs(1);
+        if self.last_sec + Duration::from_secs(1) > system.clock {
+            self.last_sec += Duration::from_secs(1);
             //let port_a = self.via.port_a.borrow_mut();
             // TODO how will the ca1/ca2 cb1/cb2 pins work in the via
             system.get_interrupt_controller().set(true, 1, 25)?;
@@ -146,13 +147,13 @@ impl Addressable for PhaseRead {
         0x80000
     }
 
-    fn read(&mut self, _clock: ClockTime, _addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, _addr: Address, data: &mut [u8]) -> Result<(), Error> {
         // TODO I'm not sure how this is supposed to work
         data[0] = 0x00;
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, _addr: Address, _data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: Instant, _addr: Address, _data: &[u8]) -> Result<(), Error> {
         // TODO I'm not sure how this is supposed to work
         Ok(())
     }

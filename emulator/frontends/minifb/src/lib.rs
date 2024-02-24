@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 
 use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{Command, Arg, ArgAction, ArgMatches};
+use femtos::{Duration as FemtosDuration};
 
-use moa_core::{System, Error, ClockDuration, Device, Debugger, DebugControl};
+use moa_core::{System, Error, Device, Debugger, DebugControl};
 use moa_core::host::{Host, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame, FrameReceiver};
 
 use moa_common::{AudioMixer, AudioSource};
@@ -294,7 +295,7 @@ impl MiniFrontend {
                 //let run_timer = Instant::now();
                 if let Some(system) = system.as_mut() {
                     //system.run_for(nanoseconds_per_frame).unwrap();
-                    match system.run_for_duration(ClockDuration::from_nanos((frame_time.as_nanos() as f32 * speed) as u64)) {
+                    match system.run_for_duration(FemtosDuration::from_nanos((frame_time.as_nanos() as f32 * speed) as u64)) {
                         Ok(()) => {},
                         Err(Error::Breakpoint(_)) => {
                             run_debugger = true;

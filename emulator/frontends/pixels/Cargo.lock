@@ -518,6 +518,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "femtos"
+version = "0.1.0"
+
+[[package]]
 name = "flate2"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -909,6 +913,8 @@ name = "moa_common"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "femtos",
+ "log",
  "moa_core",
 ]
 
@@ -916,6 +922,7 @@ dependencies = [
 name = "moa_core"
 version = "0.1.0"
 dependencies = [
+ "femtos",
  "log",
 ]
 
@@ -923,6 +930,8 @@ dependencies = [
 name = "moa_m68k"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
  "moa_parsing",
 ]
@@ -938,7 +947,9 @@ dependencies = [
 name = "moa_peripherals_yamaha"
 version = "0.1.0"
 dependencies = [
+ "femtos",
  "lazy_static",
+ "log",
  "moa_audio",
  "moa_core",
 ]
@@ -950,6 +961,7 @@ dependencies = [
  "console_error_panic_hook",
  "console_log",
  "env_logger",
+ "femtos",
  "instant",
  "log",
  "moa_common",
@@ -968,6 +980,8 @@ dependencies = [
 name = "moa_systems_genesis"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
  "moa_m68k",
  "moa_peripherals_yamaha",
@@ -978,6 +992,8 @@ dependencies = [
 name = "moa_z80"
 version = "0.1.0"
 dependencies = [
+ "femtos",
+ "log",
  "moa_core",
 ]
 

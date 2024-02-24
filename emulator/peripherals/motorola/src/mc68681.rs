@@ -1,5 +1,7 @@
 
-use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Steppable, Addressable, Transmutable, debug};
+use femtos::{Instant, Duration, Frequency};
+
+use moa_core::{System, Error, Address, Steppable, Addressable, Transmutable};
 use moa_core::host::Tty;
 
 
@@ -205,7 +207,7 @@ impl MC68681 {
 }
 
 impl Steppable for MC68681 {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         if self.port_a.check_rx()? {
             self.set_interrupt_flag(ISR_CH_A_RX_READY_FULL, true);
         }
@@ -250,7 +252,7 @@ impl Addressable for MC68681 {
         0x30
     }
 
-    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             REG_SRA_RD => {
                 data[0] = self.port_a.status
@@ -296,14 +298,14 @@ impl Addressable for MC68681 {
         }
 
         if addr != REG_SRA_RD && addr != REG_SRB_RD {
-            debug!("{}: read from {:0x} of {:0x}", DEV_NAME, addr, data[0]);
+            log::debug!("{}: read from {:0x} of {:0x}", DEV_NAME, addr, data[0]);
         }
 
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        debug!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr);
+    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        log::debug!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr);
         match addr {
             REG_MR1A_MR2A | REG_MR1B_MR2B | REG_CSRA_WR | REG_CSRB_WR => {
                 // NOTE we aren't simulating the serial speeds, so we aren't doing anything with these settings atm
@@ -312,7 +314,7 @@ impl Addressable for MC68681 {
                 self.acr = data[0];
             }
             REG_TBA_WR => {
-                debug!("{}a: write {}", DEV_NAME, data[0] as char);
+                log::debug!("{}a: write {}", DEV_NAME, data[0] as char);
                 self.port_a.send_byte(data[0]);
                 self.set_interrupt_flag(ISR_CH_A_TX_READY, false);
             },
@@ -322,7 +324,7 @@ impl Addressable for MC68681 {
                 }
             },
             REG_TBB_WR => {
-                debug!("{}b: write {:x}", DEV_NAME, data[0]);
+                log::debug!("{}b: write {:x}", DEV_NAME, data[0]);
                 self.port_b.send_byte(data[0]);
                 self.set_interrupt_flag(ISR_CH_B_TX_READY, false);
             },

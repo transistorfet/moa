@@ -7,6 +7,7 @@ edition = "2021"
 log = "0.4"
 pixels = "0.12"
 winit = "0.28"
+femtos = { path = "../../libraries/femtos" }
 
 moa_core = { path = "../../core" }
 moa_common = { path = "../common", features = ["audio"] }

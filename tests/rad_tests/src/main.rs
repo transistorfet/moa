@@ -12,8 +12,9 @@ use std::fs::{self, File};
 use clap::Parser;
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
+use femtos::Frequency;
 
-use moa_core::{System, Error, MemoryBlock, Bus, BusPort, Frequency, Address, Addressable, Steppable, Device};
+use moa_core::{System, Error, MemoryBlock, Bus, BusPort, Address, Addressable, Steppable, Device};
 
 use moa_z80::{Z80, Z80Type};
 use moa_z80::instructions::InterruptMode;

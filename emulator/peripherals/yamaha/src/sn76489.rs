@@ -1,6 +1,7 @@
 
-use moa_core::{info, warn, debug};
-use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable};
+use femtos::{Instant, Duration, Frequency};
+
+use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{Host, Audio, Sample};
 use moa_audio::SquareWave;
 
@@ -30,13 +31,13 @@ impl ToneGenerator {
             self.on = true;
             self.attenuation = (attenuation << 1) as f32;
         }
-        info!("set attenuation to {} {}", self.attenuation, self.on);
+        log::info!("set attenuation to {} {}", self.attenuation, self.on);
     }
 
     fn set_counter(&mut self, count: usize) {
         let frequency = 3_579_545.0 / (count as f32 * 32.0);
         self.wave.set_frequency(frequency);
-        info!("set frequency to {}", frequency);
+        log::info!("set frequency to {}", frequency);
     }
 
     fn get_sample(&mut self) -> f32 {
@@ -68,13 +69,13 @@ impl NoiseGenerator {
             self.on = true;
             self.attenuation = (attenuation << 1) as f32;
         }
-        info!("set attenuation to {} {}", self.attenuation, self.on);
+        log::info!("set attenuation to {} {}", self.attenuation, self.on);
     }
 
     fn set_control(&mut self, _bits: u8) {
         //let frequency = 3_579_545.0 / (count as f32 * 32.0);
         //self.wave.set_frequency(frequency);
-        //debug!("set frequency to {}", frequency);
+        //log::debug!("set frequency to {}", frequency);
     }
 
     fn get_sample(&mut self) -> f32 {
@@ -107,7 +108,7 @@ impl Sn76489 {
 }
 
 impl Steppable for Sn76489 {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let rate = self.source.samples_per_second();
         let samples = rate / 1000;
 
@@ -130,7 +131,7 @@ impl Steppable for Sn76489 {
         }
         self.source.write_samples(system.clock, &buffer);
 
-        Ok(ClockDuration::from_millis(1))          // Every 1ms of simulated time
+        Ok(Duration::from_millis(1))          // Every 1ms of simulated time
     }
 }
 
@@ -139,14 +140,14 @@ impl Addressable for Sn76489 {
         0x01
     }
 
-    fn read(&mut self, _clock: ClockTime, _addr: Address, _data: &mut [u8]) -> Result<(), Error> {
-        warn!("{}: !!! device can't be read", DEV_NAME);
+    fn read(&mut self, _clock: Instant, _addr: Address, _data: &mut [u8]) -> Result<(), Error> {
+        log::warn!("{}: !!! device can't be read", DEV_NAME);
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
         if addr != 0 {
-            warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+            log::warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
             return Ok(());
         }
 
@@ -172,7 +173,7 @@ impl Addressable for Sn76489 {
                 _ => { },
             }
         }
-        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+        log::debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         Ok(())
     }
 }

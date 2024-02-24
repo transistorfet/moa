@@ -2,12 +2,13 @@
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
+use femtos::{Instant, Duration};
 
-use crate::{Bus, EdgeSignal, Error, InterruptController, ClockTime, ClockDuration, Address, Device};
+use crate::{Bus, EdgeSignal, Error, InterruptController, Address, Device};
 
 
 pub struct System {
-    pub clock: ClockTime,
+    pub clock: Instant,
     pub devices: HashMap<String, Device>,
     pub event_queue: Vec<NextStep>,
 
@@ -23,7 +24,7 @@ pub struct System {
 impl Default for System {
     fn default() -> Self {
         Self {
-            clock: ClockTime::START,
+            clock: Instant::START,
             devices: HashMap::new(),
             event_queue: vec![],
 
@@ -132,7 +133,7 @@ impl System {
     }
 
     /// Run the simulation until the given simulation clock time has been reached
-    pub fn run_until_clock(&mut self, clock: ClockTime) -> Result<(), Error> {
+    pub fn run_until_clock(&mut self, clock: Instant) -> Result<(), Error> {
         while self.clock < clock {
             self.step()?;
         }
@@ -140,7 +141,7 @@ impl System {
     }
 
     /// Run the simulation for `elapsed` amount of simulation time
-    pub fn run_for_duration(&mut self, elapsed: ClockDuration) -> Result<(), Error> {
+    pub fn run_for_duration(&mut self, elapsed: Duration) -> Result<(), Error> {
         let target = self.clock + elapsed;
 
         while self.clock < target {
@@ -151,7 +152,7 @@ impl System {
 
     /// Run the simulation forever, or until there is an error
     pub fn run_forever(&mut self) -> Result<(), Error> {
-        self.run_until_clock(ClockTime::FOREVER)
+        self.run_until_clock(Instant::FOREVER)
     }
 
     pub fn exit_error(&mut self) {
@@ -200,14 +201,14 @@ impl System {
 
 
 pub struct NextStep {
-    pub next_clock: ClockTime,
+    pub next_clock: Instant,
     pub device: Device,
 }
 
 impl NextStep {
     pub fn new(device: Device) -> Self {
         Self {
-            next_clock: ClockTime::START,
+            next_clock: Instant::START,
             device,
         }
     }

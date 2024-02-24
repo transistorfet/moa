@@ -1,5 +1,7 @@
 
-use moa_core::{System, Error, MemoryBlock, BusPort, ClockTime, Frequency, Address, Addressable, Device};
+use femtos::{Instant, Frequency};
+
+use moa_core::{System, Error, MemoryBlock, BusPort, Address, Addressable, Device};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, Condition, XRegister, BaseRegister, IndexRegister, Direction};
@@ -16,12 +18,12 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
     let data = vec![0; 0x00100000];
     let mem = MemoryBlock::new(data);
     system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
-    system.get_bus().write_beu32(ClockTime::START, 0, INIT_STACK as u32).unwrap();
-    system.get_bus().write_beu32(ClockTime::START, 4, INIT_ADDR as u32).unwrap();
+    system.get_bus().write_beu32(Instant::START, 0, INIT_STACK as u32).unwrap();
+    system.get_bus().write_beu32(Instant::START, 4, INIT_ADDR as u32).unwrap();
 
     // Initialize the CPU and make sure it's in the expected state
     let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
-    cpu.init_cycle(ClockTime::START);
+    cpu.init_cycle(Instant::START);
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
 

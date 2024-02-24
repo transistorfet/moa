@@ -1,0 +1,14 @@
+[package]
+name = "femtos"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.60"
+categories = ["no-std", "emulation", "simulation"]
+keywords = ["femtoseconds", "time", "emulation", "simulation"]
+description = "a femtosecond-based representation of time, duration, and frequency, for the purpose of simulation"
+authors = ["transistor fet <trans@jabberwocky.ca>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/transistorfet/moa"
+
+[dependencies]
+

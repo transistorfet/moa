@@ -1,8 +1,10 @@
 
+use femtos::{Instant, Duration, Frequency};
+
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
 use moa_core::host::{self, Host, Frame, FrameSender, PixelEncoding, Key, KeyEvent, EventReceiver};
-use moa_core::{System, Error, ClockTime, ClockDuration, Frequency, Address, Addressable, Steppable, Transmutable, Device};
+use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable, Device};
 
 const SCREEN_WIDTH: u32 = 384;
 const SCREEN_HEIGHT: u32 = 128;
@@ -22,7 +24,7 @@ impl SynthControl {
 }
 
 impl Steppable for SynthControl {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         if let Some(event) = self.key_receiver.receive() {
 
             match event.key {
@@ -44,7 +46,7 @@ impl Steppable for SynthControl {
         let frame = Frame::new(SCREEN_WIDTH, SCREEN_HEIGHT, PixelEncoding::RGBA);
         self.frame_sender.add(system.clock, frame);
 
-        Ok(ClockDuration::from_micros(100))
+        Ok(Duration::from_micros(100))
     }
 }
 
@@ -56,8 +58,8 @@ impl Transmutable for SynthControl {
 
 fn set_register(device: &mut dyn Addressable, bank: u8, reg: u8, data: u8) -> Result<(), Error> {
     let addr = (bank as Address) * 2;
-    device.write_u8(ClockTime::START, addr, reg)?;
-    device.write_u8(ClockTime::START, addr + 1, data)?;
+    device.write_u8(Instant::START, addr, reg)?;
+    device.write_u8(Instant::START, addr + 1, data)?;
     Ok(())
 }
 

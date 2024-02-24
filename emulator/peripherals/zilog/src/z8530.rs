@@ -1,5 +1,7 @@
 
-use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable, warn, debug};
+use femtos::{Instant, Duration};
+
+use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 
 const DEV_NAME: &str = "z8530";
 
@@ -13,23 +15,23 @@ impl Addressable for Z8530 {
         0x10
     }
 
-    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
-        debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
+    fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+        log::debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
-        warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        log::debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+        log::warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
         Ok(())
     }
 }
 
 impl Steppable for Z8530 {
-    fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, _system: &System) -> Result<Duration, Error> {
 
-        Ok(ClockDuration::from_secs(1))
+        Ok(Duration::from_secs(1))
     }
 }
 

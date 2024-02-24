@@ -3,7 +3,9 @@ use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use moa_core::{System, Error, Frequency, MemoryBlock, Bus, Address, Addressable, Device};
+use femtos::Frequency;
+
+use moa_core::{System, Error, MemoryBlock, Bus, Address, Addressable, Device};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};

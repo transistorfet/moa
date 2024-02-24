@@ -1,8 +1,9 @@
 
 use std::rc::Rc;
 use std::cell::RefCell;
+use femtos::{Instant, Frequency};
 
-use moa_core::{ClockTime, Address, Bus, BusPort, Signal, Frequency};
+use moa_core::{Address, Bus, BusPort, Signal};
 
 use crate::decode::Z80Decoder;
 use crate::debugger::Z80Debugger;
@@ -112,7 +113,7 @@ impl Z80 {
             state: Z80State::default(),
             decoder: Z80Decoder::default(),
             debugger: Z80Debugger::default(),
-            executor: Z80Executor::at_time(ClockTime::START),
+            executor: Z80Executor::at_time(Instant::START),
             port,
             ioport,
             reset: Signal::new(false),
@@ -131,10 +132,10 @@ impl Z80 {
         self.state = Z80State::default();
         self.decoder = Z80Decoder::default();
         self.debugger = Z80Debugger::default();
-        self.executor = Z80Executor::at_time(ClockTime::START);
+        self.executor = Z80Executor::at_time(Instant::START);
     }
 
-    pub fn dump_state(&mut self, clock: ClockTime) {
+    pub fn dump_state(&mut self, clock: Instant) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#06x}", self.state.pc);
         println!("SP: {:#06x}", self.state.sp);

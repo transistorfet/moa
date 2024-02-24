@@ -1,8 +1,9 @@
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+use femtos::Instant;
 
-use crate::{ClockTime, Error};
+use crate::Error;
 use crate::host::gfx::FrameReceiver;
 use crate::host::audio::Sample;
 use crate::host::keys::KeyEvent;
@@ -46,19 +47,19 @@ pub trait Tty {
 
 pub trait Audio {
     fn samples_per_second(&self) -> usize;
-    fn write_samples(&mut self, clock: ClockTime, buffer: &[Sample]);
+    fn write_samples(&mut self, clock: Instant, buffer: &[Sample]);
 }
 
 
 #[derive(Clone, Default)]
-pub struct ClockedQueue<T>(Arc<Mutex<VecDeque<(ClockTime, T)>>>, usize);
+pub struct ClockedQueue<T>(Arc<Mutex<VecDeque<(Instant, T)>>>, usize);
 
 impl<T: Clone> ClockedQueue<T> {
     pub fn new(max: usize) -> Self {
         Self(Arc::new(Mutex::new(VecDeque::new())), max)
     }
 
-    pub fn push(&self, clock: ClockTime, data: T) {
+    pub fn push(&self, clock: Instant, data: T) {
         let mut queue = self.0.lock().unwrap();
         if queue.len() > self.1 {
             //log::warn!("dropping data from queue due to limit of {} items", self.1);
@@ -67,19 +68,19 @@ impl<T: Clone> ClockedQueue<T> {
         queue.push_back((clock, data));
     }
 
-    pub fn pop_next(&self) -> Option<(ClockTime, T)> {
+    pub fn pop_next(&self) -> Option<(Instant, T)> {
         self.0.lock().unwrap().pop_front()
     }
 
-    pub fn pop_latest(&self) -> Option<(ClockTime, T)> {
+    pub fn pop_latest(&self) -> Option<(Instant, T)> {
         self.0.lock().unwrap().drain(..).last()
     }
 
-    pub fn put_back(&self, clock: ClockTime, data: T) {
+    pub fn put_back(&self, clock: Instant, data: T) {
         self.0.lock().unwrap().push_front((clock, data));
     }
 
-    pub fn peek_clock(&self) -> Option<ClockTime> {
+    pub fn peek_clock(&self) -> Option<Instant> {
         self.0.lock().unwrap().front().map(|(clock, _)| *clock)
     }
 
@@ -96,6 +97,6 @@ impl Audio for DummyAudio {
         48000
     }
 
-    fn write_samples(&mut self, _clock: ClockTime, _buffer: &[Sample]) {}
+    fn write_samples(&mut self, _clock: Instant, _buffer: &[Sample]) {}
 }
 

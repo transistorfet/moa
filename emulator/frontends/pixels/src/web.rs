@@ -12,7 +12,8 @@ use web_sys::Event;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
-use moa_core::{ClockDuration, System, Device};
+use femtos::{Duration as FemtosDuration};
+use moa_core::{System, Device};
 use moa_core::host::{ControllerInput, ControllerDevice, ControllerEvent, EventSender};
 
 use crate::settings;
@@ -138,7 +139,7 @@ pub fn load_system(handle: &mut HostHandle, load: LoadSystemFnHandle) -> SystemH
 #[wasm_bindgen]
 pub fn run_system_for(handle: &mut SystemHandle, nanos: u32) -> usize {
     let run_timer = Instant::now();
-    let nanoseconds_per_frame = ClockDuration::from_nanos(nanos as u64);
+    let nanoseconds_per_frame = FemtosDuration::from_nanos(nanos as u64);
     //let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as Clock;
     if let Err(err) = handle.0.run_for_duration(nanoseconds_per_frame) {
         log::error!("{:?}", err);
@@ -265,7 +266,7 @@ fn update(emulator: Rc<RefCell<Emulator>>) {
     };
 
     let diff = run_timer.duration_since(last_update);
-    let nanoseconds_per_frame = ClockDuration::from_nanos(diff.as_nanos() as u64);
+    let nanoseconds_per_frame = FemtosDuration::from_nanos(diff.as_nanos() as u64);
     //let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as Clock;
     if let Err(err) = emulator.borrow_mut().system.run_for_duration(nanoseconds_per_frame) {
         log::error!("{:?}", err);
@@ -285,7 +286,7 @@ fn update(emulator: Rc<RefCell<Emulator>>) {
 fn update(emulator: Rc<RefCell<Emulator>>) {
     let run_timer = Instant::now();
     let nanoseconds_per_frame = (16_600_000 as f32 * settings::get().speed) as u64;
-    if let Err(err) = emulator.borrow_mut().system.run_for_duration(ClockDuration::from_nanos(nanoseconds_per_frame)) {
+    if let Err(err) = emulator.borrow_mut().system.run_for_duration(FemtosDuration::from_nanos(nanoseconds_per_frame)) {
         log::error!("{:?}", err);
     }
     log::info!("ran simulation for {:?}ms in {:?}ms", nanoseconds_per_frame / 1_000_000, run_timer.elapsed().as_millis());

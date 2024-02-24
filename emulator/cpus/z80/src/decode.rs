@@ -1,11 +1,13 @@
 
-use moa_core::{Error, ClockTime, Address, Addressable};
+use femtos::Instant;
+
+use moa_core::{Error, Address, Addressable};
 
 use crate::instructions::{Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target, LoadTarget, UndocumentedCopy, Instruction};
 
 #[derive(Clone)]
 pub struct Z80Decoder {
-    pub clock: ClockTime,
+    pub clock: Instant,
     pub start: u16,
     pub end: u16,
     pub extra_instruction_bytes: u16,
@@ -15,7 +17,7 @@ pub struct Z80Decoder {
 impl Default for Z80Decoder {
     fn default() -> Self {
         Self {
-            clock: ClockTime::START,
+            clock: Instant::START,
             start: 0,
             end: 0,
             extra_instruction_bytes: 0,
@@ -25,7 +27,7 @@ impl Default for Z80Decoder {
 }
 
 impl Z80Decoder {
-    pub fn decode_at(&mut self, memory: &mut dyn Addressable, clock: ClockTime, start: u16) -> Result<(), Error> {
+    pub fn decode_at(&mut self, memory: &mut dyn Addressable, clock: Instant, start: u16) -> Result<(), Error> {
         self.clock = clock;
         self.start = start;
         self.end = start;

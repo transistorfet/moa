@@ -1,5 +1,7 @@
 
-use moa_core::{System, Error, Frequency, MemoryBlock, Debuggable, Device};
+use femtos::Frequency;
+
+use moa_core::{System, Error, MemoryBlock, Debuggable, Device};
 use moa_core::host::Host;
 
 use moa_m68k::{M68k, M68kType};

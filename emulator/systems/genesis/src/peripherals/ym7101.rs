@@ -1,6 +1,7 @@
 
-use moa_core::{debug, warn, error};
-use moa_core::{System, Error, EdgeSignal, ClockTime, ClockDuration, Frequency, Signal, Address, Addressable, Steppable, Inspectable, Transmutable, Device, read_beu16, dump_slice};
+use femtos::{Instant, Duration, Frequency};
+
+use moa_core::{System, Error, EdgeSignal, Signal, Address, Addressable, Steppable, Inspectable, Transmutable, Device, read_beu16, dump_slice};
 use moa_core::host::{self, Host, Pixel, PixelEncoding, Frame, FrameSender};
 
 
@@ -170,7 +171,7 @@ impl Ym7101Memory {
             4 => Memory::Vsram,
             _ => Memory::Cram,
         };
-        debug!("{}: transfer requested of type {:x} ({:?}) to address {:x}", DEV_NAME, self.transfer_type, self.transfer_target, self.transfer_dest_addr);
+        log::debug!("{}: transfer requested of type {:x} ({:?}) to address {:x}", DEV_NAME, self.transfer_type, self.transfer_target, self.transfer_dest_addr);
         if (self.transfer_type & 0x20) != 0 {
             if (self.transfer_type & 0x10) != 0 {
                 self.set_dma_mode(DmaType::Copy);
@@ -197,7 +198,7 @@ impl Ym7101Memory {
             }
         }
         self.transfer_dest_addr += self.transfer_auto_inc;
-        debug!("{}: data port read {} bytes from {:?}:{:x} returning {:x},{:x}", DEV_NAME, data.len(), self.transfer_target, addr, data[0], data[1]);
+        log::debug!("{}: data port read {} bytes from {:?}:{:x} returning {:x},{:x}", DEV_NAME, data.len(), self.transfer_target, addr, data[0], data[1]);
         Ok(())
     }
 
@@ -207,7 +208,7 @@ impl Ym7101Memory {
             self.transfer_fill_word = if data.len() >= 2 { read_beu16(data) } else { data[0] as u16 };
             self.set_dma_mode(DmaType::Fill);
         } else {
-            debug!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.transfer_target, self.transfer_dest_addr, data);
+            log::debug!("{}: data port write {} bytes to {:?}:{:x} with {:?}", DEV_NAME, data.len(), self.transfer_target, self.transfer_dest_addr, data);
 
             {
                 let addr = self.transfer_dest_addr as usize;
@@ -227,7 +228,7 @@ impl Ym7101Memory {
             (2, None) => { self.ctrl_port_buffer = Some(value) },
             (2, Some(upper)) => self.setup_transfer(upper, read_beu16(data)),
             (4, None) => self.setup_transfer(value, read_beu16(&data[2..])),
-            _ => { error!("{}: !!! error when writing to control port with {} bytes of {:?}", DEV_NAME, data.len(), data); },
+            _ => { log::error!("{}: !!! error when writing to control port with {} bytes of {:?}", DEV_NAME, data.len(), data); },
         }
         Ok(())
     }
@@ -238,7 +239,7 @@ impl Ym7101Memory {
 
             match self.transfer_run {
                 DmaType::Memory => {
-                    debug!("{}: starting dma transfer {:x} from Mem:{:x} to {:?}:{:x} ({} bytes)", DEV_NAME, self.transfer_type, self.transfer_src_addr, self.transfer_target, self.transfer_dest_addr, self.transfer_remain);
+                    log::debug!("{}: starting dma transfer {:x} from Mem:{:x} to {:?}:{:x} ({} bytes)", DEV_NAME, self.transfer_type, self.transfer_src_addr, self.transfer_target, self.transfer_dest_addr, self.transfer_remain);
                     let mut bus = system.get_bus();
 
                     while self.transfer_remain > 0 {
@@ -256,7 +257,7 @@ impl Ym7101Memory {
                     }
                 },
                 DmaType::Copy => {
-                    debug!("{}: starting dma copy from VRAM:{:x} to VRAM:{:x} ({} bytes)", DEV_NAME, self.transfer_src_addr, self.transfer_dest_addr, self.transfer_remain);
+                    log::debug!("{}: starting dma copy from VRAM:{:x} to VRAM:{:x} ({} bytes)", DEV_NAME, self.transfer_src_addr, self.transfer_dest_addr, self.transfer_remain);
                     while self.transfer_remain > 0 {
                         self.vram[self.transfer_dest_addr as usize] = self.vram[self.transfer_src_addr as usize];
                         self.transfer_dest_addr += self.transfer_auto_inc;
@@ -265,14 +266,14 @@ impl Ym7101Memory {
                     }
                 },
                 DmaType::Fill => {
-                    debug!("{}: starting dma fill to VRAM:{:x} ({} bytes) with {:x}", DEV_NAME, self.transfer_dest_addr, self.transfer_remain, self.transfer_fill_word);
+                    log::debug!("{}: starting dma fill to VRAM:{:x} ({} bytes) with {:x}", DEV_NAME, self.transfer_dest_addr, self.transfer_remain, self.transfer_fill_word);
                     while self.transfer_remain > 0 {
                         self.vram[self.transfer_dest_addr as usize] = self.transfer_fill_word as u8;
                         self.transfer_dest_addr += self.transfer_auto_inc;
                         self.transfer_remain -= 1;
                     }
                 },
-                _ => { warn!("{}: !!! error unexpected transfer mode {:x}", DEV_NAME, self.transfer_type); },
+                _ => { log::warn!("{}: !!! error unexpected transfer mode {:x}", DEV_NAME, self.transfer_type); },
             }
 
             self.set_dma_mode(DmaType::None);
@@ -330,7 +331,7 @@ struct Ym7101State {
     sprites: Vec<Sprite>,
     sprites_by_line: Vec<Vec<usize>>,
 
-    last_clock: ClockTime,
+    last_clock: Instant,
     p_clock: u32,
     h_clock: u32,
     v_clock: u32,
@@ -365,7 +366,7 @@ impl Default for Ym7101State {
             sprites: vec![],
             sprites_by_line: vec![],
 
-            last_clock: ClockTime::START,
+            last_clock: Instant::START,
             p_clock: 0,
             h_clock: 0,
             v_clock: 0,
@@ -636,7 +637,7 @@ impl Sprite {
 }
 
 impl Steppable for Ym7101 {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let diff = system.clock.duration_since(self.state.last_clock).as_nanos() as u32;
         self.state.last_clock = system.clock;
 
@@ -732,7 +733,7 @@ impl Ym7101 {
     fn set_register(&mut self, word: u16) {
         let reg = ((word & 0x1F00) >> 8) as usize;
         let data = (word & 0x00FF) as u8;
-        debug!("{}: register {:x} set to {:x}", DEV_NAME, reg, data);
+        log::debug!("{}: register {:x} set to {:x}", DEV_NAME, reg, data);
         self.update_register_value(reg, data);
     }
 
@@ -808,14 +809,14 @@ impl Addressable for Ym7101 {
         0x20
     }
 
-    fn read(&mut self, _clock: ClockTime, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             // Read from Data Port
             0x00 | 0x02 => self.state.memory.read_data_port(addr, data)?,
 
             // Read from Control Port
             0x04 | 0x05 | 0x06 | 0x07 => {
-                debug!("{}: read status byte {:x}", DEV_NAME, self.state.status);
+                log::debug!("{}: read status byte {:x}", DEV_NAME, self.state.status);
                 for item in data {
                     *item = if (addr % 2) == 0 {
                         (self.state.status >> 8) as u8
@@ -839,14 +840,14 @@ impl Addressable for Ym7101 {
         Ok(())
     }
 
-    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
+    fn write(&mut self, clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
         match addr {
             // Write to Data Port
             0x00 | 0x02 => self.state.memory.write_data_port(data)?,
 
             // Write to Control Port
             0x04 | 0x06 => {
-                debug!("{}: write {} bytes to port {:x} with data {:?}", DEV_NAME, data.len(), addr, data);
+                log::debug!("{}: write {} bytes to port {:x} with data {:?}", DEV_NAME, data.len(), addr, data);
 
                 let value = read_beu16(data);
                 if (value & 0xC000) == 0x8000 {
@@ -868,7 +869,7 @@ impl Addressable for Ym7101 {
                 self.sn_sound.borrow_mut().as_addressable().unwrap().write(clock, 0, data)?;
             },
 
-            _ => { warn!("{}: !!! unhandled write to {:x} with {:?}", DEV_NAME, addr, data); },
+            _ => { log::warn!("{}: !!! unhandled write to {:x} with {:?}", DEV_NAME, addr, data); },
         }
         Ok(())
     }

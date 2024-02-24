@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell, RefMut};
 use std::rc::Rc;
 
-use crate::ClockTime;
+use femtos::Instant;
 
 pub trait Observable<T> {
     fn set_observer<F>(&self, f: F)
@@ -125,12 +125,12 @@ impl Observable<bool> for ObservableEdgeSignal {
 
 
 pub trait SignalReceiver<T> {
-    fn get_next(&self) -> (ClockTime, T);
-    fn get_at(clock: ClockTime) -> T;
+    fn get_next(&self) -> (Instant, T);
+    fn get_at(clock: Instant) -> T;
 }
 
 pub trait SignalDriver<T> {
-    fn set_at(clock: ClockTime, value: T);
+    fn set_at(clock: Instant, value: T);
 }
 
 

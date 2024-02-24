@@ -1,5 +1,7 @@
 
-use moa_core::{System, Error, ClockDuration, Address, Addressable, Steppable, Transmutable};
+use femtos::Duration;
+
+use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{self, Host, Frame, FrameSender, Pixel};
 
 
@@ -56,7 +58,7 @@ impl Iterator for BitIter {
 }
 
 impl Steppable for MacVideo {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let mut memory = system.get_bus();
         let mut frame = Frame::new(SCRN_SIZE.0, SCRN_SIZE.1, self.frame_sender.encoding());
         for y in 0..SCRN_SIZE.1 {
@@ -67,7 +69,7 @@ impl Steppable for MacVideo {
         }
 
         self.frame_sender.add(system.clock, frame);
-        Ok(ClockDuration::from_micros(16_600))
+        Ok(Duration::from_micros(16_600))
     }
 }
 

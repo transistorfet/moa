@@ -1,5 +1,7 @@
 
-use moa_core::{System, Error, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable, debug, warn};
+use femtos::{Instant, Duration};
+
+use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{self, Host, Frame, FrameSender, KeyEvent, EventReceiver};
 
 use super::keymap;
@@ -32,7 +34,7 @@ impl Addressable for Model1Keyboard {
         0x420
     }
 
-    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         if (0x20..=0xA0).contains(&addr) {
             let offset = addr - 0x20;
             data[0] = 0;
@@ -46,25 +48,25 @@ impl Addressable for Model1Keyboard {
             if (offset & 0x80) != 0 { data[0] |= self.keyboard_mem[7]; }
             //info!("{}: read from keyboard {:x} of {:?}", DEV_NAME, addr, data);
         } else {
-            warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+            log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
         }
-        debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
+        log::debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        log::warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
         Ok(())
     }
 }
 
 impl Steppable for Model1Keyboard {
-    fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, _system: &System) -> Result<Duration, Error> {
         while let Some(event) = self.receiver.receive() {
             keymap::record_key_press(&mut self.keyboard_mem, event.key, event.state);
         }
 
-        Ok(ClockDuration::from_millis(1))
+        Ok(Duration::from_millis(1))
     }
 }
 
@@ -97,7 +99,7 @@ impl Model1Video {
 }
 
 impl Steppable for Model1Video {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let mut frame = Frame::new(SCREEN_SIZE.0, SCREEN_SIZE.1, self.frame_sender.encoding());
         for y in 0..16 {
             for x in 0..64 {
@@ -108,7 +110,7 @@ impl Steppable for Model1Video {
         }
         self.frame_sender.add(system.clock, frame);
 
-        Ok(ClockDuration::from_micros(16_630))
+        Ok(Duration::from_micros(16_630))
     }
 }
 
@@ -117,14 +119,14 @@ impl Addressable for Model1Video {
         0x400
     }
 
-    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         data[0] = self.video_mem[addr as usize];
-        debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
+        log::debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        log::debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         self.video_mem[addr as usize] = data[0];
         Ok(())
     }

@@ -2,8 +2,9 @@
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut, BorrowMutError};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use femtos::{Duration, Instant};
 
-use crate::{Error, System, ClockTime, ClockDuration};
+use crate::{Error, System};
 
 
 /// A universal memory address used by the Addressable trait
@@ -15,7 +16,7 @@ pub type Address = u64;
 /// with any device, the `on_error()` method will be called to display any state
 /// information that might be helpful for debugging.
 pub trait Steppable {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error>;
+    fn step(&mut self, system: &System) -> Result<Duration, Error>;
     fn on_error(&mut self, _system: &System) { }
 }
 
@@ -28,73 +29,73 @@ pub trait Interruptable {
 /// A device that can be addressed to read data from or write data to the device.
 pub trait Addressable {
     fn size(&self) -> usize;
-    fn read(&mut self, clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error>;
-    fn write(&mut self, clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error>;
+    fn read(&mut self, clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error>;
+    fn write(&mut self, clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error>;
 
     #[inline]
-    fn read_u8(&mut self, clock: ClockTime, addr: Address) -> Result<u8, Error> {
+    fn read_u8(&mut self, clock: Instant, addr: Address) -> Result<u8, Error> {
         let mut data = [0; 1];
         self.read(clock, addr, &mut data)?;
         Ok(data[0])
     }
 
     #[inline]
-    fn read_beu16(&mut self, clock: ClockTime, addr: Address) -> Result<u16, Error> {
+    fn read_beu16(&mut self, clock: Instant, addr: Address) -> Result<u16, Error> {
         let mut data = [0; 2];
         self.read(clock, addr, &mut data)?;
         Ok(read_beu16(&data))
     }
 
     #[inline]
-    fn read_leu16(&mut self, clock: ClockTime, addr: Address) -> Result<u16, Error> {
+    fn read_leu16(&mut self, clock: Instant, addr: Address) -> Result<u16, Error> {
         let mut data = [0; 2];
         self.read(clock, addr, &mut data)?;
         Ok(read_leu16(&data))
     }
 
     #[inline]
-    fn read_beu32(&mut self, clock: ClockTime, addr: Address) -> Result<u32, Error> {
+    fn read_beu32(&mut self, clock: Instant, addr: Address) -> Result<u32, Error> {
         let mut data = [0; 4];
         self.read(clock, addr, &mut data)?;
         Ok(read_beu32(&data))
     }
 
     #[inline]
-    fn read_leu32(&mut self, clock: ClockTime, addr: Address) -> Result<u32, Error> {
+    fn read_leu32(&mut self, clock: Instant, addr: Address) -> Result<u32, Error> {
         let mut data = [0; 4];
         self.read(clock, addr, &mut data)?;
         Ok(read_leu32(&data))
     }
 
     #[inline]
-    fn write_u8(&mut self, clock: ClockTime, addr: Address, value: u8) -> Result<(), Error> {
+    fn write_u8(&mut self, clock: Instant, addr: Address, value: u8) -> Result<(), Error> {
         let data = [value];
         self.write(clock, addr, &data)
     }
 
     #[inline]
-    fn write_beu16(&mut self, clock: ClockTime, addr: Address, value: u16) -> Result<(), Error> {
+    fn write_beu16(&mut self, clock: Instant, addr: Address, value: u16) -> Result<(), Error> {
         let mut data = [0; 2];
         write_beu16(&mut data, value);
         self.write(clock, addr, &data)
     }
 
     #[inline]
-    fn write_leu16(&mut self, clock: ClockTime, addr: Address, value: u16) -> Result<(), Error> {
+    fn write_leu16(&mut self, clock: Instant, addr: Address, value: u16) -> Result<(), Error> {
         let mut data = [0; 2];
         write_leu16(&mut data, value);
         self.write(clock, addr, &data)
     }
 
     #[inline]
-    fn write_beu32(&mut self, clock: ClockTime, addr: Address, value: u32) -> Result<(), Error> {
+    fn write_beu32(&mut self, clock: Instant, addr: Address, value: u32) -> Result<(), Error> {
         let mut data = [0; 4];
         write_beu32(&mut data, value);
         self.write(clock, addr, &data)
     }
 
     #[inline]
-    fn write_leu32(&mut self, clock: ClockTime, addr: Address, value: u32) -> Result<(), Error> {
+    fn write_leu32(&mut self, clock: Instant, addr: Address, value: u32) -> Result<(), Error> {
         let mut data = [0; 4];
         write_leu32(&mut data, value);
         self.write(clock, addr, &data)

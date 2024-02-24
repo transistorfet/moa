@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
+use femtos::Instant;
 
-use crate::ClockTime;
 use crate::host::traits::ClockedQueue;
 
 pub const MASK_COLOUR: u32 = 0xFFFFFFFF;
@@ -135,7 +135,7 @@ impl FrameSender {
         *self.encoding.lock().unwrap()
     }
 
-    pub fn add(&self, clock: ClockTime, frame: Frame) {
+    pub fn add(&self, clock: Instant, frame: Frame) {
         self.queue.push(clock, frame);
     }
 }
@@ -155,7 +155,7 @@ impl FrameReceiver {
         *self.encoding.lock().unwrap() = encoding;
     }
 
-    pub fn latest(&self) -> Option<(ClockTime, Frame)> {
+    pub fn latest(&self) -> Option<(Instant, Frame)> {
         self.queue.pop_latest()
     }
 }

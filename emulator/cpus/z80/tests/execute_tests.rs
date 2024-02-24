@@ -1,5 +1,7 @@
 
-use moa_core::{System, MemoryBlock, BusPort, Frequency, Address, Addressable, Device};
+use femtos::Frequency;
+
+use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device};
 
 use moa_z80::{Z80, Z80Type};
 use moa_z80::state::Z80State;

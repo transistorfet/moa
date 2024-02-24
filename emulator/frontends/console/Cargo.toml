@@ -5,9 +5,10 @@ edition = "2021"
 default-run = "moa-computie"
 
 [dependencies]
-log = "^0.4"
+log = "0.4"
 clap = "^4"
 simple_logger = "^2"
+femtos = { path = "../../libraries/femtos" }
 
 moa_core = { path = "../../core" }
 moa_common = { path = "../common", features = ["tty"] }

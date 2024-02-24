@@ -1,5 +1,7 @@
 
-use moa_core::{Error, ClockTime, Address, Addressable, BusPort};
+use femtos::Instant;
+
+use moa_core::{Error, Address, Addressable, BusPort};
 
 use crate::state::{M68k, Exceptions};
 use crate::instructions::Size;
@@ -90,8 +92,8 @@ impl MemoryRequest {
 pub struct M68kBusPort {
     pub port: BusPort,
     pub request: MemoryRequest,
-    pub cycle_start_clock: ClockTime,
-    pub current_clock: ClockTime,
+    pub cycle_start_clock: Instant,
+    pub current_clock: Instant,
 }
 
 
@@ -104,8 +106,8 @@ impl M68kBusPort {
         Self {
             port,
             request: Default::default(),
-            cycle_start_clock: ClockTime::START,
-            current_clock: ClockTime::START,
+            cycle_start_clock: Instant::START,
+            current_clock: Instant::START,
         }
     }
 
@@ -113,7 +115,7 @@ impl M68kBusPort {
         self.port.data_width()
     }
 
-    pub fn init_cycle(&mut self, clock: ClockTime) {
+    pub fn init_cycle(&mut self, clock: Instant) {
         self.cycle_start_clock = clock;
         self.current_clock = clock;
     }

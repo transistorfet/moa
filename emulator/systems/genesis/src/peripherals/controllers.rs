@@ -1,6 +1,7 @@
 
-use moa_core::{warn, info};
-use moa_core::{System, Error, ClockTime, ClockDuration, Signal, Address, Addressable, Steppable, Transmutable};
+use femtos::{Instant, Duration};
+
+use moa_core::{System, Error, Signal, Address, Addressable, Steppable, Transmutable};
 use moa_core::host::{self, Host, ControllerDevice, ControllerInput, ControllerEvent, EventReceiver};
 
 
@@ -92,7 +93,7 @@ pub struct GenesisControllers {
     port_2: GenesisControllerPort,
     expansion: GenesisControllerPort,
     interrupt: Signal<bool>,
-    reset_timer: ClockDuration,
+    reset_timer: Duration,
 }
 
 impl GenesisControllers {
@@ -106,7 +107,7 @@ impl GenesisControllers {
             port_2: GenesisControllerPort::default(),
             expansion: GenesisControllerPort::default(),
             interrupt: Signal::new(false),
-            reset_timer: ClockDuration::ZERO,
+            reset_timer: Duration::ZERO,
         })
     }
 
@@ -146,7 +147,7 @@ impl Addressable for GenesisControllers {
         0x30
     }
 
-    fn read(&mut self, _clock: ClockTime, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, mut addr: Address, data: &mut [u8]) -> Result<(), Error> {
         // If the address is even, only the second byte (odd byte) will be meaningful
         let mut i = 0;
         if (addr % 2) == 0 {
@@ -165,16 +166,16 @@ impl Addressable for GenesisControllers {
             REG_S_CTRL1 => { data[i] = self.port_1.s_ctrl | 0x02; },
             REG_S_CTRL2 => { data[i] = self.port_2.s_ctrl | 0x02; },
             REG_S_CTRL3 => { data[i] = self.expansion.s_ctrl | 0x02; },
-            _ => { warn!("{}: !!! unhandled reading from {:0x}", DEV_NAME, addr); },
+            _ => { log::warn!("{}: !!! unhandled reading from {:0x}", DEV_NAME, addr); },
         }
-        info!("{}: read from register {:x} the value {:x}", DEV_NAME, addr, data[0]);
+        log::info!("{}: read from register {:x} the value {:x}", DEV_NAME, addr, data[0]);
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        self.reset_timer = ClockDuration::ZERO;
+    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        self.reset_timer = Duration::ZERO;
 
-        info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+        log::info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             REG_DATA1 => { self.port_1.set_data(data[0]); }
             REG_DATA2 => { self.port_2.set_data(data[0]); },
@@ -185,22 +186,22 @@ impl Addressable for GenesisControllers {
             REG_S_CTRL1 => { self.port_1.s_ctrl = data[0] & 0xF8; },
             REG_S_CTRL2 => { self.port_2.s_ctrl = data[0] & 0xF8; },
             REG_S_CTRL3 => { self.expansion.s_ctrl = data[0] & 0xF8; },
-            _ => { warn!("{}: !!! unhandled write of {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+            _ => { log::warn!("{}: !!! unhandled write of {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
         Ok(())
     }
 }
 
 impl Steppable for GenesisControllers {
-    fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
-        let duration = ClockDuration::from_micros(100);     // Update every 100us
+    fn step(&mut self, _system: &System) -> Result<Duration, Error> {
+        let duration = Duration::from_micros(100);     // Update every 100us
 
         while let Some(event) = self.receiver.receive() {
             self.process_event(event);
         }
 
         self.reset_timer += duration;
-        if self.reset_timer >= ClockDuration::from_micros(1_500) {
+        if self.reset_timer >= Duration::from_micros(1_500) {
             self.port_1.reset_count();
             self.port_2.reset_count();
             self.expansion.reset_count();

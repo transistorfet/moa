@@ -1,7 +1,8 @@
 
 use std::fs;
+use femtos::Instant;
 
-use moa_core::{Error, ClockTime, Address, Addressable, Transmutable, debug};
+use moa_core::{Error, Address, Addressable, Transmutable};
 
 
 const ATA_REG_DATA_WORD: Address        = 0x20;
@@ -57,7 +58,7 @@ impl Addressable for AtaDevice {
         0x30
     }
 
-    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             ATA_REG_DATA_WORD => {
                 self.selected_count -= 2;
@@ -84,14 +85,14 @@ impl Addressable for AtaDevice {
             ATA_REG_ERROR => {
                 data[0] = self.last_error;
             },
-            _ => { debug!("{}: reading from {:0x}", DEV_NAME, addr); },
+            _ => { log::debug!("{}: reading from {:0x}", DEV_NAME, addr); },
         }
 
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        log::debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             ATA_REG_DRIVE_HEAD => { self.selected_sector |= ((data[0] & 0x1F) as u32) << 24; },
             ATA_REG_CYL_HIGH => { self.selected_sector |= (data[0] as u32) << 16; },
@@ -100,11 +101,11 @@ impl Addressable for AtaDevice {
             ATA_REG_SECTOR_COUNT => { self.selected_count = (data[0] as u32) * ATA_SECTOR_SIZE; },
             ATA_REG_COMMAND => {
                 match data[0] {
-                    ATA_CMD_READ_SECTORS => { debug!("{}: reading sector {:x}", DEV_NAME, self.selected_sector); },
-                    ATA_CMD_WRITE_SECTORS => { debug!("{}: writing sector {:x}", DEV_NAME, self.selected_sector); },
+                    ATA_CMD_READ_SECTORS => { log::debug!("{}: reading sector {:x}", DEV_NAME, self.selected_sector); },
+                    ATA_CMD_WRITE_SECTORS => { log::debug!("{}: writing sector {:x}", DEV_NAME, self.selected_sector); },
                     ATA_CMD_IDENTIFY => { },
                     ATA_CMD_SET_FEATURE => { },
-                    _ => { debug!("{}: unrecognized command {:x}", DEV_NAME, data[0]); },
+                    _ => { log::debug!("{}: unrecognized command {:x}", DEV_NAME, data[0]); },
                 }
             },
             ATA_REG_FEATURE => {
@@ -113,7 +114,7 @@ impl Addressable for AtaDevice {
             ATA_REG_DATA_BYTE => {
                 // TODO implement writing
             },
-            _ => { debug!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+            _ => { log::debug!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr); },
         }
         Ok(())
     }

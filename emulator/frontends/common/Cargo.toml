@@ -8,6 +8,8 @@ tty = ["nix"]
 audio = ["cpal"]
 
 [dependencies]
+log = "0.4"
+femtos = { path = "../../libraries/femtos" }
 moa_core = { path = "../../core" }
 nix = { version = "0.25", optional = true }
 

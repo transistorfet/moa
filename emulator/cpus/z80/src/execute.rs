@@ -1,5 +1,7 @@
 
-use moa_core::{System, Error, ClockTime, ClockDuration, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
+use femtos::{Instant, Duration};
+
+use moa_core::{System, Error, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
 use crate::instructions::{Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister, IndexRegisterHalf, Size, Direction, UndocumentedCopy};
 use crate::state::{Z80, Status, Flags};
@@ -19,7 +21,7 @@ enum RotateType {
 }
 
 impl Steppable for Z80 {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let clocks = if self.reset.get() {
             self.reset()?
         } else if self.bus_request.get() {
@@ -56,12 +58,12 @@ impl Transmutable for Z80 {
 
 #[derive(Clone)]
 pub struct Z80Executor {
-    pub current_clock: ClockTime,
+    pub current_clock: Instant,
     pub took_branch: bool,
 }
 
 impl Z80Executor {
-    pub fn at_time(current_clock: ClockTime) -> Self {
+    pub fn at_time(current_clock: Instant) -> Self {
         Self {
             current_clock,
             took_branch: false,

@@ -1,8 +1,9 @@
 
 use std::rc::Rc;
 use std::cell::RefCell;
+use femtos::{Instant, Frequency};
 
-use moa_core::{ClockTime, Address, Bus, BusPort, Frequency};
+use moa_core::{Address, Bus, BusPort};
 
 use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
@@ -99,7 +100,7 @@ pub struct M68k {
     pub timing: M68kInstructionTiming,
     pub debugger: M68kDebugger,
     pub port: M68kBusPort,
-    pub current_clock: ClockTime,
+    pub current_clock: Instant,
 }
 
 impl Default for M68kState {
@@ -131,7 +132,7 @@ impl M68k {
             timing: M68kInstructionTiming::new(cputype, port.data_width()),
             debugger: M68kDebugger::default(),
             port: M68kBusPort::new(port),
-            current_clock: ClockTime::START,
+            current_clock: Instant::START,
         }
     }
 

@@ -1,5 +1,7 @@
 
-use moa_core::{Error, System, ClockTime, ClockDuration, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable, debug, warn};
+use femtos::{Instant, Duration};
+
+use moa_core::{Error, System, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable};
 
 
 const REG_OUTPUT_B: Address     = 0x00;
@@ -57,7 +59,7 @@ impl Addressable for Mos6522 {
         0x10
     }
 
-    fn read(&mut self, _clock: ClockTime, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             REG_OUTPUT_B => { data[0] = self.port_b.borrow_mut().data; },
             REG_OUTPUT_A => { data[0] = self.port_a.borrow_mut().data; },
@@ -66,15 +68,15 @@ impl Addressable for Mos6522 {
             REG_INT_FLAGS => { data[0] = self.interrupt_flags; },
             REG_INT_ENABLE => { data[0] = self.interrupt_enable | 0x80; },
             _ => {
-                warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+                log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
             },
         }
-        debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
+        log::debug!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
         Ok(())
     }
 
-    fn write(&mut self, _clock: ClockTime, addr: Address, data: &[u8]) -> Result<(), Error> {
-        debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
+    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        log::debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
             REG_OUTPUT_B => { self.port_b.borrow_mut().data = data[0]; self.port_b.notify(); },
             REG_OUTPUT_A => { self.port_a.borrow_mut().data = data[0]; self.port_a.notify(); },
@@ -91,7 +93,7 @@ impl Addressable for Mos6522 {
             },
             REG_OUTPUT_A_NHS => { self.port_a.borrow_mut().data = data[0]; self.port_a.notify(); },
             _ => {
-                warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+                log::warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
             },
         }
         Ok(())
@@ -99,9 +101,9 @@ impl Addressable for Mos6522 {
 }
 
 impl Steppable for Mos6522 {
-    fn step(&mut self, _system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, _system: &System) -> Result<Duration, Error> {
 
-        Ok(ClockDuration::from_micros(16_600))
+        Ok(Duration::from_micros(16_600))
     }
 }
 

@@ -1,6 +1,7 @@
 
-use moa_core::debug;
-use moa_core::{System, Error, ClockTime, ClockDuration, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
+use femtos::{Instant, Duration};
+
+use moa_core::{System, Error, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
 use crate::state::{M68k, M68kType, ClockCycles, Status, Flags, Exceptions, InterruptPriority};
 use crate::memory::{MemType, MemAccess};
@@ -32,7 +33,7 @@ pub enum Used {
 }
 
 impl Steppable for M68k {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let clocks = self.step_internal(system)?;
         Ok(self.frequency.period_duration() * clocks as u64)
     }
@@ -78,7 +79,7 @@ impl M68k {
         }
     }
 
-    pub fn init_cycle(&mut self, clock: ClockTime) {
+    pub fn init_cycle(&mut self, clock: Instant) {
         self.current_clock = clock;
         self.decoder = M68kDecoder::new(self.cputype, self.is_supervisor(), self.state.pc);
         self.timing = M68kInstructionTiming::new(self.cputype, self.port.data_width());
@@ -116,7 +117,7 @@ impl M68k {
             let priority_mask = ((self.state.sr & Flags::IntMask as u16) >> 8) as u8;
 
             if (pending_ipl > priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
-                debug!("{} interrupt: {} @ {} ns", DEV_NAME, pending_ipl, system.clock.as_duration().as_nanos());
+                log::debug!("{} interrupt: {} @ {} ns", DEV_NAME, pending_ipl, system.clock.as_duration().as_nanos());
                 self.state.current_ipl = self.state.pending_ipl;
                 let ack_num = system.get_interrupt_controller().acknowledge(self.state.current_ipl as u8)?;
                 self.exception(ack_num, true)?;
@@ -132,7 +133,7 @@ impl M68k {
     }
 
     pub fn exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), Error> {
-        debug!("{}: raising exception {}", DEV_NAME, number);
+        log::debug!("{}: raising exception {}", DEV_NAME, number);
 
         if number == Exceptions::BusError as u8 || number == Exceptions::AddressError as u8 {
             let result = self.setup_group0_exception(number);
@@ -429,6 +430,7 @@ impl M68k {
         self.set_target_value(target, pair.0, size, Used::Twice)?;
 
         let last_bit = if count < size.in_bits() { pair.1 } else { false };
+        //let last_bit = if count < size.in_bits() { pair.1 } else { get_msb(value, size) };
         self.set_arithmetic_shift_flags(pair.0, count, last_bit, overflow, size);
         Ok(())
     }

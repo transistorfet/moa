@@ -1,8 +1,9 @@
 
 use clap::{Command, Arg, ArgAction, ArgMatches};
 use std::io::{self, Write};
+use femtos::Duration;
 
-use moa_core::{Error, System, ClockDuration, DebugControl, Debugger};
+use moa_core::{Error, System, DebugControl, Debugger};
 use moa_core::host::{Host, Tty, ControllerEvent, Audio, DummyAudio, FrameReceiver, EventSender};
 
 pub struct ConsoleFrontend;
@@ -90,7 +91,7 @@ impl ConsoleFrontend {
                 }
             }
 
-            match system.run_for_duration(ClockDuration::MAX - system.clock.as_duration()) {
+            match system.run_for_duration(Duration::MAX - system.clock.as_duration()) {
                 Ok(()) => {},
                 Err(Error::Breakpoint(_)) => {
                     run_debugger = true;

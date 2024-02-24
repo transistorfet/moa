@@ -1,7 +1,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
+use femtos::{Instant, Duration};
 
-use moa_core::{ClockTime, ClockDuration};
 use moa_core::host::{Audio, Sample, AudioFrame, ClockedQueue};
 
 
@@ -38,7 +38,7 @@ impl AudioSource {
         self.id
     }
 
-    pub fn add_frame(&mut self, clock: ClockTime, buffer: &[Sample]) {
+    pub fn add_frame(&mut self, clock: Instant, buffer: &[Sample]) {
         let mut data = Vec::with_capacity(buffer.len());
         for sample in buffer.iter() {
             data.push(*sample);
@@ -56,7 +56,7 @@ impl Audio for AudioSource {
         self.sample_rate
     }
 
-    fn write_samples(&mut self, clock: ClockTime, buffer: &[Sample]) {
+    fn write_samples(&mut self, clock: Instant, buffer: &[Sample]) {
         self.add_frame(clock, buffer);
     }
 }
@@ -106,11 +106,11 @@ impl AudioMixerInner {
         self.sample_rate
     }
 
-    pub fn sample_duration(&self) -> ClockDuration {
-        ClockDuration::from_secs(1) / self.sample_rate as u64
+    pub fn sample_duration(&self) -> Duration {
+        Duration::from_secs(1) / self.sample_rate as u64
     }
 
-    fn assemble_frame(&mut self, frame_start: ClockTime, frame_duration: ClockDuration) {
+    fn assemble_frame(&mut self, frame_start: Instant, frame_duration: Duration) {
         let sample_duration = self.sample_duration();
         let samples = (frame_duration / sample_duration) as usize;
 
@@ -150,8 +150,8 @@ impl AudioMixerInner {
 use moa_core::{Transmutable, Steppable, Error, System};
 
 impl Steppable for AudioMixer {
-    fn step(&mut self, system: &System) -> Result<ClockDuration, Error> {
-        let duration = ClockDuration::from_millis(1);
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
+        let duration = Duration::from_millis(1);
         // TODO should you make the clock be even further back to ensure the data is already written
         if let Some(start) = system.clock.checked_sub(duration) {
             self.borrow_mut().assemble_frame(start, duration);
@@ -182,15 +182,15 @@ impl Default for AudioOutput {
 }
 
 impl AudioOutput {
-    pub fn add_frame(&self, clock: ClockTime, frame: AudioFrame) {
+    pub fn add_frame(&self, clock: Instant, frame: AudioFrame) {
         self.queue.push(clock, frame);
     }
 
-    pub fn put_back(&self, clock: ClockTime, frame: AudioFrame) {
+    pub fn put_back(&self, clock: Instant, frame: AudioFrame) {
         self.queue.put_back(clock, frame);
     }
 
-    pub fn receive(&self) -> Option<(ClockTime, AudioFrame)> {
+    pub fn receive(&self) -> Option<(Instant, AudioFrame)> {
         self.queue.pop_next()
     }
 
