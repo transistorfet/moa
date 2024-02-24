@@ -24,6 +24,11 @@ of doc comments in the code yet but I plan to eventually write more:
 [rustdocs for moa_core](http://jabberwocky.ca/moa/doc/moa_core/)
 [rustdocs for ym2612](http://jabberwocky.ca/moa/doc/moa_peripherals_yamaha/ym2612/index.html)
 
+This repository uses submodules, so make sure to clone with
+```sh
+git clone --recurse-submodules git@github.com:transistorfet/moa.git
+```
+
 
 Sega Genesis/MegaDrive
 ----------------------
