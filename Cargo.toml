@@ -4,7 +4,6 @@ members = [
     "emulator/frontends/common",
     "emulator/frontends/console",
     "emulator/frontends/minifb",
-    "emulator/cpus/moa-iz80",
     "tests/harte_tests",
     "tests/rad_tests"
 ]
