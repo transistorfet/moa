@@ -8,7 +8,7 @@ default-run = "moa-computie"
 log = "0.4"
 clap = "^4"
 simple_logger = "^2"
-femtos = { path = "../../libraries/femtos" }
+femtos = "0.1"
 
 moa_core = { path = "../../core" }
 moa_common = { path = "../common", features = ["tty"] }

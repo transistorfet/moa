@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 log = "0.4"
-femtos = { path = "../../libraries/femtos" }
+femtos = "0.1"
 moa_core = { path = "../../core" }
 moa_z80 = { path = "../../cpus/z80" }
 

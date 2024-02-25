@@ -463,6 +463,8 @@ dependencies = [
 [[package]]
 name = "femtos"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b90ac969e2dfcc103ec34948f65290b7616edc460922bd6d33ad75f525964f7d"
 
 [[package]]
 name = "flate2"
@@ -574,6 +576,12 @@ name = "itoa"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
+
+[[package]]
+name = "iz80"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76e13cd358184c4b647f19a858246b82e3327ed29c2893d232f01ed016ac5d3c"
 
 [[package]]
 name = "jni"
@@ -722,6 +730,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7810e0be55b428ada41041c41f32c9f1a42817901b4ccf45fa3d4b6561e74c7"
 dependencies = [
  "adler",
+]
+
+[[package]]
+name = "moa-iz80"
+version = "0.1.0"
+dependencies = [
+ "femtos",
+ "iz80",
+ "moa_core",
 ]
 
 [[package]]
