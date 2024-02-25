@@ -1,13 +1,13 @@
 [package]
-name = "moa_systems_genesis"
+name = "moa-systems-genesis"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 log = "0.4"
 femtos = "0.1"
-moa_core = { path = "../../core" }
-moa_peripherals_yamaha = { path = "../../peripherals/yamaha" }
-moa_m68k = { path = "../../cpus/m68k" }
-moa_z80 = { path = "../../cpus/z80" }
+moa-core = { path = "../../core" }
+moa-peripherals-yamaha = { path = "../../peripherals/yamaha" }
+moa-m68k = { path = "../../cpus/m68k" }
+moa-z80 = { path = "../../cpus/z80" }
 

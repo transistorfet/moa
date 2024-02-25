@@ -1,5 +1,5 @@
 [package]
-name = "moa_minifb"
+name = "moa-minifb"
 version = "0.1.0"
 edition = "2021"
 default-run = "moa-genesis"
@@ -11,12 +11,12 @@ clap = "^4"
 simple_logger = "^2"
 femtos = "0.1"
 
-moa_core = { path = "../../core" }
-moa_common = { path = "../common", features = ["audio"] }
+moa-core = { path = "../../core" }
+moa-common = { path = "../common", features = ["audio"] }
 
-moa_systems_genesis = { path = "../../systems/genesis" }
-moa_systems_computie = { path = "../../systems/computie" }
-moa_systems_trs80 = { path = "../../systems/trs80" }
-moa_systems_macintosh = { path = "../../systems/macintosh" }
-moa_peripherals_yamaha = { path = "../../peripherals/yamaha" }
+moa-systems-genesis = { path = "../../systems/genesis" }
+moa-systems-computie = { path = "../../systems/computie" }
+moa-systems-trs80 = { path = "../../systems/trs80" }
+moa-systems-macintosh = { path = "../../systems/macintosh" }
+moa-peripherals-yamaha = { path = "../../peripherals/yamaha" }
 

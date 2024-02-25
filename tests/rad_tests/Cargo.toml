@@ -1,12 +1,12 @@
 [package]
-name = "rad_tests"
+name = "rad-tests"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 femtos = "0.1"
-moa_core = { path = "../../emulator/core" }
-moa_z80 = { path = "../../emulator/cpus/z80" }
+moa-core = { path = "../../emulator/core" }
+moa-z80 = { path = "../../emulator/cpus/z80" }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"

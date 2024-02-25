@@ -1,12 +1,12 @@
 [package]
-name = "moa_systems_macintosh"
+name = "moa-systems-macintosh"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 log = "0.4"
 femtos = "0.1"
-moa_core = { path = "../../core" }
-moa_m68k = { path = "../../cpus/m68k" }
-moa_peripherals_mos = { path = "../../peripherals/mos" }
-moa_peripherals_zilog = { path = "../../peripherals/zilog" }
+moa-core = { path = "../../core" }
+moa-m68k = { path = "../../cpus/m68k" }
+moa-peripherals-mos = { path = "../../peripherals/mos" }
+moa-peripherals-zilog = { path = "../../peripherals/zilog" }

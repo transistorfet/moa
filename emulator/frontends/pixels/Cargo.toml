@@ -1,5 +1,5 @@
 [package]
-name = "moa_pixels"
+name = "moa-pixels"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,10 +9,10 @@ pixels = "0.12"
 winit = "0.28"
 femtos = "0.1"
 
-moa_core = { path = "../../core" }
-moa_common = { path = "../common", features = ["audio"] }
+moa-core = { path = "../../core" }
+moa-common = { path = "../common", features = ["audio"] }
 
-moa_systems_genesis = { path = "../../systems/genesis" }
+moa-systems-genesis = { path = "../../systems/genesis" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"

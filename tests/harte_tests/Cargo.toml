@@ -1,13 +1,13 @@
 [package]
-name = "harte_tests"
+name = "harte-tests"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 femtos = "0.1"
 
-moa_core = { path = "../../emulator/core" }
-moa_m68k = { path = "../../emulator/cpus/m68k" }
+moa-core = { path = "../../emulator/core" }
+moa-m68k = { path = "../../emulator/cpus/m68k" }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"

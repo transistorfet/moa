@@ -1,10 +1,10 @@
 [package]
-name = "moa_m68k"
+name = "moa-m68k"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 log = "0.4"
 femtos = "0.1"
-moa_core = { path = "../../core" }
-moa_parsing = { path = "../../libraries/parsing" }
+moa-core = { path = "../../core" }
+moa-parsing = { path = "../../libraries/parsing" }

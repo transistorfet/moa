@@ -483,14 +483,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
-name = "harte_tests"
+name = "harte-tests"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
  "femtos",
  "flate2",
- "moa_core",
- "moa_m68k",
+ "moa-core",
+ "moa-m68k",
  "serde",
  "serde_derive",
  "serde_json",
@@ -733,48 +733,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "moa-iz80"
-version = "0.1.0"
-dependencies = [
- "femtos",
- "iz80",
- "moa_core",
-]
-
-[[package]]
-name = "moa_audio"
+name = "moa-audio"
 version = "0.1.0"
 
 [[package]]
-name = "moa_common"
+name = "moa-common"
 version = "0.1.0"
 dependencies = [
  "cpal",
  "femtos",
  "log",
- "moa_core",
+ "moa-core",
  "nix 0.25.1",
 ]
 
 [[package]]
-name = "moa_console"
+name = "moa-console"
 version = "0.1.0"
 dependencies = [
  "clap 4.3.3",
  "femtos",
  "log",
- "moa_common",
- "moa_core",
- "moa_m68k",
- "moa_peripherals_generic",
- "moa_peripherals_motorola",
- "moa_systems_computie",
- "moa_systems_genesis",
+ "moa-common",
+ "moa-core",
+ "moa-m68k",
+ "moa-peripherals-generic",
+ "moa-peripherals-motorola",
+ "moa-systems-computie",
+ "moa-systems-genesis",
  "simple_logger",
 ]
 
 [[package]]
-name = "moa_core"
+name = "moa-core"
 version = "0.1.0"
 dependencies = [
  "femtos",
@@ -782,140 +773,149 @@ dependencies = [
 ]
 
 [[package]]
-name = "moa_m68k"
+name = "moa-iz80"
+version = "0.1.0"
+dependencies = [
+ "femtos",
+ "iz80",
+ "moa-core",
+]
+
+[[package]]
+name = "moa-m68k"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
- "moa_parsing",
+ "moa-core",
+ "moa-parsing",
 ]
 
 [[package]]
-name = "moa_minifb"
+name = "moa-minifb"
 version = "0.1.0"
 dependencies = [
  "clap 4.3.3",
  "femtos",
  "log",
  "minifb",
- "moa_common",
- "moa_core",
- "moa_peripherals_yamaha",
- "moa_systems_computie",
- "moa_systems_genesis",
- "moa_systems_macintosh",
- "moa_systems_trs80",
+ "moa-common",
+ "moa-core",
+ "moa-peripherals-yamaha",
+ "moa-systems-computie",
+ "moa-systems-genesis",
+ "moa-systems-macintosh",
+ "moa-systems-trs80",
  "simple_logger",
 ]
 
 [[package]]
-name = "moa_parsing"
+name = "moa-parsing"
 version = "0.1.0"
 dependencies = [
- "moa_core",
+ "moa-core",
 ]
 
 [[package]]
-name = "moa_peripherals_generic"
-version = "0.1.0"
-dependencies = [
- "femtos",
- "log",
- "moa_core",
-]
-
-[[package]]
-name = "moa_peripherals_mos"
+name = "moa-peripherals-generic"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
+ "moa-core",
 ]
 
 [[package]]
-name = "moa_peripherals_motorola"
+name = "moa-peripherals-mos"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
+ "moa-core",
 ]
 
 [[package]]
-name = "moa_peripherals_yamaha"
+name = "moa-peripherals-motorola"
+version = "0.1.0"
+dependencies = [
+ "femtos",
+ "log",
+ "moa-core",
+]
+
+[[package]]
+name = "moa-peripherals-yamaha"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "lazy_static",
  "log",
- "moa_audio",
- "moa_core",
+ "moa-audio",
+ "moa-core",
 ]
 
 [[package]]
-name = "moa_peripherals_zilog"
+name = "moa-peripherals-zilog"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
+ "moa-core",
 ]
 
 [[package]]
-name = "moa_systems_computie"
+name = "moa-systems-computie"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
- "moa_m68k",
- "moa_peripherals_generic",
- "moa_peripherals_motorola",
+ "moa-core",
+ "moa-m68k",
+ "moa-peripherals-generic",
+ "moa-peripherals-motorola",
 ]
 
 [[package]]
-name = "moa_systems_genesis"
+name = "moa-systems-genesis"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
- "moa_m68k",
- "moa_peripherals_yamaha",
- "moa_z80",
+ "moa-core",
+ "moa-m68k",
+ "moa-peripherals-yamaha",
+ "moa-z80",
 ]
 
 [[package]]
-name = "moa_systems_macintosh"
+name = "moa-systems-macintosh"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
- "moa_m68k",
- "moa_peripherals_mos",
- "moa_peripherals_zilog",
+ "moa-core",
+ "moa-m68k",
+ "moa-peripherals-mos",
+ "moa-peripherals-zilog",
 ]
 
 [[package]]
-name = "moa_systems_trs80"
+name = "moa-systems-trs80"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
- "moa_z80",
+ "moa-core",
+ "moa-z80",
 ]
 
 [[package]]
-name = "moa_z80"
+name = "moa-z80"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
- "moa_core",
+ "moa-core",
 ]
 
 [[package]]
@@ -1219,14 +1219,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "rad_tests"
+name = "rad-tests"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
  "femtos",
  "flate2",
- "moa_core",
- "moa_z80",
+ "moa-core",
+ "moa-z80",
  "serde",
  "serde_derive",
  "serde_json",

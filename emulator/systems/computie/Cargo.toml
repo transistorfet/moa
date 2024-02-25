@@ -1,12 +1,12 @@
 [package]
-name = "moa_systems_computie"
+name = "moa-systems-computie"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 log = "0.4"
 femtos = "0.1"
-moa_core = { path = "../../core" }
-moa_m68k = { path = "../../cpus/m68k" }
-moa_peripherals_generic = { path = "../../peripherals/generic" }
-moa_peripherals_motorola = { path = "../../peripherals/motorola" }
+moa-core = { path = "../../core" }
+moa-m68k = { path = "../../cpus/m68k" }
+moa-peripherals-generic = { path = "../../peripherals/generic" }
+moa-peripherals-motorola = { path = "../../peripherals/motorola" }

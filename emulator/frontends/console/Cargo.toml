@@ -1,5 +1,5 @@
 [package]
-name = "moa_console"
+name = "moa-console"
 version = "0.1.0"
 edition = "2021"
 default-run = "moa-computie"
@@ -10,11 +10,11 @@ clap = "^4"
 simple_logger = "^2"
 femtos = "0.1"
 
-moa_core = { path = "../../core" }
-moa_common = { path = "../common", features = ["tty"] }
+moa-core = { path = "../../core" }
+moa-common = { path = "../common", features = ["tty"] }
 
-moa_systems_genesis = { path = "../../systems/genesis" }
-moa_systems_computie = { path = "../../systems/computie" }
-moa_m68k = { path = "../../cpus/m68k" }
-moa_peripherals_generic = { path = "../../peripherals/generic" }
-moa_peripherals_motorola = { path = "../../peripherals/motorola" }
+moa-systems-genesis = { path = "../../systems/genesis" }
+moa-systems-computie = { path = "../../systems/computie" }
+moa-m68k = { path = "../../cpus/m68k" }
+moa-peripherals-generic = { path = "../../peripherals/generic" }
+moa-peripherals-motorola = { path = "../../peripherals/motorola" }

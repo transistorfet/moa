@@ -1,5 +1,5 @@
 [package]
-name = "moa_common"
+name = "moa-common"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,7 +10,7 @@ audio = ["cpal"]
 [dependencies]
 log = "0.4"
 femtos = "0.1"
-moa_core = { path = "../../core" }
+moa-core = { path = "../../core" }
 nix = { version = "0.25", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
