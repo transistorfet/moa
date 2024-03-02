@@ -2,7 +2,7 @@
 use femtos::Duration;
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{self, Host, Frame, FrameSender, Pixel};
+use moa_host::{self, Host, HostError, Frame, FrameSender, Pixel};
 
 
 const SCRN_BASE: u32        = 0x07A700;
@@ -13,8 +13,11 @@ pub struct MacVideo {
 }
 
 impl MacVideo {
-    pub fn new<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let (frame_sender, frame_receiver) = host::frame_queue(SCRN_SIZE.0, SCRN_SIZE.1);
+    pub fn new<H, E>(host: &mut H) -> Result<Self, HostError<E>>
+    where
+        H: Host<Error = E>,
+    {
+        let (frame_sender, frame_receiver) = moa_host::frame_queue(SCRN_SIZE.0, SCRN_SIZE.1);
 
         host.add_video_source(frame_receiver)?;
 

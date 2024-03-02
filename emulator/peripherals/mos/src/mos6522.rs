@@ -1,8 +1,8 @@
 
 use femtos::{Instant, Duration};
 
-use moa_core::{Error, System, Address, Addressable, Steppable, Transmutable, Signal, ObservableSignal, Observable};
-
+use moa_core::{Error, System, Address, Addressable, Steppable, Transmutable};
+use moa_signals::{Signal, ObservableSignal, Observable};
 
 const REG_OUTPUT_B: Address     = 0x00;
 const REG_OUTPUT_A: Address     = 0x01;

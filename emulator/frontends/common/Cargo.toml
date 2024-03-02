@@ -11,6 +11,7 @@ audio = ["cpal"]
 log = "0.4"
 femtos = "0.1"
 moa-core = { path = "../../core" }
+moa-host = { path = "../../libraries/host" }
 nix = { version = "0.25", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

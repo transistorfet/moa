@@ -14,7 +14,7 @@ use wasm_bindgen::closure::Closure;
 
 use femtos::{Duration as FemtosDuration};
 use moa_core::{System, Device};
-use moa_core::host::{ControllerInput, ControllerDevice, ControllerEvent, EventSender};
+use moa_host::{ControllerInput, ControllerDevice, ControllerEvent, EventSender};
 
 use crate::settings;
 use crate::frontend::{self, PixelsFrontend, LoadSystemFn};

@@ -2,7 +2,7 @@
 use femtos::{Instant, Duration};
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{self, Host, Frame, FrameSender, KeyEvent, EventReceiver};
+use moa_host::{self, Host, HostError, Frame, FrameSender, KeyEvent, EventReceiver};
 
 use super::keymap;
 use super::charset::CharacterGenerator;
@@ -18,8 +18,11 @@ pub struct Model1Keyboard {
 }
 
 impl Model1Keyboard {
-    pub fn new<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let (sender, receiver) = host::event_queue();
+    pub fn new<H, E>(host: &mut H) -> Result<Self, HostError<E>>
+    where
+        H: Host<Error = E>,
+    {
+        let (sender, receiver) = moa_host::event_queue();
         host.register_keyboard(sender)?;
 
         Ok(Self {
@@ -86,8 +89,11 @@ pub struct Model1Video {
 }
 
 impl Model1Video {
-    pub fn new<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let (frame_sender, frame_receiver) = host::frame_queue(SCREEN_SIZE.0, SCREEN_SIZE.1);
+    pub fn new<H, E>(host: &mut H) -> Result<Self, HostError<E>>
+    where
+        H: Host<Error = E>,
+    {
+        let (frame_sender, frame_receiver) = moa_host::frame_queue(SCREEN_SIZE.0, SCREEN_SIZE.1);
 
         host.add_video_source(frame_receiver)?;
 

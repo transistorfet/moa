@@ -2,7 +2,7 @@
 use femtos::Frequency;
 
 use moa_core::{System, Error, MemoryBlock, Device};
-use moa_core::host::Host;
+use moa_host::Host;
 
 use moa_z80::{Z80, Z80Type};
 

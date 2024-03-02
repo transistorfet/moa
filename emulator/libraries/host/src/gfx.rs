@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use femtos::Instant;
 
-use crate::host::traits::ClockedQueue;
+use crate::traits::ClockedQueue;
 
 pub const MASK_COLOUR: u32 = 0xFFFFFFFF;
 

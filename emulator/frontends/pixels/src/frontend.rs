@@ -5,7 +5,7 @@ use winit::event::{Event, VirtualKeyCode, WindowEvent, ElementState};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 use moa_core::{System, Error};
-use moa_core::host::{Host, PixelEncoding, Frame, ControllerDevice, ControllerInput, ControllerEvent, EventSender, Audio, DummyAudio, FrameReceiver};
+use moa_host::{Host, HostError, PixelEncoding, Frame, ControllerDevice, ControllerInput, ControllerEvent, EventSender, Audio, DummyAudio, FrameReceiver};
 use moa_common::{AudioMixer, AudioSource, CpalAudioOutput};
 
 use crate::settings;
@@ -45,17 +45,19 @@ impl PixelsFrontend {
 }
 
 impl Host for PixelsFrontend {
-    fn add_video_source(&mut self, receiver: FrameReceiver) -> Result<(), Error> {
+    type Error = Error;
+
+    fn add_video_source(&mut self, receiver: FrameReceiver) -> Result<(), HostError<Self::Error>> {
         self.video = Some(receiver);
         Ok(())
     }
 
-    fn register_controllers(&mut self, sender: EventSender<ControllerEvent>) -> Result<(), Error> {
+    fn register_controllers(&mut self, sender: EventSender<ControllerEvent>) -> Result<(), HostError<Self::Error>> {
         self.controllers = Some(sender);
         Ok(())
     }
 
-    fn add_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
+    fn add_audio_source(&mut self) -> Result<Box<dyn Audio>, HostError<Self::Error>> {
         let source = AudioSource::new(self.mixer.clone());
         Ok(Box::new(source))
         //Ok(Box::new(DummyAudio()))

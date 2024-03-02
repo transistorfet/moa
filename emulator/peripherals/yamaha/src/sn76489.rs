@@ -2,7 +2,7 @@
 use femtos::{Instant, Duration, Frequency};
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{Host, Audio, Sample};
+use moa_host::{Host, HostError, Audio, Sample};
 use moa_audio::SquareWave;
 
 
@@ -94,7 +94,10 @@ pub struct Sn76489 {
 }
 
 impl Sn76489 {
-    pub fn new<H: Host>(host: &mut H, _clock_frequency: Frequency) -> Result<Self, Error> {
+    pub fn new<H, E>(host: &mut H, _clock_frequency: Frequency) -> Result<Self, HostError<E>>
+    where
+        H: Host<Error = E>
+    {
         let source = host.add_audio_source()?;
         let sample_rate = source.samples_per_second();
 

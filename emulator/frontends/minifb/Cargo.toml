@@ -12,8 +12,10 @@ simple_logger = "^2"
 femtos = "0.1"
 
 moa-core = { path = "../../core" }
+moa-host = { path = "../../libraries/host" }
 moa-common = { path = "../common", features = ["audio"] }
 
+moa-debugger = { path = "../../libraries/debugger" }
 moa-systems-genesis = { path = "../../systems/genesis" }
 moa-systems-computie = { path = "../../systems/computie" }
 moa-systems-trs80 = { path = "../../systems/trs80" }

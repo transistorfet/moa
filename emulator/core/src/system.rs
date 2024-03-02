@@ -4,7 +4,7 @@ use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use femtos::{Instant, Duration};
 
-use crate::{Bus, EdgeSignal, Error, InterruptController, Address, Device};
+use crate::{Bus, Error, InterruptController, Address, Device};
 
 
 pub struct System {
@@ -17,8 +17,6 @@ pub struct System {
     pub bus: Rc<RefCell<Bus>>,
     pub buses: HashMap<String, Rc<RefCell<Bus>>>,
     pub interrupt_controller: RefCell<InterruptController>,
-
-    pub break_signal: Option<EdgeSignal>,
 }
 
 impl Default for System {
@@ -33,8 +31,6 @@ impl Default for System {
             bus: Rc::new(RefCell::new(Bus::default())),
             buses: HashMap::new(),
             interrupt_controller: RefCell::new(InterruptController::default()),
-
-            break_signal: None,
         }
     }
 }

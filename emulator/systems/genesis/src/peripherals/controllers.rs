@@ -1,9 +1,9 @@
 
 use femtos::{Instant, Duration};
 
-use moa_core::{System, Error, Signal, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{self, Host, ControllerDevice, ControllerInput, ControllerEvent, EventReceiver};
-
+use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
+use moa_host::{self, Host, HostError, ControllerDevice, ControllerInput, ControllerEvent, EventReceiver};
+use moa_signals::{Signal};
 
 const REG_VERSION: Address      = 0x01;
 const REG_DATA1: Address        = 0x03;
@@ -97,8 +97,11 @@ pub struct GenesisControllers {
 }
 
 impl GenesisControllers {
-    pub fn new<H: Host>(host: &mut H) -> Result<Self, Error> {
-        let (sender, receiver) = host::event_queue();
+    pub fn new<H, E>(host: &mut H) -> Result<Self, HostError<E>>
+    where
+        H: Host<Error = E>,
+    {
+        let (sender, receiver) = moa_host::event_queue();
         host.register_controllers(sender)?;
 
         Ok(Self {

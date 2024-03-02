@@ -9,5 +9,5 @@ pub mod memory;
 pub mod timing;
 pub mod tests;
 
-pub use self::state::{M68k, M68kType};
+pub use self::state::{M68k, M68kType, M68kError};
 

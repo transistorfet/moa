@@ -2,7 +2,7 @@
 use femtos::{Instant, Duration, Frequency};
 
 use moa_core::{System, Error, Address, Steppable, Addressable, Transmutable};
-use moa_core::host::Tty;
+use moa_host::Tty;
 
 
 const REG_MR1A_MR2A: Address = 0x01;

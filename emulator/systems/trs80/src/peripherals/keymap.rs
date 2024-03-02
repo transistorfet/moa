@@ -1,5 +1,5 @@
 
-use moa_core::host::Key;
+use moa_host::Key;
 
 #[inline(always)]
 pub fn set_bit(data: &mut [u8; 8], index: usize, bit: u8, state: bool) {

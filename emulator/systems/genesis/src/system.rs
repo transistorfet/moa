@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use femtos::Frequency;
 
 use moa_core::{System, Error, MemoryBlock, Bus, Address, Addressable, Device};
-use moa_core::host::Host;
+use moa_host::Host;
 
 use moa_m68k::{M68k, M68kType};
 use moa_z80::{Z80, Z80Type};
@@ -45,13 +45,13 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     let rom = MemoryBlock::new(rom_data);
     //rom.read_only();
     let rom_end = rom.size();
-    system.add_addressable_device(0x00000000, Device::new(rom)).unwrap();
+    system.add_addressable_device(0x00000000, Device::new(rom))?;
 
     let cartridge_nvram = MemoryBlock::new(vec![0; 0x400000 - rom_end]);
-    system.add_addressable_device(rom_end as Address, Device::new(cartridge_nvram)).unwrap();
+    system.add_addressable_device(rom_end as Address, Device::new(cartridge_nvram))?;
 
     let ram = MemoryBlock::new(vec![0; 0x00010000]);
-    system.add_addressable_device(0x00ff0000, Device::new(ram)).unwrap();
+    system.add_addressable_device(0x00ff0000, Device::new(ram))?;
 
 
     // Build the Coprocessor's Bus
@@ -86,16 +86,16 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
 
     let controllers = GenesisControllers::new(host)?;
     let interrupt = controllers.get_interrupt_signal();
-    system.add_addressable_device(0x00a10000, Device::new(controllers)).unwrap();
+    system.add_addressable_device(0x00a10000, Device::new(controllers))?;
 
     let coproc = CoprocessorCoordinator::new(reset, bus_request);
-    system.add_addressable_device(0x00a11000, Device::new(coproc)).unwrap();
+    system.add_addressable_device(0x00a11000, Device::new(coproc))?;
 
-    let vdp = Ym7101::new(host, interrupt, coproc_sn_sound);
-    system.add_peripheral("vdp", 0x00c00000, Device::new(vdp)).unwrap();
+    let vdp = Ym7101::new(host, interrupt, coproc_sn_sound)?;
+    system.add_peripheral("vdp", 0x00c00000, Device::new(vdp))?;
 
     let cpu = M68k::from_type(M68kType::MC68000, Frequency::from_hz(7_670_454), system.bus.clone(), 0);
-    system.add_interruptable_device("cpu", Device::new(cpu)).unwrap();
+    system.add_interruptable_device("cpu", Device::new(cpu))?;
 
     Ok(system)
 }

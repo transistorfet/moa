@@ -2,7 +2,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 use femtos::{Instant, Duration};
 
-use moa_core::host::{Audio, Sample, AudioFrame, ClockedQueue};
+use moa_host::{Audio, Sample, AudioFrame, ClockedQueue};
 
 
 pub const SAMPLE_RATE: usize = 48000;

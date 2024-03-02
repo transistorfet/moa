@@ -578,12 +578,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 
 [[package]]
-name = "iz80"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76e13cd358184c4b647f19a858246b82e3327ed29c2893d232f01ed016ac5d3c"
-
-[[package]]
 name = "jni"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -744,6 +738,7 @@ dependencies = [
  "femtos",
  "log",
  "moa-core",
+ "moa-host",
  "nix 0.25.1",
 ]
 
@@ -770,15 +765,23 @@ version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
+ "moa-host",
+ "thiserror",
 ]
 
 [[package]]
-name = "moa-iz80"
+name = "moa-debugger"
+version = "0.1.0"
+dependencies = [
+ "moa-core",
+]
+
+[[package]]
+name = "moa-host"
 version = "0.1.0"
 dependencies = [
  "femtos",
- "iz80",
- "moa-core",
+ "thiserror",
 ]
 
 [[package]]
@@ -789,6 +792,7 @@ dependencies = [
  "log",
  "moa-core",
  "moa-parsing",
+ "thiserror",
 ]
 
 [[package]]
@@ -801,6 +805,8 @@ dependencies = [
  "minifb",
  "moa-common",
  "moa-core",
+ "moa-debugger",
+ "moa-host",
  "moa-peripherals-yamaha",
  "moa-systems-computie",
  "moa-systems-genesis",
@@ -832,6 +838,7 @@ dependencies = [
  "femtos",
  "log",
  "moa-core",
+ "moa-signals",
 ]
 
 [[package]]
@@ -841,6 +848,7 @@ dependencies = [
  "femtos",
  "log",
  "moa-core",
+ "moa-host",
 ]
 
 [[package]]
@@ -852,6 +860,7 @@ dependencies = [
  "log",
  "moa-audio",
  "moa-core",
+ "moa-host",
 ]
 
 [[package]]
@@ -864,12 +873,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "moa-signals"
+version = "0.1.0"
+dependencies = [
+ "femtos",
+]
+
+[[package]]
 name = "moa-systems-computie"
 version = "0.1.0"
 dependencies = [
  "femtos",
  "log",
  "moa-core",
+ "moa-host",
  "moa-m68k",
  "moa-peripherals-generic",
  "moa-peripherals-motorola",
@@ -882,8 +899,10 @@ dependencies = [
  "femtos",
  "log",
  "moa-core",
+ "moa-host",
  "moa-m68k",
  "moa-peripherals-yamaha",
+ "moa-signals",
  "moa-z80",
 ]
 
@@ -894,9 +913,11 @@ dependencies = [
  "femtos",
  "log",
  "moa-core",
+ "moa-host",
  "moa-m68k",
  "moa-peripherals-mos",
  "moa-peripherals-zilog",
+ "moa-signals",
 ]
 
 [[package]]
@@ -906,6 +927,7 @@ dependencies = [
  "femtos",
  "log",
  "moa-core",
+ "moa-host",
  "moa-z80",
 ]
 
@@ -916,6 +938,7 @@ dependencies = [
  "femtos",
  "log",
  "moa-core",
+ "moa-signals",
 ]
 
 [[package]]

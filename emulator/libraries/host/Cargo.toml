@@ -1,0 +1,16 @@
+[package]
+name = "moa-host"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.60"
+categories = ["emulators"]
+keywords = ["emulators"]
+description = "traits for abstracting the I/O of an emulated system to the host"
+authors = ["transistor fet <trans@jabberwocky.ca>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/transistorfet/moa"
+readme = "README.md"
+
+[dependencies]
+femtos = "0.1"
+thiserror = "1.0"

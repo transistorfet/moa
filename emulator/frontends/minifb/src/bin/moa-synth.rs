@@ -3,7 +3,7 @@ use femtos::{Instant, Duration, Frequency};
 
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
-use moa_core::host::{self, Host, Frame, FrameSender, PixelEncoding, Key, KeyEvent, EventReceiver};
+use moa_host::{self, Host, Frame, FrameSender, PixelEncoding, Key, KeyEvent, EventReceiver};
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable, Device};
 
 const SCREEN_WIDTH: u32 = 384;
@@ -85,8 +85,8 @@ fn main() {
     moa_minifb::run(matches, |host| {
         let mut system = System::default();
 
-        let (frame_sender, frame_receiver) = host::frame_queue(SCREEN_WIDTH, SCREEN_HEIGHT);
-        let (key_sender, key_receiver) = host::event_queue();
+        let (frame_sender, frame_receiver) = moa_host::frame_queue(SCREEN_WIDTH, SCREEN_HEIGHT);
+        let (key_sender, key_receiver) = moa_host::event_queue();
         let control = Device::new(SynthControl::new(key_receiver, frame_sender));
         system.add_device("control", control)?;
 

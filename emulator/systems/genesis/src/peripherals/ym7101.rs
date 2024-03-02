@@ -1,9 +1,9 @@
 
 use femtos::{Instant, Duration, Frequency};
 
-use moa_core::{System, Error, EdgeSignal, Signal, Address, Addressable, Steppable, Inspectable, Transmutable, Device, read_beu16, dump_slice};
-use moa_core::host::{self, Host, Pixel, PixelEncoding, Frame, FrameSender};
-
+use moa_core::{System, Error, Address, Addressable, Steppable, Inspectable, Transmutable, Device, read_beu16, dump_slice};
+use moa_host::{self, Host, HostError, Pixel, PixelEncoding, Frame, FrameSender};
+use moa_signals::{EdgeSignal, Signal};
 
 const DEV_NAME: &str = "ym7101";
 
@@ -717,17 +717,20 @@ pub struct Ym7101 {
 }
 
 impl Ym7101 {
-    pub fn new<H: Host>(host: &mut H, external_interrupt: Signal<bool>, sn_sound: Device) -> Ym7101 {
-        let (sender, receiver) = host::frame_queue(320, 224);
-        host.add_video_source(receiver).unwrap();
+    pub fn new<H, E>(host: &mut H, external_interrupt: Signal<bool>, sn_sound: Device) -> Result<Ym7101, HostError<E>>
+    where
+        H: Host<Error = E>,
+    {
+        let (sender, receiver) = moa_host::frame_queue(320, 224);
+        host.add_video_source(receiver)?;
 
-        Ym7101 {
+        Ok(Ym7101 {
             sender,
             state: Ym7101State::default(),
             sn_sound,
             external_interrupt,
             vsync_interrupt: EdgeSignal::default(),
-        }
+        })
     }
 
     fn set_register(&mut self, word: u16) {

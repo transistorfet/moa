@@ -7,5 +7,6 @@ edition = "2021"
 log = "0.4"
 femtos = "0.1"
 moa-core = { path = "../../core" }
+moa-host = { path = "../../libraries/host" }
 moa-z80 = { path = "../../cpus/z80" }
 

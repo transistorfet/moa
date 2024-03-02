@@ -1,6 +1,6 @@
 
 use minifb::Key as MiniKey;
-use moa_core::host::ControllerInput;
+use moa_host::ControllerInput;
 
 pub fn map_controller_a(key: MiniKey, state: bool) -> Option<ControllerInput> {
     match key {

@@ -3,8 +3,8 @@ use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use femtos::Instant;
 
-use moa_core::{Bus, Signal, Error, Address, Addressable, Transmutable};
-
+use moa_core::{Bus, Error, Address, Addressable, Transmutable};
+use moa_signals::Signal;
 
 const DEV_NAME: &str = "coprocessor";
 

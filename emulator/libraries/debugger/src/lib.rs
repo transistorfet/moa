@@ -1,5 +1,5 @@
 
-use crate::{Error, System, Address, Addressable};
+use moa_core::{Error, System, Address, Addressable};
 
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

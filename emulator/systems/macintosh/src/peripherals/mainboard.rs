@@ -3,7 +3,8 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Duration};
 
-use moa_core::{System, Bus, Error, Observable, Address, Addressable, AddressRepeater, Steppable, Transmutable, Device};
+use moa_core::{System, Bus, Error, Address, Addressable, AddressRepeater, Steppable, Transmutable, Device};
+use moa_signals::Observable;
 
 use moa_peripherals_mos::Mos6522;
 use moa_peripherals_zilog::Z8530;

@@ -11,6 +11,7 @@ femtos = "0.1"
 
 moa-core = { path = "../../core" }
 moa-common = { path = "../common", features = ["audio"] }
+moa-host = { path = "../../libraries/host" }
 
 moa-systems-genesis = { path = "../../systems/genesis" }
 

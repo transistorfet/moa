@@ -21,7 +21,7 @@ use lazy_static::lazy_static;
 use femtos::{Instant, Duration, Frequency};
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
-use moa_core::host::{Host, Audio, Sample};
+use moa_host::{Host, HostError, Audio, Sample};
 
 
 /// Table of shift values for each possible rate angle
@@ -739,7 +739,10 @@ pub struct Ym2612 {
 }
 
 impl Ym2612 {
-    pub fn new<H: Host>(host: &mut H, clock_frequency: Frequency) -> Result<Self, Error> {
+    pub fn new<H, E>(host: &mut H, clock_frequency: Frequency) -> Result<Self, HostError<E>>
+    where
+        H: Host<Error = E>,
+    {
         let source = host.add_audio_source()?;
         let fm_clock = clock_frequency / (6 * 24);
         let fm_clock_period = fm_clock.period_duration();

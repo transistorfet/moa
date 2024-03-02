@@ -1,16 +1,21 @@
 
+use std::fmt;
+use std::error::{Error as StdError};
+use moa_host::HostError;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EmulatorErrorKind {
     Misc,
     MemoryAlignment,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, thiserror::Error)]
 pub enum Error {
     Assertion(String),
     Breakpoint(String),
     Emulator(EmulatorErrorKind, String),
     Processor(u32),
+    Other(String),
 }
 
 impl Error {
@@ -50,9 +55,28 @@ impl Error {
         match self {
             Error::Assertion(msg) |
             Error::Breakpoint(msg) |
+            Error::Other(msg) |
             Error::Emulator(_, msg) => msg.as_str(),
             Error::Processor(_) => "native exception",
         }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::Assertion(msg) |
+            Error::Breakpoint(msg) |
+            Error::Other(msg) |
+            Error::Emulator(_, msg) => write!(f, "{}", msg),
+            Error::Processor(_) => write!(f, "native exception"),
+        }
+    }
+}
+
+impl<E> From<HostError<E>> for Error {
+    fn from(err: HostError<E>) -> Self {
+        Self::Other(format!("other"))
     }
 }
 

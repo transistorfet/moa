@@ -8,8 +8,9 @@ use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{Command, Arg, ArgAction, ArgMatches};
 use femtos::{Duration as FemtosDuration};
 
-use moa_core::{System, Error, Device, Debugger, DebugControl};
-use moa_core::host::{Host, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame, FrameReceiver};
+use moa_core::{System, Error, Device};
+use moa_debugger::{Debugger, DebugControl};
+use moa_host::{Host, HostError, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame, FrameReceiver};
 
 use moa_common::{AudioMixer, AudioSource};
 use moa_common::CpalAudioOutput;
@@ -138,38 +139,40 @@ impl MiniFrontendBuilder {
 }
 
 impl Host for MiniFrontendBuilder {
-    fn add_video_source(&mut self, receiver: FrameReceiver) -> Result<(), Error> {
+    type Error = Error;
+
+    fn add_video_source(&mut self, receiver: FrameReceiver) -> Result<(), HostError<Self::Error>> {
         if self.video.is_some() {
-            return Err(Error::new("Only one video source can be registered with this frontend"));
+            return Err(HostError::Specific(Error::new("Only one video source can be registered with this frontend")));
         }
         self.video = Some(receiver);
         Ok(())
     }
 
-    fn add_audio_source(&mut self) -> Result<Box<dyn Audio>, Error> {
+    fn add_audio_source(&mut self) -> Result<Box<dyn Audio>, HostError<Self::Error>> {
         let source = AudioSource::new(self.mixer.as_ref().unwrap().clone());
         Ok(Box::new(source))
     }
 
-    fn register_controllers(&mut self, sender: EventSender<ControllerEvent>) -> Result<(), Error> {
+    fn register_controllers(&mut self, sender: EventSender<ControllerEvent>) -> Result<(), HostError<Self::Error>> {
         if self.controllers.is_some() {
-            return Err(Error::new("A controller updater has already been registered with the frontend"));
+            return Err(HostError::Specific(Error::new("A controller updater has already been registered with the frontend")));
         }
         self.controllers = Some(sender);
         Ok(())
     }
 
-    fn register_keyboard(&mut self, sender: EventSender<KeyEvent>) -> Result<(), Error> {
+    fn register_keyboard(&mut self, sender: EventSender<KeyEvent>) -> Result<(), HostError<Self::Error>> {
         if self.keyboard.is_some() {
-            return Err(Error::new("A keyboard updater has already been registered with the frontend"));
+            return Err(HostError::Specific(Error::new("A keyboard updater has already been registered with the frontend")));
         }
         self.keyboard = Some(sender);
         Ok(())
     }
 
-    fn register_mouse(&mut self, sender: EventSender<MouseEvent>) -> Result<(), Error> {
+    fn register_mouse(&mut self, sender: EventSender<MouseEvent>) -> Result<(), HostError<Self::Error>> {
         if self.mouse.is_some() {
-            return Err(Error::new("A mouse updater has already been registered with the frontend"));
+            return Err(HostError::Specific(Error::new("A mouse updater has already been registered with the frontend")));
         }
         self.mouse = Some(sender);
         Ok(())

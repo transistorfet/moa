@@ -3,7 +3,8 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Frequency};
 
-use moa_core::{Address, Bus, BusPort, Signal};
+use moa_core::{Address, Bus, BusPort};
+use moa_signals::Signal;
 
 use crate::decode::Z80Decoder;
 use crate::debugger::Z80Debugger;

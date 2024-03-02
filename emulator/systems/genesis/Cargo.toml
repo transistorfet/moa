@@ -7,6 +7,8 @@ edition = "2021"
 log = "0.4"
 femtos = "0.1"
 moa-core = { path = "../../core" }
+moa-signals = { path = "../../libraries/signals" }
+moa-host = { path = "../../libraries/host" }
 moa-peripherals-yamaha = { path = "../../peripherals/yamaha" }
 moa-m68k = { path = "../../cpus/m68k" }
 moa-z80 = { path = "../../cpus/z80" }
