@@ -1,7 +1,7 @@
 
-use moa_core::{Error, Address, Addressable};
+use moa_core::{Address, Addressable};
 
-use crate::state::{M68kType, Exceptions};
+use crate::state::{M68kType, M68kError, Exceptions};
 use crate::memory::M68kBusPort;
 use crate::instructions::{
     Size,
@@ -66,13 +66,13 @@ impl M68kDecoder {
         self.end = start;
     }
 
-    pub fn decode_at(&mut self, memory: &mut M68kBusPort, is_supervisor: bool, start: u32) -> Result<(), Error> {
+    pub fn decode_at(&mut self, memory: &mut M68kBusPort, is_supervisor: bool, start: u32) -> Result<(), M68kError> {
         self.init(is_supervisor, start);
         self.instruction = self.decode_next(memory)?;
         Ok(())
     }
 
-    pub fn decode_next(&mut self, memory: &mut M68kBusPort) -> Result<Instruction, Error> {
+    pub fn decode_next(&mut self, memory: &mut M68kBusPort) -> Result<Instruction, M68kError> {
         let ins = self.read_instruction_word(memory)?;
         self.instruction_word = ins;
 
@@ -93,12 +93,12 @@ impl M68kDecoder {
             OPCG_ADD => self.decode_group_add(memory, ins),
             OPCG_SHIFT => self.decode_group_shift(memory, ins),
             OPCG_FLINE => Ok(Instruction::UnimplementedF(ins)),
-            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+            _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
         }
     }
 
     #[inline]
-    fn decode_group_bit_ops(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_bit_ops(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let optype = (ins & 0x0F00) >> 8;
 
         if (ins & 0x13F) == 0x03C {
@@ -109,7 +109,7 @@ impl M68kDecoder {
                         0b0000 => Ok(Instruction::ORtoCCR(data as u8)),
                         0b0010 => Ok(Instruction::ANDtoCCR(data as u8)),
                         0b1010 => Ok(Instruction::EORtoCCR(data as u8)),
-                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                     }
                 },
                 0b01 => {
@@ -118,10 +118,10 @@ impl M68kDecoder {
                         0b0000 => Ok(Instruction::ORtoSR(data)),
                         0b0010 => Ok(Instruction::ANDtoSR(data)),
                         0b1010 => Ok(Instruction::EORtoSR(data)),
-                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                     }
                 },
-                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             }
         } else if (ins & 0x138) == 0x108 {
             let dreg = get_high_reg(ins);
@@ -148,7 +148,7 @@ impl M68kDecoder {
                 0b01 => Ok(Instruction::BCHG(bitnum, target, size)),
                 0b10 => Ok(Instruction::BCLR(bitnum, target, size)),
                 0b11 => Ok(Instruction::BSET(bitnum, target, size)),
-                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             }
         } else {
             let size = get_size(ins);
@@ -156,7 +156,7 @@ impl M68kDecoder {
                 Some(Size::Byte) => self.read_instruction_word(memory)? as u32 & 0xFF,
                 Some(Size::Word) => self.read_instruction_word(memory)? as u32,
                 Some(Size::Long) => self.read_instruction_long(memory)?,
-                None => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                None => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             };
             let target = self.decode_lower_effective_address(memory, ins, size)?;
 
@@ -167,20 +167,20 @@ impl M68kDecoder {
                 0b0110 => Ok(Instruction::ADD(Target::Immediate(data), target, size.unwrap())),
                 0b1010 => Ok(Instruction::EOR(Target::Immediate(data), target, size.unwrap())),
                 0b1100 => Ok(Instruction::CMP(Target::Immediate(data), target, size.unwrap())),
-                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             }
         }
     }
 
     #[inline]
-    fn decode_group_move_byte(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_move_byte(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let src = self.decode_lower_effective_address(memory, ins, Some(Size::Byte))?;
         let dest = self.decode_upper_effective_address(memory, ins, Some(Size::Byte))?;
         Ok(Instruction::MOVE(src, dest, Size::Byte))
     }
 
     #[inline]
-    fn decode_group_move_long(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_move_long(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let src = self.decode_lower_effective_address(memory, ins, Some(Size::Long))?;
         let dest = self.decode_upper_effective_address(memory, ins, Some(Size::Long))?;
         if let Target::DirectAReg(reg) = dest {
@@ -191,7 +191,7 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_move_word(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_move_word(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let src = self.decode_lower_effective_address(memory, ins, Some(Size::Word))?;
         let dest = self.decode_upper_effective_address(memory, ins, Some(Size::Word))?;
         if let Target::DirectAReg(reg) = dest {
@@ -202,7 +202,7 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_misc(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_misc(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let ins_0f00 = ins & 0xF00;
         let ins_00f0 = ins & 0x0F0;
 
@@ -213,7 +213,7 @@ impl M68kDecoder {
                     Some(Size::Long) if self.cputype >= M68kType::MC68020 => Size::Long,
                     // On the 68000, long words in CHK are not supported, but the opcode maps to the word size instruction
                     Some(Size::Long) => Size::Word,
-                    _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                    _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                 };
 
                 let reg = get_high_reg(ins);
@@ -253,7 +253,7 @@ impl M68kDecoder {
                     match get_size(ins) {
                         Some(size) => Ok(Instruction::CLR(target, size)),
                         None if self.cputype >= M68kType::MC68010 => Ok(Instruction::MOVEfromCCR(target)),
-                        None => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        None => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                     }
                 },
                 0b100 => {
@@ -268,7 +268,7 @@ impl M68kDecoder {
                         None => Ok(Instruction::MOVEtoSR(target)),
                     }
                 },
-                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             }
         } else if ins_0f00 == 0x800 || ins_0f00 == 0x900 {
             let opmode = (ins & 0x01C0) >> 6;
@@ -301,7 +301,7 @@ impl M68kDecoder {
                 (0b111, 0b000) => {
                     Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Long))
                 },
-                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             }
         } else if ins_0f00 == 0xA00 {
             if (ins & 0x0FF) == 0xFC {
@@ -360,20 +360,20 @@ impl M68kDecoder {
                         };
                         let creg = match ins2 & 0xFFF {
                             0x801 => ControlRegister::VBR,
-                            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                            _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                         };
                         Ok(Instruction::MOVEC(target, creg, dir))
                     },
-                    _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                    _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                 }
             }
         } else {
-            Err(Error::processor(Exceptions::IllegalInstruction as u32))
+            Err(M68kError::Exception(Exceptions::IllegalInstruction))
         }
     }
 
     #[inline]
-    fn decode_group_addq_subq(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_addq_subq(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         match get_size(ins) {
             Some(size) => {
                 let target = self.decode_lower_effective_address(memory, ins, Some(size))?;
@@ -411,7 +411,7 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_branch(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_branch(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let mut disp = ((ins & 0xFF) as i8) as i32;
         if disp == 0 {
             disp = (self.read_instruction_word(memory)? as i16) as i32;
@@ -427,9 +427,9 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_moveq(&mut self, _memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_moveq(&mut self, _memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         if (ins & 0x0100) != 0 {
-            return Err(Error::processor(Exceptions::IllegalInstruction as u32));
+            return Err(M68kError::Exception(Exceptions::IllegalInstruction));
         }
         let reg = get_high_reg(ins);
         let data = (ins & 0xFF) as u8;
@@ -437,7 +437,7 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_div_or(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_div_or(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let size = get_size(ins);
 
         if (ins & 0x1F0) == 0x100 {
@@ -461,7 +461,7 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_sub(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_sub(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let reg = get_high_reg(ins);
         let dir = (ins & 0x0100) >> 8;
         let size = get_size(ins);
@@ -492,7 +492,7 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_cmp_eor(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_cmp_eor(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let reg = get_high_reg(ins);
         let optype = (ins & 0x0100) >> 8;
         let size = get_size(ins);
@@ -514,12 +514,12 @@ impl M68kDecoder {
                 let target = self.decode_lower_effective_address(memory, ins, Some(size))?;
                 Ok(Instruction::CMPA(target, reg, size))
             },
-            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+            _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
         }
     }
 
     #[inline]
-    fn decode_group_mul_and(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_mul_and(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let size = get_size(ins);
 
         if (ins & 0b0001_1111_0000) == 0b0001_0000_0000 {
@@ -537,7 +537,7 @@ impl M68kDecoder {
                 0b01000 => Ok(Instruction::EXG(Target::DirectDReg(regx), Target::DirectDReg(regy))),
                 0b01001 => Ok(Instruction::EXG(Target::DirectAReg(regx), Target::DirectAReg(regy))),
                 0b10001 => Ok(Instruction::EXG(Target::DirectDReg(regx), Target::DirectAReg(regy))),
-                _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             }
         } else if let Some(size) = size {
             let data_reg = Target::DirectDReg(get_high_reg(ins));
@@ -552,7 +552,7 @@ impl M68kDecoder {
     }
 
     #[inline]
-    fn decode_group_add(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_add(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         let reg = get_high_reg(ins);
         let dir = (ins & 0x0100) >> 8;
         let size = get_size(ins);
@@ -582,7 +582,7 @@ impl M68kDecoder {
         }
     }
 
-    fn decode_group_shift(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, Error> {
+    fn decode_group_shift(&mut self, memory: &mut M68kBusPort, ins: u16) -> Result<Instruction, M68kError> {
         match get_size(ins) {
             Some(size) => {
                 let target = Target::DirectDReg(get_low_reg(ins));
@@ -599,7 +599,7 @@ impl M68kDecoder {
                         0b01 => Ok(Instruction::LSR(count, target, size)),
                         0b10 => Ok(Instruction::ROXR(count, target, size)),
                         0b11 => Ok(Instruction::ROR(count, target, size)),
-                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                     }
                 } else {
                     match (ins & 0x0018) >> 3 {
@@ -607,7 +607,7 @@ impl M68kDecoder {
                         0b01 => Ok(Instruction::LSL(count, target, size)),
                         0b10 => Ok(Instruction::ROXL(count, target, size)),
                         0b11 => Ok(Instruction::ROL(count, target, size)),
-                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                     }
                 }
             },
@@ -623,7 +623,7 @@ impl M68kDecoder {
                             0b01 => Ok(Instruction::LSR(count, target, size)),
                             0b10 => Ok(Instruction::ROXR(count, target, size)),
                             0b11 => Ok(Instruction::ROR(count, target, size)),
-                            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                            _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                         }
                     } else {
                         match (ins & 0x0600) >> 9 {
@@ -631,7 +631,7 @@ impl M68kDecoder {
                             0b01 => Ok(Instruction::LSL(count, target, size)),
                             0b10 => Ok(Instruction::ROXL(count, target, size)),
                             0b11 => Ok(Instruction::ROL(count, target, size)),
-                            _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                            _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                         }
                     }
                 } else if self.cputype > M68kType::MC68020 {
@@ -659,50 +659,50 @@ impl M68kDecoder {
                         0b111 => Ok(Instruction::BFINS(reg, target, offset, width)),
                         0b110 => Ok(Instruction::BFSET(target, offset, width)),
                         0b000 => Ok(Instruction::BFTST(target, offset, width)),
-                        _ => Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                        _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                     }
                 } else {
-                    Err(Error::processor(Exceptions::IllegalInstruction as u32))
+                    Err(M68kError::Exception(Exceptions::IllegalInstruction))
                 }
             },
         }
     }
 
-    fn read_instruction_word(&mut self, memory: &mut M68kBusPort) -> Result<u16, Error> {
+    fn read_instruction_word(&mut self, memory: &mut M68kBusPort) -> Result<u16, M68kError> {
         let word = memory.read_instruction_word(self.is_supervisor, self.end)?;
         self.end += 2;
         Ok(word)
     }
 
-    fn read_instruction_long(&mut self, memory: &mut M68kBusPort) -> Result<u32, Error> {
+    fn read_instruction_long(&mut self, memory: &mut M68kBusPort) -> Result<u32, M68kError> {
         let word = memory.read_instruction_long(self.is_supervisor, self.end)?;
         self.end += 4;
         Ok(word)
     }
 
-    fn decode_lower_effective_address(&mut self, memory: &mut M68kBusPort, ins: u16, size: Option<Size>) -> Result<Target, Error> {
+    fn decode_lower_effective_address(&mut self, memory: &mut M68kBusPort, ins: u16, size: Option<Size>) -> Result<Target, M68kError> {
         let reg = get_low_reg(ins);
         let mode = get_low_mode(ins);
         self.get_mode_as_target(memory, mode, reg, size)
     }
 
-    fn decode_upper_effective_address(&mut self, memory: &mut M68kBusPort, ins: u16, size: Option<Size>) -> Result<Target, Error> {
+    fn decode_upper_effective_address(&mut self, memory: &mut M68kBusPort, ins: u16, size: Option<Size>) -> Result<Target, M68kError> {
         let reg = get_high_reg(ins);
         let mode = get_high_mode(ins);
         self.get_mode_as_target(memory, mode, reg, size)
     }
 
-    fn get_extension_displacement(&mut self, memory: &mut M68kBusPort, select: u16) -> Result<i32, Error> {
+    fn get_extension_displacement(&mut self, memory: &mut M68kBusPort, select: u16) -> Result<i32, M68kError> {
         let result = match select {
             0b00 | 0b01 => 0,
             0b10 => sign_extend_to_long(self.read_instruction_word(memory)? as u32, Size::Word),
             0b11 => self.read_instruction_long(memory)? as i32,
-            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+            _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
         };
         Ok(result)
     }
 
-    fn decode_extension_word(&mut self, memory: &mut M68kBusPort, areg: Option<u8>) -> Result<Target, Error> {
+    fn decode_extension_word(&mut self, memory: &mut M68kBusPort, areg: Option<u8>) -> Result<Target, M68kError> {
         let brief_extension = self.read_instruction_word(memory)?;
 
         let use_brief = (brief_extension & 0x0100) == 0;
@@ -755,7 +755,7 @@ impl M68kDecoder {
         }
     }
 
-    pub(super) fn get_mode_as_target(&mut self, memory: &mut M68kBusPort, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, Error> {
+    pub(super) fn get_mode_as_target(&mut self, memory: &mut M68kBusPort, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, M68kError> {
         let value = match mode {
             0b000 => Target::DirectDReg(reg),
             0b001 => Target::DirectAReg(reg),
@@ -790,14 +790,14 @@ impl M68kDecoder {
                         let data = match size {
                             Some(Size::Byte) | Some(Size::Word) => self.read_instruction_word(memory)? as u32,
                             Some(Size::Long) => self.read_instruction_long(memory)?,
-                            None => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                            None => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                         };
                         Target::Immediate(data)
                     },
-                    _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+                    _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                 }
             },
-            _ => return Err(Error::processor(Exceptions::IllegalInstruction as u32)),
+            _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
         };
         Ok(value)
     }
@@ -813,7 +813,7 @@ impl M68kDecoder {
                 Err(err) => {
                     println!("{:?}", err);
                     match err {
-                        Error::Processor(native) if native == Exceptions::IllegalInstruction as u32 => {
+                        M68kError::Exception(ex) if ex == Exceptions::IllegalInstruction => {
                             println!("    at {:08x}: {:04x}", self.start, memory.port.read_beu16(memory.current_clock, self.start as Address).unwrap());
                         },
                         _ => { },
@@ -825,7 +825,7 @@ impl M68kDecoder {
     }
 
     pub fn dump_decoded(&mut self, memory: &mut M68kBusPort) {
-        let ins_data: Result<String, Error> =
+        let ins_data: Result<String, M68kError> =
             (0..((self.end - self.start) / 2)).map(|offset|
                 Ok(format!("{:04x} ", memory.port.read_beu16(memory.current_clock, (self.start + (offset * 2)) as Address).unwrap()))
             ).collect();

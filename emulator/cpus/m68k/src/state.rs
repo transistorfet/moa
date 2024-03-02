@@ -9,6 +9,7 @@ use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
 use crate::memory::M68kBusPort;
 use crate::timing::M68kInstructionTiming;
+use crate::instructions::Target;
 
 
 pub type ClockCycles = u16;
@@ -89,6 +90,22 @@ pub struct M68kState {
     pub usp: u32,
 
     pub vbr: u32,
+}
+
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum M68kError {
+    #[error("cpu halted")]
+    Halted,
+    #[error("processor exception {0:?}")]
+    Exception(Exceptions),
+    #[error("interrupt vector {0} occurred")]
+    Interrupt(u8),
+    #[error("breakpoint reached")]
+    Breakpoint,
+    #[error("invalid instruction target, direct value used as a pointer: {0:?}")]
+    InvalidTarget(Target),
+    #[error("error: {0}")]
+    Other(String),
 }
 
 #[derive(Clone)]

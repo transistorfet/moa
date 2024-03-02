@@ -251,7 +251,8 @@ mod decode_unit_tests {
 
 #[cfg(test)]
 mod execute_unit_tests {
-    use moa_core::{System, MemoryBlock, BusPort, Instant, Frequency, Address, Addressable, Steppable, Device};
+    use femtos::{Instant, Frequency};
+    use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, Device};
 
     use crate::{M68k, M68kType};
     use crate::execute::Used;
