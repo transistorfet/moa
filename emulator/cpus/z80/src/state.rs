@@ -9,7 +9,7 @@ use moa_signals::Signal;
 use crate::decode::Z80Decoder;
 use crate::debugger::Z80Debugger;
 use crate::execute::Z80Executor;
-use crate::instructions::{Register, InterruptMode};
+use crate::instructions::{Instruction, Register, InterruptMode};
 
 
 #[allow(dead_code)]
@@ -90,6 +90,18 @@ impl Z80State {
     pub fn set_register(&mut self, reg: Register, value: u8) {
         self.reg[reg as usize] = value;
     }
+}
+
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum Z80Error {
+    #[error("cpu halted")]
+    Halted,
+    #[error("breakpoint reached")]
+    Breakpoint,
+    #[error("unimplemented instruction {0:?}")]
+    Unimplemented(Instruction),
+    #[error("bus error: {0}")]
+    BusError(String),
 }
 
 #[derive(Clone)]

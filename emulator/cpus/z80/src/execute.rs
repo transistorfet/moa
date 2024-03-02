@@ -4,7 +4,7 @@ use femtos::{Instant, Duration};
 use moa_core::{System, Error, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
 use crate::instructions::{Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister, IndexRegisterHalf, Size, Direction, UndocumentedCopy};
-use crate::state::{Z80, Status, Flags};
+use crate::state::{Z80, Z80Error, Status, Flags};
 use crate::timing::Z80InstructionCycles;
 
 
@@ -55,7 +55,27 @@ impl Transmutable for Z80 {
     }
 }
 
+impl From<Z80Error> for Error {
+    fn from(err: Z80Error) -> Self {
+        match err {
+            Z80Error::Halted => Self::Other("cpu halted".to_string()),
+            Z80Error::Breakpoint => Self::Breakpoint("breakpoint".to_string()),
+            Z80Error::Unimplemented(instruction) => Self::new(format!("unimplemented instruction {:?}", instruction)),
+            Z80Error::BusError(msg) => Self::Other(msg),
+        }
+    }
+}
 
+impl From<Error> for Z80Error {
+    fn from(err: Error) -> Self {
+        match err {
+            Error::Processor(ex) => Z80Error::BusError(format!("processor error {}", ex)),
+            Error::Breakpoint(msg) => Z80Error::Breakpoint,
+            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => Z80Error::BusError(format!("{}", msg)),
+        }
+    }
+
+}
 #[derive(Clone)]
 pub struct Z80Executor {
     pub current_clock: Instant,
@@ -72,35 +92,32 @@ impl Z80Executor {
 }
 
 impl Z80 {
-    pub fn step_internal(&mut self, system: &System) -> Result<u16, Error> {
+    pub fn step_internal(&mut self, system: &System) -> Result<u16, Z80Error> {
         self.executor = Z80Executor::at_time(system.clock);
         match self.state.status {
             Status::Init => self.init(),
-            Status::Halted => Err(Error::new("CPU stopped")),
+            Status::Halted => Err(Z80Error::Halted),
             Status::Running => {
                 match self.cycle_one() {
                     Ok(clocks) => Ok(clocks),
-                    Err(Error::Processor(_)) => {
-                        Ok(4)
-                    },
                     Err(err) => Err(err),
                 }
             },
         }
     }
 
-    pub fn init(&mut self) -> Result<u16, Error> {
+    pub fn init(&mut self) -> Result<u16, Z80Error> {
         self.state.pc = 0;
         self.state.status = Status::Running;
         Ok(16)
     }
 
-    pub fn reset(&mut self) -> Result<u16, Error> {
+    pub fn reset(&mut self) -> Result<u16, Z80Error> {
         self.clear_state();
         Ok(16)
     }
 
-    pub fn cycle_one(&mut self) -> Result<u16, Error> {
+    pub fn cycle_one(&mut self) -> Result<u16, Z80Error> {
         self.check_breakpoints()?;
 
         self.decode_next()?;
@@ -109,14 +126,14 @@ impl Z80 {
             .calculate_cycles(self.executor.took_branch))
     }
 
-    pub fn decode_next(&mut self) -> Result<(), Error> {
+    pub fn decode_next(&mut self) -> Result<(), Z80Error> {
         self.decoder.decode_at(&mut self.port, self.executor.current_clock, self.state.pc)?;
         self.increment_refresh(self.decoder.end.saturating_sub(self.decoder.start) as u8);
         self.state.pc = self.decoder.end;
         Ok(())
     }
 
-    pub fn execute_current(&mut self) -> Result<(), Error> {
+    pub fn execute_current(&mut self) -> Result<(), Z80Error> {
         match self.decoder.instruction {
             Instruction::ADCa(target) => self.execute_adca(target),
             Instruction::ADC16(dest_pair, src_pair) => self.execute_adc16(dest_pair, src_pair),
@@ -216,12 +233,12 @@ impl Z80 {
             Instruction::SUB(target) => self.execute_sub(target),
             Instruction::XOR(target) => self.execute_xor(target),
             _ => {
-                Err(Error::new(format!("{}: unimplemented instruction: {:?}", DEV_NAME, self.decoder.instruction)))
+                Err(Z80Error::Unimplemented(self.decoder.instruction.clone()))
             }
         }
     }
 
-    fn execute_adca(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_adca(&mut self, target: Target) -> Result<(), Z80Error> {
         let src = self.get_target_value(target)?;
         let acc = self.get_register_value(Register::A);
 
@@ -233,7 +250,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_adc16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Error> {
+    fn execute_adc16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Z80Error> {
         let src = self.get_register_pair_value(src_pair);
         let dest = self.get_register_pair_value(dest_pair);
 
@@ -245,7 +262,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_adda(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_adda(&mut self, target: Target) -> Result<(), Z80Error> {
         let src = self.get_target_value(target)?;
         let acc = self.get_register_value(Register::A);
 
@@ -256,7 +273,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_add16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Error> {
+    fn execute_add16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Z80Error> {
         let src = self.get_register_pair_value(src_pair);
         let dest = self.get_register_pair_value(dest_pair);
 
@@ -269,7 +286,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_and(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_and(&mut self, target: Target) -> Result<(), Z80Error> {
         let acc = self.get_register_value(Register::A);
         let value = self.get_target_value(target)?;
         let result = acc & value;
@@ -278,7 +295,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_bit(&mut self, bit: u8, target: Target) -> Result<(), Error> {
+    fn execute_bit(&mut self, bit: u8, target: Target) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let result = value & (1 << bit);
         self.set_flag(Flags::Zero, result == 0);
@@ -289,13 +306,13 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_call(&mut self, addr: u16) -> Result<(), Error> {
+    fn execute_call(&mut self, addr: u16) -> Result<(), Z80Error> {
         self.push_word(self.decoder.end)?;
         self.state.pc = addr;
         Ok(())
     }
 
-    fn execute_callcc(&mut self, cond: Condition, addr: u16) -> Result<(), Error> {
+    fn execute_callcc(&mut self, cond: Condition, addr: u16) -> Result<(), Z80Error> {
         if self.get_current_condition(cond) {
             self.executor.took_branch = true;
             self.push_word(self.decoder.end)?;
@@ -304,14 +321,14 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_ccf(&mut self) -> Result<(), Error> {
+    fn execute_ccf(&mut self) -> Result<(), Z80Error> {
         self.set_flag(Flags::AddSubtract, false);
         self.set_flag(Flags::HalfCarry, self.get_flag(Flags::Carry));
         self.set_flag(Flags::Carry, !self.get_flag(Flags::Carry));
         Ok(())
     }
 
-    fn execute_cp(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_cp(&mut self, target: Target) -> Result<(), Z80Error> {
         let src = self.get_target_value(target)?;
         let acc = self.get_register_value(Register::A);
 
@@ -329,7 +346,7 @@ impl Z80 {
     //Instruction::CPIR => {
     //}
 
-    fn execute_cpl(&mut self) -> Result<(), Error> {
+    fn execute_cpl(&mut self) -> Result<(), Z80Error> {
         let value = self.get_register_value(Register::A);
         self.set_register_value(Register::A, !value);
         self.set_flag(Flags::HalfCarry, true);
@@ -337,7 +354,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_daa(&mut self) -> Result<(), Error> {
+    fn execute_daa(&mut self) -> Result<(), Z80Error> {
         // From <http://z80-heaven.wikidot.com/instructions-set:daa>
         // if the least significant four bits of A contain a non-BCD digit (i. e. it is
         // greater than 9) or the H flag is set, then $06 is added to the register. Then
@@ -382,7 +399,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_dec16(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+    fn execute_dec16(&mut self, regpair: RegisterPair) -> Result<(), Z80Error> {
         let value = self.get_register_pair_value(regpair);
 
         let (result, _, _, _) = sub_words(value, 1);
@@ -391,7 +408,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_dec8(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_dec8(&mut self, target: Target) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
 
         let (result, _, overflow, half_carry) = sub_bytes(value, 1);
@@ -402,13 +419,13 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_di(&mut self) -> Result<(), Error> {
+    fn execute_di(&mut self) -> Result<(), Z80Error> {
         self.state.iff1 = false;
         self.state.iff2 = false;
         Ok(())
     }
 
-    fn execute_djnz(&mut self, offset: i8) -> Result<(), Error> {
+    fn execute_djnz(&mut self, offset: i8) -> Result<(), Z80Error> {
         let value = self.get_register_value(Register::B);
         let result = value.wrapping_sub(1);
         self.set_register_value(Register::B, result);
@@ -420,13 +437,13 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_ei(&mut self) -> Result<(), Error> {
+    fn execute_ei(&mut self) -> Result<(), Z80Error> {
         self.state.iff1 = true;
         self.state.iff2 = true;
         Ok(())
     }
 
-    fn execute_exx(&mut self) -> Result<(), Error> {
+    fn execute_exx(&mut self) -> Result<(), Z80Error> {
         for i in 0..6 {
             let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
             self.state.reg[i] = shadow;
@@ -435,7 +452,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_ex_af_af(&mut self) -> Result<(), Error> {
+    fn execute_ex_af_af(&mut self) -> Result<(), Z80Error> {
         for i in 6..8 {
             let (normal, shadow) = (self.state.reg[i], self.state.shadow_reg[i]);
             self.state.reg[i] = shadow;
@@ -444,14 +461,14 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_ex_hl_de(&mut self) -> Result<(), Error> {
+    fn execute_ex_hl_de(&mut self) -> Result<(), Z80Error> {
         let (hl, de) = (self.get_register_pair_value(RegisterPair::HL), self.get_register_pair_value(RegisterPair::DE));
         self.set_register_pair_value(RegisterPair::DE, hl);
         self.set_register_pair_value(RegisterPair::HL, de);
         Ok(())
     }
 
-    fn execute_ex_sp(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+    fn execute_ex_sp(&mut self, regpair: RegisterPair) -> Result<(), Z80Error> {
         let reg_value = self.get_register_pair_value(regpair);
         let sp = self.get_register_pair_value(RegisterPair::SP);
         let sp_value = self.read_port_u16(sp)?;
@@ -460,18 +477,18 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_halt(&mut self) -> Result<(), Error> {
+    fn execute_halt(&mut self) -> Result<(), Z80Error> {
         self.state.status = Status::Halted;
         self.state.pc -= 1;
         Ok(())
     }
 
-    fn execute_im(&mut self, mode: InterruptMode) -> Result<(), Error> {
+    fn execute_im(&mut self, mode: InterruptMode) -> Result<(), Z80Error> {
         self.state.im = mode;
         Ok(())
     }
 
-    fn execute_inc16(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+    fn execute_inc16(&mut self, regpair: RegisterPair) -> Result<(), Z80Error> {
         let value = self.get_register_pair_value(regpair);
 
         let (result, _, _, _) = add_words(value, 1);
@@ -480,7 +497,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_inc8(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_inc8(&mut self, target: Target) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let (result, _, overflow, half_carry) = add_bytes(value, 1);
         let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
@@ -495,7 +512,7 @@ impl Z80 {
     //Instruction::INDR => {
     //}
 
-    fn execute_ini(&mut self) -> Result<(), Error> {
+    fn execute_ini(&mut self) -> Result<(), Z80Error> {
         let b = self.get_register_value(Register::B);
         let c = self.get_register_value(Register::C);
         let value = self.read_ioport_value(b, c)?;
@@ -511,7 +528,7 @@ impl Z80 {
     //Instruction::INIR => {
     //}
 
-    fn execute_inic(&mut self, reg: Register) -> Result<(), Error> {
+    fn execute_inic(&mut self, reg: Register) -> Result<(), Z80Error> {
         let b = self.get_register_value(Register::B);
         let c = self.get_register_value(Register::C);
         let value = self.read_ioport_value(b, c)?;
@@ -527,25 +544,25 @@ impl Z80 {
     //Instruction::INicz => {
     //}
 
-    fn execute_inx(&mut self, n: u8) -> Result<(), Error> {
+    fn execute_inx(&mut self, n: u8) -> Result<(), Z80Error> {
         let a = self.get_register_value(Register::A);
         let value = self.read_ioport_value(a, n)?;
         self.set_register_value(Register::A, value);
         Ok(())
     }
 
-    fn execute_jp(&mut self, addr: u16) -> Result<(), Error> {
+    fn execute_jp(&mut self, addr: u16) -> Result<(), Z80Error> {
         self.state.pc = addr;
         Ok(())
     }
 
-    fn execute_jp_indirect(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+    fn execute_jp_indirect(&mut self, regpair: RegisterPair) -> Result<(), Z80Error> {
         let value = self.get_register_pair_value(regpair);
         self.state.pc = value;
         Ok(())
     }
 
-    fn execute_jpcc(&mut self, cond: Condition, addr: u16) -> Result<(), Error> {
+    fn execute_jpcc(&mut self, cond: Condition, addr: u16) -> Result<(), Z80Error> {
         if self.get_current_condition(cond) {
             self.executor.took_branch = true;
             self.state.pc = addr;
@@ -553,12 +570,12 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_jr(&mut self, offset: i8) -> Result<(), Error> {
+    fn execute_jr(&mut self, offset: i8) -> Result<(), Z80Error> {
         self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
         Ok(())
     }
 
-    fn execute_jrcc(&mut self, cond: Condition, offset: i8) -> Result<(), Error> {
+    fn execute_jrcc(&mut self, cond: Condition, offset: i8) -> Result<(), Z80Error> {
         if self.get_current_condition(cond) {
             self.executor.took_branch = true;
             self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
@@ -566,13 +583,13 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_ld(&mut self, dest: LoadTarget, src: LoadTarget) -> Result<(), Error> {
+    fn execute_ld(&mut self, dest: LoadTarget, src: LoadTarget) -> Result<(), Z80Error> {
         let src_value = self.get_load_target_value(src)?;
         self.set_load_target_value(dest, src_value)?;
         Ok(())
     }
 
-    fn execute_ldsr(&mut self, special_reg: SpecialRegister, dir: Direction) -> Result<(), Error> {
+    fn execute_ldsr(&mut self, special_reg: SpecialRegister, dir: Direction) -> Result<(), Z80Error> {
         let addr = match special_reg {
             SpecialRegister::I => &mut self.state.i,
             SpecialRegister::R => &mut self.state.r,
@@ -595,7 +612,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_ldx(&mut self) -> Result<(), Error> {
+    fn execute_ldx(&mut self) -> Result<(), Z80Error> {
         let diff = if self.decoder.instruction == Instruction::LDI || self.decoder.instruction == Instruction::LDIR {
             1
         } else {
@@ -620,7 +637,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_neg(&mut self) -> Result<(), Error> {
+    fn execute_neg(&mut self) -> Result<(), Z80Error> {
         let acc = self.get_register_value(Register::A);
 
         let (result, carry, overflow, half_carry) = sub_bytes(0, acc);
@@ -630,7 +647,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_or(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_or(&mut self, target: Target) -> Result<(), Z80Error> {
         let acc = self.get_register_value(Register::A);
         let value = self.get_target_value(target)?;
         let result = acc | value;
@@ -648,7 +665,7 @@ impl Z80 {
     //Instruction::OUTI => {
     //}
 
-    fn execute_outic(&mut self, reg: Register) -> Result<(), Error> {
+    fn execute_outic(&mut self, reg: Register) -> Result<(), Z80Error> {
         let b = self.get_register_value(Register::B);
         let c = self.get_register_value(Register::C);
         let value = self.get_register_value(reg);
@@ -659,26 +676,26 @@ impl Z80 {
     //Instruction::OUTicz => {
     //}
 
-    fn execute_outx(&mut self, n: u8) -> Result<(), Error> {
+    fn execute_outx(&mut self, n: u8) -> Result<(), Z80Error> {
         let a = self.get_register_value(Register::A);
         let value = self.get_register_value(Register::A);
         self.write_ioport_value(a, n, value)?;
         Ok(())
     }
 
-    fn execute_pop(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+    fn execute_pop(&mut self, regpair: RegisterPair) -> Result<(), Z80Error> {
         let value = self.pop_word()?;
         self.set_register_pair_value(regpair, value);
         Ok(())
     }
 
-    fn execute_push(&mut self, regpair: RegisterPair) -> Result<(), Error> {
+    fn execute_push(&mut self, regpair: RegisterPair) -> Result<(), Z80Error> {
         let value = self.get_register_pair_value(regpair);
         self.push_word(value)?;
         Ok(())
     }
 
-    fn execute_res(&mut self, bit: u8, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_res(&mut self, bit: u8, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let mut value = self.get_target_value(target)?;
         value &= !(1 << bit);
         self.set_target_value(target, value)?;
@@ -688,24 +705,24 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_ret(&mut self) -> Result<(), Error> {
+    fn execute_ret(&mut self) -> Result<(), Z80Error> {
         self.state.pc = self.pop_word()?;
         Ok(())
     }
 
-    fn execute_reti(&mut self) -> Result<(), Error> {
-        self.state.pc = self.pop_word()?;
-        self.state.iff1 = self.state.iff2;
-        Ok(())
-    }
-
-    fn execute_retn(&mut self) -> Result<(), Error> {
+    fn execute_reti(&mut self) -> Result<(), Z80Error> {
         self.state.pc = self.pop_word()?;
         self.state.iff1 = self.state.iff2;
         Ok(())
     }
 
-    fn execute_retcc(&mut self, cond: Condition) -> Result<(), Error> {
+    fn execute_retn(&mut self) -> Result<(), Z80Error> {
+        self.state.pc = self.pop_word()?;
+        self.state.iff1 = self.state.iff2;
+        Ok(())
+    }
+
+    fn execute_retcc(&mut self, cond: Condition) -> Result<(), Z80Error> {
         if self.get_current_condition(cond) {
             self.executor.took_branch = true;
             self.state.pc = self.pop_word()?;
@@ -713,7 +730,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rl(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_rl(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
         self.set_logic_op_flags(result, out_bit, false);
@@ -724,7 +741,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rla(&mut self) -> Result<(), Error> {
+    fn execute_rla(&mut self) -> Result<(), Z80Error> {
         let value = self.get_register_value(Register::A);
         let (result, out_bit) = self.rotate_left(value, RotateType::Bit9);
         self.set_flag(Flags::AddSubtract, false);
@@ -734,7 +751,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rlc(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_rlc(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
         self.set_logic_op_flags(result, out_bit, false);
@@ -745,7 +762,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rlca(&mut self) -> Result<(), Error> {
+    fn execute_rlca(&mut self) -> Result<(), Z80Error> {
         let value = self.get_register_value(Register::A);
         let (result, out_bit) = self.rotate_left(value, RotateType::Bit8);
         self.set_flag(Flags::AddSubtract, false);
@@ -755,7 +772,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rld(&mut self) -> Result<(), Error> {
+    fn execute_rld(&mut self) -> Result<(), Z80Error> {
         let a = self.get_register_value(Register::A);
         let mem = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))? as u8;
 
@@ -773,7 +790,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rr(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_rr(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
         self.set_logic_op_flags(result, out_bit, false);
@@ -784,7 +801,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rra(&mut self) -> Result<(), Error> {
+    fn execute_rra(&mut self) -> Result<(), Z80Error> {
         let value = self.get_register_value(Register::A);
         let (result, out_bit) = self.rotate_right(value, RotateType::Bit9);
         self.set_flag(Flags::AddSubtract, false);
@@ -794,7 +811,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rrc(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_rrc(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
         self.set_logic_op_flags(result, out_bit, false);
@@ -805,7 +822,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rrca(&mut self) -> Result<(), Error> {
+    fn execute_rrca(&mut self) -> Result<(), Z80Error> {
         let value = self.get_register_value(Register::A);
         let (result, out_bit) = self.rotate_right(value, RotateType::Bit8);
         self.set_flag(Flags::AddSubtract, false);
@@ -815,7 +832,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rrd(&mut self) -> Result<(), Error> {
+    fn execute_rrd(&mut self) -> Result<(), Z80Error> {
         let a = self.get_register_value(Register::A);
         let mem = self.get_load_target_value(LoadTarget::IndirectRegByte(RegisterPair::HL))? as u8;
 
@@ -833,13 +850,13 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_rst(&mut self, addr: u8) -> Result<(), Error> {
+    fn execute_rst(&mut self, addr: u8) -> Result<(), Z80Error> {
         self.push_word(self.decoder.end)?;
         self.state.pc = addr as u16;
         Ok(())
     }
 
-    fn execute_sbca(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_sbca(&mut self, target: Target) -> Result<(), Z80Error> {
         let src = self.get_target_value(target)?;
         let acc = self.get_register_value(Register::A);
 
@@ -851,7 +868,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_sbc16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Error> {
+    fn execute_sbc16(&mut self, dest_pair: RegisterPair, src_pair: RegisterPair) -> Result<(), Z80Error> {
         let src = self.get_register_pair_value(src_pair);
         let dest = self.get_register_pair_value(dest_pair);
 
@@ -863,14 +880,14 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_scf(&mut self) -> Result<(), Error> {
+    fn execute_scf(&mut self) -> Result<(), Z80Error> {
         self.set_flag(Flags::AddSubtract, false);
         self.set_flag(Flags::HalfCarry, false);
         self.set_flag(Flags::Carry, true);
         Ok(())
     }
 
-    fn execute_set(&mut self, bit: u8, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_set(&mut self, bit: u8, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let mut value = self.get_target_value(target)?;
         value |= 1 << bit;
         self.set_target_value(target, value)?;
@@ -880,7 +897,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_sla(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_sla(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let out_bit = get_msb(value as u16, Size::Byte);
         let result = value << 1;
@@ -892,7 +909,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_sll(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_sll(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let out_bit = get_msb(value as u16, Size::Byte);
         let result = (value << 1) | 0x01;
@@ -904,7 +921,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_sra(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_sra(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let out_bit = (value & 0x01) != 0;
         let msb_mask = if get_msb(value as u16, Size::Byte) { 0x80 } else { 0 };
@@ -917,7 +934,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_srl(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Error> {
+    fn execute_srl(&mut self, target: Target, opt_copy: UndocumentedCopy) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let out_bit = (value & 0x01) != 0;
         let result = value >> 1;
@@ -929,7 +946,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_sub(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_sub(&mut self, target: Target) -> Result<(), Z80Error> {
         let src = self.get_target_value(target)?;
         let acc = self.get_register_value(Register::A);
 
@@ -940,7 +957,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn execute_xor(&mut self, target: Target) -> Result<(), Error> {
+    fn execute_xor(&mut self, target: Target) -> Result<(), Z80Error> {
         let acc = self.get_register_value(Register::A);
         let value = self.get_target_value(target)?;
         let result = acc ^ value;
@@ -992,7 +1009,7 @@ impl Z80 {
 
 
 
-    fn push_word(&mut self, value: u16) -> Result<(), Error> {
+    fn push_word(&mut self, value: u16) -> Result<(), Z80Error> {
         self.state.sp = self.state.sp.wrapping_sub(1);
         self.write_port_u8(self.state.sp, (value >> 8) as u8)?;
         self.state.sp = self.state.sp.wrapping_sub(1);
@@ -1000,7 +1017,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn pop_word(&mut self) -> Result<u16, Error> {
+    fn pop_word(&mut self) -> Result<u16, Z80Error> {
         let mut value;
         value = self.read_port_u8(self.state.sp)? as u16;
         self.state.sp = self.state.sp.wrapping_add(1);
@@ -1009,7 +1026,7 @@ impl Z80 {
         Ok(value)
     }
 
-    fn get_load_target_value(&mut self, target: LoadTarget) -> Result<u16, Error> {
+    fn get_load_target_value(&mut self, target: LoadTarget) -> Result<u16, Z80Error> {
         let value = match target {
             LoadTarget::DirectRegByte(reg) => self.get_register_value(reg) as u16,
             LoadTarget::DirectRegHalfByte(reg) => self.get_index_register_half_value(reg) as u16,
@@ -1039,7 +1056,7 @@ impl Z80 {
         Ok(value)
     }
 
-    fn set_load_target_value(&mut self, target: LoadTarget, value: u16) -> Result<(), Error> {
+    fn set_load_target_value(&mut self, target: LoadTarget, value: u16) -> Result<(), Z80Error> {
         match target {
             LoadTarget::DirectRegByte(reg) => self.set_register_value(reg, value as u8),
             LoadTarget::DirectRegHalfByte(reg) => self.set_index_register_half_value(reg, value as u8),
@@ -1067,7 +1084,7 @@ impl Z80 {
         Ok(())
     }
 
-    fn get_target_value(&mut self, target: Target) -> Result<u8, Error> {
+    fn get_target_value(&mut self, target: Target) -> Result<u8, Z80Error> {
         match target {
             Target::DirectReg(reg) => Ok(self.get_register_value(reg)),
             Target::DirectRegHalf(reg) => Ok(self.get_index_register_half_value(reg)),
@@ -1083,7 +1100,7 @@ impl Z80 {
         }
     }
 
-    fn set_target_value(&mut self, target: Target, value: u8) -> Result<(), Error> {
+    fn set_target_value(&mut self, target: Target, value: u8) -> Result<(), Z80Error> {
         match target {
             Target::DirectReg(reg) => self.set_register_value(reg, value),
             Target::DirectRegHalf(reg) => self.set_index_register_half_value(reg, value),
@@ -1104,27 +1121,27 @@ impl Z80 {
         self.state.r = (self.state.r & 0x80) | ((self.state.r + count) & 0x7F);
     }
 
-    fn read_port_u8(&mut self, addr: u16) -> Result<u8, Error> {
+    fn read_port_u8(&mut self, addr: u16) -> Result<u8, Z80Error> {
         self.increment_refresh(1);
-        self.port.read_u8(self.executor.current_clock, addr as Address)
+        Ok(self.port.read_u8(self.executor.current_clock, addr as Address)?)
     }
 
-    fn write_port_u8(&mut self, addr: u16, value: u8) -> Result<(), Error> {
+    fn write_port_u8(&mut self, addr: u16, value: u8) -> Result<(), Z80Error> {
         self.increment_refresh(1);
-        self.port.write_u8(self.executor.current_clock, addr as Address, value)
+        Ok(self.port.write_u8(self.executor.current_clock, addr as Address, value)?)
     }
 
-    fn read_port_u16(&mut self, addr: u16) -> Result<u16, Error> {
+    fn read_port_u16(&mut self, addr: u16) -> Result<u16, Z80Error> {
         self.increment_refresh(2);
-        self.port.read_leu16(self.executor.current_clock, addr as Address)
+        Ok(self.port.read_leu16(self.executor.current_clock, addr as Address)?)
     }
 
-    fn write_port_u16(&mut self, addr: u16, value: u16) -> Result<(), Error> {
+    fn write_port_u16(&mut self, addr: u16, value: u16) -> Result<(), Z80Error> {
         self.increment_refresh(2);
-        self.port.write_leu16(self.executor.current_clock, addr as Address, value)
+        Ok(self.port.write_leu16(self.executor.current_clock, addr as Address, value)?)
     }
 
-    fn read_ioport_value(&mut self, upper: u8, lower: u8) -> Result<u8, Error> {
+    fn read_ioport_value(&mut self, upper: u8, lower: u8) -> Result<u8, Z80Error> {
         let addr = ((upper as Address) << 8) | (lower as Address);
         if let Some(io) = self.ioport.as_mut() {
             Ok(io.read_u8(self.executor.current_clock, addr)?)
@@ -1133,7 +1150,7 @@ impl Z80 {
         }
     }
 
-    fn write_ioport_value(&mut self, upper: u8, lower: u8, value: u8) -> Result<(), Error> {
+    fn write_ioport_value(&mut self, upper: u8, lower: u8, value: u8) -> Result<(), Z80Error> {
         let addr = ((upper as Address) << 8) | (lower as Address);
         if let Some(io) = self.ioport.as_mut() {
             io.write_u8(self.executor.current_clock, addr, value)?

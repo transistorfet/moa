@@ -1,8 +1,9 @@
 
 use femtos::Instant;
 
-use moa_core::{Error, Address, Addressable};
+use moa_core::{Address, Addressable};
 
+use crate::state::Z80Error;
 use crate::instructions::{Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target, LoadTarget, UndocumentedCopy, Instruction};
 
 #[derive(Clone)]
@@ -27,7 +28,7 @@ impl Default for Z80Decoder {
 }
 
 impl Z80Decoder {
-    pub fn decode_at(&mut self, memory: &mut dyn Addressable, clock: Instant, start: u16) -> Result<(), Error> {
+    pub fn decode_at(&mut self, memory: &mut dyn Addressable, clock: Instant, start: u16) -> Result<(), Z80Error> {
         self.clock = clock;
         self.start = start;
         self.end = start;
@@ -36,12 +37,12 @@ impl Z80Decoder {
         Ok(())
     }
 
-    pub fn decode_one(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
+    pub fn decode_one(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Z80Error> {
         let ins = self.read_instruction_byte(memory)?;
         self.decode_bare(memory, ins, 0)
     }
 
-    pub fn decode_bare(&mut self, memory: &mut dyn Addressable, ins: u8, extra_instruction_bytes: u16) -> Result<Instruction, Error> {
+    pub fn decode_bare(&mut self, memory: &mut dyn Addressable, ins: u8, extra_instruction_bytes: u16) -> Result<Instruction, Z80Error> {
         self.extra_instruction_bytes = extra_instruction_bytes;
         match get_ins_x(ins) {
             0 => {
@@ -217,7 +218,7 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_prefix_cb(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
+    pub fn decode_prefix_cb(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Z80Error> {
         let ins = self.read_instruction_byte(memory)?;
         match get_ins_x(ins) {
             0 => Ok(get_rot_instruction(get_ins_y(ins), get_register(get_ins_z(ins)), None)),
@@ -228,7 +229,7 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_sub_prefix_cb(&mut self, memory: &mut dyn Addressable, reg: IndexRegister) -> Result<Instruction, Error> {
+    pub fn decode_sub_prefix_cb(&mut self, memory: &mut dyn Addressable, reg: IndexRegister) -> Result<Instruction, Z80Error> {
         let offset = self.read_instruction_byte(memory)? as i8;
         let ins = self.read_instruction_byte(memory)?;
         let opt_copy = match get_ins_z(ins) {
@@ -245,7 +246,7 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_prefix_ed(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Error> {
+    pub fn decode_prefix_ed(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Z80Error> {
         let ins = self.read_instruction_byte(memory)?;
 
         match get_ins_x(ins) {
@@ -342,7 +343,7 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_prefix_dd_fd(&mut self, memory: &mut dyn Addressable, index_reg: IndexRegister) -> Result<Instruction, Error> {
+    pub fn decode_prefix_dd_fd(&mut self, memory: &mut dyn Addressable, index_reg: IndexRegister) -> Result<Instruction, Z80Error> {
         let ins = self.read_instruction_byte(memory)?;
 
         if ins == 0xCB {
@@ -510,7 +511,7 @@ impl Z80Decoder {
         }
     }
 
-    fn decode_index_target(&mut self, memory: &mut dyn Addressable, index_reg: IndexRegister, z: u8) -> Result<Option<Target>, Error> {
+    fn decode_index_target(&mut self, memory: &mut dyn Addressable, index_reg: IndexRegister, z: u8) -> Result<Option<Target>, Z80Error> {
         let result = match z {
             4 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 0))),
             5 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 1))),
@@ -525,13 +526,13 @@ impl Z80Decoder {
 
 
 
-    fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Error> {
+    fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Z80Error> {
         let byte = device.read_u8(self.clock, self.end as Address)?;
         self.end = self.end.wrapping_add(1);
         Ok(byte)
     }
 
-    fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Error> {
+    fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Z80Error> {
         let word = device.read_leu16(self.clock, self.end as Address)?;
         self.end = self.end.wrapping_add(2);
         Ok(word)
