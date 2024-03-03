@@ -5,7 +5,7 @@ use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, De
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::M68kState;
-use moa_m68k::execute::M68kCycle;
+use moa_m68k::execute::{M68kCycle, M68kCycleGuard};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, Direction, Condition};
 
 const INIT_STACK: Address = 0x00002000;
@@ -37,7 +37,7 @@ struct TestCase {
 
 fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
 where
-    F: FnMut(M68kCycle, System),
+    F: FnMut(M68kCycleGuard, System),
 {
     let mut system = System::default();
 
@@ -51,12 +51,14 @@ where
     let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
     cpu.step(&system).unwrap();
 
-    let cycle = M68kCycle::new(cpu);
-    assert_eq!(cycle.state.pc, INIT_ADDR as u32);
-    assert_eq!(cycle.state.ssp, INIT_STACK as u32);
-    assert_eq!(cycle.decoder.instruction, Instruction::NOP);
+    let cycle = M68kCycle::new(&cpu, system.clock);
+    let mut executor = cycle.begin(&mut cpu);
 
-    test_func(cycle, system)
+    assert_eq!(executor.state.pc, INIT_ADDR as u32);
+    assert_eq!(executor.state.ssp, INIT_STACK as u32);
+    assert_eq!(executor.cycle.decoder.instruction, Instruction::NOP);
+
+    test_func(executor, system)
 }
 
 fn build_state(state: &TestState) -> M68kState {
@@ -79,19 +81,19 @@ fn load_memory(system: &System, data: &[u16]) {
 }
 
 fn run_test(case: &TestCase) {
-    run_execute_test(case.cputype, |mut cycle, system| {
+    run_execute_test(case.cputype, |mut executor, system| {
         let init_state = build_state(&case.init);
         let expected_state = build_state(&case.fini);
         system.get_bus().write_beu32(system.clock, MEM_ADDR as Address, case.init.mem).unwrap();
 
         load_memory(&system, case.data);
-        *cycle.state = init_state;
+        *executor.state = init_state;
 
-        cycle.decode_next().unwrap();
-        assert_eq!(cycle.decoder.instruction, case.ins);
+        executor.decode_next().unwrap();
+        assert_eq!(executor.cycle.decoder.instruction, case.ins);
 
-        cycle.execute_current().unwrap();
-        assert_eq!(*cycle.state, expected_state);
+        executor.execute_current().unwrap();
+        assert_eq!(*executor.state, expected_state);
 
         let mem = system.get_bus().read_beu32(system.clock, MEM_ADDR as Address).unwrap();
         assert_eq!(mem, case.fini.mem);

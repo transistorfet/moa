@@ -80,7 +80,7 @@ fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, System) {
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
 
-    let cycle = M68kCycle::new(cpu, system.clock);
+    let cycle = M68kCycle::new(&cpu, system.clock);
     assert_eq!(cycle.decoder.start, INIT_ADDR as u32);
     assert_eq!(cycle.decoder.instruction, Instruction::NOP);
     (cpu, cycle, system)
@@ -95,18 +95,18 @@ fn load_memory(system: &System, data: &[u16]) {
 }
 
 fn run_decode_test(case: &TestCase) {
-    let (mut cpu, mut cycle, system) = init_decode_test(case.cpu);
+    let (mut cpu, cycle, system) = init_decode_test(case.cpu);
     load_memory(&system, case.data);
     match &case.ins {
         Some(ins) => {
-            let mut execution = cycle.begin(cpu);
-            execution.decode_next().unwrap();
-            assert_eq!(cpu.decoder.instruction, ins.clone());
+            let mut executor = cycle.begin(&mut cpu);
+            executor.decode_next().unwrap();
+            assert_eq!(executor.cycle.decoder.instruction, ins.clone());
         },
         None => {
-            let mut execution = cycle.begin(cpu);
-            let next = execution.decode_next();
-            println!("{:?}", cpu.decoder.instruction);
+            let mut executor = cycle.begin(&mut cpu);
+            let next = executor.decode_next();
+            println!("{:?}", executor.cycle.decoder.instruction);
             assert!(next.is_err());
         },
     }

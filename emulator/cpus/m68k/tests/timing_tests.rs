@@ -6,6 +6,7 @@ use moa_core::{System, Error, MemoryBlock, BusPort, Address, Addressable, Device
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::instructions::{Instruction, Target, Size};
 use moa_m68k::timing::M68kInstructionTiming;
+use moa_m68k::execute::M68kCycle;
 
 const INIT_STACK: Address = 0x00002000;
 const INIT_ADDR: Address = 0x00000010;
@@ -23,7 +24,7 @@ const TIMING_TESTS: &'static [TimingCase] = &[
 ];
 
 
-fn init_decode_test(cputype: M68kType) -> (M68k, System) {
+fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, System) {
     let mut system = System::default();
 
     // Insert basic initialization
@@ -34,15 +35,15 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
     system.get_bus().write_beu32(Instant::START, 4, INIT_ADDR as u32).unwrap();
 
     // Initialize the CPU and make sure it's in the expected state
-    let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
-    cpu.reset_cpu().unwrap();
+    let cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
+    //cpu.reset_cpu().unwrap();
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
 
-    cpu.decoder.init(true, INIT_ADDR as u32);
-    assert_eq!(cpu.decoder.start, INIT_ADDR as u32);
-    assert_eq!(cpu.decoder.instruction, Instruction::NOP);
-    (cpu, system)
+    let cycle = M68kCycle::new(&cpu, system.clock);
+    assert_eq!(cycle.decoder.start, INIT_ADDR as u32);
+    assert_eq!(cycle.decoder.instruction, Instruction::NOP);
+    (cpu, cycle, system)
 }
 
 fn load_memory(system: &System, data: &[u16]) {
@@ -54,14 +55,15 @@ fn load_memory(system: &System, data: &[u16]) {
 }
 
 fn run_timing_test(case: &TimingCase) -> Result<(), Error> {
-    let (mut cpu, system) = init_decode_test(case.cpu);
+    let (mut cpu, cycle, system) = init_decode_test(case.cpu);
+    let mut executor = cycle.begin(&mut cpu);
     let mut timing = M68kInstructionTiming::new(case.cpu, 16);
 
     load_memory(&system, case.data);
-    cpu.decode_next().unwrap();
-    assert_eq!(cpu.decoder.instruction, case.ins.clone());
+    executor.decode_next().unwrap();
+    assert_eq!(executor.cycle.decoder.instruction, case.ins.clone());
 
-    timing.add_instruction(&cpu.decoder.instruction);
+    timing.add_instruction(&executor.cycle.decoder.instruction);
     let result = timing.calculate_clocks(false, 1);
     let expected = match case.cpu {
         M68kType::MC68000 => case.timing.0,

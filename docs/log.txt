@@ -466,3 +466,16 @@ General Work
   shift instructions pass now, but there are lots but fewer than before failures for the asl and
   asr instructions, some movem and movep errors and some bcd instruction errors, mostly
 
+2024-03-02
+- I'm trying to extract the memory/bus interface, and pass it in at the start of each cycle instead
+  of having the BusPort permanently embedded, which will allow migrating to emulator-hal.
+
+- The functional way would be argument drilling; passing an extra argument to each function in the
+  entire execution core.  The problem is that it's messy, so a solution that is still functional is to
+  implement all of the execution logic on a newtype that contains a reference to the mutable state and
+  the owned cycle data, and at the end of the cycle, decompose the M68kCycleGuard that holds the
+  reference, and keep the cycle data for debugging purposes.
+
+- So far it's going quite well.  I really like the pattern of making the cycle be like a transaction,
+  and making it possible to decompose it, especially for testing.  I still need to fix the tests
+- next step is to push System up from the interrupt handling code

@@ -50,7 +50,7 @@ impl M68kCycle {
         }
     }
 
-    pub fn new(cpu: &mut M68k, clock: Instant) -> Self {
+    pub fn new(cpu: &M68k, clock: Instant) -> Self {
         let is_supervisor = cpu.state.sr & (Flags:: Supervisor as u16) != 0;
         let pc = cpu.state.pc;
         let data_width = cpu.port.data_width();
@@ -99,17 +99,17 @@ impl<'a> M68kCycleGuard<'a> {
         println!();
     }
 
-    pub fn finalize(self) -> M68kCycle {
+    pub fn end(self) -> M68kCycle {
         self.cycle
     }
 }
 
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<Duration, Error> {
-        let mut cycle = M68kCycle::new(self, system.clock);
+        let cycle = M68kCycle::new(self, system.clock);
         let mut execution = cycle.begin(self);
         let clocks = execution.step(system)?;
-        self.cycle = execution.finalize();
+        self.cycle = execution.end();
         Ok(self.frequency.period_duration() * clocks as u64)
     }
 
@@ -193,8 +193,7 @@ impl<'a> M68kCycleGuard<'a> {
     pub fn cycle_one(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
         self.check_breakpoints()?;
 
-        self.decode_next()?;
-        self.execute_current()?;
+        self.decode_and_execute()?;
 
         self.check_pending_interrupts(system)?;
         Ok(self.cycle.timing.calculate_clocks(false, 1))
@@ -296,6 +295,13 @@ impl<'a> M68kCycleGuard<'a> {
         let addr = self.get_address_sized(vector as Address, Size::Long)?;
         self.set_pc(addr)?;
 
+        Ok(())
+    }
+
+    #[inline]
+    pub fn decode_and_execute(&mut self) -> Result<(), M68kError> {
+        self.decode_next()?;
+        self.execute_current()?;
         Ok(())
     }
 
