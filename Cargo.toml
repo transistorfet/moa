@@ -13,6 +13,9 @@ exclude = [
 ]
 default-members = ["emulator/frontends/minifb"]
 
+[profile.dev]
+opt-level = 3
+
 [profile.release]
 debug = true
 #overflow-checks = true

@@ -1,5 +1,6 @@
 
 use femtos::Instant;
+use emulator_hal::bus::{BusType, BusAccess};
 
 use moa_core::{Error, Address, Addressable, BusPort};
 
@@ -187,7 +188,22 @@ fn validate_address(addr: u32) -> Result<u32, M68kError> {
     }
 }
 
+/*
+impl BusType for M68kBusPort {
+    type Instant = Instant;
+    type Error = Error;
+}
 
+impl BusAccess<u32> for M68kBusPort {
+    fn read(&mut self, now: Self::Instant, addr: Address, data: &mut [u8]) -> Result<usize, Self::Error> {
+        self.
+    }
+
+    fn write(&mut self, now: Self::Instant, addr: Address, data: &[u8]) -> Result<usize, Self::Error> {
+
+    }
+}
+*/
 
 /*
 pub(crate) struct TargetAccess {

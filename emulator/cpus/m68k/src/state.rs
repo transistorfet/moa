@@ -10,6 +10,7 @@ use crate::debugger::M68kDebugger;
 use crate::memory::M68kBusPort;
 use crate::timing::M68kInstructionTiming;
 use crate::instructions::Target;
+use crate::execute::M68kCycle;
 
 
 pub type ClockCycles = u16;
@@ -113,11 +114,12 @@ pub struct M68k {
     pub cputype: M68kType,
     pub frequency: Frequency,
     pub state: M68kState,
-    pub decoder: M68kDecoder,
-    pub timing: M68kInstructionTiming,
+    //pub decoder: M68kDecoder,
+    //pub timing: M68kInstructionTiming,
     pub debugger: M68kDebugger,
     pub port: M68kBusPort,
-    pub current_clock: Instant,
+    //pub current_clock: Instant,
+    pub cycle: M68kCycle,
 }
 
 impl Default for M68kState {
@@ -141,15 +143,17 @@ impl Default for M68kState {
 
 impl M68k {
     pub fn new(cputype: M68kType, frequency: Frequency, port: BusPort) -> M68k {
+        let data_width = port.data_width();
         M68k {
             cputype,
             frequency,
             state: M68kState::default(),
-            decoder: M68kDecoder::new(cputype, true, 0),
-            timing: M68kInstructionTiming::new(cputype, port.data_width()),
+            //decoder: M68kDecoder::new(cputype, true, 0),
+            //timing: M68kInstructionTiming::new(cputype, port.data_width()),
             debugger: M68kDebugger::default(),
             port: M68kBusPort::new(port),
-            current_clock: Instant::START,
+            //current_clock: Instant::START,
+            cycle: M68kCycle::default(cputype, data_width),
         }
     }
 
@@ -162,21 +166,6 @@ impl M68k {
         }
     }
 
-    pub fn dump_state(&mut self) {
-        println!("Status: {:?}", self.state.status);
-        println!("PC: {:#010x}", self.state.pc);
-        println!("SR: {:#06x}", self.state.sr);
-        for i in 0..7 {
-            println!("D{}: {:#010x}        A{}: {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
-        }
-        println!("D7: {:#010x}       USP: {:#010x}", self.state.d_reg[7], self.state.usp);
-        println!("                     SSP: {:#010x}", self.state.ssp);
-
-        println!("Current Instruction: {:#010x} {:?}", self.decoder.start, self.decoder.instruction);
-        println!();
-        self.port.dump_memory(self.state.ssp, 0x40);
-        println!();
-    }
 }
 
 impl InterruptPriority {

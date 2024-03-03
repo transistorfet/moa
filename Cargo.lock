@@ -418,6 +418,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
+name = "emulator-hal"
+version = "0.1.0"
+
+[[package]]
 name = "env_logger"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -763,6 +767,7 @@ dependencies = [
 name = "moa-core"
 version = "0.1.0"
 dependencies = [
+ "emulator-hal",
  "femtos",
  "log",
  "moa-host",
@@ -788,6 +793,7 @@ dependencies = [
 name = "moa-m68k"
 version = "0.1.0"
 dependencies = [
+ "emulator-hal",
  "femtos",
  "log",
  "moa-core",
@@ -935,10 +941,12 @@ dependencies = [
 name = "moa-z80"
 version = "0.1.0"
 dependencies = [
+ "emulator-hal",
  "femtos",
  "log",
  "moa-core",
  "moa-signals",
+ "thiserror",
 ]
 
 [[package]]

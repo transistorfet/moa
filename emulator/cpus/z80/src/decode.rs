@@ -6,6 +6,18 @@ use moa_core::{Address, Addressable};
 use crate::state::Z80Error;
 use crate::instructions::{Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target, LoadTarget, UndocumentedCopy, Instruction};
 
+use emulator_hal::bus::{BusType, BusAccess};
+
+struct Z80Bus;
+
+type Z80Address = (bool, u16);
+
+impl BusType for Z80Bus {
+    //type Address = (bool, u16);
+    type Error = Z80Error;
+    type Instant = Instant;
+}
+
 #[derive(Clone)]
 pub struct Z80Decoder {
     pub clock: Instant,
@@ -26,6 +38,16 @@ impl Default for Z80Decoder {
         }
     }
 }
+
+/*
+    fn read_test<B>(&mut self, device: &mut B) -> Result<u8, Z80Error>
+    where
+        B: BusAccess<Z80Address, Instant = Instant>,
+    {
+        device.read_u8(self.clock, (false, self.end as u16))
+            .map_err(|err| Z80Error::BusError(format!("butts")))
+    }
+*/
 
 impl Z80Decoder {
     pub fn decode_at(&mut self, memory: &mut dyn Addressable, clock: Instant, start: u16) -> Result<(), Z80Error> {
@@ -523,7 +545,6 @@ impl Z80Decoder {
         };
         Ok(result)
     }
-
 
 
     fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Z80Error> {

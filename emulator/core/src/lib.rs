@@ -14,3 +14,5 @@ pub use crate::interrupts::InterruptController;
 pub use crate::memory::{MemoryBlock, AddressTranslator, AddressRepeater, Bus, BusPort, dump_slice};
 pub use crate::system::System;
 
+pub use emulator_hal::bus::{BusAccess};
+

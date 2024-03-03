@@ -1,4 +1,5 @@
 
+use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Frequency};
@@ -93,7 +94,7 @@ impl Z80State {
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
-pub enum Z80Error {
+pub enum Z80Error /* <B: fmt::Display> */ {
     #[error("cpu halted")]
     Halted,
     #[error("breakpoint reached")]
@@ -101,7 +102,7 @@ pub enum Z80Error {
     #[error("unimplemented instruction {0:?}")]
     Unimplemented(Instruction),
     #[error("bus error: {0}")]
-    BusError(String),
+    BusError(String /* B */),
 }
 
 #[derive(Clone)]

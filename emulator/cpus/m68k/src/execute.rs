@@ -3,9 +3,10 @@ use femtos::{Instant, Duration};
 
 use moa_core::{System, Error, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
-use crate::state::{M68k, M68kType, M68kError, ClockCycles, Status, Flags, Exceptions, InterruptPriority};
-use crate::memory::{MemType, MemAccess};
+use crate::state::{M68k, M68kType, M68kError, M68kState, ClockCycles, Status, Flags, Exceptions, InterruptPriority};
+use crate::memory::{MemType, MemAccess, M68kBusPort};
 use crate::decode::M68kDecoder;
+use crate::debugger::M68kDebugger;
 use crate::timing::M68kInstructionTiming;
 use crate::instructions::{
     Register,
@@ -32,14 +33,89 @@ pub enum Used {
     Twice,
 }
 
+
+#[derive(Clone, Debug)]
+pub struct M68kCycle {
+    pub decoder: M68kDecoder,
+    pub timing: M68kInstructionTiming,
+    pub current_clock: Instant,
+}
+
+impl M68kCycle {
+    pub fn default(cputype: M68kType, data_width: u8) -> Self {
+        Self {
+            decoder: M68kDecoder::new(cputype, true, 0),
+            timing: M68kInstructionTiming::new(cputype, data_width),
+            current_clock: Instant::START,
+        }
+    }
+
+    pub fn new(cpu: &mut M68k, clock: Instant) -> Self {
+        let is_supervisor = cpu.state.sr & (Flags:: Supervisor as u16) != 0;
+        let pc = cpu.state.pc;
+        let data_width = cpu.port.data_width();
+        let cputype = cpu.cputype;
+        Self {
+            decoder: M68kDecoder::new(cputype, is_supervisor, pc),
+            timing: M68kInstructionTiming::new(cputype, data_width),
+            current_clock: clock,
+        }
+    }
+
+    pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleGuard<'a> {
+        // TODO this port init_cycle must be integrated into the cycle struct instead
+        cpu.port.init_cycle(self.current_clock);
+
+        M68kCycleGuard {
+            state: &mut cpu.state,
+            port: &mut cpu.port,
+            debugger: &mut cpu.debugger,
+            cycle: self,
+        }
+    }
+}
+
+pub struct M68kCycleGuard<'a> {
+    pub state: &'a mut M68kState,
+    pub port: &'a mut M68kBusPort,
+    pub debugger: &'a mut M68kDebugger,
+    pub cycle: M68kCycle,
+}
+
+impl<'a> M68kCycleGuard<'a> {
+    pub fn dump_state(&mut self) {
+        println!("Status: {:?}", self.state.status);
+        println!("PC: {:#010x}", self.state.pc);
+        println!("SR: {:#06x}", self.state.sr);
+        for i in 0..7 {
+            println!("D{}: {:#010x}        A{}: {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
+        }
+        println!("D7: {:#010x}       USP: {:#010x}", self.state.d_reg[7], self.state.usp);
+        println!("                     SSP: {:#010x}", self.state.ssp);
+
+        println!("Current Instruction: {:#010x} {:?}", self.cycle.decoder.start, self.cycle.decoder.instruction);
+        println!();
+        self.port.dump_memory(self.state.ssp, 0x40);
+        println!();
+    }
+
+    pub fn finalize(self) -> M68kCycle {
+        self.cycle
+    }
+}
+
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<Duration, Error> {
-        let clocks = self.step_internal(system)?;
+        let mut cycle = M68kCycle::new(self, system.clock);
+        let mut execution = cycle.begin(self);
+        let clocks = execution.step(system)?;
+        self.cycle = execution.finalize();
         Ok(self.frequency.period_duration() * clocks as u64)
     }
 
     fn on_error(&mut self, _system: &System) {
-        self.dump_state();
+        // TODO the cycle data in dropped by this point
+        //self.dump_state();
     }
 }
 
@@ -82,9 +158,9 @@ impl From<Error> for M68kError {
     }
 }
 
-impl M68k {
-    pub fn step_internal(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
-        self.init_cycle(system.clock);
+impl<'a> M68kCycleGuard<'a> {
+    #[inline]
+    pub fn step(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
         match self.state.status {
             Status::Init => self.reset_cpu(),
             Status::Stopped => Err(M68kError::Halted),
@@ -105,14 +181,7 @@ impl M68k {
         }
     }
 
-    pub fn init_cycle(&mut self, clock: Instant) {
-        self.current_clock = clock;
-        self.decoder = M68kDecoder::new(self.cputype, self.is_supervisor(), self.state.pc);
-        self.timing = M68kInstructionTiming::new(self.cputype, self.port.data_width());
-        self.port.init_cycle(clock);
-        self.timing.reset();
-    }
-
+    #[inline]
     pub fn reset_cpu(&mut self) -> Result<ClockCycles, M68kError> {
         self.state.ssp = self.get_address_sized(0, Size::Long)?;
         self.state.pc = self.get_address_sized(4, Size::Long)?;
@@ -120,6 +189,7 @@ impl M68k {
         Ok(16)
     }
 
+    #[inline]
     pub fn cycle_one(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
         self.check_breakpoints()?;
 
@@ -127,9 +197,10 @@ impl M68k {
         self.execute_current()?;
 
         self.check_pending_interrupts(system)?;
-        Ok(self.timing.calculate_clocks(false, 1))
+        Ok(self.cycle.timing.calculate_clocks(false, 1))
     }
 
+    #[inline]
     pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), M68kError> {
         self.state.pending_ipl = match system.get_interrupt_controller().check() {
             (true, priority) => InterruptPriority::from_u8(priority),
@@ -174,9 +245,9 @@ impl M68k {
         Ok(())
     }
 
-    pub fn setup_group0_exception(&mut self, number: u8) -> Result<(), M68kError> {
+    fn setup_group0_exception(&mut self, number: u8) -> Result<(), M68kError> {
         let sr = self.state.sr;
-        let ins_word = self.decoder.instruction_word;
+        let ins_word = self.cycle.decoder.instruction_word;
         let extra_code = self.port.request.get_type_code();
         let fault_size = self.port.request.size.in_bytes();
         let fault_address = self.port.request.address;
@@ -186,7 +257,7 @@ impl M68k {
         self.set_flag(Flags::Tracing, false);
 
         let offset = (number as u16) << 2;
-        if self.cputype >= M68kType::MC68010 {
+        if self.cycle.decoder.cputype >= M68kType::MC68010 {
             self.push_word(offset)?;
         }
 
@@ -203,7 +274,7 @@ impl M68k {
         Ok(())
     }
 
-    pub fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError> {
+    fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError> {
         let sr = self.state.sr;
         self.port.request.i_n_bit = true;
 
@@ -215,7 +286,7 @@ impl M68k {
         }
 
         let offset = (number as u16) << 2;
-        if self.cputype >= M68kType::MC68010 {
+        if self.cycle.decoder.cputype >= M68kType::MC68010 {
             self.push_word(offset)?;
         }
         self.push_long(self.state.pc)?;
@@ -228,19 +299,21 @@ impl M68k {
         Ok(())
     }
 
+    #[inline]
     pub fn decode_next(&mut self) -> Result<(), M68kError> {
         let is_supervisor = self.is_supervisor();
-        self.decoder.decode_at(&mut self.port, is_supervisor, self.state.pc)?;
+        self.cycle.decoder.decode_at(&mut self.port, is_supervisor, self.state.pc)?;
 
-        self.timing.add_instruction(&self.decoder.instruction);
+        self.cycle.timing.add_instruction(&self.cycle.decoder.instruction);
 
-        self.state.pc = self.decoder.end;
+        self.state.pc = self.cycle.decoder.end;
 
         Ok(())
     }
 
+    #[inline]
     pub fn execute_current(&mut self) -> Result<(), M68kError> {
-        match self.decoder.instruction {
+        match self.cycle.decoder.instruction {
             Instruction::ABCD(src, dest) => self.execute_abcd(src, dest),
             Instruction::ADD(src, dest, size) => self.execute_add(src, dest, size),
             Instruction::ADDA(src, dest, size) => self.execute_adda(src, dest, size),
@@ -475,7 +548,7 @@ impl M68k {
     fn execute_bcc(&mut self, cond: Condition, offset: i32) -> Result<(), M68kError> {
         let should_branch = self.get_current_condition(cond);
         if should_branch {
-            if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
+            if let Err(err) = self.set_pc(self.cycle.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
                 self.state.pc -= 2;
                 return Err(err);
             }
@@ -484,7 +557,7 @@ impl M68k {
     }
 
     fn execute_bra(&mut self, offset: i32) -> Result<(), M68kError> {
-        if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
+        if let Err(err) = self.set_pc(self.cycle.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
             self.state.pc -= 2;
             return Err(err);
         }
@@ -495,7 +568,7 @@ impl M68k {
         self.push_long(self.state.pc)?;
         let sp = *self.get_stack_pointer_mut();
         self.debugger.stack_tracer.push_return(sp);
-        if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
+        if let Err(err) = self.set_pc(self.cycle.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
             self.state.pc -= 2;
             return Err(err);
         }
@@ -618,7 +691,7 @@ impl M68k {
     }
 
     fn execute_clr(&mut self, target: Target, size: Size) -> Result<(), M68kError> {
-        if self.cputype == M68kType::MC68000 {
+        if self.cycle.decoder.cputype == M68kType::MC68000 {
             self.get_target_value(target, size, Used::Twice)?;
             self.set_target_value(target, 0, size, Used::Twice)?;
         } else {
@@ -653,7 +726,7 @@ impl M68k {
             let next = ((get_value_sized(self.state.d_reg[reg as usize], Size::Word) as u16) as i16).wrapping_sub(1);
             set_value_sized(&mut self.state.d_reg[reg as usize], next as u32, Size::Word);
             if next != -1 {
-                if let Err(err) = self.set_pc(self.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
+                if let Err(err) = self.set_pc(self.cycle.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
                     self.state.pc -= 2;
                     return Err(err);
                 }
@@ -912,7 +985,7 @@ impl M68k {
         let addr = self.get_target_address(target)?;
 
         // If we're using a MC68020 or higher, and it was Post-Inc/Pre-Dec target, then update the value before it's stored
-        if self.cputype >= M68kType::MC68020 {
+        if self.cycle.decoder.cputype >= M68kType::MC68020 {
             match target {
                 Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
                     let a_reg_mut = self.get_a_reg_mut(reg);
@@ -1217,7 +1290,7 @@ impl M68k {
         let sr = self.pop_word()?;
         let addr = self.pop_long()?;
 
-        if self.cputype >= M68kType::MC68010 {
+        if self.cycle.decoder.cputype >= M68kType::MC68010 {
             let _ = self.pop_word()?;
         }
 
@@ -1545,14 +1618,14 @@ impl M68k {
         *self.get_stack_pointer_mut() -= 2;
         let addr = *self.get_stack_pointer_mut();
         self.port.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Write, MemType::Data, false)?;
-        self.port.port.write_beu16(self.current_clock, addr as Address, value)?;
+        self.port.port.write_beu16(self.cycle.current_clock, addr as Address, value)?;
         Ok(())
     }
 
     fn pop_word(&mut self) -> Result<u16, M68kError> {
         let addr = *self.get_stack_pointer_mut();
         self.port.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Read, MemType::Data, false)?;
-        let value = self.port.port.read_beu16(self.current_clock, addr as Address)?;
+        let value = self.port.port.read_beu16(self.cycle.current_clock, addr as Address)?;
         *self.get_stack_pointer_mut() += 2;
         Ok(value)
     }
@@ -1561,14 +1634,14 @@ impl M68k {
         *self.get_stack_pointer_mut() -= 4;
         let addr = *self.get_stack_pointer_mut();
         self.port.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Write, MemType::Data, false)?;
-        self.port.port.write_beu32(self.current_clock, addr as Address, value)?;
+        self.port.port.write_beu32(self.cycle.current_clock, addr as Address, value)?;
         Ok(())
     }
 
     fn pop_long(&mut self) -> Result<u32, M68kError> {
         let addr = *self.get_stack_pointer_mut();
         self.port.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Read, MemType::Data, false)?;
-        let value = self.port.port.read_beu32(self.current_clock, addr as Address)?;
+        let value = self.port.port.read_beu32(self.cycle.current_clock, addr as Address)?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }
@@ -1605,7 +1678,7 @@ impl M68k {
     fn get_base_reg_value(&self, base_reg: BaseRegister) -> u32 {
         match base_reg {
             BaseRegister::None => 0,
-            BaseRegister::PC => self.decoder.start + 2,
+            BaseRegister::PC => self.cycle.decoder.start + 2,
             BaseRegister::AReg(reg) if reg == 7 => if self.is_supervisor() { self.state.ssp } else { self.state.usp },
             BaseRegister::AReg(reg) => self.state.a_reg[reg as usize],
         }
@@ -1659,7 +1732,7 @@ impl M68k {
     }
 
     fn set_sr(&mut self, value: u16) {
-        let mask = if self.cputype <= M68kType::MC68010 { 0xA71F } else { 0xF71F };
+        let mask = if self.cycle.decoder.cputype <= M68kType::MC68010 { 0xA71F } else { 0xF71F };
         self.state.sr = value & mask;
     }
 

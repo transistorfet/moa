@@ -3,6 +3,7 @@ use moa_core::{System, Error, Address, Addressable, Debuggable};
 
 use super::state::M68k;
 use super::decode::M68kDecoder;
+use super::execute::M68kCycleGuard;
 
 #[derive(Clone, Default)]
 pub struct StackTracer {
@@ -40,9 +41,10 @@ impl Debuggable for M68k {
     }
 
     fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
-        let _ = self.decoder.decode_at(&mut self.port, true, self.state.pc);
-        self.decoder.dump_decoded(&mut self.port);
-        self.dump_state();
+        // TODO this is called by the debugger, but should be called some other way
+        //let _ = self.decoder.decode_at(&mut self.port, true, self.state.pc);
+        //self.decoder.dump_decoded(&mut self.port);
+        //self.dump_state();
         Ok(())
     }
 
@@ -68,7 +70,7 @@ impl Debuggable for M68k {
     }
 }
 
-impl M68k {
+impl<'a> M68kCycleGuard<'a> {
     pub fn check_breakpoints(&mut self) -> Result<(), Error> {
         for breakpoint in &self.debugger.breakpoints {
             if *breakpoint == self.state.pc {

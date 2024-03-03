@@ -1,4 +1,16 @@
 
+
+* the idea would be, instead of argument drilling, you create an object that is short lived, that lasts one instruction, or possibly even parts of one instruction, and
+  it has some references instead of "moving" data (or if you move, you move and move out without cloning), such that you can bundle everything up, call a method on the
+  bundle, with the execution context and state all part of or reference by the bundle, all instructions would be implemented on the bundle and not the state alone, and
+  after the instruction, or when transitioning from one phase to the next, you'd decompose the bundle back into its parts, and return before being called again to
+  repeat the process with the next instruction
+
+
+* it doesn't work when using debug due to math checks, so fix them
+
+
+
 * change all the inspection and debugging things to return a struct which can then be printed by the frontend
 
 * there are many issues with the coprocessor address space, and the VDP

@@ -210,3 +210,26 @@ impl NextStep {
     }
 }
 
+/*
+use emulator_hal::bus::{BusType, BusAccess};
+
+impl BusType for System {
+    type Address = u64;
+    type Error = Error;
+    type Instant = Instant;
+}
+
+impl BusAccess for System {
+    fn read(&mut self, _now: Instant, addr: u64, data: &mut [u8]) -> Result<usize, Self::Error> {
+        let addr = addr as usize;
+        data.copy_from_slice(&self.0[addr..addr + data.len()]);
+        Ok(data.len())
+    }
+
+    fn write(&mut self, _now: Instant, addr: u64, data: &[u8]) -> Result<usize, Self::Error> {
+        let addr = addr as usize;
+        self.0[addr..addr + data.len()].copy_from_slice(data);
+        Ok(data.len())
+    }
+}
+*/

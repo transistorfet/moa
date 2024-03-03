@@ -1,7 +1,7 @@
 
 use moa_core::{System, Error, Address, Debuggable};
 
-use crate::state::Z80;
+use crate::state::{Z80, Z80Error};
 use crate::decode::Z80Decoder;
 use crate::instructions::Register;
 
@@ -47,7 +47,7 @@ impl Debuggable for Z80 {
 }
 
 impl Z80 {
-    pub fn check_breakpoints(&mut self) -> Result<(), Error> {
+    pub fn check_breakpoints(&mut self) -> Result<(), Z80Error> {
         for breakpoint in &self.debugger.breakpoints {
             if *breakpoint == self.state.pc {
                 if self.debugger.skip_breakpoint > 0 {
@@ -55,7 +55,7 @@ impl Z80 {
                     return Ok(());
                 } else {
                     self.debugger.skip_breakpoint = 1;
-                    return Err(Error::breakpoint(format!("breakpoint reached: {:08x}", *breakpoint)));
+                    return Err(Z80Error::Breakpoint);
                 }
             }
         }

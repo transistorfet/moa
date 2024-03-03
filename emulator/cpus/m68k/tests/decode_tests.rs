@@ -6,6 +6,7 @@ use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device};
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, XRegister, BaseRegister, IndexRegister, Direction};
 use moa_m68k::assembler::M68kAssembler;
+use moa_m68k::execute::M68kCycle;
 
 const INIT_STACK: Address = 0x00002000;
 const INIT_ADDR: Address = 0x00000010;
@@ -63,7 +64,7 @@ const DECODE_TESTS: &'static [TestCase] = &[
 ];
 
 
-fn init_decode_test(cputype: M68kType) -> (M68k, System) {
+fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, System) {
     let mut system = System::default();
 
     // Insert basic initialization
@@ -75,14 +76,14 @@ fn init_decode_test(cputype: M68kType) -> (M68k, System) {
 
     // Initialize the CPU and make sure it's in the expected state
     let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
-    cpu.reset_cpu().unwrap();
+    //cpu.reset_cpu().unwrap();
     assert_eq!(cpu.state.pc, INIT_ADDR as u32);
     assert_eq!(cpu.state.ssp, INIT_STACK as u32);
 
-    cpu.decoder.init(true, INIT_ADDR as u32);
-    assert_eq!(cpu.decoder.start, INIT_ADDR as u32);
-    assert_eq!(cpu.decoder.instruction, Instruction::NOP);
-    (cpu, system)
+    let cycle = M68kCycle::new(cpu, system.clock);
+    assert_eq!(cycle.decoder.start, INIT_ADDR as u32);
+    assert_eq!(cycle.decoder.instruction, Instruction::NOP);
+    (cpu, cycle, system)
 }
 
 fn load_memory(system: &System, data: &[u16]) {
@@ -94,15 +95,17 @@ fn load_memory(system: &System, data: &[u16]) {
 }
 
 fn run_decode_test(case: &TestCase) {
-    let (mut cpu, system) = init_decode_test(case.cpu);
+    let (mut cpu, mut cycle, system) = init_decode_test(case.cpu);
     load_memory(&system, case.data);
     match &case.ins {
         Some(ins) => {
-            cpu.decode_next().unwrap();
+            let mut execution = cycle.begin(cpu);
+            execution.decode_next().unwrap();
             assert_eq!(cpu.decoder.instruction, ins.clone());
         },
         None => {
-            let next = cpu.decode_next();
+            let mut execution = cycle.begin(cpu);
+            let next = execution.decode_next();
             println!("{:?}", cpu.decoder.instruction);
             assert!(next.is_err());
         },

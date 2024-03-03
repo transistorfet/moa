@@ -9,3 +9,4 @@ thiserror = "1.0"
 femtos = "0.1"
 moa-core = { path = "../../core" }
 moa-signals = { path = "../../libraries/signals" }
+emulator-hal = { path = "/media/work/projects/emulator-hal/emulator-hal" }

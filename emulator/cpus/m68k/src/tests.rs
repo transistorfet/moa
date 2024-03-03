@@ -255,13 +255,16 @@ mod execute_unit_tests {
     use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, Device};
 
     use crate::{M68k, M68kType};
-    use crate::execute::Used;
+    use crate::execute::{Used, M68kCycle, M68kCycleGuard};
     use crate::instructions::{Instruction, Target, Size};
 
     const INIT_STACK: Address = 0x00002000;
     const INIT_ADDR: Address = 0x00000010;
 
-    fn init_execute_test(cputype: M68kType) -> (M68k, System) {
+    fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
+    where
+        F: FnMut(M68kCycleGuard),
+    {
         let mut system = System::default();
 
         // Insert basic initialization
@@ -273,11 +276,14 @@ mod execute_unit_tests {
 
         let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
         cpu.step(&system).unwrap();
-        cpu.decoder.init(true, cpu.state.pc);
-        assert_eq!(cpu.state.pc, INIT_ADDR as u32);
-        assert_eq!(cpu.state.ssp, INIT_STACK as u32);
-        assert_eq!(cpu.decoder.instruction, Instruction::NOP);
-        (cpu, system)
+        let mut cycle = M68kCycle::new(&mut cpu, system.clock);
+        let mut execution = cycle.begin(&mut cpu);
+        execution.cycle.decoder.init(true, execution.state.pc);
+        assert_eq!(execution.state.pc, INIT_ADDR as u32);
+        assert_eq!(execution.state.ssp, INIT_STACK as u32);
+        assert_eq!(execution.cycle.decoder.instruction, Instruction::NOP);
+
+        test_func(execution);
     }
 
     //
@@ -286,86 +292,86 @@ mod execute_unit_tests {
 
     #[test]
     fn target_value_direct_d() {
-        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
+        run_execute_test(M68kType::MC68010, |mut cycle| {
+            let size = Size::Word;
+            let expected = 0x1234;
+            let target = Target::DirectDReg(1);
 
-        let size = Size::Word;
-        let expected = 0x1234;
-        let target = Target::DirectDReg(1);
-
-        cpu.state.d_reg[1] = expected;
-        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
-        assert_eq!(result, expected);
+            cycle.state.d_reg[1] = expected;
+            let result = cycle.get_target_value(target, size, Used::Once).unwrap();
+            assert_eq!(result, expected);
+        });
     }
 
     #[test]
     fn target_value_direct_a() {
-        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
+        run_execute_test(M68kType::MC68010, |mut cycle| {
+            let size = Size::Word;
+            let expected = 0x1234;
+            let target = Target::DirectAReg(2);
 
-        let size = Size::Word;
-        let expected = 0x1234;
-        let target = Target::DirectAReg(2);
-
-        cpu.state.a_reg[2] = expected;
-        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
-        assert_eq!(result, expected);
+            cycle.state.a_reg[2] = expected;
+            let result = cycle.get_target_value(target, size, Used::Once).unwrap();
+            assert_eq!(result, expected);
+        });
     }
 
     #[test]
     fn target_value_indirect_a() {
-        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
+        run_execute_test(M68kType::MC68010, |mut cycle| {
+            let size = Size::Long;
+            let expected = 0x12345678;
+            let target = Target::IndirectAReg(2);
+            cycle.port.port.write_beu32(Instant::START, INIT_ADDR, expected).unwrap();
 
-        let size = Size::Long;
-        let expected = 0x12345678;
-        let target = Target::IndirectAReg(2);
-        cpu.port.port.write_beu32(Instant::START, INIT_ADDR, expected).unwrap();
-
-        cpu.state.a_reg[2] = INIT_ADDR as u32;
-        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
-        assert_eq!(result, expected);
+            cycle.state.a_reg[2] = INIT_ADDR as u32;
+            let result = cycle.get_target_value(target, size, Used::Once).unwrap();
+            assert_eq!(result, expected);
+        });
     }
 
     #[test]
     fn target_value_indirect_a_inc() {
-        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
+        run_execute_test(M68kType::MC68010, |mut cycle| {
+            let size = Size::Long;
+            let expected = 0x12345678;
+            let target = Target::IndirectARegInc(2);
+            cycle.port.port.write_beu32(Instant::START, INIT_ADDR, expected).unwrap();
 
-        let size = Size::Long;
-        let expected = 0x12345678;
-        let target = Target::IndirectARegInc(2);
-        cpu.port.port.write_beu32(Instant::START, INIT_ADDR, expected).unwrap();
-
-        cpu.state.a_reg[2] = INIT_ADDR as u32;
-        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
-        assert_eq!(result, expected);
-        assert_eq!(cpu.state.a_reg[2], (INIT_ADDR as u32) + 4);
+            cycle.state.a_reg[2] = INIT_ADDR as u32;
+            let result = cycle.get_target_value(target, size, Used::Once).unwrap();
+            assert_eq!(result, expected);
+            assert_eq!(cycle.state.a_reg[2], (INIT_ADDR as u32) + 4);
+        });
     }
 
     #[test]
     fn target_value_indirect_a_dec() {
-        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
+        run_execute_test(M68kType::MC68010, |mut cycle| {
+            let size = Size::Long;
+            let expected = 0x12345678;
+            let target = Target::IndirectARegDec(2);
+            cycle.port.port.write_beu32(Instant::START, INIT_ADDR, expected).unwrap();
 
-        let size = Size::Long;
-        let expected = 0x12345678;
-        let target = Target::IndirectARegDec(2);
-        cpu.port.port.write_beu32(Instant::START, INIT_ADDR, expected).unwrap();
-
-        cpu.state.a_reg[2] = (INIT_ADDR as u32) + 4;
-        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
-        assert_eq!(result, expected);
-        assert_eq!(cpu.state.a_reg[2], INIT_ADDR as u32);
+            cycle.state.a_reg[2] = (INIT_ADDR as u32) + 4;
+            let result = cycle.get_target_value(target, size, Used::Once).unwrap();
+            assert_eq!(result, expected);
+            assert_eq!(cycle.state.a_reg[2], INIT_ADDR as u32);
+        });
     }
 
 
     #[test]
     fn target_value_immediate() {
-        let (mut cpu, _) = init_execute_test(M68kType::MC68010);
+        run_execute_test(M68kType::MC68010, |mut cycle| {
+            let size = Size::Word;
+            let expected = 0x1234;
 
-        let size = Size::Word;
-        let expected = 0x1234;
+            let target = Target::Immediate(expected);
 
-        let target = Target::Immediate(expected);
-
-        let result = cpu.get_target_value(target, size, Used::Once).unwrap();
-        assert_eq!(result, expected);
+            let result = cycle.get_target_value(target, size, Used::Once).unwrap();
+            assert_eq!(result, expected);
+        });
     }
 }
 
