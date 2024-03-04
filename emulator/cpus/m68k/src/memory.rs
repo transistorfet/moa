@@ -2,7 +2,7 @@
 use femtos::Instant;
 use emulator_hal::bus::{BusType, BusAccess};
 
-use moa_core::{Error, Address, Addressable, BusPort};
+use moa_core::{Address, Addressable, BusPort};
 
 use crate::state::{M68k, M68kError, Exceptions};
 use crate::instructions::Size;
@@ -41,6 +41,7 @@ pub struct MemoryRequest {
     pub code: FunctionCode,
     pub size: Size,
     pub address: u32,
+    pub clock: Instant,
 }
 
 impl FunctionCode {
@@ -69,11 +70,22 @@ impl Default for MemoryRequest {
             code: FunctionCode::Reserved0,
             size: Size::Word,
             address: 0,
+            clock: Instant::START,
         }
     }
 }
 
 impl MemoryRequest {
+    pub(crate) fn instruction(&mut self, is_supervisor: bool, addr: u32) -> Result<u32, M68kError> {
+        self.i_n_bit = false;
+        self.code = FunctionCode::program(is_supervisor);
+        self.access = MemAccess::Read;
+        self.address = addr;
+
+        validate_address(addr)
+    }
+
+    #[inline]
     pub fn get_type_code(&self) -> u16 {
         let ins = match self.i_n_bit {
             false => 0x0000,
@@ -89,9 +101,16 @@ impl MemoryRequest {
     }
 }
 
-#[derive(Clone)]
+
+#[derive(Clone, Debug)]
+pub struct InstructionRequest {
+    pub request: MemoryRequest,
+    pub current_clock: Instant,
+}
+
+#[derive(Clone, Debug)]
 pub struct M68kBusPort {
-    pub port: BusPort,
+    //pub port: BusPort,
     pub request: MemoryRequest,
     pub cycle_start_clock: Instant,
     pub current_clock: Instant,
@@ -102,60 +121,52 @@ impl M68k {
     // TODO should some of the ones from execute.rs move here
 }
 
-impl M68kBusPort {
-    pub fn new(port: BusPort) -> Self {
+impl Default for M68kBusPort {
+    fn default(/* port: BusPort */) -> Self {
         Self {
-            port,
+            //port,
             request: Default::default(),
             cycle_start_clock: Instant::START,
             current_clock: Instant::START,
         }
     }
+}
 
-    pub fn data_width(&self) -> u8 {
-        self.port.data_width()
+impl M68kBusPort {
+    pub fn new(clock: Instant) -> Self {
+        Self {
+            request: Default::default(),
+            cycle_start_clock: clock,
+            current_clock: clock,
+        }
     }
 
-    pub fn init_cycle(&mut self, clock: Instant) {
-        self.cycle_start_clock = clock;
-        self.current_clock = clock;
-    }
-
-    pub(crate) fn read_instruction_word(&mut self, is_supervisor: bool, addr: u32) -> Result<u16, M68kError> {
-        self.start_instruction_request(is_supervisor, addr)?;
-        Ok(self.port.read_beu16(self.current_clock, addr as Address)?)
-    }
-
-    pub(crate) fn read_instruction_long(&mut self, is_supervisor: bool, addr: u32) -> Result<u32, M68kError> {
-        self.start_instruction_request(is_supervisor, addr)?;
-        Ok(self.port.read_beu32(self.current_clock, addr as Address)?)
-    }
-
-    pub(crate) fn read_data_sized(&mut self, is_supervisor: bool, addr: Address, size: Size) -> Result<u32, M68kError> {
+    pub(crate) fn read_data_sized(&mut self, port: &mut BusPort, is_supervisor: bool, addr: Address, size: Size) -> Result<u32, M68kError> {
         self.start_request(is_supervisor, addr as u32, size, MemAccess::Read, MemType::Data, false)?;
         Ok(match size {
-            Size::Byte => self.port.read_u8(self.current_clock, addr).map(|value| value as u32),
-            Size::Word => self.port.read_beu16(self.current_clock, addr).map(|value| value as u32),
-            Size::Long => self.port.read_beu32(self.current_clock, addr),
+            Size::Byte => port.read_u8(self.current_clock, addr).map(|value| value as u32),
+            Size::Word => port.read_beu16(self.current_clock, addr).map(|value| value as u32),
+            Size::Long => port.read_beu32(self.current_clock, addr),
         }?)
     }
 
-    pub(crate) fn write_data_sized(&mut self, is_supervisor: bool, addr: Address, value: u32, size: Size) -> Result<(), M68kError> {
+    pub(crate) fn write_data_sized(&mut self, port: &mut BusPort, is_supervisor: bool, addr: Address, value: u32, size: Size) -> Result<(), M68kError> {
         self.start_request(is_supervisor, addr as u32, size, MemAccess::Write, MemType::Data, false)?;
         Ok(match size {
-            Size::Byte => self.port.write_u8(self.current_clock, addr, value as u8),
-            Size::Word => self.port.write_beu16(self.current_clock, addr, value as u16),
-            Size::Long => self.port.write_beu32(self.current_clock, addr, value),
+            Size::Byte => port.write_u8(self.current_clock, addr, value as u8),
+            Size::Word => port.write_beu16(self.current_clock, addr, value as u16),
+            Size::Long => port.write_beu32(self.current_clock, addr, value),
         }?)
     }
 
-    pub(crate) fn start_instruction_request(&mut self, is_supervisor: bool, addr: u32) -> Result<u32, M68kError> {
-        self.request.i_n_bit = false;
-        self.request.code = FunctionCode::program(is_supervisor);
-        self.request.access = MemAccess::Read;
-        self.request.address = addr;
+    pub(crate) fn read_instruction_word(&mut self, port: &mut BusPort, is_supervisor: bool, addr: u32) -> Result<u16, M68kError> {
+        self.request.instruction(is_supervisor, addr)?;
+        Ok(port.read_beu16(self.current_clock, addr as Address)?)
+    }
 
-        validate_address(addr)
+    pub(crate) fn read_instruction_long(&mut self, port: &mut BusPort, is_supervisor: bool, addr: u32) -> Result<u32, M68kError> {
+        self.request.instruction(is_supervisor, addr)?;
+        Ok(port.read_beu32(self.current_clock, addr as Address)?)
     }
 
     pub(crate) fn start_request(&mut self, is_supervisor: bool, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, M68kError> {
@@ -175,8 +186,8 @@ impl M68kBusPort {
         }
     }
 
-    pub(crate) fn dump_memory(&mut self, addr: u32, length: usize) {
-        self.port.dump_memory(self.current_clock, addr as Address, length as u64);
+    pub(crate) fn dump_memory(&mut self, port: &mut BusPort, addr: u32, length: usize) {
+        port.dump_memory(self.current_clock, addr as Address, length as u64);
     }
 }
 

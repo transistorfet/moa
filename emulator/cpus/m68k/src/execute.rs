@@ -1,7 +1,7 @@
 
 use femtos::{Instant, Duration};
 
-use moa_core::{System, Error, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
+use moa_core::{System, Error, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable, BusPort};
 
 use crate::state::{M68k, M68kType, M68kError, M68kState, ClockCycles, Status, Flags, Exceptions, InterruptPriority};
 use crate::memory::{MemType, MemAccess, M68kBusPort};
@@ -38,35 +38,35 @@ pub enum Used {
 pub struct M68kCycle {
     pub decoder: M68kDecoder,
     pub timing: M68kInstructionTiming,
+    pub memory: M68kBusPort,
     pub current_clock: Instant,
 }
 
 impl M68kCycle {
+    #[inline]
     pub fn default(cputype: M68kType, data_width: u8) -> Self {
         Self {
             decoder: M68kDecoder::new(cputype, true, 0),
             timing: M68kInstructionTiming::new(cputype, data_width),
+            memory: M68kBusPort::new(Instant::START),
             current_clock: Instant::START,
         }
     }
 
+    #[inline]
     pub fn new(cpu: &M68k, clock: Instant) -> Self {
         let is_supervisor = cpu.state.sr & (Flags:: Supervisor as u16) != 0;
-        let pc = cpu.state.pc;
-        let data_width = cpu.port.data_width();
-        let cputype = cpu.cputype;
         Self {
-            decoder: M68kDecoder::new(cputype, is_supervisor, pc),
-            timing: M68kInstructionTiming::new(cputype, data_width),
+            decoder: M68kDecoder::new(cpu.info.chip, is_supervisor, cpu.state.pc),
+            timing: M68kInstructionTiming::new(cpu.info.chip, cpu.info.data_width as u8),
+            memory: M68kBusPort::new(clock),
             current_clock: clock,
         }
     }
 
-    pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleGuard<'a> {
-        // TODO this port init_cycle must be integrated into the cycle struct instead
-        cpu.port.init_cycle(self.current_clock);
-
-        M68kCycleGuard {
+    #[inline]
+    pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleExecutor<'a> {
+        M68kCycleExecutor {
             state: &mut cpu.state,
             port: &mut cpu.port,
             debugger: &mut cpu.debugger,
@@ -75,14 +75,15 @@ impl M68kCycle {
     }
 }
 
-pub struct M68kCycleGuard<'a> {
+pub struct M68kCycleExecutor<'a> {
     pub state: &'a mut M68kState,
-    pub port: &'a mut M68kBusPort,
+    pub port: &'a mut BusPort,
     pub debugger: &'a mut M68kDebugger,
     pub cycle: M68kCycle,
 }
 
-impl<'a> M68kCycleGuard<'a> {
+impl<'a> M68kCycleExecutor<'a> {
+    #[inline]
     pub fn dump_state(&mut self) {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#010x}", self.state.pc);
@@ -95,7 +96,7 @@ impl<'a> M68kCycleGuard<'a> {
 
         println!("Current Instruction: {:#010x} {:?}", self.cycle.decoder.start, self.cycle.decoder.instruction);
         println!();
-        self.port.dump_memory(self.state.ssp, 0x40);
+        self.cycle.memory.dump_memory(self.port, self.state.ssp, 0x40);
         println!();
     }
 
@@ -107,10 +108,10 @@ impl<'a> M68kCycleGuard<'a> {
 impl Steppable for M68k {
     fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let cycle = M68kCycle::new(self, system.clock);
-        let mut execution = cycle.begin(self);
-        let clocks = execution.step(system)?;
-        self.cycle = execution.end();
-        Ok(self.frequency.period_duration() * clocks as u64)
+        let mut executor = cycle.begin(self);
+        let clocks = executor.step(system)?;
+        self.cycle = Some(executor.end());
+        Ok(self.info.frequency.period_duration() * clocks as u64)
     }
 
     fn on_error(&mut self, _system: &System) {
@@ -158,26 +159,35 @@ impl From<Error> for M68kError {
     }
 }
 
-impl<'a> M68kCycleGuard<'a> {
+impl<'a> M68kCycleExecutor<'a> {
     #[inline]
     pub fn step(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
+        let result = self.step_one(system);
+        self.process_error(result, 4)
+    }
+
+    #[inline]
+    pub fn process_error<T>(&mut self, result: Result<T, M68kError>, ok: T) -> Result<T, M68kError> {
+        match result {
+            Ok(value) => Ok(value),
+            Err(M68kError::Exception(ex)) => {
+                self.exception(ex as u8, false)?;
+                Ok(ok)
+            },
+            Err(M68kError::Interrupt(ex)) => {
+                self.exception(ex as u8, false)?;
+                Ok(ok)
+            },
+            Err(err) => Err(err),
+        }
+    }
+
+    #[inline]
+    pub fn step_one(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
         match self.state.status {
             Status::Init => self.reset_cpu(),
             Status::Stopped => Err(M68kError::Halted),
-            Status::Running => {
-                match self.cycle_one(system) {
-                    Ok(diff) => Ok(diff),
-                    Err(M68kError::Exception(ex)) => {
-                        self.exception(ex as u8, false)?;
-                        Ok(4)
-                    },
-                    Err(M68kError::Interrupt(ex)) => {
-                        self.exception(ex as u8, false)?;
-                        Ok(4)
-                    },
-                    Err(err) => Err(err),
-                }
-            },
+            Status::Running => self.cycle_one(system),
         }
     }
 
@@ -201,6 +211,7 @@ impl<'a> M68kCycleGuard<'a> {
 
     #[inline]
     pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), M68kError> {
+        // TODO this could move somewhere else
         self.state.pending_ipl = match system.get_interrupt_controller().check() {
             (true, priority) => InterruptPriority::from_u8(priority),
             (false, _) => InterruptPriority::NoInterrupt,
@@ -228,6 +239,35 @@ impl<'a> M68kCycleGuard<'a> {
         Ok(())
     }
 
+    /*
+    #[inline]
+    pub fn check_pending_interrupts2(&mut self, interrupt: Option<(InterruptPriority, u8)>) -> Result<InterruptAcknowledge, M68kError> {
+        self.state.pending_ipl = interrupt.unwrap_or(InterruptPriority::NoInterrupt);
+
+        let current_ipl = self.state.current_ipl as u8;
+        let pending_ipl = self.state.pending_ipl as u8;
+
+        if self.state.pending_ipl != InterruptPriority::NoInterrupt {
+            let priority_mask = ((self.state.sr & Flags::IntMask as u16) >> 8) as u8;
+
+            if (pending_ipl > priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
+                log::debug!("{} interrupt: {} @ {} ns", DEV_NAME, pending_ipl, system.clock.as_duration().as_nanos());
+                self.state.current_ipl = self.state.pending_ipl;
+                let acknowledge = self.state.current_ipl;
+                let ack_num = system.get_interrupt_controller().acknowledge(self.state.current_ipl as u8)?;
+                self.exception(ack_num, true)?;
+                return Ok(());
+            }
+        }
+
+        if pending_ipl < current_ipl {
+            self.state.current_ipl = self.state.pending_ipl;
+        }
+
+        Ok(())
+    }
+    */
+
     pub fn exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError> {
         log::debug!("{}: raising exception {}", DEV_NAME, number);
 
@@ -247,9 +287,9 @@ impl<'a> M68kCycleGuard<'a> {
     fn setup_group0_exception(&mut self, number: u8) -> Result<(), M68kError> {
         let sr = self.state.sr;
         let ins_word = self.cycle.decoder.instruction_word;
-        let extra_code = self.port.request.get_type_code();
-        let fault_size = self.port.request.size.in_bytes();
-        let fault_address = self.port.request.address;
+        let extra_code = self.cycle.memory.request.get_type_code();
+        let fault_size = self.cycle.memory.request.size.in_bytes();
+        let fault_address = self.cycle.memory.request.address;
 
         // Changes to the flags must happen after the previous value has been pushed to the stack
         self.set_flag(Flags::Supervisor, true);
@@ -275,7 +315,7 @@ impl<'a> M68kCycleGuard<'a> {
 
     fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError> {
         let sr = self.state.sr;
-        self.port.request.i_n_bit = true;
+        self.cycle.memory.request.i_n_bit = true;
 
         // Changes to the flags must happen after the previous value has been pushed to the stack
         self.set_flag(Flags::Supervisor, true);
@@ -308,7 +348,7 @@ impl<'a> M68kCycleGuard<'a> {
     #[inline]
     pub fn decode_next(&mut self) -> Result<(), M68kError> {
         let is_supervisor = self.is_supervisor();
-        self.cycle.decoder.decode_at(&mut self.port, is_supervisor, self.state.pc)?;
+        self.cycle.decoder.decode_at(&mut self.port, &mut self.cycle.memory, is_supervisor, self.state.pc)?;
 
         self.cycle.timing.add_instruction(&self.cycle.decoder.instruction);
 
@@ -1613,25 +1653,25 @@ impl<'a> M68kCycleGuard<'a> {
     }
 
     fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, M68kError> {
-        self.port.read_data_sized(self.is_supervisor(), addr, size)
+        self.cycle.memory.read_data_sized(self.port, self.is_supervisor(), addr, size)
     }
 
     fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), M68kError> {
-        self.port.write_data_sized(self.is_supervisor(), addr, value, size)
+        self.cycle.memory.write_data_sized(self.port, self.is_supervisor(), addr, value, size)
     }
 
     fn push_word(&mut self, value: u16) -> Result<(), M68kError> {
         *self.get_stack_pointer_mut() -= 2;
         let addr = *self.get_stack_pointer_mut();
-        self.port.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Write, MemType::Data, false)?;
-        self.port.port.write_beu16(self.cycle.current_clock, addr as Address, value)?;
+        self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Write, MemType::Data, false)?;
+        self.port.write_beu16(self.cycle.current_clock, addr as Address, value)?;
         Ok(())
     }
 
     fn pop_word(&mut self) -> Result<u16, M68kError> {
         let addr = *self.get_stack_pointer_mut();
-        self.port.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Read, MemType::Data, false)?;
-        let value = self.port.port.read_beu16(self.cycle.current_clock, addr as Address)?;
+        self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Read, MemType::Data, false)?;
+        let value = self.port.read_beu16(self.cycle.current_clock, addr as Address)?;
         *self.get_stack_pointer_mut() += 2;
         Ok(value)
     }
@@ -1639,22 +1679,22 @@ impl<'a> M68kCycleGuard<'a> {
     fn push_long(&mut self, value: u32) -> Result<(), M68kError> {
         *self.get_stack_pointer_mut() -= 4;
         let addr = *self.get_stack_pointer_mut();
-        self.port.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Write, MemType::Data, false)?;
-        self.port.port.write_beu32(self.cycle.current_clock, addr as Address, value)?;
+        self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Write, MemType::Data, false)?;
+        self.port.write_beu32(self.cycle.current_clock, addr as Address, value)?;
         Ok(())
     }
 
     fn pop_long(&mut self) -> Result<u32, M68kError> {
         let addr = *self.get_stack_pointer_mut();
-        self.port.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Read, MemType::Data, false)?;
-        let value = self.port.port.read_beu32(self.cycle.current_clock, addr as Address)?;
+        self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Read, MemType::Data, false)?;
+        let value = self.port.read_beu32(self.cycle.current_clock, addr as Address)?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }
 
     fn set_pc(&mut self, value: u32) -> Result<(), M68kError> {
         self.state.pc = value;
-        self.port.start_request(self.is_supervisor(), self.state.pc, Size::Word, MemAccess::Read, MemType::Program, true)?;
+        self.cycle.memory.start_request(self.is_supervisor(), self.state.pc, Size::Word, MemAccess::Read, MemType::Program, true)?;
         Ok(())
     }
 

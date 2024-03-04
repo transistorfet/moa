@@ -1,4 +1,10 @@
 
+* I want to push System, and BusPort into only the step function
+* first I need to make Decoder take &mut Addressable, and still function like it does
+* next I need to make Executor only access through a &mut Addressable
+* move the interrupt controller logic to the step() function only, and have a customish interrupt interface into the sim
+* move the impls for Step, Transmutable, etc into a moa.rs file or something
+* the remaining code should really use Addressable, and then we can swap it for BusAccess
 
 * the idea would be, instead of argument drilling, you create an object that is short lived, that lasts one instruction, or possibly even parts of one instruction, and
   it has some references instead of "moving" data (or if you move, you move and move out without cloning), such that you can bundle everything up, call a method on the

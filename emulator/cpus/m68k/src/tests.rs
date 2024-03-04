@@ -255,7 +255,7 @@ mod execute_unit_tests {
     use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, Device};
 
     use crate::{M68k, M68kType};
-    use crate::execute::{Used, M68kCycle, M68kCycleGuard};
+    use crate::execute::{Used, M68kCycle, M68kCycleExecutor};
     use crate::instructions::{Instruction, Target, Size};
 
     const INIT_STACK: Address = 0x00002000;
@@ -263,7 +263,7 @@ mod execute_unit_tests {
 
     fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
     where
-        F: FnMut(M68kCycleGuard),
+        F: FnMut(M68kCycleExecutor),
     {
         let mut system = System::default();
 
@@ -277,13 +277,13 @@ mod execute_unit_tests {
         let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
         cpu.step(&system).unwrap();
         let mut cycle = M68kCycle::new(&mut cpu, system.clock);
-        let mut execution = cycle.begin(&mut cpu);
-        execution.cycle.decoder.init(true, execution.state.pc);
-        assert_eq!(execution.state.pc, INIT_ADDR as u32);
-        assert_eq!(execution.state.ssp, INIT_STACK as u32);
-        assert_eq!(execution.cycle.decoder.instruction, Instruction::NOP);
+        let mut executor = cycle.begin(&mut cpu);
+        executor.cycle.decoder.init(true, executor.state.pc);
+        assert_eq!(executor.state.pc, INIT_ADDR as u32);
+        assert_eq!(executor.state.ssp, INIT_STACK as u32);
+        assert_eq!(executor.cycle.decoder.instruction, Instruction::NOP);
 
-        test_func(execution);
+        test_func(executor);
     }
 
     //

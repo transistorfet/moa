@@ -5,23 +5,107 @@ use femtos::{Instant, Frequency};
 
 use moa_core::{Address, Bus, BusPort};
 
-use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
 use crate::memory::M68kBusPort;
-use crate::timing::M68kInstructionTiming;
 use crate::instructions::Target;
 use crate::execute::M68kCycle;
 
 
 pub type ClockCycles = u16;
 
+
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum M68kType {
+#[repr(u8)]
+pub enum AddressWidth {
+    A32 = 32,    // MC68020+
+    A24 = 24,    // MC68000 64-Pin, MC68010
+    A22 = 22,    // MC68008 52-Pin
+    A20 = 20,    // MC68008 48-Pin
+}
+
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum DataWidth {
+    D32 = 32,
+    D16 = 16,
+    D8 = 8,
+}
+
+/// The instruction set of the chip
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CoreType {
     MC68000,
     MC68010,
     MC68020,
     MC68030,
+}
+
+/// Complete collection of information about the CPU being simulated
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CpuInfo {
+    pub chip: M68kType,
+    pub core_type: CoreType,
+    pub address_width: AddressWidth,
+    pub data_width: DataWidth,
+    pub frequency: Frequency,
+}
+
+/// The variant of the 68k family of CPUs that is being emulated
+///
+/// This can be used as a shorthand for creating a CpuInfo that
+/// can be used by the simuation code to determine behaviour
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum M68kType {
+    MC68000,
+    MC68008,
+    MC68010,
+    MC68020,
+    MC68030,
+}
+
+impl From<M68kType> for CoreType {
+    fn from(cputype: M68kType) -> Self {
+        match cputype {
+            M68kType::MC68000 => CoreType::MC68000,
+            M68kType::MC68008 => CoreType::MC68000,
+            M68kType::MC68010 => CoreType::MC68010,
+            M68kType::MC68020 => CoreType::MC68020,
+            M68kType::MC68030 => CoreType::MC68030,
+        }
+    }
+}
+
+impl CpuInfo {
+    fn from(cputype: M68kType, frequency: Frequency) -> Self {
+        match cputype {
+            M68kType::MC68008 => Self {
+                chip: cputype,
+                core_type: cputype.into(),
+                address_width: AddressWidth::A22,
+                data_width: DataWidth::D8,
+                frequency,
+            },
+            M68kType::MC68000 | M68kType::MC68010 => Self {
+                chip: cputype,
+                core_type: cputype.into(),
+                address_width: AddressWidth::A24,
+                data_width: DataWidth::D16,
+                frequency,
+            },
+            M68kType::MC68020 | M68kType::MC68030 => Self {
+                chip: cputype,
+                core_type: cputype.into(),
+                address_width: AddressWidth::A32,
+                data_width: DataWidth::D32,
+                frequency,
+            }
+        }
+    }
 }
 
 const FLAGS_ON_RESET: u16 = 0x2700;
@@ -111,15 +195,11 @@ pub enum M68kError {
 
 #[derive(Clone)]
 pub struct M68k {
-    pub cputype: M68kType,
-    pub frequency: Frequency,
+    pub info: CpuInfo,
     pub state: M68kState,
-    //pub decoder: M68kDecoder,
-    //pub timing: M68kInstructionTiming,
     pub debugger: M68kDebugger,
-    pub port: M68kBusPort,
-    //pub current_clock: Instant,
-    pub cycle: M68kCycle,
+    pub port: BusPort,
+    pub cycle: Option<M68kCycle>,
 }
 
 impl Default for M68kState {
@@ -142,30 +222,20 @@ impl Default for M68kState {
 }
 
 impl M68k {
-    pub fn new(cputype: M68kType, frequency: Frequency, port: BusPort) -> M68k {
-        let data_width = port.data_width();
+    pub fn new(info: CpuInfo, port: BusPort) -> M68k {
         M68k {
-            cputype,
-            frequency,
+            info,
             state: M68kState::default(),
-            //decoder: M68kDecoder::new(cputype, true, 0),
-            //timing: M68kInstructionTiming::new(cputype, port.data_width()),
             debugger: M68kDebugger::default(),
-            port: M68kBusPort::new(port),
-            //current_clock: Instant::START,
-            cycle: M68kCycle::default(cputype, data_width),
+            port,
+            cycle: None,
         }
     }
 
     pub fn from_type(cputype: M68kType, frequency: Frequency, bus: Rc<RefCell<Bus>>, addr_offset: Address) -> Self {
-        match cputype {
-            M68kType::MC68000 |
-            M68kType::MC68010 => Self::new(cputype, frequency, BusPort::new(addr_offset, 24, 16, bus)),
-            M68kType::MC68020 |
-            M68kType::MC68030 => Self::new(cputype, frequency, BusPort::new(addr_offset, 32, 32, bus)),
-        }
+        let info = CpuInfo::from(cputype, frequency);
+        Self::new(info, BusPort::new(addr_offset, info.address_width as u8, info.data_width as u8, bus))
     }
-
 }
 
 impl InterruptPriority {

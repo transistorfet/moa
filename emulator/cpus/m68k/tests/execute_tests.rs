@@ -5,7 +5,7 @@ use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, De
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::M68kState;
-use moa_m68k::execute::{M68kCycle, M68kCycleGuard};
+use moa_m68k::execute::{M68kCycle, M68kCycleExecutor};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, Direction, Condition};
 
 const INIT_STACK: Address = 0x00002000;
@@ -37,7 +37,7 @@ struct TestCase {
 
 fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
 where
-    F: FnMut(M68kCycleGuard, System),
+    F: FnMut(M68kCycleExecutor, System),
 {
     let mut system = System::default();
 
