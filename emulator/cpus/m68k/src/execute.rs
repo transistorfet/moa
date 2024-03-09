@@ -1,10 +1,11 @@
 
 use femtos::{Instant, Duration};
+use emulator_hal::bus::{self, BusAccess, BusAdapter};
 
 use moa_core::{System, Error, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable, BusPort};
 
 use crate::state::{M68k, M68kType, M68kError, M68kState, ClockCycles, Status, Flags, Exceptions, InterruptPriority};
-use crate::memory::{MemType, MemAccess, M68kBusPort};
+use crate::memory::{MemType, MemAccess, M68kBusPort, M68kAddress};
 use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
 use crate::timing::M68kInstructionTiming;
@@ -65,24 +66,40 @@ impl M68kCycle {
     }
 
     #[inline]
-    pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleExecutor<'a> {
+    pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleExecutor<'a, bus::BusAdapter<M68kAddress, u64, Instant, &'a mut BusPort>> {
+        let adapter = bus::BusAdapter {
+            bus: &mut cpu.port,
+            translate: translate_address,
+            instant: core::marker::PhantomData,
+        };
+
         M68kCycleExecutor {
             state: &mut cpu.state,
-            port: &mut cpu.port,
+            port: adapter,
             debugger: &mut cpu.debugger,
             cycle: self,
         }
     }
 }
 
-pub struct M68kCycleExecutor<'a> {
+fn translate_address(addr_in: M68kAddress) -> u64 {
+    addr_in as u64
+}
+
+pub struct M68kCycleExecutor<'a, Bus>
+where
+    Bus: BusAccess<M68kAddress, Instant>,
+{
     pub state: &'a mut M68kState,
-    pub port: &'a mut BusPort,
+    pub port: Bus,
     pub debugger: &'a mut M68kDebugger,
     pub cycle: M68kCycle,
 }
 
-impl<'a> M68kCycleExecutor<'a> {
+impl<'a, Bus> M68kCycleExecutor<'a, Bus>
+where
+    Bus: BusAccess<M68kAddress, Instant>,
+{
     #[inline]
     pub fn dump_state(&mut self) {
         println!("Status: {:?}", self.state.status);
@@ -96,7 +113,7 @@ impl<'a> M68kCycleExecutor<'a> {
 
         println!("Current Instruction: {:#010x} {:?}", self.cycle.decoder.start, self.cycle.decoder.instruction);
         println!();
-        self.cycle.memory.dump_memory(self.port, self.state.ssp, 0x40);
+        self.cycle.memory.dump_memory(&mut self.port, self.state.ssp, 0x40);
         println!();
     }
 
@@ -136,20 +153,21 @@ impl Transmutable for M68k {
     }
 }
 
-impl From<M68kError> for Error {
-    fn from(err: M68kError) -> Self {
+impl<BusError: bus::BusError> From<M68kError<BusError>> for Error {
+    fn from(err: M68kError<BusError>) -> Self {
         match err {
             M68kError::Halted => Self::Other("cpu halted".to_string()),
             M68kError::Exception(ex) => Self::Processor(ex as u32),
             M68kError::Interrupt(num) => Self::Processor(num as u32),
             M68kError::Breakpoint => Self::Breakpoint("breakpoint".to_string()),
             M68kError::InvalidTarget(target) => Self::new(target.to_string()),
+            M68kError::BusError(msg) => Self::Other(format!("{:?}", msg)),
             M68kError::Other(msg) => Self::Other(msg),
         }
     }
 }
 
-impl From<Error> for M68kError {
+impl<BusError> From<Error> for M68kError<BusError> {
     fn from(err: Error) -> Self {
         match err {
             Error::Processor(ex) => M68kError::Interrupt(ex as u8),
@@ -159,15 +177,18 @@ impl From<Error> for M68kError {
     }
 }
 
-impl<'a> M68kCycleExecutor<'a> {
+impl<'a, Bus> M68kCycleExecutor<'a, Bus>
+where
+    Bus: BusAccess<M68kAddress, Instant>,
+{
     #[inline]
-    pub fn step(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
+    pub fn step(&mut self, system: &System) -> Result<ClockCycles, M68kError<Bus::Error>> {
         let result = self.step_one(system);
         self.process_error(result, 4)
     }
 
     #[inline]
-    pub fn process_error<T>(&mut self, result: Result<T, M68kError>, ok: T) -> Result<T, M68kError> {
+    pub fn process_error<T>(&mut self, result: Result<T, M68kError<Bus::Error>>, ok: T) -> Result<T, M68kError<Bus::Error>> {
         match result {
             Ok(value) => Ok(value),
             Err(M68kError::Exception(ex)) => {
@@ -183,34 +204,36 @@ impl<'a> M68kCycleExecutor<'a> {
     }
 
     #[inline]
-    pub fn step_one(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
+    pub fn step_one(&mut self, system: &System) -> Result<ClockCycles, M68kError<Bus::Error>> {
         match self.state.status {
             Status::Init => self.reset_cpu(),
             Status::Stopped => Err(M68kError::Halted),
             Status::Running => self.cycle_one(system),
-        }
+        }?;
+        Ok(self.cycle.timing.calculate_clocks())
     }
 
     #[inline]
-    pub fn reset_cpu(&mut self) -> Result<ClockCycles, M68kError> {
+    pub fn reset_cpu(&mut self) -> Result<(), M68kError<Bus::Error>> {
         self.state.ssp = self.get_address_sized(0, Size::Long)?;
         self.state.pc = self.get_address_sized(4, Size::Long)?;
         self.state.status = Status::Running;
-        Ok(16)
+        self.cycle.timing.performed_reset();
+        Ok(())
     }
 
     #[inline]
-    pub fn cycle_one(&mut self, system: &System) -> Result<ClockCycles, M68kError> {
+    pub fn cycle_one(&mut self, system: &System) -> Result<(), M68kError<Bus::Error>> {
         self.check_breakpoints()?;
 
         self.decode_and_execute()?;
 
         self.check_pending_interrupts(system)?;
-        Ok(self.cycle.timing.calculate_clocks(false, 1))
+        Ok(())
     }
 
     #[inline]
-    pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), M68kError> {
+    pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), M68kError<Bus::Error>> {
         // TODO this could move somewhere else
         self.state.pending_ipl = match system.get_interrupt_controller().check() {
             (true, priority) => InterruptPriority::from_u8(priority),
@@ -268,7 +291,7 @@ impl<'a> M68kCycleExecutor<'a> {
     }
     */
 
-    pub fn exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError> {
+    pub fn exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError<Bus::Error>> {
         log::debug!("{}: raising exception {}", DEV_NAME, number);
 
         if number == Exceptions::BusError as u8 || number == Exceptions::AddressError as u8 {
@@ -284,7 +307,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn setup_group0_exception(&mut self, number: u8) -> Result<(), M68kError> {
+    fn setup_group0_exception(&mut self, number: u8) -> Result<(), M68kError<Bus::Error>> {
         let sr = self.state.sr;
         let ins_word = self.cycle.decoder.instruction_word;
         let extra_code = self.cycle.memory.request.get_type_code();
@@ -313,7 +336,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError> {
+    fn setup_normal_exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError<Bus::Error>> {
         let sr = self.state.sr;
         self.cycle.memory.request.i_n_bit = true;
 
@@ -339,14 +362,14 @@ impl<'a> M68kCycleExecutor<'a> {
     }
 
     #[inline]
-    pub fn decode_and_execute(&mut self) -> Result<(), M68kError> {
+    pub fn decode_and_execute(&mut self) -> Result<(), M68kError<Bus::Error>> {
         self.decode_next()?;
         self.execute_current()?;
         Ok(())
     }
 
     #[inline]
-    pub fn decode_next(&mut self) -> Result<(), M68kError> {
+    pub fn decode_next(&mut self) -> Result<(), M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
         self.cycle.decoder.decode_at(&mut self.port, &mut self.cycle.memory, is_supervisor, self.state.pc)?;
 
@@ -358,7 +381,7 @@ impl<'a> M68kCycleExecutor<'a> {
     }
 
     #[inline]
-    pub fn execute_current(&mut self) -> Result<(), M68kError> {
+    pub fn execute_current(&mut self) -> Result<(), M68kError<Bus::Error>> {
         match self.cycle.decoder.instruction {
             Instruction::ABCD(src, dest) => self.execute_abcd(src, dest),
             Instruction::ADD(src, dest, size) => self.execute_add(src, dest, size),
@@ -454,7 +477,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_abcd(&mut self, src: Target, dest: Target) -> Result<(), M68kError> {
+    fn execute_abcd(&mut self, src: Target, dest: Target) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, Size::Byte, Used::Once)?;
         let dest_val = self.get_target_value(dest, Size::Byte, Used::Twice)?;
 
@@ -478,7 +501,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_add(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_add(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let (result, carry) = overflowing_add_sized(dest_val, src_val, size);
@@ -489,7 +512,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_adda(&mut self, src: Target, dest: Register, size: Size) -> Result<(), M68kError> {
+    fn execute_adda(&mut self, src: Target, dest: Register, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
         let dest_val = *self.get_a_reg_mut(dest);
         let (result, _) = overflowing_add_sized(dest_val, src_val, Size::Long);
@@ -497,7 +520,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_addx(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_addx(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let extend = self.get_flag(Flags::Extend) as u32;
@@ -518,7 +541,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_and(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_and(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let result = get_value_sized(dest_val & src_val, size);
@@ -527,18 +550,18 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_and_to_ccr(&mut self, value: u8) -> Result<(), M68kError> {
+    fn execute_and_to_ccr(&mut self, value: u8) -> Result<(), M68kError<Bus::Error>> {
         self.state.sr = (self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) & (value as u16));
         Ok(())
     }
 
-    fn execute_and_to_sr(&mut self, value: u16) -> Result<(), M68kError> {
+    fn execute_and_to_sr(&mut self, value: u16) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         self.set_sr(self.state.sr & value);
         Ok(())
     }
 
-    fn execute_asl(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_asl(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let value = self.get_target_value(target, size, Used::Twice)?;
 
@@ -558,7 +581,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_asr(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_asr(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let value = self.get_target_value(target, size, Used::Twice)?;
 
@@ -591,7 +614,7 @@ impl<'a> M68kCycleExecutor<'a> {
         }
     }
 
-    fn execute_bcc(&mut self, cond: Condition, offset: i32) -> Result<(), M68kError> {
+    fn execute_bcc(&mut self, cond: Condition, offset: i32) -> Result<(), M68kError<Bus::Error>> {
         let should_branch = self.get_current_condition(cond);
         if should_branch {
             if let Err(err) = self.set_pc(self.cycle.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
@@ -602,7 +625,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bra(&mut self, offset: i32) -> Result<(), M68kError> {
+    fn execute_bra(&mut self, offset: i32) -> Result<(), M68kError<Bus::Error>> {
         if let Err(err) = self.set_pc(self.cycle.decoder.start.wrapping_add(2).wrapping_add(offset as u32)) {
             self.state.pc -= 2;
             return Err(err);
@@ -610,7 +633,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bsr(&mut self, offset: i32) -> Result<(), M68kError> {
+    fn execute_bsr(&mut self, offset: i32) -> Result<(), M68kError<Bus::Error>> {
         self.push_long(self.state.pc)?;
         let sp = *self.get_stack_pointer_mut();
         self.debugger.stack_tracer.push_return(sp);
@@ -621,7 +644,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bchg(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_bchg(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
         let mut src_val = self.get_target_value(target, size, Used::Twice)?;
         let mask = self.set_bit_test_flags(src_val, bitnum, size);
@@ -630,7 +653,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bclr(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_bclr(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
         let mut src_val = self.get_target_value(target, size, Used::Twice)?;
         let mask = self.set_bit_test_flags(src_val, bitnum, size);
@@ -639,7 +662,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bset(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_bset(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
         let mut value = self.get_target_value(target, size, Used::Twice)?;
         let mask = self.set_bit_test_flags(value, bitnum, size);
@@ -648,14 +671,14 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_btst(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_btst(&mut self, bitnum: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let bitnum = self.get_target_value(bitnum, Size::Byte, Used::Once)?;
         let value = self.get_target_value(target, size, Used::Once)?;
         self.set_bit_test_flags(value, bitnum, size);
         Ok(())
     }
 
-    fn execute_bfchg(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError> {
+    fn execute_bfchg(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Twice)?;
@@ -665,7 +688,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bfclr(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError> {
+    fn execute_bfclr(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Twice)?;
@@ -675,7 +698,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bfexts(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate, reg: Register) -> Result<(), M68kError> {
+    fn execute_bfexts(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate, reg: Register) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Once)?;
@@ -691,7 +714,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bfextu(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate, reg: Register) -> Result<(), M68kError> {
+    fn execute_bfextu(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate, reg: Register) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Once)?;
@@ -701,7 +724,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bfset(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError> {
+    fn execute_bfset(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Twice)?;
@@ -711,7 +734,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_bftst(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError> {
+    fn execute_bftst(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Once)?;
@@ -720,7 +743,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_chk(&mut self, target: Target, reg: Register, size: Size) -> Result<(), M68kError> {
+    fn execute_chk(&mut self, target: Target, reg: Register, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let upper_bound = sign_extend_to_long(self.get_target_value(target, size, Used::Once)?, size);
         let dreg = sign_extend_to_long(self.state.d_reg[reg as usize], size);
 
@@ -736,7 +759,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_clr(&mut self, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_clr(&mut self, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         if self.cycle.decoder.cputype == M68kType::MC68000 {
             self.get_target_value(target, size, Used::Twice)?;
             self.set_target_value(target, 0, size, Used::Twice)?;
@@ -748,7 +771,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_cmp(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_cmp(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Once)?;
         let (result, carry) = overflowing_sub_sized(dest_val, src_val, size);
@@ -757,7 +780,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_cmpa(&mut self, src: Target, reg: Register, size: Size) -> Result<(), M68kError> {
+    fn execute_cmpa(&mut self, src: Target, reg: Register, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
         let dest_val = *self.get_a_reg_mut(reg);
         let (result, carry) = overflowing_sub_sized(dest_val, src_val, Size::Long);
@@ -766,7 +789,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_dbcc(&mut self, cond: Condition, reg: Register, offset: i16) -> Result<(), M68kError> {
+    fn execute_dbcc(&mut self, cond: Condition, reg: Register, offset: i16) -> Result<(), M68kError<Bus::Error>> {
         let condition_true = self.get_current_condition(cond);
         if !condition_true {
             let next = ((get_value_sized(self.state.d_reg[reg as usize], Size::Word) as u16) as i16).wrapping_sub(1);
@@ -781,7 +804,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_divw(&mut self, src: Target, dest: Register, sign: Sign) -> Result<(), M68kError> {
+    fn execute_divw(&mut self, src: Target, dest: Register, sign: Sign) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, Size::Word, Used::Once)?;
         if src_val == 0 {
             self.exception(Exceptions::ZeroDivide as u8, false)?;
@@ -821,7 +844,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_divl(&mut self, src: Target, dest_h: Option<Register>, dest_l: Register, sign: Sign) -> Result<(), M68kError> {
+    fn execute_divl(&mut self, src: Target, dest_h: Option<Register>, dest_l: Register, sign: Sign) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, Size::Long, Used::Once)?;
         if src_val == 0 {
             self.exception(Exceptions::ZeroDivide as u8, false)?;
@@ -854,7 +877,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_eor(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_eor(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let result = get_value_sized(dest_val ^ src_val, size);
@@ -863,18 +886,18 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_eor_to_ccr(&mut self, value: u8) -> Result<(), M68kError> {
+    fn execute_eor_to_ccr(&mut self, value: u8) -> Result<(), M68kError<Bus::Error>> {
         self.set_sr((self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) ^ (value as u16)));
         Ok(())
     }
 
-    fn execute_eor_to_sr(&mut self, value: u16) -> Result<(), M68kError> {
+    fn execute_eor_to_sr(&mut self, value: u16) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         self.set_sr(self.state.sr ^ value);
         Ok(())
     }
 
-    fn execute_exg(&mut self, target1: Target, target2: Target) -> Result<(), M68kError> {
+    fn execute_exg(&mut self, target1: Target, target2: Target) -> Result<(), M68kError<Bus::Error>> {
         let value1 = self.get_target_value(target1, Size::Long, Used::Twice)?;
         let value2 = self.get_target_value(target2, Size::Long, Used::Twice)?;
         self.set_target_value(target1, value2, Size::Long, Used::Twice)?;
@@ -882,7 +905,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_ext(&mut self, reg: Register, from_size: Size, to_size: Size) -> Result<(), M68kError> {
+    fn execute_ext(&mut self, reg: Register, from_size: Size, to_size: Size) -> Result<(), M68kError<Bus::Error>> {
         let input = get_value_sized(self.state.d_reg[reg as usize], from_size);
         let result = match (from_size, to_size) {
             (Size::Byte, Size::Word) => ((((input as u8) as i8) as i16) as u16) as u32,
@@ -895,12 +918,12 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_illegal(&mut self) -> Result<(), M68kError> {
+    fn execute_illegal(&mut self) -> Result<(), M68kError<Bus::Error>> {
         self.exception(Exceptions::IllegalInstruction as u8, false)?;
         Ok(())
     }
 
-    fn execute_jmp(&mut self, target: Target) -> Result<(), M68kError> {
+    fn execute_jmp(&mut self, target: Target) -> Result<(), M68kError<Bus::Error>> {
         let addr = self.get_target_address(target)?;
         if let Err(err) = self.set_pc(addr) {
             self.state.pc -= 2;
@@ -909,7 +932,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_jsr(&mut self, target: Target) -> Result<(), M68kError> {
+    fn execute_jsr(&mut self, target: Target) -> Result<(), M68kError<Bus::Error>> {
         let previous_pc = self.state.pc;
         let addr = self.get_target_address(target)?;
         if let Err(err) = self.set_pc(addr) {
@@ -924,14 +947,14 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_lea(&mut self, target: Target, reg: Register) -> Result<(), M68kError> {
+    fn execute_lea(&mut self, target: Target, reg: Register) -> Result<(), M68kError<Bus::Error>> {
         let value = self.get_target_address(target)?;
         let addr = self.get_a_reg_mut(reg);
         *addr = value;
         Ok(())
     }
 
-    fn execute_link(&mut self, reg: Register, offset: i32) -> Result<(), M68kError> {
+    fn execute_link(&mut self, reg: Register, offset: i32) -> Result<(), M68kError<Bus::Error>> {
         *self.get_stack_pointer_mut() -= 4;
         let sp = *self.get_stack_pointer_mut();
         let value = *self.get_a_reg_mut(reg);
@@ -941,7 +964,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_lsl(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_lsl(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
@@ -953,7 +976,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_lsr(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_lsr(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
@@ -976,14 +999,14 @@ impl<'a> M68kCycleExecutor<'a> {
         }
     }
 
-    fn execute_move(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_move(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         self.set_logic_flags(src_val, size);
         self.set_target_value(dest, src_val, size, Used::Once)?;
         Ok(())
     }
 
-    fn execute_movea(&mut self, src: Target, reg: Register, size: Size) -> Result<(), M68kError> {
+    fn execute_movea(&mut self, src: Target, reg: Register, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let src_val = sign_extend_to_long(src_val, size) as u32;
         let addr = self.get_a_reg_mut(reg);
@@ -991,26 +1014,26 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_move_from_sr(&mut self, target: Target) -> Result<(), M68kError> {
+    fn execute_move_from_sr(&mut self, target: Target) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         self.set_target_value(target, self.state.sr as u32, Size::Word, Used::Once)?;
         Ok(())
     }
 
-    fn execute_move_to_sr(&mut self, target: Target) -> Result<(), M68kError> {
+    fn execute_move_to_sr(&mut self, target: Target) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         let value = self.get_target_value(target, Size::Word, Used::Once)? as u16;
         self.set_sr(value);
         Ok(())
     }
 
-    fn execute_move_to_ccr(&mut self, target: Target) -> Result<(), M68kError> {
+    fn execute_move_to_ccr(&mut self, target: Target) -> Result<(), M68kError<Bus::Error>> {
         let value = self.get_target_value(target, Size::Word, Used::Once)? as u16;
         self.set_sr((self.state.sr & 0xFF00) | (value & 0x00FF));
         Ok(())
     }
 
-    fn execute_movec(&mut self, target: Target, control_reg: ControlRegister, dir: Direction) -> Result<(), M68kError> {
+    fn execute_movec(&mut self, target: Target, control_reg: ControlRegister, dir: Direction) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         match dir {
             Direction::FromTarget => {
@@ -1027,7 +1050,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_movem(&mut self, target: Target, size: Size, dir: Direction, mask: u16) -> Result<(), M68kError> {
+    fn execute_movem(&mut self, target: Target, size: Size, dir: Direction, mask: u16) -> Result<(), M68kError<Bus::Error>> {
         let addr = self.get_target_address(target)?;
 
         // If we're using a MC68020 or higher, and it was Post-Inc/Pre-Dec target, then update the value before it's stored
@@ -1074,7 +1097,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn move_memory_to_registers(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, M68kError> {
+    fn move_memory_to_registers(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, M68kError<Bus::Error>> {
         for i in 0..8 {
             if (mask & 0x01) != 0 {
                 self.state.d_reg[i] = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
@@ -1092,7 +1115,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(addr)
     }
 
-    fn move_registers_to_memory(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, M68kError> {
+    fn move_registers_to_memory(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, M68kError<Bus::Error>> {
         for i in 0..8 {
             if (mask & 0x01) != 0 {
                 self.set_address_sized(addr as Address, self.state.d_reg[i], size)?;
@@ -1111,7 +1134,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(addr)
     }
 
-    fn move_registers_to_memory_reverse(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, M68kError> {
+    fn move_registers_to_memory_reverse(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, M68kError<Bus::Error>> {
         for i in (0..8).rev() {
             if (mask & 0x01) != 0 {
                 let value = *self.get_a_reg_mut(i);
@@ -1130,7 +1153,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(addr)
     }
 
-    fn execute_movep(&mut self, dreg: Register, areg: Register, offset: i16, size: Size, dir: Direction) -> Result<(), M68kError> {
+    fn execute_movep(&mut self, dreg: Register, areg: Register, offset: i16, size: Size, dir: Direction) -> Result<(), M68kError<Bus::Error>> {
         match dir {
             Direction::ToTarget => {
                 let mut shift = (size.in_bits() as i32) - 8;
@@ -1156,14 +1179,14 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_moveq(&mut self, data: u8, reg: Register) -> Result<(), M68kError> {
+    fn execute_moveq(&mut self, data: u8, reg: Register) -> Result<(), M68kError<Bus::Error>> {
         let value = sign_extend_to_long(data as u32, Size::Byte) as u32;
         self.state.d_reg[reg as usize] = value;
         self.set_logic_flags(value, Size::Long);
         Ok(())
     }
 
-    fn execute_moveusp(&mut self, target: Target, dir: Direction) -> Result<(), M68kError> {
+    fn execute_moveusp(&mut self, target: Target, dir: Direction) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         match dir {
             Direction::ToTarget => self.set_target_value(target, self.state.usp, Size::Long, Used::Once)?,
@@ -1172,7 +1195,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_mulw(&mut self, src: Target, dest: Register, sign: Sign) -> Result<(), M68kError> {
+    fn execute_mulw(&mut self, src: Target, dest: Register, sign: Sign) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, Size::Word, Used::Once)?;
         let dest_val = get_value_sized(self.state.d_reg[dest as usize], Size::Word);
         let result = match sign {
@@ -1185,7 +1208,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_mull(&mut self, src: Target, dest_h: Option<Register>, dest_l: Register, sign: Sign) -> Result<(), M68kError> {
+    fn execute_mull(&mut self, src: Target, dest_h: Option<Register>, dest_l: Register, sign: Sign) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, Size::Long, Used::Once)?;
         let dest_val = get_value_sized(self.state.d_reg[dest_l as usize], Size::Long);
         let result = match sign {
@@ -1201,14 +1224,14 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_nbcd(&mut self, dest: Target) -> Result<(), M68kError> {
+    fn execute_nbcd(&mut self, dest: Target) -> Result<(), M68kError<Bus::Error>> {
         let dest_val = self.get_target_value(dest, Size::Byte, Used::Twice)?;
         let result = self.execute_sbcd_val(dest_val, 0)?;
         self.set_target_value(dest, result, Size::Byte, Used::Twice)?;
         Ok(())
     }
 
-    fn execute_neg(&mut self, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_neg(&mut self, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let original = self.get_target_value(target, size, Used::Twice)?;
         let (result, overflow) = overflowing_sub_signed_sized(0, original, size);
         let carry = result != 0;
@@ -1218,7 +1241,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_negx(&mut self, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_negx(&mut self, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let extend = self.get_flag(Flags::Extend) as u32;
         let (result1, carry1) = overflowing_sub_sized(0, dest_val, size);
@@ -1238,7 +1261,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_not(&mut self, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_not(&mut self, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let mut value = self.get_target_value(target, size, Used::Twice)?;
         value = get_value_sized(!value, size);
         self.set_target_value(target, value, size, Used::Twice)?;
@@ -1246,7 +1269,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_or(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_or(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let result = get_value_sized(dest_val | src_val, size);
@@ -1255,30 +1278,30 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_or_to_ccr(&mut self, value: u8) -> Result<(), M68kError> {
+    fn execute_or_to_ccr(&mut self, value: u8) -> Result<(), M68kError<Bus::Error>> {
         self.set_sr((self.state.sr & 0xFF00) | ((self.state.sr & 0x00FF) | (value as u16)));
         Ok(())
     }
 
-    fn execute_or_to_sr(&mut self, value: u16) -> Result<(), M68kError> {
+    fn execute_or_to_sr(&mut self, value: u16) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         self.set_sr(self.state.sr | value);
         Ok(())
     }
 
-    fn execute_pea(&mut self, target: Target) -> Result<(), M68kError> {
+    fn execute_pea(&mut self, target: Target) -> Result<(), M68kError<Bus::Error>> {
         let value = self.get_target_address(target)?;
         self.push_long(value)?;
         Ok(())
     }
 
-    fn execute_reset(&mut self) -> Result<(), M68kError> {
+    fn execute_reset(&mut self) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         // TODO this only resets external devices and not internal ones
         Ok(())
     }
 
-    fn execute_rol(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_rol(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
@@ -1289,7 +1312,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_ror(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_ror(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
@@ -1300,7 +1323,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_roxl(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_roxl(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
@@ -1312,7 +1335,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_roxr(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_roxr(&mut self, count: Target, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let count = self.get_target_value(count, size, Used::Once)? % 64;
         let mut pair = (self.get_target_value(target, size, Used::Twice)?, false);
         for _ in 0..count {
@@ -1331,7 +1354,7 @@ impl<'a> M68kCycleExecutor<'a> {
         }
     }
 
-    fn execute_rte(&mut self) -> Result<(), M68kError> {
+    fn execute_rte(&mut self) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         let sr = self.pop_word()?;
         let addr = self.pop_long()?;
@@ -1348,7 +1371,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_rtr(&mut self) -> Result<(), M68kError> {
+    fn execute_rtr(&mut self) -> Result<(), M68kError<Bus::Error>> {
         let ccr = self.pop_word()?;
         let addr = self.pop_long()?;
         self.set_sr((self.state.sr & 0xFF00) | (ccr & 0x00FF));
@@ -1359,7 +1382,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_rts(&mut self) -> Result<(), M68kError> {
+    fn execute_rts(&mut self) -> Result<(), M68kError<Bus::Error>> {
         self.debugger.stack_tracer.pop_return();
         let addr = self.pop_long()?;
         if let Err(err) = self.set_pc(addr) {
@@ -1369,7 +1392,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_scc(&mut self, cond: Condition, target: Target) -> Result<(), M68kError> {
+    fn execute_scc(&mut self, cond: Condition, target: Target) -> Result<(), M68kError<Bus::Error>> {
         let condition_true = self.get_current_condition(cond);
         if condition_true {
             self.set_target_value(target, 0xFF, Size::Byte, Used::Once)?;
@@ -1379,14 +1402,14 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_stop(&mut self, flags: u16) -> Result<(), M68kError> {
+    fn execute_stop(&mut self, flags: u16) -> Result<(), M68kError<Bus::Error>> {
         self.require_supervisor()?;
         self.set_sr(flags);
         self.state.status = Status::Stopped;
         Ok(())
     }
 
-    fn execute_sbcd(&mut self, src: Target, dest: Target) -> Result<(), M68kError> {
+    fn execute_sbcd(&mut self, src: Target, dest: Target) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, Size::Byte, Used::Once)?;
         let dest_val = self.get_target_value(dest, Size::Byte, Used::Twice)?;
         let result = self.execute_sbcd_val(src_val, dest_val)?;
@@ -1394,7 +1417,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_sbcd_val(&mut self, src_val: u32, dest_val: u32) -> Result<u32, M68kError> {
+    fn execute_sbcd_val(&mut self, src_val: u32, dest_val: u32) -> Result<u32, M68kError<Bus::Error>> {
         let extend_flag = self.get_flag(Flags::Extend) as u32;
         let src_parts = get_nibbles_from_byte(src_val);
         let dest_parts = get_nibbles_from_byte(dest_val);
@@ -1415,7 +1438,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(result)
     }
 
-    fn execute_sub(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_sub(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let (result, carry) = overflowing_sub_sized(dest_val, src_val, size);
@@ -1426,7 +1449,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_suba(&mut self, src: Target, dest: Register, size: Size) -> Result<(), M68kError> {
+    fn execute_suba(&mut self, src: Target, dest: Register, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = sign_extend_to_long(self.get_target_value(src, size, Used::Once)?, size) as u32;
         let dest_val = *self.get_a_reg_mut(dest);
         let (result, _) = overflowing_sub_sized(dest_val, src_val, Size::Long);
@@ -1434,7 +1457,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_subx(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_subx(&mut self, src: Target, dest: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, size, Used::Once)?;
         let dest_val = self.get_target_value(dest, size, Used::Twice)?;
         let extend = self.get_flag(Flags::Extend) as u32;
@@ -1455,14 +1478,14 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_swap(&mut self, reg: Register) -> Result<(), M68kError> {
+    fn execute_swap(&mut self, reg: Register) -> Result<(), M68kError<Bus::Error>> {
         let value = self.state.d_reg[reg as usize];
         self.state.d_reg[reg as usize] = ((value & 0x0000FFFF) << 16) | ((value & 0xFFFF0000) >> 16);
         self.set_logic_flags(self.state.d_reg[reg as usize], Size::Long);
         Ok(())
     }
 
-    fn execute_tas(&mut self, target: Target) -> Result<(), M68kError> {
+    fn execute_tas(&mut self, target: Target) -> Result<(), M68kError<Bus::Error>> {
         let value = self.get_target_value(target, Size::Byte, Used::Twice)?;
         self.set_flag(Flags::Negative, (value & 0x80) != 0);
         self.set_flag(Flags::Zero, value == 0);
@@ -1472,25 +1495,25 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_tst(&mut self, target: Target, size: Size) -> Result<(), M68kError> {
+    fn execute_tst(&mut self, target: Target, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let value = self.get_target_value(target, size, Used::Once)?;
         self.set_logic_flags(value, size);
         Ok(())
     }
 
-    fn execute_trap(&mut self, number: u8) -> Result<(), M68kError> {
+    fn execute_trap(&mut self, number: u8) -> Result<(), M68kError<Bus::Error>> {
         self.exception(32 + number, false)?;
         Ok(())
     }
 
-    fn execute_trapv(&mut self) -> Result<(), M68kError> {
+    fn execute_trapv(&mut self) -> Result<(), M68kError<Bus::Error>> {
         if self.get_flag(Flags::Overflow) {
             self.exception(Exceptions::TrapvInstruction as u8, false)?;
         }
         Ok(())
     }
 
-    fn execute_unlk(&mut self, reg: Register) -> Result<(), M68kError> {
+    fn execute_unlk(&mut self, reg: Register) -> Result<(), M68kError<Bus::Error>> {
         let value = *self.get_a_reg_mut(reg);
         *self.get_stack_pointer_mut() = value;
         let new_value = self.pop_long()?;
@@ -1499,20 +1522,20 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn execute_unimplemented_a(&mut self, _: u16) -> Result<(), M68kError> {
+    fn execute_unimplemented_a(&mut self, _: u16) -> Result<(), M68kError<Bus::Error>> {
         self.state.pc -= 2;
         self.exception(Exceptions::LineAEmulator as u8, false)?;
         Ok(())
     }
 
-    fn execute_unimplemented_f(&mut self, _: u16) -> Result<(), M68kError> {
+    fn execute_unimplemented_f(&mut self, _: u16) -> Result<(), M68kError<Bus::Error>> {
         self.state.pc -= 2;
         self.exception(Exceptions::LineFEmulator as u8, false)?;
         Ok(())
     }
 
 
-    pub(super) fn get_target_value(&mut self, target: Target, size: Size, used: Used) -> Result<u32, M68kError> {
+    pub(super) fn get_target_value(&mut self, target: Target, size: Size, used: Used) -> Result<u32, M68kError<Bus::Error>> {
         match target {
             Target::Immediate(value) => Ok(value),
             Target::DirectDReg(reg) => Ok(get_value_sized(self.state.d_reg[reg as usize], size)),
@@ -1552,7 +1575,7 @@ impl<'a> M68kCycleExecutor<'a> {
         }
     }
 
-    pub(super) fn set_target_value(&mut self, target: Target, value: u32, size: Size, used: Used) -> Result<(), M68kError> {
+    pub(super) fn set_target_value(&mut self, target: Target, value: u32, size: Size, used: Used) -> Result<(), M68kError<Bus::Error>> {
         match target {
             Target::DirectDReg(reg) => {
                 set_value_sized(&mut self.state.d_reg[reg as usize], value, size);
@@ -1597,7 +1620,7 @@ impl<'a> M68kCycleExecutor<'a> {
         Ok(())
     }
 
-    fn get_target_address(&mut self, target: Target) -> Result<u32, M68kError> {
+    fn get_target_address(&mut self, target: Target) -> Result<u32, M68kError<Bus::Error>> {
         let addr = match target {
             Target::IndirectAReg(reg) | Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => *self.get_a_reg_mut(reg),
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
@@ -1652,47 +1675,49 @@ impl<'a> M68kCycleExecutor<'a> {
         *reg_addr
     }
 
-    fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, M68kError> {
-        self.cycle.memory.read_data_sized(self.port, self.is_supervisor(), addr, size)
+    fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, M68kError<Bus::Error>> {
+        let is_supervisor = self.is_supervisor();
+        self.cycle.memory.read_data_sized(&mut self.port, is_supervisor, addr, size)
     }
 
-    fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), M68kError> {
-        self.cycle.memory.write_data_sized(self.port, self.is_supervisor(), addr, value, size)
+    fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), M68kError<Bus::Error>> {
+        let is_supervisor = self.is_supervisor();
+        self.cycle.memory.write_data_sized(&mut self.port, is_supervisor, addr, value, size)
     }
 
-    fn push_word(&mut self, value: u16) -> Result<(), M68kError> {
+    fn push_word(&mut self, value: u16) -> Result<(), M68kError<Bus::Error>> {
         *self.get_stack_pointer_mut() -= 2;
         let addr = *self.get_stack_pointer_mut();
         self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Write, MemType::Data, false)?;
-        self.port.write_beu16(self.cycle.current_clock, addr as Address, value)?;
+        self.port.write_beu16(self.cycle.current_clock, addr as Address, value).map_err(|err| M68kError::BusError(err))?;
         Ok(())
     }
 
-    fn pop_word(&mut self) -> Result<u16, M68kError> {
+    fn pop_word(&mut self) -> Result<u16, M68kError<Bus::Error>> {
         let addr = *self.get_stack_pointer_mut();
         self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Read, MemType::Data, false)?;
-        let value = self.port.read_beu16(self.cycle.current_clock, addr as Address)?;
+        let value = self.port.read_beu16(self.cycle.current_clock, addr as Address).map_err(|err| M68kError::BusError(err))?;
         *self.get_stack_pointer_mut() += 2;
         Ok(value)
     }
 
-    fn push_long(&mut self, value: u32) -> Result<(), M68kError> {
+    fn push_long(&mut self, value: u32) -> Result<(), M68kError<Bus::Error>> {
         *self.get_stack_pointer_mut() -= 4;
         let addr = *self.get_stack_pointer_mut();
         self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Write, MemType::Data, false)?;
-        self.port.write_beu32(self.cycle.current_clock, addr as Address, value)?;
+        self.port.write_beu32(self.cycle.current_clock, addr as Address, value).map_err(|err| M68kError::BusError(err))?;
         Ok(())
     }
 
-    fn pop_long(&mut self) -> Result<u32, M68kError> {
+    fn pop_long(&mut self) -> Result<u32, M68kError<Bus::Error>> {
         let addr = *self.get_stack_pointer_mut();
         self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Read, MemType::Data, false)?;
-        let value = self.port.read_beu32(self.cycle.current_clock, addr as Address)?;
+        let value = self.port.read_beu32(self.cycle.current_clock, addr as Address).map_err(|err| M68kError::BusError(err))?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }
 
-    fn set_pc(&mut self, value: u32) -> Result<(), M68kError> {
+    fn set_pc(&mut self, value: u32) -> Result<(), M68kError<Bus::Error>> {
         self.state.pc = value;
         self.cycle.memory.start_request(self.is_supervisor(), self.state.pc, Size::Word, MemAccess::Read, MemType::Program, true)?;
         Ok(())
@@ -1769,7 +1794,7 @@ impl<'a> M68kCycleExecutor<'a> {
         self.state.sr & (Flags:: Supervisor as u16) != 0
     }
 
-    fn require_supervisor(&self) -> Result<(), M68kError> {
+    fn require_supervisor(&self) -> Result<(), M68kError<Bus::Error>> {
         if self.is_supervisor() {
             Ok(())
         } else {

@@ -6,17 +6,11 @@ use moa_core::{Address, Addressable};
 use crate::state::Z80Error;
 use crate::instructions::{Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target, LoadTarget, UndocumentedCopy, Instruction};
 
-use emulator_hal::bus::{BusType, BusAccess};
+use emulator_hal::bus::{BusAccess};
 
 struct Z80Bus;
 
 type Z80Address = (bool, u16);
-
-impl BusType for Z80Bus {
-    //type Address = (bool, u16);
-    type Error = Z80Error;
-    type Instant = Instant;
-}
 
 #[derive(Clone)]
 pub struct Z80Decoder {

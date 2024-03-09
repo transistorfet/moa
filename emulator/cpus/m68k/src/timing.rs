@@ -9,6 +9,9 @@ pub struct M68kInstructionTiming {
     pub cputype: M68kType,
     pub bus_size: Size,
 
+    pub branched: bool,
+    pub reps: u16,
+
     pub accesses: u8,
     pub internal: u8,
     pub on_branch: u8,
@@ -21,6 +24,9 @@ impl M68kInstructionTiming {
         Self {
             cputype,
             bus_size,
+
+            branched: false,
+            reps: 0,
 
             accesses: 0,
             internal: 0,
@@ -338,12 +344,27 @@ impl M68kInstructionTiming {
         self.add_internal(4)
     }
 
-    pub fn calculate_clocks(&self, branched: bool, reps: u16) -> ClockCycles {
+    pub fn performed_reset(&mut self) {
+        self.internal = 0;
+        self.accesses = 4;
+        self.branched = false;
+        self.reps = 0;
+    }
+
+    pub fn increase_reps(&mut self, reps: u16) {
+        self.reps += reps;
+    }
+
+    pub fn branch_taken(&mut self) {
+        self.branched = true;
+    }
+
+    pub fn calculate_clocks(&self) -> ClockCycles {
         //println!("{:?}", self);
         (self.accesses as ClockCycles * 4)
         + self.internal as ClockCycles
-        + (if branched { self.on_branch as ClockCycles } else { 0 })
-        + self.per_rep as ClockCycles * reps
+        + (if self.branched { self.on_branch as ClockCycles } else { 0 })
+        + self.per_rep as ClockCycles * self.reps
     }
 
     #[inline(always)]

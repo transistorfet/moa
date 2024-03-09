@@ -150,7 +150,7 @@ fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, Syst
     } else {
         BusPort::new(0, 32, 32, system.bus.clone())
     };
-    let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
+    let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
     cpu.state.status = Status::Running;
 
     load_state(&mut cpu, &mut system, state)?;
@@ -226,7 +226,7 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
     assert_value(cpu.state.sr, expected.sr, "sr")?;
     assert_value(cpu.state.pc, expected.pc, "pc")?;
 
-    let addr_mask = cpu.port.port.address_mask();
+    let addr_mask = cpu.port.address_mask();
 
     // Load instructions into memory
     for (i, ins) in expected.prefetch.iter().enumerate() {
@@ -246,7 +246,7 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
 
 fn step_cpu_and_assert(cpu: &mut M68k, system: &System, case: &TestCase, test_timing: bool) -> Result<(), Error> {
     let clock_elapsed = cpu.step(&system)?;
-    let cycles = clock_elapsed / cpu.frequency.period_duration();
+    let cycles = clock_elapsed / cpu.info.frequency.period_duration();
 
     assert_state(&cpu, &system, &case.final_state)?;
 
@@ -269,8 +269,8 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                 if args.debug {
                     case.dump();
                     println!("");
-                    initial_cpu.dump_state();
-                    cpu.dump_state();
+                    //initial_cpu.dump_state();
+                    //cpu.dump_state();
                 }
                 println!("FAILED: {:?}",  err);
             }

@@ -1,10 +1,11 @@
 
 use femtos::Instant;
+use emulator_hal::bus::{self, BusAccess, BusError};
 
-use moa_core::{Address, Addressable, BusPort};
+use moa_core::{Error, Address, Addressable};
 
 use crate::state::{M68kType, M68kError, Exceptions};
-use crate::memory::M68kBusPort;
+use crate::memory::{M68kBusPort, M68kAddress};
 use crate::instructions::{
     Size,
     Sign,
@@ -49,8 +50,11 @@ pub struct M68kDecoder {
     pub instruction: Instruction,
 }
 
-pub struct InstructionDecoding<'a> {
-    port: &'a mut BusPort,
+pub struct InstructionDecoding<'a, Bus>
+where
+    Bus: BusAccess<M68kAddress, Instant>,
+{
+    port: &'a mut Bus,
     memory: &'a mut M68kBusPort,
     decoder: &'a mut M68kDecoder,
 }
@@ -76,7 +80,10 @@ impl M68kDecoder {
     }
 
     #[inline]
-    pub fn decode_at(&mut self, port: &mut BusPort, memory: &mut M68kBusPort, is_supervisor: bool, start: u32) -> Result<(), M68kError> {
+    pub fn decode_at<Bus>(&mut self, port: &mut Bus, memory: &mut M68kBusPort, is_supervisor: bool, start: u32) -> Result<(), M68kError<Bus::Error>>
+    where
+        Bus: BusAccess<M68kAddress, Instant>,
+    {
         self.init(is_supervisor, start);
         let mut decoding = InstructionDecoding {
             port,
@@ -87,7 +94,10 @@ impl M68kDecoder {
         Ok(())
     }
 
-    pub fn dump_disassembly(&mut self, port: &mut BusPort, memory: &mut M68kBusPort, start: u32, length: u32) {
+    pub fn dump_disassembly<Bus>(&mut self, port: &mut Bus, memory: &mut M68kBusPort, start: u32, length: u32)
+    where
+        Bus: BusAccess<M68kAddress, Instant>,
+    {
         let mut next = start;
         while next < (start + length) {
             match self.decode_at(port, memory, self.is_supervisor, next) {
@@ -109,8 +119,11 @@ impl M68kDecoder {
         }
     }
 
-    pub fn dump_decoded(&mut self, clock: Instant, port: &mut BusPort) {
-        let ins_data: Result<String, M68kError> =
+    pub fn dump_decoded<Bus>(&mut self, clock: Instant, port: &mut Bus)
+    where
+        Bus: BusAccess<M68kAddress, Instant>,
+    {
+        let ins_data: Result<String, M68kError<Bus::Error>> =
             (0..((self.end - self.start) / 2)).map(|offset|
                 Ok(format!("{:04x} ", port.read_beu16(clock, (self.start + (offset * 2)) as Address).unwrap()))
             ).collect();
@@ -118,9 +131,12 @@ impl M68kDecoder {
     }
 }
 
-impl<'a> InstructionDecoding<'a> {
+impl<'a, Bus> InstructionDecoding<'a, Bus>
+where
+    Bus: BusAccess<M68kAddress, Instant>,
+{
     #[inline]
-    pub fn decode_next(&mut self) -> Result<Instruction, M68kError> {
+    pub fn decode_next(&mut self) -> Result<Instruction, M68kError<Bus::Error>> {
         let ins = self.read_instruction_word()?;
         self.decoder.instruction_word = ins;
 
@@ -146,7 +162,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_bit_ops(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_bit_ops(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let optype = (ins & 0x0F00) >> 8;
 
         if (ins & 0x13F) == 0x03C {
@@ -221,14 +237,14 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_move_byte(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_move_byte(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let src = self.decode_lower_effective_address(ins, Some(Size::Byte))?;
         let dest = self.decode_upper_effective_address(ins, Some(Size::Byte))?;
         Ok(Instruction::MOVE(src, dest, Size::Byte))
     }
 
     #[inline]
-    fn decode_group_move_long(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_move_long(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let src = self.decode_lower_effective_address(ins, Some(Size::Long))?;
         let dest = self.decode_upper_effective_address(ins, Some(Size::Long))?;
         if let Target::DirectAReg(reg) = dest {
@@ -239,7 +255,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_move_word(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_move_word(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let src = self.decode_lower_effective_address(ins, Some(Size::Word))?;
         let dest = self.decode_upper_effective_address(ins, Some(Size::Word))?;
         if let Target::DirectAReg(reg) = dest {
@@ -250,7 +266,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_misc(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_misc(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let ins_0f00 = ins & 0xF00;
         let ins_00f0 = ins & 0x0F0;
 
@@ -421,7 +437,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_addq_subq(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_addq_subq(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         match get_size(ins) {
             Some(size) => {
                 let target = self.decode_lower_effective_address(ins, Some(size))?;
@@ -459,7 +475,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_branch(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_branch(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let mut disp = ((ins & 0xFF) as i8) as i32;
         if disp == 0 {
             disp = (self.read_instruction_word()? as i16) as i32;
@@ -475,7 +491,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_moveq(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_moveq(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         if (ins & 0x0100) != 0 {
             return Err(M68kError::Exception(Exceptions::IllegalInstruction));
         }
@@ -485,7 +501,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_div_or(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_div_or(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let size = get_size(ins);
 
         if (ins & 0x1F0) == 0x100 {
@@ -509,7 +525,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_sub(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_sub(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let reg = get_high_reg(ins);
         let dir = (ins & 0x0100) >> 8;
         let size = get_size(ins);
@@ -540,7 +556,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_cmp_eor(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_cmp_eor(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let reg = get_high_reg(ins);
         let optype = (ins & 0x0100) >> 8;
         let size = get_size(ins);
@@ -567,7 +583,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_mul_and(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_mul_and(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let size = get_size(ins);
 
         if (ins & 0b0001_1111_0000) == 0b0001_0000_0000 {
@@ -600,7 +616,7 @@ impl<'a> InstructionDecoding<'a> {
     }
 
     #[inline]
-    fn decode_group_add(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_add(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         let reg = get_high_reg(ins);
         let dir = (ins & 0x0100) >> 8;
         let size = get_size(ins);
@@ -630,7 +646,7 @@ impl<'a> InstructionDecoding<'a> {
         }
     }
 
-    fn decode_group_shift(&mut self, ins: u16) -> Result<Instruction, M68kError> {
+    fn decode_group_shift(&mut self, ins: u16) -> Result<Instruction, M68kError<Bus::Error>> {
         match get_size(ins) {
             Some(size) => {
                 let target = Target::DirectDReg(get_low_reg(ins));
@@ -716,31 +732,31 @@ impl<'a> InstructionDecoding<'a> {
         }
     }
 
-    fn read_instruction_word(&mut self) -> Result<u16, M68kError> {
+    fn read_instruction_word(&mut self) -> Result<u16, M68kError<Bus::Error>> {
         let word = self.memory.read_instruction_word(self.port, self.decoder.is_supervisor, self.decoder.end)?;
         self.decoder.end += 2;
         Ok(word)
     }
 
-    fn read_instruction_long(&mut self) -> Result<u32, M68kError> {
+    fn read_instruction_long(&mut self) -> Result<u32, M68kError<Bus::Error>> {
         let word = self.memory.read_instruction_long(self.port, self.decoder.is_supervisor, self.decoder.end)?;
         self.decoder.end += 4;
         Ok(word)
     }
 
-    fn decode_lower_effective_address(&mut self, ins: u16, size: Option<Size>) -> Result<Target, M68kError> {
+    fn decode_lower_effective_address(&mut self, ins: u16, size: Option<Size>) -> Result<Target, M68kError<Bus::Error>> {
         let reg = get_low_reg(ins);
         let mode = get_low_mode(ins);
         self.get_mode_as_target(mode, reg, size)
     }
 
-    fn decode_upper_effective_address(&mut self, ins: u16, size: Option<Size>) -> Result<Target, M68kError> {
+    fn decode_upper_effective_address(&mut self, ins: u16, size: Option<Size>) -> Result<Target, M68kError<Bus::Error>> {
         let reg = get_high_reg(ins);
         let mode = get_high_mode(ins);
         self.get_mode_as_target(mode, reg, size)
     }
 
-    fn get_extension_displacement(&mut self, select: u16) -> Result<i32, M68kError> {
+    fn get_extension_displacement(&mut self, select: u16) -> Result<i32, M68kError<Bus::Error>> {
         let result = match select {
             0b00 | 0b01 => 0,
             0b10 => sign_extend_to_long(self.read_instruction_word()? as u32, Size::Word),
@@ -750,7 +766,7 @@ impl<'a> InstructionDecoding<'a> {
         Ok(result)
     }
 
-    fn decode_extension_word(&mut self, areg: Option<u8>) -> Result<Target, M68kError> {
+    fn decode_extension_word(&mut self, areg: Option<u8>) -> Result<Target, M68kError<Bus::Error>> {
         let brief_extension = self.read_instruction_word()?;
 
         let use_brief = (brief_extension & 0x0100) == 0;
@@ -803,7 +819,7 @@ impl<'a> InstructionDecoding<'a> {
         }
     }
 
-    pub(super) fn get_mode_as_target(&mut self, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, M68kError> {
+    pub(super) fn get_mode_as_target(&mut self, mode: u8, reg: u8, size: Option<Size>) -> Result<Target, M68kError<Bus::Error>> {
         let value = match mode {
             0b000 => Target::DirectDReg(reg),
             0b001 => Target::DirectAReg(reg),

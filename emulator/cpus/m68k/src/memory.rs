@@ -1,8 +1,8 @@
 
 use femtos::Instant;
-use emulator_hal::bus::{BusType, BusAccess};
+use emulator_hal::bus::{BusAccess};
 
-use moa_core::{Address, Addressable, BusPort};
+use moa_core::{Error, Address, Addressable};
 
 use crate::state::{M68k, M68kError, Exceptions};
 use crate::instructions::Size;
@@ -76,7 +76,7 @@ impl Default for MemoryRequest {
 }
 
 impl MemoryRequest {
-    pub(crate) fn instruction(&mut self, is_supervisor: bool, addr: u32) -> Result<u32, M68kError> {
+    pub(crate) fn instruction<BusError>(&mut self, is_supervisor: bool, addr: u32) -> Result<u32, M68kError<BusError>> {
         self.i_n_bit = false;
         self.code = FunctionCode::program(is_supervisor);
         self.access = MemAccess::Read;
@@ -101,6 +101,8 @@ impl MemoryRequest {
     }
 }
 
+//pub type M68kAddress = (FunctionCode, u32);
+pub type M68kAddress = u64;
 
 #[derive(Clone, Debug)]
 pub struct InstructionRequest {
@@ -110,7 +112,6 @@ pub struct InstructionRequest {
 
 #[derive(Clone, Debug)]
 pub struct M68kBusPort {
-    //pub port: BusPort,
     pub request: MemoryRequest,
     pub cycle_start_clock: Instant,
     pub current_clock: Instant,
@@ -122,9 +123,8 @@ impl M68k {
 }
 
 impl Default for M68kBusPort {
-    fn default(/* port: BusPort */) -> Self {
+    fn default() -> Self {
         Self {
-            //port,
             request: Default::default(),
             cycle_start_clock: Instant::START,
             current_clock: Instant::START,
@@ -141,35 +141,47 @@ impl M68kBusPort {
         }
     }
 
-    pub(crate) fn read_data_sized(&mut self, port: &mut BusPort, is_supervisor: bool, addr: Address, size: Size) -> Result<u32, M68kError> {
+    pub(crate) fn read_data_sized<Bus, BusError>(&mut self, port: &mut Bus, is_supervisor: bool, addr: Address, size: Size) -> Result<u32, M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
         self.start_request(is_supervisor, addr as u32, size, MemAccess::Read, MemType::Data, false)?;
         Ok(match size {
             Size::Byte => port.read_u8(self.current_clock, addr).map(|value| value as u32),
             Size::Word => port.read_beu16(self.current_clock, addr).map(|value| value as u32),
             Size::Long => port.read_beu32(self.current_clock, addr),
-        }?)
+        }.map_err(|err| M68kError::BusError(err))?)
     }
 
-    pub(crate) fn write_data_sized(&mut self, port: &mut BusPort, is_supervisor: bool, addr: Address, value: u32, size: Size) -> Result<(), M68kError> {
+    pub(crate) fn write_data_sized<Bus, BusError>(&mut self, port: &mut Bus, is_supervisor: bool, addr: Address, value: u32, size: Size) -> Result<(), M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
         self.start_request(is_supervisor, addr as u32, size, MemAccess::Write, MemType::Data, false)?;
         Ok(match size {
             Size::Byte => port.write_u8(self.current_clock, addr, value as u8),
             Size::Word => port.write_beu16(self.current_clock, addr, value as u16),
             Size::Long => port.write_beu32(self.current_clock, addr, value),
-        }?)
+        }.map_err(|err| M68kError::BusError(err))?)
     }
 
-    pub(crate) fn read_instruction_word(&mut self, port: &mut BusPort, is_supervisor: bool, addr: u32) -> Result<u16, M68kError> {
+    pub(crate) fn read_instruction_word<Bus, BusError>(&mut self, port: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u16, M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
         self.request.instruction(is_supervisor, addr)?;
-        Ok(port.read_beu16(self.current_clock, addr as Address)?)
+        Ok(port.read_beu16(self.current_clock, addr as Address).map_err(|err| M68kError::BusError(err))?)
     }
 
-    pub(crate) fn read_instruction_long(&mut self, port: &mut BusPort, is_supervisor: bool, addr: u32) -> Result<u32, M68kError> {
+    pub(crate) fn read_instruction_long<Bus, BusError>(&mut self, port: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u32, M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
         self.request.instruction(is_supervisor, addr)?;
-        Ok(port.read_beu32(self.current_clock, addr as Address)?)
+        Ok(port.read_beu32(self.current_clock, addr as Address).map_err(|err| M68kError::BusError(err))?)
     }
 
-    pub(crate) fn start_request(&mut self, is_supervisor: bool, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, M68kError> {
+    pub(crate) fn start_request<BusError>(&mut self, is_supervisor: bool, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, M68kError<BusError>> {
         self.request.i_n_bit = i_n_bit;
         self.request.code = match mtype {
             MemType::Program => FunctionCode::program(is_supervisor),
@@ -186,12 +198,16 @@ impl M68kBusPort {
         }
     }
 
-    pub(crate) fn dump_memory(&mut self, port: &mut BusPort, addr: u32, length: usize) {
-        port.dump_memory(self.current_clock, addr as Address, length as u64);
+    pub(crate) fn dump_memory<Bus, BusError>(&mut self, port: &mut Bus, addr: u32, length: usize)
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
+        // TODO temporarily disabled
+        //port.dump_memory(self.current_clock, addr as Address, length as u64);
     }
 }
 
-fn validate_address(addr: u32) -> Result<u32, M68kError> {
+fn validate_address<BusError>(addr: u32) -> Result<u32, M68kError<BusError>> {
     if addr & 0x1 == 0 {
         Ok(addr)
     } else {

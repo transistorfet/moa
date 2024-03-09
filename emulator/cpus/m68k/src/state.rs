@@ -1,6 +1,7 @@
 
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::fmt::Display;
 use femtos::{Instant, Frequency};
 
 use moa_core::{Address, Bus, BusPort};
@@ -178,7 +179,7 @@ pub struct M68kState {
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
-pub enum M68kError {
+pub enum M68kError<BusError> {
     #[error("cpu halted")]
     Halted,
     #[error("processor exception {0:?}")]
@@ -189,6 +190,8 @@ pub enum M68kError {
     Breakpoint,
     #[error("invalid instruction target, direct value used as a pointer: {0:?}")]
     InvalidTarget(Target),
+    #[error("bus error")]
+    BusError(BusError),
     #[error("error: {0}")]
     Other(String),
 }

@@ -1,9 +1,13 @@
 
+use femtos::Instant;
+use emulator_hal::bus::{self, BusAccess};
+
 use moa_core::{System, Error, Address, Addressable, Debuggable};
 
 use super::state::M68k;
 use super::decode::M68kDecoder;
 use super::execute::M68kCycleExecutor;
+use super::memory::M68kAddress;
 
 #[derive(Clone, Default)]
 pub struct StackTracer {
@@ -59,7 +63,7 @@ impl Debuggable for M68k {
             "ds" | "stack" | "dumpstack" => {
                 println!("Stack:");
                 for addr in &self.debugger.stack_tracer.calls {
-                    println!("  {:08x}", self.port.read_beu32(system.clock, *addr as Address)?);
+                    println!("  {:08x}", BusAccess::read_beu32(&mut self.port, system.clock, *addr as Address)?);
                 }
             },
             "so" | "stepout" => {
@@ -71,7 +75,10 @@ impl Debuggable for M68k {
     }
 }
 
-impl<'a> M68kCycleExecutor<'a> {
+impl<'a, Bus> M68kCycleExecutor<'a, Bus>
+where
+    Bus: BusAccess<M68kAddress, Instant>,
+{
     pub fn check_breakpoints(&mut self) -> Result<(), Error> {
         for breakpoint in &self.debugger.breakpoints {
             if *breakpoint == self.state.pc {
