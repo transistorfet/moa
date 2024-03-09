@@ -197,11 +197,29 @@ pub enum M68kError<BusError> {
 }
 
 #[derive(Clone)]
+pub struct M68kStatistics {
+    pub cycle_number: usize,
+    pub last_update: usize,
+    pub last_time: std::time::SystemTime,
+}
+
+impl Default for M68kStatistics {
+    fn default() -> Self {
+        Self {
+            cycle_number: 0,
+            last_update: 0,
+            last_time: std::time::SystemTime::now(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct M68k {
     pub info: CpuInfo,
     pub state: M68kState,
     pub debugger: M68kDebugger,
     pub port: BusPort,
+    pub stats: M68kStatistics,
     pub cycle: Option<M68kCycle>,
 }
 
@@ -231,6 +249,7 @@ impl M68k {
             state: M68kState::default(),
             debugger: M68kDebugger::default(),
             port,
+            stats: Default::default(),
             cycle: None,
         }
     }

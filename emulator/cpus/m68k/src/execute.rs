@@ -37,6 +37,7 @@ pub enum Used {
 
 #[derive(Clone, Debug)]
 pub struct M68kCycle {
+
     pub decoder: M68kDecoder,
     pub timing: M68kInstructionTiming,
     pub memory: M68kBusPort,
@@ -67,6 +68,14 @@ impl M68kCycle {
 
     #[inline]
     pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleExecutor<'a, bus::BusAdapter<M68kAddress, u64, Instant, &'a mut BusPort>> {
+        cpu.stats.cycle_number += 1;
+        if cpu.stats.cycle_number > cpu.stats.last_update {
+            cpu.stats.last_update = cpu.stats.last_update + 1_000_000;
+            let now = std::time::SystemTime::now();
+            log::warn!("{} per million", now.duration_since(cpu.stats.last_time).unwrap().as_micros());
+            cpu.stats.last_time = now;
+        }
+
         let adapter = bus::BusAdapter {
             bus: &mut cpu.port,
             translate: translate_address,
