@@ -1,3 +1,6 @@
 [submodule "emulator/libraries/femtos"]
 	path = emulator/libraries/femtos
 	url = git@github.com:transistorfet/femtos.git
+[submodule "emulator/libraries/emulator-hal"]
+	path = emulator/libraries/emulator-hal
+	url = git@github.com:transistorfet/emulator-hal.git
