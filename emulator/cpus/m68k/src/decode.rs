@@ -1,6 +1,6 @@
 
 use femtos::Instant;
-use emulator_hal::bus::{self, BusAccess, BusError};
+use emulator_hal::bus::{self, BusAccess, Error as BusError};
 
 use moa_core::{Error, Address, Addressable};
 

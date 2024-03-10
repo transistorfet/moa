@@ -67,7 +67,7 @@ impl M68kCycle {
     }
 
     #[inline]
-    pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleExecutor<'a, bus::BusAdapter<M68kAddress, u64, Instant, &'a mut BusPort>> {
+    pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleExecutor<'a, bus::BusAdapter<M68kAddress, u64, Instant, &'a mut BusPort, Error>> {
         cpu.stats.cycle_number += 1;
         if cpu.stats.cycle_number > cpu.stats.last_update {
             cpu.stats.last_update = cpu.stats.last_update + 1_000_000;
@@ -76,11 +76,11 @@ impl M68kCycle {
             cpu.stats.last_time = now;
         }
 
-        let adapter = bus::BusAdapter {
-            bus: &mut cpu.port,
-            translate: translate_address,
-            instant: core::marker::PhantomData,
-        };
+        let adapter = bus::BusAdapter::new(
+            &mut cpu.port,
+            translate_address,
+            |err| err,
+        );
 
         M68kCycleExecutor {
             state: &mut cpu.state,
@@ -162,7 +162,7 @@ impl Transmutable for M68k {
     }
 }
 
-impl<BusError: bus::BusError> From<M68kError<BusError>> for Error {
+impl<BusError: bus::Error> From<M68kError<BusError>> for Error {
     fn from(err: M68kError<BusError>) -> Self {
         match err {
             M68kError::Halted => Self::Other("cpu halted".to_string()),

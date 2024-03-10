@@ -360,11 +360,7 @@ pub fn dump_slice(data: &[u8], mut count: usize) {
 
 use emulator_hal::bus::{self, BusAccess};
 
-//impl bus::Error for Error {}
-
-//impl ErrorType for BusPort {
-//    type Error = Error;
-//}
+impl bus::Error for Error {}
 
 impl BusAccess<u64, Instant> for BusPort {
     type Error = Error;
