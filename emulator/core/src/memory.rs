@@ -358,20 +358,46 @@ pub fn dump_slice(data: &[u8], mut count: usize) {
     }
 }
 
+pub fn dump_memory<Bus, Address, Instant>(bus: &mut Bus, clock: Instant, addr: Address, count: Address)
+where
+    Bus: BusAccess<Address, Instant>,
+    Address: From<u64> + Into<u64> + Copy,
+    Instant: Copy,
+{
+    let mut addr = addr.into();
+    let mut count = count.into();
+    while count > 0 {
+        let mut line = format!("{:#010x}: ", addr);
+
+        let to = if count < 16 { count / 2 } else { 8 };
+        for _ in 0..to {
+            let word = bus.read_beu16(clock, Address::from(addr));
+            if word.is_err() {
+                println!("{}", line);
+                return;
+            }
+            write!(line, "{:#06x} ", word.unwrap()).unwrap();
+            addr += 2;
+            count -= 2;
+        }
+        println!("{}", line);
+    }
+}
+
 use emulator_hal::bus::{self, BusAccess};
 
 impl bus::Error for Error {}
 
-impl BusAccess<u64, Instant> for BusPort {
+impl BusAccess<u64, Instant> for &mut dyn Addressable {
     type Error = Error;
 
     fn read(&mut self, now: Instant, addr: Address, data: &mut [u8]) -> Result<usize, Self::Error> {
-        <Self as Addressable>::read(self, now, addr, data)?;
+        (*self).read(now, addr, data)?;
         Ok(data.len())
     }
 
     fn write(&mut self, now: Instant, addr: Address, data: &[u8]) -> Result<usize, Self::Error> {
-        <Self as Addressable>::write(self, now, addr, data)?;
+        (*self).write(now, addr, data)?;
         Ok(data.len())
     }
 }

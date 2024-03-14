@@ -479,3 +479,8 @@ General Work
 - So far it's going quite well.  I really like the pattern of making the cycle be like a transaction,
   and making it possible to decompose it, especially for testing.  I still need to fix the tests
 - next step is to push System up from the interrupt handling code
+
+2024-03-10
+- the emulator-hal conversion is going well.  I'm thinking it makes more sense for the Address of
+  BusAccess to be a generic instead of an associated type, but I'll need to finish converting
+  everything to get a better sense of it.  There's a lot of cleanup to do

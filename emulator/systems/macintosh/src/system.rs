@@ -71,7 +71,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     system.add_addressable_device(0x00000000, Device::new(mainboard))?;
 
 
-    let mut cpu = M68k::from_type(M68kType::MC68000, Frequency::from_hz(7_833_600), system.bus.clone(), 0);
+    let mut cpu = M68k::from_type(M68kType::MC68000, Frequency::from_hz(7_833_600));
 
     //cpu.enable_tracing();
     //system.enable_debugging();

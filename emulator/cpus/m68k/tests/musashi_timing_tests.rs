@@ -1,5 +1,6 @@
 
 use femtos::{Instant, Frequency};
+use emulator_hal::bus::BusAdapter;
 
 use moa_core::{System, Error, MemoryBlock, Address, Addressable, Device};
 
@@ -42,7 +43,15 @@ fn load_memory(system: &System, data: &[u16]) {
 
 fn run_timing_test(case: &TimingCase) -> Result<(), Error> {
     let (mut cpu, cycle, system) = init_decode_test(case.cpu);
-    let mut executor = cycle.begin(&mut cpu);
+
+    let mut bus = system.bus.borrow_mut();
+    let mut adapter: BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> = BusAdapter::new(
+        &mut *bus,
+        |addr| addr as u64,
+        |err| err.try_into().unwrap(),
+    );
+
+    let mut executor = cycle.begin(&mut cpu, &mut adapter);
     let mut timing = M68kInstructionTiming::new(case.cpu, 16);
 
     load_memory(&system, case.data);
@@ -50,7 +59,7 @@ fn run_timing_test(case: &TimingCase) -> Result<(), Error> {
     assert_eq!(executor.cycle.decoder.instruction, case.ins.clone());
 
     timing.add_instruction(&executor.cycle.decoder.instruction);
-    let result = timing.calculate_clocks(false, 1);
+    let result = timing.calculate_clocks();
     let expected = match case.cpu {
         M68kType::MC68000 => case.timing.0,
         M68kType::MC68010 => case.timing.1,

@@ -7,7 +7,7 @@ edition = "2021"
 femtos = "0.1"
 
 moa-core = { path = "../../emulator/core" }
-moa-m68k = { path = "../../emulator/cpus/m68k" }
+moa-m68k = { path = "../../emulator/cpus/m68k", features = ["moa"] }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"

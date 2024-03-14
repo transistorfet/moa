@@ -1,7 +1,8 @@
 
 use femtos::{Instant, Frequency};
+use emulator_hal::bus::BusAdapter;
 
-use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, Device};
+use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, Device, Error};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::M68kState;
@@ -37,7 +38,7 @@ struct TestCase {
 
 fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
 where
-    F: FnMut(M68kCycleExecutor, System),
+    F: FnMut(M68kCycleExecutor<&mut BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error>>, &System),
 {
     let mut system = System::default();
 
@@ -48,17 +49,24 @@ where
     system.get_bus().write_beu32(Instant::START, 0, INIT_STACK as u32).unwrap();
     system.get_bus().write_beu32(Instant::START, 4, INIT_ADDR as u32).unwrap();
 
+    let mut bus = system.bus.borrow_mut();
+    let mut adapter: BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> = BusAdapter::new(
+        &mut *bus,
+        |addr| addr as u64,
+        |err| err.try_into().unwrap(),
+    );
+
     let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
     cpu.step(&system).unwrap();
 
     let cycle = M68kCycle::new(&cpu, system.clock);
-    let mut executor = cycle.begin(&mut cpu);
+    let executor = cycle.begin(&mut cpu, &mut adapter);
 
     assert_eq!(executor.state.pc, INIT_ADDR as u32);
     assert_eq!(executor.state.ssp, INIT_STACK as u32);
     assert_eq!(executor.cycle.decoder.instruction, Instruction::NOP);
 
-    test_func(executor, system)
+    test_func(executor, &system)
 }
 
 fn build_state(state: &TestState) -> M68kState {

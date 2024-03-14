@@ -9,6 +9,6 @@ femtos = "0.1"
 moa-core = { path = "../../core" }
 moa-host = { path = "../../libraries/host" }
 moa-signals = { path = "../../libraries/signals" }
-moa-m68k = { path = "../../cpus/m68k" }
+moa-m68k = { path = "../../cpus/m68k", features = ["moa"] }
 moa-peripherals-mos = { path = "../../peripherals/mos" }
 moa-peripherals-zilog = { path = "../../peripherals/zilog" }

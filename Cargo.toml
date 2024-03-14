@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 members = [
     "emulator/core",
     "emulator/frontends/common",
@@ -18,5 +19,6 @@ opt-level = 3
 
 [profile.release]
 debug = true
+# TODO there are many overflow errors, which could be bugs
 #overflow-checks = true
 

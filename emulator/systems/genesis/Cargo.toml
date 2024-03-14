@@ -10,6 +10,6 @@ moa-core = { path = "../../core" }
 moa-signals = { path = "../../libraries/signals" }
 moa-host = { path = "../../libraries/host" }
 moa-peripherals-yamaha = { path = "../../peripherals/yamaha" }
-moa-m68k = { path = "../../cpus/m68k" }
+moa-m68k = { path = "../../cpus/m68k", features = ["moa"] }
 moa-z80 = { path = "../../cpus/z80" }
 

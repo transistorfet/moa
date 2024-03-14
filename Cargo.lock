@@ -774,6 +774,8 @@ dependencies = [
  "log",
  "moa-common",
  "moa-core",
+ "moa-debugger",
+ "moa-host",
  "moa-m68k",
  "moa-peripherals-generic",
  "moa-peripherals-motorola",

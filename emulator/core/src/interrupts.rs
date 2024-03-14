@@ -26,11 +26,11 @@ impl InterruptController {
         Ok(())
     }
 
-    pub fn check(&mut self) -> (bool, u8) {
+    pub fn check(&mut self) -> (bool, u8, u8) {
         if self.highest > 0 {
-            (true, self.highest)
+            (true, self.highest, self.interrupts[self.highest as usize].1)
         } else {
-            (false, 0)
+            (false, 0, 0)
         }
     }
 

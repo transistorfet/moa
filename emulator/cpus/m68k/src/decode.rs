@@ -1,8 +1,6 @@
 
 use femtos::Instant;
-use emulator_hal::bus::{self, BusAccess, Error as BusError};
-
-use moa_core::{Error, Address, Addressable};
+use emulator_hal::bus::BusAccess;
 
 use crate::state::{M68kType, M68kError, Exceptions};
 use crate::memory::{M68kBusPort, M68kAddress};
@@ -54,9 +52,9 @@ pub struct InstructionDecoding<'a, Bus>
 where
     Bus: BusAccess<M68kAddress, Instant>,
 {
-    port: &'a mut Bus,
-    memory: &'a mut M68kBusPort,
-    decoder: &'a mut M68kDecoder,
+    pub(crate) port: &'a mut Bus,
+    pub(crate) memory: &'a mut M68kBusPort,
+    pub(crate) decoder: &'a mut M68kDecoder,
 }
 
 impl M68kDecoder {
@@ -109,7 +107,7 @@ impl M68kDecoder {
                     println!("{:?}", err);
                     match err {
                         M68kError::Exception(ex) if ex == Exceptions::IllegalInstruction => {
-                            println!("    at {:08x}: {:04x}", self.start, port.read_beu16(memory.current_clock, self.start as Address).unwrap());
+                            println!("    at {:08x}: {:04x}", self.start, port.read_beu16(memory.current_clock, self.start).unwrap());
                         },
                         _ => { },
                     }
@@ -125,7 +123,7 @@ impl M68kDecoder {
     {
         let ins_data: Result<String, M68kError<Bus::Error>> =
             (0..((self.end - self.start) / 2)).map(|offset|
-                Ok(format!("{:04x} ", port.read_beu16(clock, (self.start + (offset * 2)) as Address).unwrap()))
+                Ok(format!("{:04x} ", port.read_beu16(clock, self.start + (offset * 2)).unwrap()))
             ).collect();
         println!("{:#010x}: {}\n\t{}\n", self.start, ins_data.unwrap(), self.instruction);
     }

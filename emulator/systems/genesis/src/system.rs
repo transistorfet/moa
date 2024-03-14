@@ -94,7 +94,7 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     let vdp = Ym7101::new(host, interrupt, coproc_sn_sound)?;
     system.add_peripheral("vdp", 0x00c00000, Device::new(vdp))?;
 
-    let cpu = M68k::from_type(M68kType::MC68000, Frequency::from_hz(7_670_454), system.bus.clone(), 0);
+    let cpu = M68k::from_type(M68kType::MC68000, Frequency::from_hz(7_670_454));
     system.add_interruptable_device("cpu", Device::new(cpu))?;
 
     Ok(system)

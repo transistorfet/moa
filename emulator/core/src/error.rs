@@ -3,6 +3,8 @@ use std::fmt;
 use std::error::{Error as StdError};
 use moa_host::HostError;
 
+use emulator_hal::bus;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EmulatorErrorKind {
     Misc,

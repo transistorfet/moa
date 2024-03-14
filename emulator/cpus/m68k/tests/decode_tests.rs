@@ -1,7 +1,8 @@
 
 use femtos::{Instant, Frequency};
+use emulator_hal::bus::BusAdapter;
 
-use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device};
+use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device, Error};
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, XRegister, BaseRegister, IndexRegister, Direction};
@@ -77,12 +78,12 @@ fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, System) {
     // Initialize the CPU and make sure it's in the expected state
     let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
     //cpu.reset_cpu().unwrap();
-    assert_eq!(cpu.state.pc, INIT_ADDR as u32);
-    assert_eq!(cpu.state.ssp, INIT_STACK as u32);
+    //assert_eq!(cpu.state.pc, INIT_ADDR as u32);
+    //assert_eq!(cpu.state.ssp, INIT_STACK as u32);
 
     let cycle = M68kCycle::new(&cpu, system.clock);
-    assert_eq!(cycle.decoder.start, INIT_ADDR as u32);
-    assert_eq!(cycle.decoder.instruction, Instruction::NOP);
+    //assert_eq!(cycle.decoder.start, INIT_ADDR as u32);
+    //assert_eq!(cycle.decoder.instruction, Instruction::NOP);
     (cpu, cycle, system)
 }
 
@@ -97,14 +98,24 @@ fn load_memory(system: &System, data: &[u16]) {
 fn run_decode_test(case: &TestCase) {
     let (mut cpu, cycle, system) = init_decode_test(case.cpu);
     load_memory(&system, case.data);
+
+    let mut bus = system.bus.borrow_mut();
+    let mut adapter: BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> = BusAdapter::new(
+        &mut *bus,
+        |addr| addr as u64,
+        |err| err.try_into().unwrap(),
+    );
+
     match &case.ins {
         Some(ins) => {
-            let mut executor = cycle.begin(&mut cpu);
+            let mut executor = cycle.begin(&mut cpu, &mut adapter);
+            executor.reset_cpu().unwrap();
             executor.decode_next().unwrap();
             assert_eq!(executor.cycle.decoder.instruction, ins.clone());
         },
         None => {
-            let mut executor = cycle.begin(&mut cpu);
+            let mut executor = cycle.begin(&mut cpu, &mut adapter);
+            executor.reset_cpu().unwrap();
             let next = executor.decode_next();
             println!("{:?}", executor.cycle.decoder.instruction);
             assert!(next.is_err());

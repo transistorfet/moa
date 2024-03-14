@@ -7,6 +7,10 @@ edition = "2021"
 log = "0.4"
 thiserror = "1.0"
 femtos = "0.1"
-moa-core = { path = "../../core" }
 moa-parsing = { path = "../../libraries/parsing" }
 emulator-hal = { path = "../../libraries/emulator-hal/emulator-hal" }
+
+moa-core = { path = "../../core", optional = true }
+
+[features]
+moa = []

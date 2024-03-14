@@ -1,10 +1,8 @@
 
-use femtos::{Instant, Duration};
-use emulator_hal::bus::{self, BusAccess, BusAdapter};
+use femtos::Instant;
+use emulator_hal::bus::BusAccess;
 
-use moa_core::{System, Error, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable, BusPort};
-
-use crate::state::{M68k, M68kType, M68kError, M68kState, ClockCycles, Status, Flags, Exceptions, InterruptPriority};
+use crate::state::{M68k, M68kType, M68kError, M68kState, Status, Flags, Exceptions, InterruptPriority};
 use crate::memory::{MemType, MemAccess, M68kBusPort, M68kAddress};
 use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
@@ -37,7 +35,6 @@ pub enum Used {
 
 #[derive(Clone, Debug)]
 pub struct M68kCycle {
-
     pub decoder: M68kDecoder,
     pub timing: M68kInstructionTiming,
     pub memory: M68kBusPort,
@@ -50,7 +47,7 @@ impl M68kCycle {
         Self {
             decoder: M68kDecoder::new(cputype, true, 0),
             timing: M68kInstructionTiming::new(cputype, data_width),
-            memory: M68kBusPort::new(Instant::START),
+            memory: M68kBusPort::default(),
             current_clock: Instant::START,
         }
     }
@@ -61,13 +58,16 @@ impl M68kCycle {
         Self {
             decoder: M68kDecoder::new(cpu.info.chip, is_supervisor, cpu.state.pc),
             timing: M68kInstructionTiming::new(cpu.info.chip, cpu.info.data_width as u8),
-            memory: M68kBusPort::new(clock),
+            memory: M68kBusPort::from_info(&cpu.info, clock),
             current_clock: clock,
         }
     }
 
     #[inline]
-    pub fn begin<'a>(mut self, cpu: &'a mut M68k) -> M68kCycleExecutor<'a, bus::BusAdapter<M68kAddress, u64, Instant, &'a mut BusPort, Error>> {
+    pub fn begin<'a, Bus>(mut self, cpu: &'a mut M68k, bus: Bus) -> M68kCycleExecutor<'a, Bus>
+    where
+        Bus: BusAccess<M68kAddress, Instant>,
+    {
         cpu.stats.cycle_number += 1;
         if cpu.stats.cycle_number > cpu.stats.last_update {
             cpu.stats.last_update = cpu.stats.last_update + 1_000_000;
@@ -76,23 +76,13 @@ impl M68kCycle {
             cpu.stats.last_time = now;
         }
 
-        let adapter = bus::BusAdapter::new(
-            &mut cpu.port,
-            translate_address,
-            |err| err,
-        );
-
         M68kCycleExecutor {
             state: &mut cpu.state,
-            port: adapter,
+            port: bus,
             debugger: &mut cpu.debugger,
             cycle: self,
         }
     }
-}
-
-fn translate_address(addr_in: M68kAddress) -> u64 {
-    addr_in as u64
 }
 
 pub struct M68kCycleExecutor<'a, Bus>
@@ -109,80 +99,8 @@ impl<'a, Bus> M68kCycleExecutor<'a, Bus>
 where
     Bus: BusAccess<M68kAddress, Instant>,
 {
-    #[inline]
-    pub fn dump_state(&mut self) {
-        println!("Status: {:?}", self.state.status);
-        println!("PC: {:#010x}", self.state.pc);
-        println!("SR: {:#06x}", self.state.sr);
-        for i in 0..7 {
-            println!("D{}: {:#010x}        A{}: {:#010x}", i, self.state.d_reg[i as usize], i, self.state.a_reg[i as usize]);
-        }
-        println!("D7: {:#010x}       USP: {:#010x}", self.state.d_reg[7], self.state.usp);
-        println!("                     SSP: {:#010x}", self.state.ssp);
-
-        println!("Current Instruction: {:#010x} {:?}", self.cycle.decoder.start, self.cycle.decoder.instruction);
-        println!();
-        self.cycle.memory.dump_memory(&mut self.port, self.state.ssp, 0x40);
-        println!();
-    }
-
     pub fn end(self) -> M68kCycle {
         self.cycle
-    }
-}
-
-impl Steppable for M68k {
-    fn step(&mut self, system: &System) -> Result<Duration, Error> {
-        let cycle = M68kCycle::new(self, system.clock);
-        let mut executor = cycle.begin(self);
-        let clocks = executor.step(system)?;
-        self.cycle = Some(executor.end());
-        Ok(self.info.frequency.period_duration() * clocks as u64)
-    }
-
-    fn on_error(&mut self, _system: &System) {
-        // TODO the cycle data in dropped by this point
-        //self.dump_state();
-    }
-}
-
-impl Interruptable for M68k { }
-
-impl Transmutable for M68k {
-    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
-        Some(self)
-    }
-
-    fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
-        Some(self)
-    }
-
-    fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
-        Some(self)
-    }
-}
-
-impl<BusError: bus::Error> From<M68kError<BusError>> for Error {
-    fn from(err: M68kError<BusError>) -> Self {
-        match err {
-            M68kError::Halted => Self::Other("cpu halted".to_string()),
-            M68kError::Exception(ex) => Self::Processor(ex as u32),
-            M68kError::Interrupt(num) => Self::Processor(num as u32),
-            M68kError::Breakpoint => Self::Breakpoint("breakpoint".to_string()),
-            M68kError::InvalidTarget(target) => Self::new(target.to_string()),
-            M68kError::BusError(msg) => Self::Other(format!("{:?}", msg)),
-            M68kError::Other(msg) => Self::Other(msg),
-        }
-    }
-}
-
-impl<BusError> From<Error> for M68kError<BusError> {
-    fn from(err: Error) -> Self {
-        match err {
-            Error::Processor(ex) => M68kError::Interrupt(ex as u8),
-            Error::Breakpoint(msg) => M68kError::Breakpoint,
-            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => M68kError::Other(format!("{}", msg)),
-        }
     }
 }
 
@@ -191,35 +109,13 @@ where
     Bus: BusAccess<M68kAddress, Instant>,
 {
     #[inline]
-    pub fn step(&mut self, system: &System) -> Result<ClockCycles, M68kError<Bus::Error>> {
-        let result = self.step_one(system);
-        self.process_error(result, 4)
-    }
-
-    #[inline]
-    pub fn process_error<T>(&mut self, result: Result<T, M68kError<Bus::Error>>, ok: T) -> Result<T, M68kError<Bus::Error>> {
-        match result {
-            Ok(value) => Ok(value),
-            Err(M68kError::Exception(ex)) => {
-                self.exception(ex as u8, false)?;
-                Ok(ok)
-            },
-            Err(M68kError::Interrupt(ex)) => {
-                self.exception(ex as u8, false)?;
-                Ok(ok)
-            },
-            Err(err) => Err(err),
-        }
-    }
-
-    #[inline]
-    pub fn step_one(&mut self, system: &System) -> Result<ClockCycles, M68kError<Bus::Error>> {
+    pub fn step(&mut self) -> Result<(), M68kError<Bus::Error>> {
         match self.state.status {
             Status::Init => self.reset_cpu(),
             Status::Stopped => Err(M68kError::Halted),
-            Status::Running => self.cycle_one(system),
+            Status::Running => self.cycle_one(),
         }?;
-        Ok(self.cycle.timing.calculate_clocks())
+        Ok(())
     }
 
     #[inline]
@@ -232,15 +128,18 @@ where
     }
 
     #[inline]
-    pub fn cycle_one(&mut self, system: &System) -> Result<(), M68kError<Bus::Error>> {
+    pub fn cycle_one(&mut self) -> Result<(), M68kError<Bus::Error>> {
         self.check_breakpoints()?;
 
-        self.decode_and_execute()?;
+        let result = self.decode_and_execute();
+        self.process_error(result)?;
 
-        self.check_pending_interrupts(system)?;
+        // TODO this is called by the step function directly, but should be integrated better
+        //self.check_pending_interrupts(system)?;
         Ok(())
     }
 
+    /*
     #[inline]
     pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), M68kError<Bus::Error>> {
         // TODO this could move somewhere else
@@ -270,11 +169,15 @@ where
 
         Ok(())
     }
+    */
 
-    /*
     #[inline]
-    pub fn check_pending_interrupts2(&mut self, interrupt: Option<(InterruptPriority, u8)>) -> Result<InterruptAcknowledge, M68kError> {
-        self.state.pending_ipl = interrupt.unwrap_or(InterruptPriority::NoInterrupt);
+    pub fn check_pending_interrupts(&mut self, interrupt: (bool, u8, u8)) -> Result<(InterruptPriority, Option<u8>), M68kError<Bus::Error>> {
+        let ack_num;
+        (self.state.pending_ipl, ack_num) = match interrupt {
+            (true, priority, ack) => (InterruptPriority::from_u8(priority), ack),
+            (false, _, ack) => (InterruptPriority::NoInterrupt, ack),
+        };
 
         let current_ipl = self.state.current_ipl as u8;
         let pending_ipl = self.state.pending_ipl as u8;
@@ -283,12 +186,12 @@ where
             let priority_mask = ((self.state.sr & Flags::IntMask as u16) >> 8) as u8;
 
             if (pending_ipl > priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
-                log::debug!("{} interrupt: {} @ {} ns", DEV_NAME, pending_ipl, system.clock.as_duration().as_nanos());
+                //log::debug!("{} interrupt: {} @ {} ns", DEV_NAME, pending_ipl, system.clock.as_duration().as_nanos());
                 self.state.current_ipl = self.state.pending_ipl;
-                let acknowledge = self.state.current_ipl;
-                let ack_num = system.get_interrupt_controller().acknowledge(self.state.current_ipl as u8)?;
+                //let acknowledge = self.state.current_ipl;
+                //let ack_num = system.get_interrupt_controller().acknowledge(self.state.current_ipl as u8)?;
                 self.exception(ack_num, true)?;
-                return Ok(());
+                return Ok((self.state.current_ipl, Some(ack_num)));
             }
         }
 
@@ -296,9 +199,8 @@ where
             self.state.current_ipl = self.state.pending_ipl;
         }
 
-        Ok(())
+        Ok((self.state.current_ipl, None))
     }
-    */
 
     pub fn exception(&mut self, number: u8, is_interrupt: bool) -> Result<(), M68kError<Bus::Error>> {
         log::debug!("{}: raising exception {}", DEV_NAME, number);
@@ -339,7 +241,7 @@ where
         self.push_word((ins_word & 0xFFF0) | extra_code)?;
 
         let vector = self.state.vbr + offset as u32;
-        let addr = self.get_address_sized(vector as Address, Size::Long)?;
+        let addr = self.get_address_sized(vector, Size::Long)?;
         self.set_pc(addr)?;
 
         Ok(())
@@ -364,10 +266,26 @@ where
         self.push_word(sr)?;
 
         let vector = self.state.vbr + offset as u32;
-        let addr = self.get_address_sized(vector as Address, Size::Long)?;
+        let addr = self.get_address_sized(vector, Size::Long)?;
         self.set_pc(addr)?;
 
         Ok(())
+    }
+
+    #[inline]
+    pub fn process_error(&mut self, result: Result<(), M68kError<Bus::Error>>) -> Result<(), M68kError<Bus::Error>> {
+        match result {
+            Ok(value) => Ok(value),
+            Err(M68kError::Exception(ex)) => {
+                self.exception(ex as u8, false)?;
+                Ok(())
+            },
+            Err(M68kError::Interrupt(ex)) => {
+                self.exception(ex as u8, false)?;
+                Ok(())
+            },
+            Err(err) => Err(err),
+        }
     }
 
     #[inline]
@@ -967,7 +885,7 @@ where
         *self.get_stack_pointer_mut() -= 4;
         let sp = *self.get_stack_pointer_mut();
         let value = *self.get_a_reg_mut(reg);
-        self.set_address_sized(sp as Address, value, Size::Long)?;
+        self.set_address_sized(sp, value, Size::Long)?;
         *self.get_a_reg_mut(reg) = sp;
         *self.get_stack_pointer_mut() = (sp as i32).wrapping_add(offset) as u32;
         Ok(())
@@ -1109,14 +1027,14 @@ where
     fn move_memory_to_registers(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, M68kError<Bus::Error>> {
         for i in 0..8 {
             if (mask & 0x01) != 0 {
-                self.state.d_reg[i] = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
+                self.state.d_reg[i] = sign_extend_to_long(self.get_address_sized(addr, size)?, size) as u32;
                 (addr, _) = overflowing_add_sized(addr, size.in_bytes(), Size::Long);
             }
             mask >>= 1;
         }
         for i in 0..8 {
             if (mask & 0x01) != 0 {
-                *self.get_a_reg_mut(i) = sign_extend_to_long(self.get_address_sized(addr as Address, size)?, size) as u32;
+                *self.get_a_reg_mut(i) = sign_extend_to_long(self.get_address_sized(addr, size)?, size) as u32;
                 (addr, _) = overflowing_add_sized(addr, size.in_bytes(), Size::Long);
             }
             mask >>= 1;
@@ -1127,7 +1045,7 @@ where
     fn move_registers_to_memory(&mut self, mut addr: u32, size: Size, mut mask: u16) -> Result<u32, M68kError<Bus::Error>> {
         for i in 0..8 {
             if (mask & 0x01) != 0 {
-                self.set_address_sized(addr as Address, self.state.d_reg[i], size)?;
+                self.set_address_sized(addr, self.state.d_reg[i], size)?;
                 addr += size.in_bytes();
             }
             mask >>= 1;
@@ -1135,7 +1053,7 @@ where
         for i in 0..8 {
             if (mask & 0x01) != 0 {
                 let value = *self.get_a_reg_mut(i);
-                self.set_address_sized(addr as Address, value, size)?;
+                self.set_address_sized(addr, value, size)?;
                 addr += size.in_bytes();
             }
             mask >>= 1;
@@ -1148,14 +1066,14 @@ where
             if (mask & 0x01) != 0 {
                 let value = *self.get_a_reg_mut(i);
                 addr -= size.in_bytes();
-                self.set_address_sized(addr as Address, value, size)?;
+                self.set_address_sized(addr, value, size)?;
             }
             mask >>= 1;
         }
         for i in (0..8).rev() {
             if (mask & 0x01) != 0 {
                 addr -= size.in_bytes();
-                self.set_address_sized(addr as Address, self.state.d_reg[i], size)?;
+                self.set_address_sized(addr, self.state.d_reg[i], size)?;
             }
             mask >>= 1;
         }
@@ -1166,7 +1084,7 @@ where
         match dir {
             Direction::ToTarget => {
                 let mut shift = (size.in_bits() as i32) - 8;
-                let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32) as Address;
+                let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32);
                 while shift >= 0 {
                     let byte = self.state.d_reg[dreg as usize] >> shift;
                     self.set_address_sized(addr, byte, Size::Byte)?;
@@ -1176,7 +1094,7 @@ where
             },
             Direction::FromTarget => {
                 let mut shift = (size.in_bits() as i32) - 8;
-                let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32) as Address;
+                let mut addr = (*self.get_a_reg_mut(areg)).wrapping_add_signed(offset as i32);
                 while shift >= 0 {
                     let byte = self.get_address_sized(addr, Size::Byte)?;
                     self.state.d_reg[dreg as usize] |= byte << shift;
@@ -1551,35 +1469,35 @@ where
             Target::DirectAReg(reg) => Ok(get_value_sized(*self.get_a_reg_mut(reg), size)),
             Target::IndirectAReg(reg) => {
                 let addr = *self.get_a_reg_mut(reg);
-                self.get_address_sized(addr as Address, size)
+                self.get_address_sized(addr, size)
             },
             Target::IndirectARegInc(reg) => {
                 let addr = self.post_increment_areg_target(reg, size, used);
-                self.get_address_sized(addr as Address, size)
+                self.get_address_sized(addr, size)
             },
             Target::IndirectARegDec(reg) => {
                 let addr = self.pre_decrement_areg_target(reg, size, Used::Once);
-                self.get_address_sized(addr as Address, size)
+                self.get_address_sized(addr, size)
             },
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                self.get_address_sized(base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32) as Address, size)
+                self.get_address_sized(base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32), size)
             },
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
-                self.get_address_sized(intermediate.wrapping_add(outer_disp as u32) as Address, size)
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
+                self.get_address_sized(intermediate.wrapping_add(outer_disp as u32), size)
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
-                self.get_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, size)
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32), Size::Long)?;
+                self.get_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32), size)
             },
             Target::IndirectMemory(addr, _) => {
-                self.get_address_sized(addr as Address, size)
+                self.get_address_sized(addr, size)
             },
         }
     }
@@ -1594,35 +1512,35 @@ where
             },
             Target::IndirectAReg(reg) => {
                 let addr = *self.get_a_reg_mut(reg);
-                self.set_address_sized(addr as Address, value, size)?;
+                self.set_address_sized(addr, value, size)?;
             },
             Target::IndirectARegInc(reg) => {
                 let addr = self.post_increment_areg_target(reg, size, Used::Once);
-                self.set_address_sized(addr as Address, value, size)?;
+                self.set_address_sized(addr, value, size)?;
             },
             Target::IndirectARegDec(reg) => {
                 let addr = self.pre_decrement_areg_target(reg, size, used);
-                self.set_address_sized(addr as Address, value, size)?;
+                self.set_address_sized(addr, value, size)?;
             },
             Target::IndirectRegOffset(base_reg, index_reg, displacement) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                self.set_address_sized(base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32) as Address, value, size)?;
+                self.set_address_sized(base_value.wrapping_add(displacement as u32).wrapping_add(index_value as u32), value, size)?;
             },
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
-                self.set_address_sized(intermediate.wrapping_add(outer_disp as u32) as Address, value, size)?;
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
+                self.set_address_sized(intermediate.wrapping_add(outer_disp as u32), value, size)?;
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
-                self.set_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32) as Address, value, size)?;
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32), Size::Long)?;
+                self.set_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32), value, size)?;
             },
             Target::IndirectMemory(addr, _) => {
-                self.set_address_sized(addr as Address, value, size)?;
+                self.set_address_sized(addr, value, size)?;
             },
             Target::Immediate(_) => return Err(M68kError::InvalidTarget(target)),
         }
@@ -1640,13 +1558,13 @@ where
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32) as Address, Size::Long)?;
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
                 intermediate.wrapping_add(outer_disp as u32)
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32) as Address, Size::Long)?;
+                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32), Size::Long)?;
                 intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32)
             },
             Target::IndirectMemory(addr, _) => {
@@ -1684,44 +1602,44 @@ where
         *reg_addr
     }
 
-    fn get_address_sized(&mut self, addr: Address, size: Size) -> Result<u32, M68kError<Bus::Error>> {
+    fn get_address_sized(&mut self, addr: M68kAddress, size: Size) -> Result<u32, M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
         self.cycle.memory.read_data_sized(&mut self.port, is_supervisor, addr, size)
     }
 
-    fn set_address_sized(&mut self, addr: Address, value: u32, size: Size) -> Result<(), M68kError<Bus::Error>> {
+    fn set_address_sized(&mut self, addr: M68kAddress, value: u32, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
-        self.cycle.memory.write_data_sized(&mut self.port, is_supervisor, addr, value, size)
+        self.cycle.memory.write_data_sized(&mut self.port, is_supervisor, addr, size, value)
     }
 
     fn push_word(&mut self, value: u16) -> Result<(), M68kError<Bus::Error>> {
+        let is_supervisor = self.is_supervisor();
         *self.get_stack_pointer_mut() -= 2;
         let addr = *self.get_stack_pointer_mut();
-        self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Write, MemType::Data, false)?;
-        self.port.write_beu16(self.cycle.current_clock, addr as Address, value).map_err(|err| M68kError::BusError(err))?;
+        self.cycle.memory.write_data_sized(&mut self.port, is_supervisor, addr, Size::Word, value as u32)?;
         Ok(())
     }
 
     fn pop_word(&mut self) -> Result<u16, M68kError<Bus::Error>> {
+        let is_supervisor = self.is_supervisor();
         let addr = *self.get_stack_pointer_mut();
-        self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Word, MemAccess::Read, MemType::Data, false)?;
-        let value = self.port.read_beu16(self.cycle.current_clock, addr as Address).map_err(|err| M68kError::BusError(err))?;
+        let value = self.cycle.memory.read_data_sized(&mut self.port, is_supervisor, addr, Size::Word)?;
         *self.get_stack_pointer_mut() += 2;
-        Ok(value)
+        Ok(value as u16)
     }
 
     fn push_long(&mut self, value: u32) -> Result<(), M68kError<Bus::Error>> {
+        let is_supervisor = self.is_supervisor();
         *self.get_stack_pointer_mut() -= 4;
         let addr = *self.get_stack_pointer_mut();
-        self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Write, MemType::Data, false)?;
-        self.port.write_beu32(self.cycle.current_clock, addr as Address, value).map_err(|err| M68kError::BusError(err))?;
+        self.cycle.memory.write_data_sized(&mut self.port, is_supervisor, addr, Size::Long, value)?;
         Ok(())
     }
 
     fn pop_long(&mut self) -> Result<u32, M68kError<Bus::Error>> {
+        let is_supervisor = self.is_supervisor();
         let addr = *self.get_stack_pointer_mut();
-        self.cycle.memory.start_request(self.is_supervisor(), addr, Size::Long, MemAccess::Read, MemType::Data, false)?;
-        let value = self.port.read_beu32(self.cycle.current_clock, addr as Address).map_err(|err| M68kError::BusError(err))?;
+        let value = self.cycle.memory.read_data_sized(&mut self.port, is_supervisor, addr, Size::Long)?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }

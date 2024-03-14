@@ -1,4 +1,8 @@
 
+* the next step is to factor all of moa_core into the moa.rs file, with BusPort being the last big piece
+  The functionality of BusPort should be integrated into memory.rs, to break up operations based on the cpu type
+  and then you won't need a value to hold on to port in a special bundle type.  It can be borrowed in the step function from system.bus
+
 * I want to push System, and BusPort into only the step function
 * first I need to make Decoder take &mut Addressable, and still function like it does
 * next I need to make Executor only access through a &mut Addressable
