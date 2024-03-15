@@ -33,11 +33,13 @@ impl Host for ConsoleFrontend {
     }
 }
 
-impl ConsoleFrontend {
-    pub fn new() -> Self {
+impl Default for ConsoleFrontend {
+    fn default() -> Self {
         Self
     }
+}
 
+impl ConsoleFrontend {
     pub fn args(application_name: &'static str) -> Command {
         Command::new(application_name)
             .arg(Arg::new("log-level")

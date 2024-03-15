@@ -18,7 +18,7 @@ fn main() {
         options.rom = filename.to_string();
     }
 
-    let mut frontend = ConsoleFrontend::new();
+    let mut frontend = ConsoleFrontend::default();
 
     let system = build_computie(&mut frontend, options).unwrap();
     frontend.start(matches, system);

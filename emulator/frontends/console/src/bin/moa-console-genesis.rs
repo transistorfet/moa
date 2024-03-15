@@ -10,7 +10,7 @@ fn main() {
             .help("ROM file to load (must be flat binary)"))
         .get_matches();
 
-    let mut frontend = ConsoleFrontend::new();
+    let mut frontend = ConsoleFrontend::default();
 
     let mut options = SegaGenesisOptions::default();
     if let Some(filename) = matches.get_one::<String>("ROM") {

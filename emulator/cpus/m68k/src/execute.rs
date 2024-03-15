@@ -1,6 +1,7 @@
 
 use femtos::Instant;
-use emulator_hal::bus::BusAccess;
+use emulator_hal::bus::{self, BusAccess};
+use emulator_hal::step::Step;
 
 use crate::state::{M68k, M68kType, M68kError, M68kState, Status, Flags, Exceptions, InterruptPriority};
 use crate::memory::{MemType, MemAccess, M68kBusPort, M68kAddress};
@@ -64,7 +65,7 @@ impl M68kCycle {
     }
 
     #[inline]
-    pub fn begin<'a, Bus>(mut self, cpu: &'a mut M68k, bus: Bus) -> M68kCycleExecutor<'a, Bus>
+    pub fn begin<Bus>(self, cpu: &mut M68k, bus: Bus) -> M68kCycleExecutor<'_, Bus>
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
@@ -78,10 +79,43 @@ impl M68kCycle {
 
         M68kCycleExecutor {
             state: &mut cpu.state,
-            port: bus,
+            bus: bus,
             debugger: &mut cpu.debugger,
             cycle: self,
         }
+    }
+}
+
+impl<Bus, BusError> Step<M68kAddress, Instant, Bus> for M68k
+where
+    BusError: bus::Error,
+    Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+{
+    type Error = M68kError<BusError>;
+
+    fn is_running(&mut self) -> bool {
+        self.state.status == Status::Running
+    }
+
+    fn reset(&mut self, now: Instant, bus: &mut Bus) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn step(&mut self, now: Instant, bus: &mut Bus) -> Result<Instant, Self::Error> {
+        let cycle = M68kCycle::new(self, now);
+
+        let mut executor = cycle.begin(self, &mut *bus);
+        executor.check_breakpoints()?;
+        executor.step()?;
+
+        //let interrupt = system.get_interrupt_controller().check();
+        //if let (priority, Some(ack)) = executor.check_pending_interrupts(interrupt)? {
+        //    log::debug!("interrupt: {:?} @ {} ns", priority, system.clock.as_duration().as_nanos());
+        //    system.get_interrupt_controller().acknowledge(priority as u8)?;
+        //}
+
+        self.cycle = Some(executor.end());
+        Ok(now + self.last_cycle_duration())
     }
 }
 
@@ -90,7 +124,7 @@ where
     Bus: BusAccess<M68kAddress, Instant>,
 {
     pub state: &'a mut M68kState,
-    pub port: Bus,
+    pub bus: Bus,
     pub debugger: &'a mut M68kDebugger,
     pub cycle: M68kCycle,
 }
@@ -298,7 +332,7 @@ where
     #[inline]
     pub fn decode_next(&mut self) -> Result<(), M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
-        self.cycle.decoder.decode_at(&mut self.port, &mut self.cycle.memory, is_supervisor, self.state.pc)?;
+        self.cycle.decoder.decode_at(&mut self.bus, &mut self.cycle.memory, is_supervisor, self.state.pc)?;
 
         self.cycle.timing.add_instruction(&self.cycle.decoder.instruction);
 
@@ -1604,26 +1638,26 @@ where
 
     fn get_address_sized(&mut self, addr: M68kAddress, size: Size) -> Result<u32, M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
-        self.cycle.memory.read_data_sized(&mut self.port, is_supervisor, addr, size)
+        self.cycle.memory.read_data_sized(&mut self.bus, is_supervisor, addr, size)
     }
 
     fn set_address_sized(&mut self, addr: M68kAddress, value: u32, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
-        self.cycle.memory.write_data_sized(&mut self.port, is_supervisor, addr, size, value)
+        self.cycle.memory.write_data_sized(&mut self.bus, is_supervisor, addr, size, value)
     }
 
     fn push_word(&mut self, value: u16) -> Result<(), M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
         *self.get_stack_pointer_mut() -= 2;
         let addr = *self.get_stack_pointer_mut();
-        self.cycle.memory.write_data_sized(&mut self.port, is_supervisor, addr, Size::Word, value as u32)?;
+        self.cycle.memory.write_data_sized(&mut self.bus, is_supervisor, addr, Size::Word, value as u32)?;
         Ok(())
     }
 
     fn pop_word(&mut self) -> Result<u16, M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
         let addr = *self.get_stack_pointer_mut();
-        let value = self.cycle.memory.read_data_sized(&mut self.port, is_supervisor, addr, Size::Word)?;
+        let value = self.cycle.memory.read_data_sized(&mut self.bus, is_supervisor, addr, Size::Word)?;
         *self.get_stack_pointer_mut() += 2;
         Ok(value as u16)
     }
@@ -1632,14 +1666,14 @@ where
         let is_supervisor = self.is_supervisor();
         *self.get_stack_pointer_mut() -= 4;
         let addr = *self.get_stack_pointer_mut();
-        self.cycle.memory.write_data_sized(&mut self.port, is_supervisor, addr, Size::Long, value)?;
+        self.cycle.memory.write_data_sized(&mut self.bus, is_supervisor, addr, Size::Long, value)?;
         Ok(())
     }
 
     fn pop_long(&mut self) -> Result<u32, M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
         let addr = *self.get_stack_pointer_mut();
-        let value = self.cycle.memory.read_data_sized(&mut self.port, is_supervisor, addr, Size::Long)?;
+        let value = self.cycle.memory.read_data_sized(&mut self.bus, is_supervisor, addr, Size::Long)?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }
@@ -1677,7 +1711,7 @@ where
         match base_reg {
             BaseRegister::None => 0,
             BaseRegister::PC => self.cycle.decoder.start + 2,
-            BaseRegister::AReg(reg) if reg == 7 => if self.is_supervisor() { self.state.ssp } else { self.state.usp },
+            BaseRegister::AReg(7) => if self.is_supervisor() { self.state.ssp } else { self.state.usp },
             BaseRegister::AReg(reg) => self.state.a_reg[reg as usize],
         }
     }

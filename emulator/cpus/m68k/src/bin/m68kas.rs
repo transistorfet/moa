@@ -17,7 +17,7 @@ fn main() {
             for word in words.iter() {
                 print!("{:04x} ", word);
             }
-            println!("");
+            println!();
         },
         Err(err) => {
             println!("{:?}", err);

@@ -272,7 +272,7 @@ impl M68k {
             println!("Current Instruction: {:#010x} {:?}", cycle.decoder.start, cycle.decoder.instruction);
             println!();
         }
-        //memory::dump_memory(&mut self.port, self.cycle.current_clock, self.state.ssp, 0x40);
+        //memory::dump_memory(&mut self.bus, self.cycle.current_clock, self.state.ssp, 0x40);
         println!();
     }
 

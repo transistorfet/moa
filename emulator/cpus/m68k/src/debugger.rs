@@ -1,9 +1,8 @@
 
 use femtos::Instant;
-use emulator_hal::bus::{self, BusAccess};
+use emulator_hal::bus::BusAccess;
 
-use super::state::{M68k, M68kError};
-use super::decode::M68kDecoder;
+use super::state::M68kError;
 use super::execute::M68kCycleExecutor;
 use super::memory::M68kAddress;
 

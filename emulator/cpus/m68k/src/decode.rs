@@ -52,7 +52,7 @@ pub struct InstructionDecoding<'a, Bus>
 where
     Bus: BusAccess<M68kAddress, Instant>,
 {
-    pub(crate) port: &'a mut Bus,
+    pub(crate) bus: &'a mut Bus,
     pub(crate) memory: &'a mut M68kBusPort,
     pub(crate) decoder: &'a mut M68kDecoder,
 }
@@ -78,13 +78,13 @@ impl M68kDecoder {
     }
 
     #[inline]
-    pub fn decode_at<Bus>(&mut self, port: &mut Bus, memory: &mut M68kBusPort, is_supervisor: bool, start: u32) -> Result<(), M68kError<Bus::Error>>
+    pub fn decode_at<Bus>(&mut self, bus: &mut Bus, memory: &mut M68kBusPort, is_supervisor: bool, start: u32) -> Result<(), M68kError<Bus::Error>>
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
         self.init(is_supervisor, start);
         let mut decoding = InstructionDecoding {
-            port,
+            bus,
             memory,
             decoder: self,
         };
@@ -92,22 +92,22 @@ impl M68kDecoder {
         Ok(())
     }
 
-    pub fn dump_disassembly<Bus>(&mut self, port: &mut Bus, memory: &mut M68kBusPort, start: u32, length: u32)
+    pub fn dump_disassembly<Bus>(&mut self, bus: &mut Bus, memory: &mut M68kBusPort, start: u32, length: u32)
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
         let mut next = start;
         while next < (start + length) {
-            match self.decode_at(port, memory, self.is_supervisor, next) {
+            match self.decode_at(bus, memory, self.is_supervisor, next) {
                 Ok(()) => {
-                    self.dump_decoded(memory.current_clock, port);
+                    self.dump_decoded(memory.current_clock, bus);
                     next = self.end;
                 },
                 Err(err) => {
                     println!("{:?}", err);
                     match err {
                         M68kError::Exception(ex) if ex == Exceptions::IllegalInstruction => {
-                            println!("    at {:08x}: {:04x}", self.start, port.read_beu16(memory.current_clock, self.start).unwrap());
+                            println!("    at {:08x}: {:04x}", self.start, bus.read_beu16(memory.current_clock, self.start).unwrap());
                         },
                         _ => { },
                     }
@@ -117,13 +117,13 @@ impl M68kDecoder {
         }
     }
 
-    pub fn dump_decoded<Bus>(&mut self, clock: Instant, port: &mut Bus)
+    pub fn dump_decoded<Bus>(&mut self, clock: Instant, bus: &mut Bus)
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
         let ins_data: Result<String, M68kError<Bus::Error>> =
             (0..((self.end - self.start) / 2)).map(|offset|
-                Ok(format!("{:04x} ", port.read_beu16(clock, self.start + (offset * 2)).unwrap()))
+                Ok(format!("{:04x} ", bus.read_beu16(clock, self.start + (offset * 2)).unwrap()))
             ).collect();
         println!("{:#010x}: {}\n\t{}\n", self.start, ins_data.unwrap(), self.instruction);
     }
@@ -731,13 +731,13 @@ where
     }
 
     fn read_instruction_word(&mut self) -> Result<u16, M68kError<Bus::Error>> {
-        let word = self.memory.read_instruction_word(self.port, self.decoder.is_supervisor, self.decoder.end)?;
+        let word = self.memory.read_instruction_word(self.bus, self.decoder.is_supervisor, self.decoder.end)?;
         self.decoder.end += 2;
         Ok(word)
     }
 
     fn read_instruction_long(&mut self) -> Result<u32, M68kError<Bus::Error>> {
-        let word = self.memory.read_instruction_long(self.port, self.decoder.is_supervisor, self.decoder.end)?;
+        let word = self.memory.read_instruction_long(self.bus, self.decoder.is_supervisor, self.decoder.end)?;
         self.decoder.end += 4;
         Ok(word)
     }

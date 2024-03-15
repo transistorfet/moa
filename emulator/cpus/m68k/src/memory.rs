@@ -200,36 +200,36 @@ impl M68kBusPort {
         }
     }
 
-    pub(crate) fn read_data_sized<Bus, BusError>(&mut self, port: &mut Bus, is_supervisor: bool, addr: M68kAddress, size: Size) -> Result<u32, M68kError<BusError>>
+    pub(crate) fn read_data_sized<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: M68kAddress, size: Size) -> Result<u32, M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
         self.start_request(is_supervisor, addr as u32, size, MemAccess::Read, MemType::Data, false)?;
-        self.read_sized(port, addr, size)
+        self.read_sized(bus, addr, size)
     }
 
-    pub(crate) fn write_data_sized<Bus, BusError>(&mut self, port: &mut Bus, is_supervisor: bool, addr: M68kAddress, size: Size, value: u32) -> Result<(), M68kError<BusError>>
+    pub(crate) fn write_data_sized<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: M68kAddress, size: Size, value: u32) -> Result<(), M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
         self.start_request(is_supervisor, addr as u32, size, MemAccess::Write, MemType::Data, false)?;
-        self.write_sized(port, addr, size, value)
+        self.write_sized(bus, addr, size, value)
     }
 
-    pub(crate) fn read_instruction_word<Bus, BusError>(&mut self, port: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u16, M68kError<BusError>>
+    pub(crate) fn read_instruction_word<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u16, M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
         self.request.instruction(is_supervisor, addr)?;
-        Ok(self.read_sized(port, addr, Size::Word)? as u16)
+        Ok(self.read_sized(bus, addr, Size::Word)? as u16)
     }
 
-    pub(crate) fn read_instruction_long<Bus, BusError>(&mut self, port: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u32, M68kError<BusError>>
+    pub(crate) fn read_instruction_long<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u32, M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
         self.request.instruction(is_supervisor, addr)?;
-        self.read_sized(port, addr, Size::Long)
+        self.read_sized(bus, addr, Size::Long)
     }
 
     pub(crate) fn start_request<BusError>(&mut self, is_supervisor: bool, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, M68kError<BusError>> {

@@ -1,9 +1,6 @@
 
 use std::fmt;
-use std::error::{Error as StdError};
 use moa_host::HostError;
-
-use emulator_hal::bus;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EmulatorErrorKind {
@@ -78,7 +75,7 @@ impl fmt::Display for Error {
 
 impl<E> From<HostError<E>> for Error {
     fn from(err: HostError<E>) -> Self {
-        Self::Other(format!("other"))
+        Self::Other("other".to_string())
     }
 }
 

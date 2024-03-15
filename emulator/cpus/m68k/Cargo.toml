@@ -13,4 +13,4 @@ emulator-hal = { path = "../../libraries/emulator-hal/emulator-hal" }
 moa-core = { path = "../../core", optional = true }
 
 [features]
-moa = []
+moa = ["moa-core"]

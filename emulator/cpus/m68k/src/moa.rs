@@ -94,15 +94,15 @@ impl Debuggable for M68k {
 
     fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
         // TODO this is called by the debugger, but should be called some other way
-        //let _ = self.decoder.decode_at(&mut self.port, true, self.state.pc);
-        //self.decoder.dump_decoded(&mut self.port);
+        //let _ = self.decoder.decode_at(&mut self.bus, true, self.state.pc);
+        //self.decoder.dump_decoded(&mut self.bus);
         //self.dump_state();
         Ok(())
     }
 
     fn print_disassembly(&mut self, addr: Address, count: usize) {
         let mut decoder = M68kDecoder::new(self.info.chip, true, 0);
-        //decoder.dump_disassembly(&mut self.port, self.cycle.memory, addr as u32, count as u32);
+        //decoder.dump_disassembly(&mut self.bus, self.cycle.memory, addr as u32, count as u32);
     }
 
     fn run_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {

@@ -426,6 +426,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "emulator-hal-memory"
+version = "0.1.0"
+dependencies = [
+ "emulator-hal",
+]
+
+[[package]]
 name = "env_logger"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -510,6 +517,8 @@ name = "harte-tests"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
+ "emulator-hal",
+ "emulator-hal-memory",
  "femtos",
  "flate2",
  "moa-core",
