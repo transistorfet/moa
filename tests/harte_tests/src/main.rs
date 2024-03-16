@@ -2,7 +2,7 @@
 const DEFAULT_HARTE_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
 
 use std::io::prelude::*;
-use std::fmt::{Debug, UpperHex};
+use std::fmt::{Write, Debug, UpperHex};
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::fs::{self, File};
@@ -146,6 +146,7 @@ impl TestCase {
 }
 
 
+#[allow(clippy::uninit_vec)]
 fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, MemoryBlock<u32, Instant>), Error> {
     // Insert basic initialization
     let len = 0x100_0000;
@@ -274,13 +275,15 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
         Ok(()) => Ok(()),
         Err(err) => {
             if !args.quiet {
+                let mut writer = String::new();
                 if args.debug {
                     case.dump();
-                    println!();
-                    //initial_cpu.dump_state();
-                    //cpu.dump_state();
+                    writeln!(writer).unwrap();
+                    initial_cpu.dump_state(&mut writer).unwrap();
+                    cpu.dump_state(&mut writer).unwrap();
                 }
-                println!("FAILED: {:?}",  err);
+                writeln!(writer, "FAILED: {:?}",  err).unwrap();
+                println!("{}", writer);
             }
             Err(err)
         },
@@ -311,11 +314,9 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
         }
 
         // Only run the test if it's selected by the exceptions flag
-        if case.is_extended_exception_case() && args.exceptions == Selection::ExcludeAddr {
-            continue;
-        } else if case.is_exception_case() && args.exceptions == Selection::Exclude {
-            continue;
-        } else if !case.is_exception_case() && args.exceptions == Selection::Only {
+        if case.is_extended_exception_case() && args.exceptions == Selection::ExcludeAddr
+        || case.is_exception_case() && args.exceptions == Selection::Exclude
+        || !case.is_exception_case() && args.exceptions == Selection::Only {
             continue;
         }
 

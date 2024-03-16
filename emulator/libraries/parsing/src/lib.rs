@@ -272,8 +272,6 @@ impl<'input> AssemblyLexer<'input> {
                             break;
                         }
                     }
-                } else {
-
                 }
             } else if *ch == ' ' || *ch == '\t' || *ch == '\r' {
                 self.chars.next();

@@ -74,7 +74,7 @@ impl fmt::Display for Error {
 }
 
 impl<E> From<HostError<E>> for Error {
-    fn from(err: HostError<E>) -> Self {
+    fn from(_err: HostError<E>) -> Self {
         Self::Other("other".to_string())
     }
 }

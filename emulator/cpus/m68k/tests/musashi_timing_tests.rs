@@ -1,60 +1,51 @@
 
 use femtos::{Instant, Frequency};
-use emulator_hal::bus::BusAdapter;
+use emulator_hal::bus::BusAccess;
+use emulator_hal_memory::MemoryBlock;
 
-use moa_core::{System, Error, MemoryBlock, Address, Addressable, Device};
-
-use moa_m68k::{M68k, M68kType};
+use moa_m68k::{M68k, M68kType, M68kAddress};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, Condition, XRegister, BaseRegister, IndexRegister, Direction};
 use moa_m68k::timing::M68kInstructionTiming;
 use moa_m68k::execute::M68kCycle;
 
 
-const INIT_STACK: Address = 0x00002000;
-const INIT_ADDR: Address = 0x00000010;
+const INIT_STACK: M68kAddress = 0x00002000;
+const INIT_ADDR: M68kAddress = 0x00000010;
 
-fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, System) {
-    let mut system = System::default();
-
+#[allow(clippy::uninit_vec)]
+fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Instant>) {
     // Insert basic initialization
-    let data = vec![0; 0x00100000];
-    let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
-    system.get_bus().write_beu32(Instant::START, 0, INIT_STACK as u32).unwrap();
-    system.get_bus().write_beu32(Instant::START, 4, INIT_ADDR as u32).unwrap();
+    let len = 0x10_0000;
+    let mut data = Vec::with_capacity(len);
+    let mut memory = MemoryBlock::from(data);
+    memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
+    memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
 
     // Initialize the CPU and make sure it's in the expected state
-    let cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
-    let cycle = M68kCycle::new(&cpu, system.clock);
-    assert_eq!(cpu.state.pc, INIT_ADDR as u32);
-    assert_eq!(cpu.state.ssp, INIT_STACK as u32);
-    assert_eq!(cycle.decoder.start, INIT_ADDR as u32);
+    let cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
+    let cycle = M68kCycle::new(&cpu, Instant::START);
+    assert_eq!(cpu.state.pc, INIT_ADDR);
+    assert_eq!(cpu.state.ssp, INIT_STACK);
+    assert_eq!(cycle.decoder.start, INIT_ADDR);
     assert_eq!(cycle.decoder.instruction, Instruction::NOP);
-    (cpu, cycle, system)
+    (cpu, cycle, memory)
 }
 
-fn load_memory(system: &System, data: &[u16]) {
+fn load_memory<Bus: BusAccess<u32, Instant>>(bus: &mut Bus, data: &[u16]) {
     let mut addr = INIT_ADDR;
     for word in data {
-        system.get_bus().write_beu16(system.clock, addr, *word).unwrap();
+        bus.write_beu16(Instant::START, addr, *word).unwrap();
         addr += 2;
     }
 }
 
-fn run_timing_test(case: &TimingCase) -> Result<(), Error> {
-    let (mut cpu, cycle, system) = init_decode_test(case.cpu);
+fn run_timing_test(case: &TimingCase) -> Result<(), String> {
+    let (mut cpu, cycle, mut memory) = init_decode_test(case.cpu);
+    load_memory(&mut memory, case.data);
 
-    let mut bus = system.bus.borrow_mut();
-    let mut adapter: BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> = BusAdapter::new(
-        &mut *bus,
-        |addr| addr as u64,
-        |err| err.try_into().unwrap(),
-    );
-
-    let mut executor = cycle.begin(&mut cpu, &mut adapter);
+    let mut executor = cycle.begin(&mut cpu, &mut memory);
     let mut timing = M68kInstructionTiming::new(case.cpu, 16);
 
-    load_memory(&system, case.data);
     executor.decode_next().unwrap();
     assert_eq!(executor.cycle.decoder.instruction, case.ins.clone());
 
@@ -71,7 +62,7 @@ fn run_timing_test(case: &TimingCase) -> Result<(), Error> {
         Ok(())
     } else {
         println!("{:?}", timing);
-        Err(Error::new(format!("expected {} but found {}", expected, result)))
+        Err(format!("expected {} but found {}", expected, result))
     }
 }
 

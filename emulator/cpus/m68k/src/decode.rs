@@ -105,11 +105,8 @@ impl M68kDecoder {
                 },
                 Err(err) => {
                     println!("{:?}", err);
-                    match err {
-                        M68kError::Exception(ex) if ex == Exceptions::IllegalInstruction => {
-                            println!("    at {:08x}: {:04x}", self.start, bus.read_beu16(memory.current_clock, self.start).unwrap());
-                        },
-                        _ => { },
+                    if let M68kError::Exception(Exceptions::IllegalInstruction) = err {
+                        println!("    at {:08x}: {:04x}", self.start, bus.read_beu16(memory.current_clock, self.start).unwrap());
                     }
                     return;
                 },

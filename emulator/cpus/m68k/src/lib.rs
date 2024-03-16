@@ -12,5 +12,6 @@ pub mod tests;
 #[cfg(feature = "moa")]
 pub mod moa;
 
-pub use self::state::{M68k, M68kType, M68kError};
+pub use crate::state::{M68k, M68kType, M68kError};
+pub use crate::memory::{M68kAddress, M68kAddressSpace};
 

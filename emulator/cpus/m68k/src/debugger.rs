@@ -26,6 +26,7 @@ impl StackTracer {
 pub struct M68kDebugger {
     pub(crate) skip_breakpoint: usize,
     pub(crate) breakpoints: Vec<u32>,
+    #[allow(dead_code)]
     pub(crate) step_until_return: Option<usize>,
     pub(crate) stack_tracer: StackTracer,
 }

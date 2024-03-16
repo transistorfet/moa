@@ -153,9 +153,9 @@ impl M68kBusPort {
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
         let addr = addr & self.address_mask;
-        for i in (0..data.len()).step_by(self.data_bytewidth as usize) {
+        for i in (0..data.len()).step_by(self.data_bytewidth) {
             let addr_index = (addr + i as M68kAddress) & self.address_mask;
-            let end = cmp::min(i + self.data_bytewidth as usize, data.len());
+            let end = cmp::min(i + self.data_bytewidth, data.len());
             bus.read(clock, addr_index, &mut data[i..end])
                 .map_err(|err| M68kError::BusError(err))?;
         }
@@ -167,9 +167,9 @@ impl M68kBusPort {
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
         let addr = addr & self.address_mask;
-        for i in (0..data.len()).step_by(self.data_bytewidth as usize) {
+        for i in (0..data.len()).step_by(self.data_bytewidth) {
             let addr_index = (addr + i as M68kAddress) & self.address_mask;
-            let end = cmp::min(i + self.data_bytewidth as usize, data.len());
+            let end = cmp::min(i + self.data_bytewidth, data.len());
             bus.write(clock, addr_index, &data[i..end])
                 .map_err(|err| M68kError::BusError(err))?;
         }
@@ -204,7 +204,7 @@ impl M68kBusPort {
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
-        self.start_request(is_supervisor, addr as u32, size, MemAccess::Read, MemType::Data, false)?;
+        self.start_request(is_supervisor, addr, size, MemAccess::Read, MemType::Data, false)?;
         self.read_sized(bus, addr, size)
     }
 
@@ -212,7 +212,7 @@ impl M68kBusPort {
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
-        self.start_request(is_supervisor, addr as u32, size, MemAccess::Write, MemType::Data, false)?;
+        self.start_request(is_supervisor, addr, size, MemAccess::Write, MemType::Data, false)?;
         self.write_sized(bus, addr, size, value)
     }
 

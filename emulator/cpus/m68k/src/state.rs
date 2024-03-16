@@ -237,7 +237,7 @@ impl Default for M68kState {
 }
 
 impl M68kState {
-    pub fn dump_state<W: Write>(&mut self, writer: &mut W) -> Result<(), fmt::Error> {
+    pub fn dump_state<W: Write>(&self, writer: &mut W) -> Result<(), fmt::Error> {
         writeln!(writer, "Status: {:?}", self.status)?;
         writeln!(writer, "PC: {:#010x}", self.pc)?;
         writeln!(writer, "SR: {:#06x}", self.sr)?;
@@ -265,15 +265,16 @@ impl M68k {
         Self::new(CpuInfo::from_type(cputype, freq))
     }
 
-    pub fn dump_state<W: Write>(&mut self, writer: &mut W) {
-        self.state.dump_state(writer);
+    pub fn dump_state<W: Write>(&self, writer: &mut W) -> Result<(), fmt::Error> {
+        self.state.dump_state(writer)?;
 
         if let Some(cycle) = self.cycle.as_ref() {
-            println!("Current Instruction: {:#010x} {:?}", cycle.decoder.start, cycle.decoder.instruction);
-            println!();
+            writeln!(writer, "Current Instruction: {:#010x} {:?}", cycle.decoder.start, cycle.decoder.instruction)?;
+            writeln!(writer)?;
         }
         //memory::dump_memory(&mut self.bus, self.cycle.current_clock, self.state.ssp, 0x40);
-        println!();
+        writeln!(writer)?;
+        Ok(())
     }
 
     #[inline]

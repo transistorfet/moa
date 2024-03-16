@@ -71,7 +71,7 @@ impl M68kCycle {
     {
         cpu.stats.cycle_number += 1;
         if cpu.stats.cycle_number > cpu.stats.last_update {
-            cpu.stats.last_update = cpu.stats.last_update + 1_000_000;
+            cpu.stats.last_update += 1_000_000;
             let now = std::time::SystemTime::now();
             log::warn!("{} per million", now.duration_since(cpu.stats.last_time).unwrap().as_micros());
             cpu.stats.last_time = now;
@@ -79,7 +79,7 @@ impl M68kCycle {
 
         M68kCycleExecutor {
             state: &mut cpu.state,
-            bus: bus,
+            bus,
             debugger: &mut cpu.debugger,
             cycle: self,
         }
@@ -97,7 +97,7 @@ where
         self.state.status == Status::Running
     }
 
-    fn reset(&mut self, now: Instant, bus: &mut Bus) -> Result<(), Self::Error> {
+    fn reset(&mut self, _now: Instant, _bus: &mut Bus) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -172,38 +172,6 @@ where
         //self.check_pending_interrupts(system)?;
         Ok(())
     }
-
-    /*
-    #[inline]
-    pub fn check_pending_interrupts(&mut self, system: &System) -> Result<(), M68kError<Bus::Error>> {
-        // TODO this could move somewhere else
-        self.state.pending_ipl = match system.get_interrupt_controller().check() {
-            (true, priority) => InterruptPriority::from_u8(priority),
-            (false, _) => InterruptPriority::NoInterrupt,
-        };
-
-        let current_ipl = self.state.current_ipl as u8;
-        let pending_ipl = self.state.pending_ipl as u8;
-
-        if self.state.pending_ipl != InterruptPriority::NoInterrupt {
-            let priority_mask = ((self.state.sr & Flags::IntMask as u16) >> 8) as u8;
-
-            if (pending_ipl > priority_mask || pending_ipl == 7) && pending_ipl >= current_ipl {
-                log::debug!("{} interrupt: {} @ {} ns", DEV_NAME, pending_ipl, system.clock.as_duration().as_nanos());
-                self.state.current_ipl = self.state.pending_ipl;
-                let ack_num = system.get_interrupt_controller().acknowledge(self.state.current_ipl as u8)?;
-                self.exception(ack_num, true)?;
-                return Ok(());
-            }
-        }
-
-        if pending_ipl < current_ipl {
-            self.state.current_ipl = self.state.pending_ipl;
-        }
-
-        Ok(())
-    }
-    */
 
     #[inline]
     pub fn check_pending_interrupts(&mut self, interrupt: (bool, u8, u8)) -> Result<(InterruptPriority, Option<u8>), M68kError<Bus::Error>> {
@@ -315,7 +283,7 @@ where
                 Ok(())
             },
             Err(M68kError::Interrupt(ex)) => {
-                self.exception(ex as u8, false)?;
+                self.exception(ex, false)?;
                 Ok(())
             },
             Err(err) => Err(err),

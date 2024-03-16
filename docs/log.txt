@@ -484,3 +484,10 @@ General Work
 - the emulator-hal conversion is going well.  I'm thinking it makes more sense for the Address of
   BusAccess to be a generic instead of an associated type, but I'll need to finish converting
   everything to get a better sense of it.  There's a lot of cleanup to do
+
+2024-03-14
+- I finally took a look at a flamegraph of the harte_test runner, and almost the entirety of the time
+  spent running tests was in zeroing of the array of memory at the start of each test.  I really
+  should use MaybeUninit, but I instead used Vec::with_capacity/.set_len().  It went from 15-24 minutes
+  down to 6 seconds.
+

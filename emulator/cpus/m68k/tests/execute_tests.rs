@@ -1,16 +1,16 @@
 
 use femtos::{Instant, Frequency};
-use emulator_hal::bus::BusAdapter;
+use emulator_hal::bus::BusAccess;
+use emulator_hal::step::Step;
+use emulator_hal_memory::MemoryBlock;
 
-use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, Device, Error};
-
-use moa_m68k::{M68k, M68kType};
+use moa_m68k::{M68k, M68kType, M68kAddress};
 use moa_m68k::state::M68kState;
 use moa_m68k::execute::{M68kCycle, M68kCycleExecutor};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, Direction, Condition};
 
-const INIT_STACK: Address = 0x00002000;
-const INIT_ADDR: Address = 0x00000010;
+const INIT_STACK: M68kAddress = 0x00002000;
+const INIT_ADDR: M68kAddress = 0x00000010;
 
 const MEM_ADDR: u32 = 0x00001234;
 
@@ -36,37 +36,29 @@ struct TestCase {
 }
 
 
+#[allow(clippy::uninit_vec)]
 fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
 where
-    F: FnMut(M68kCycleExecutor<&mut BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error>>, &System),
+    F: FnMut(M68kCycleExecutor<&mut MemoryBlock<u32, Instant>>),
 {
-    let mut system = System::default();
-
     // Insert basic initialization
-    let data = vec![0; 0x00100000];
-    let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
-    system.get_bus().write_beu32(Instant::START, 0, INIT_STACK as u32).unwrap();
-    system.get_bus().write_beu32(Instant::START, 4, INIT_ADDR as u32).unwrap();
+    let len = 0x10_0000;
+    let mut data = Vec::with_capacity(len);
+    let mut memory = MemoryBlock::from(data);
+    memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
+    memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
 
-    let mut bus = system.bus.borrow_mut();
-    let mut adapter: BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> = BusAdapter::new(
-        &mut *bus,
-        |addr| addr as u64,
-        |err| err.try_into().unwrap(),
-    );
+    let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
+    cpu.step(Instant::START, &mut memory).unwrap();
 
-    let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
-    cpu.step(&system).unwrap();
+    let cycle = M68kCycle::new(&cpu, Instant::START);
+    let executor = cycle.begin(&mut cpu, &mut memory);
 
-    let cycle = M68kCycle::new(&cpu, system.clock);
-    let executor = cycle.begin(&mut cpu, &mut adapter);
-
-    assert_eq!(executor.state.pc, INIT_ADDR as u32);
-    assert_eq!(executor.state.ssp, INIT_STACK as u32);
+    assert_eq!(executor.state.pc, INIT_ADDR);
+    assert_eq!(executor.state.ssp, INIT_STACK);
     assert_eq!(executor.cycle.decoder.instruction, Instruction::NOP);
 
-    test_func(executor, &system)
+    test_func(executor)
 }
 
 fn build_state(state: &TestState) -> M68kState {
@@ -82,19 +74,21 @@ fn build_state(state: &TestState) -> M68kState {
     new_state
 }
 
-fn load_memory(system: &System, data: &[u16]) {
-    for i in 0..data.len() {
-        system.get_bus().write_beu16(system.clock, (i << 1) as Address, data[i]).unwrap();
-    } 
+fn load_memory<Bus: BusAccess<u32, Instant>>(bus: &mut Bus, data: &[u16]) {
+    let mut addr = INIT_ADDR;
+    for word in data {
+        bus.write_beu16(Instant::START, addr, *word).unwrap();
+        addr += 2;
+    }
 }
 
 fn run_test(case: &TestCase) {
-    run_execute_test(case.cputype, |mut executor, system| {
+    run_execute_test(case.cputype, |mut executor| {
         let init_state = build_state(&case.init);
         let expected_state = build_state(&case.fini);
-        system.get_bus().write_beu32(system.clock, MEM_ADDR as Address, case.init.mem).unwrap();
+        executor.bus.write_beu32(Instant::START, MEM_ADDR, case.init.mem).unwrap();
 
-        load_memory(&system, case.data);
+        load_memory(&mut executor.bus, case.data);
         *executor.state = init_state;
 
         executor.decode_next().unwrap();
@@ -103,7 +97,7 @@ fn run_test(case: &TestCase) {
         executor.execute_current().unwrap();
         assert_eq!(*executor.state, expected_state);
 
-        let mem = system.get_bus().read_beu32(system.clock, MEM_ADDR as Address).unwrap();
+        let mem = executor.bus.read_beu32(Instant::START, MEM_ADDR).unwrap();
         assert_eq!(mem, case.fini.mem);
     });
 }

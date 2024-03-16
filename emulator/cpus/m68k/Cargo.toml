@@ -12,5 +12,8 @@ emulator-hal = { path = "../../libraries/emulator-hal/emulator-hal" }
 
 moa-core = { path = "../../core", optional = true }
 
+[dev-dependencies]
+emulator-hal-memory = { path = "../../libraries/emulator-hal/emulator-hal-memory" }
+
 [features]
 moa = ["moa-core"]
