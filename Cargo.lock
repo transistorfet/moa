@@ -521,7 +521,6 @@ dependencies = [
  "emulator-hal-memory",
  "femtos",
  "flate2",
- "moa-core",
  "moa-m68k",
  "serde",
  "serde_derive",

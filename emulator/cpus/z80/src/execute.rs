@@ -8,8 +8,6 @@ use crate::state::{Z80, Z80Error, Status, Flags};
 use crate::timing::Z80InstructionCycles;
 
 
-const DEV_NAME: &str = "z80-cpu";
-
 const FLAGS_NUMERIC: u8                 = 0xC0;
 const FLAGS_ARITHMETIC: u8              = 0x17;
 const FLAGS_CARRY_HALF_CARRY: u8        = 0x11;
@@ -70,8 +68,8 @@ impl From<Error> for Z80Error {
     fn from(err: Error) -> Self {
         match err {
             Error::Processor(ex) => Z80Error::BusError(format!("processor error {}", ex)),
-            Error::Breakpoint(msg) => Z80Error::Breakpoint,
-            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => Z80Error::BusError(format!("{}", msg)),
+            Error::Breakpoint(_) => Z80Error::Breakpoint,
+            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => Z80Error::BusError(msg.to_string()),
         }
     }
 

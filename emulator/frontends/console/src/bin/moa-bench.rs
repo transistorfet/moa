@@ -3,7 +3,7 @@ use std::thread;
 use std::time::Duration;
 use femtos::Frequency;
 
-use moa_core::{System, MemoryBlock, BusPort, Device};
+use moa_core::{System, MemoryBlock, Device};
 
 use moa_m68k::{M68k, M68kType};
 use moa_peripherals_generic::AtaDevice;

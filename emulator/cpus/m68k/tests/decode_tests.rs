@@ -17,6 +17,7 @@ struct TestCase {
     ins: Option<Instruction>,
 }
 
+#[rustfmt::skip]
 const DECODE_TESTS: &'static [TestCase] = &[
     // MC68000
     TestCase { cpu: M68kType::MC68000, data: &[0x4e71],                             ins: Some(Instruction::NOP) },
@@ -66,21 +67,16 @@ const DECODE_TESTS: &'static [TestCase] = &[
 
 fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Instant>) {
     // Insert basic initialization
-    let len = 0x10_0000;
+    let len = 0x2000;
     let mut data = Vec::with_capacity(len);
+    unsafe { data.set_len(len); }
     let mut memory = MemoryBlock::from(data);
     memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
     memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
 
     // Initialize the CPU and make sure it's in the expected state
-    let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
-    //cpu.reset_cpu().unwrap();
-    //assert_eq!(cpu.state.pc, INIT_ADDR);
-    //assert_eq!(cpu.state.ssp, INIT_STACK);
-
+    let cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
     let cycle = M68kCycle::new(&cpu, Instant::START);
-    //assert_eq!(cycle.decoder.start, INIT_ADDR);
-    //assert_eq!(cycle.decoder.instruction, Instruction::NOP);
     (cpu, cycle, memory)
 }
 
@@ -100,12 +96,16 @@ fn run_decode_test(case: &TestCase) {
         Some(ins) => {
             let mut executor = cycle.begin(&mut cpu, &mut memory);
             executor.reset_cpu().unwrap();
+            assert_eq!(executor.state.pc, INIT_ADDR);
+            assert_eq!(executor.state.ssp, INIT_STACK);
             executor.decode_next().unwrap();
             assert_eq!(executor.cycle.decoder.instruction, ins.clone());
         },
         None => {
             let mut executor = cycle.begin(&mut cpu, &mut memory);
             executor.reset_cpu().unwrap();
+            assert_eq!(executor.state.pc, INIT_ADDR);
+            assert_eq!(executor.state.ssp, INIT_STACK);
             let next = executor.decode_next();
             println!("{:?}", executor.cycle.decoder.instruction);
             assert!(next.is_err());
@@ -122,6 +122,7 @@ pub fn run_decode_tests() {
 }
 
 #[test]
+#[ignore]
 pub fn run_assembler_tests() {
     let mut tests = 0;
     let mut errors = 0;

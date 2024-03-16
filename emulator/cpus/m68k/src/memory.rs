@@ -142,7 +142,7 @@ impl M68kBusPort {
         Self {
             request: Default::default(),
             data_bytewidth: info.data_width as usize / 8,
-            address_mask: 1_u32.wrapping_shl(info.address_width as u32).wrapping_sub(1),
+            address_mask: 1_u32.checked_shl(info.address_width as u32).unwrap_or(0).wrapping_sub(1),
             cycle_start_clock: clock,
             current_clock: clock,
         }

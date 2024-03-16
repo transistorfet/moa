@@ -725,13 +725,18 @@ pub struct Ym2612 {
     channels: Vec<Channel>,
     dac: Dac,
 
+    // TODO the timer hasn't been implemented yet
+    #[allow(dead_code)]
     timer_a_enable: bool,
     timer_a: u16,
+    #[allow(dead_code)]
     timer_a_current: u16,
     timer_a_overflow: bool,
 
+    #[allow(dead_code)]
     timer_b_enable: bool,
     timer_b: u8,
+    #[allow(dead_code)]
     timer_b_current: u8,
     timer_b_overflow: bool,
 
@@ -856,8 +861,8 @@ impl Ym2612 {
             0x28 => {
                 let num = (data as usize) & 0x07;
                 let ch = match num {
-                    0 | 1 | 2 => num,
-                    4 | 5 | 6 => num - 1,
+                    0..=2 => num,
+                    4..=6 => num - 1,
                     _ => {
                         log::warn!("{}: attempted key on/off to invalid channel {}", DEV_NAME, num);
                         return;
@@ -1025,7 +1030,7 @@ impl Addressable for Ym2612 {
 
     fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
-            0 | 1 | 2 | 3 => {
+            0..=3 => {
                 // Read the status byte (busy/overflow)
                 data[0] = ((self.timer_a_overflow as u8) << 1) | (self.timer_b_overflow as u8);
             }

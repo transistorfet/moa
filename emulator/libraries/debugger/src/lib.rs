@@ -154,7 +154,7 @@ impl Debugger {
                 };
 
                 if let Some(device) = system.get_next_debuggable_device() {
-                    device.borrow_mut().as_debuggable().unwrap().print_disassembly(addr, count);
+                    device.borrow_mut().as_debuggable().unwrap().print_disassembly(system, addr, count);
                 }
             },
             "c" | "continue" => {

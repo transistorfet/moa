@@ -14,7 +14,7 @@ impl Host for ConsoleFrontend {
 
     fn add_pty(&self) -> Result<Box<dyn Tty>, HostError<Self::Error>> {
         use moa_common::tty::SimplePty;
-        Ok(Box::new(SimplePty::open().map_err(|err| HostError::TTYNotSupported)?)) //.map_err(|err| Error::new(format!("console: error opening pty: {:?}", err)))?))
+        Ok(Box::new(SimplePty::open().map_err(|_| HostError::TTYNotSupported)?)) //.map_err(|err| Error::new(format!("console: error opening pty: {:?}", err)))?))
     }
 
     fn add_video_source(&mut self, _receiver: FrameReceiver) -> Result<(), HostError<Self::Error>> {

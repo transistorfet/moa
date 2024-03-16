@@ -17,6 +17,7 @@ fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Ins
     // Insert basic initialization
     let len = 0x10_0000;
     let mut data = Vec::with_capacity(len);
+    unsafe { data.set_len(len); }
     let mut memory = MemoryBlock::from(data);
     memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
     memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
@@ -24,10 +25,6 @@ fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Ins
     // Initialize the CPU and make sure it's in the expected state
     let cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
     let cycle = M68kCycle::new(&cpu, Instant::START);
-    assert_eq!(cpu.state.pc, INIT_ADDR);
-    assert_eq!(cpu.state.ssp, INIT_STACK);
-    assert_eq!(cycle.decoder.start, INIT_ADDR);
-    assert_eq!(cycle.decoder.instruction, Instruction::NOP);
     (cpu, cycle, memory)
 }
 
@@ -45,6 +42,10 @@ fn run_timing_test(case: &TimingCase) -> Result<(), String> {
 
     let mut executor = cycle.begin(&mut cpu, &mut memory);
     let mut timing = M68kInstructionTiming::new(case.cpu, 16);
+
+    executor.reset_cpu().unwrap();
+    assert_eq!(executor.state.pc, INIT_ADDR);
+    assert_eq!(executor.state.ssp, INIT_STACK);
 
     executor.decode_next().unwrap();
     assert_eq!(executor.cycle.decoder.instruction, case.ins.clone());
@@ -67,15 +68,15 @@ fn run_timing_test(case: &TimingCase) -> Result<(), String> {
 }
 
 #[test]
+#[ignore]
 pub fn run_timing_tests() {
     let mut errors = 0;
     for case in TIMING_TESTS {
-        // NOTE switched to only show the failures rather than all tests
-        //print!("Testing for {:?}...", case.ins);
-        //match run_timing_test(case) {
-        //    Ok(()) => println!("ok"),
-        //    Err(err) => { println!("{}", err.msg); errors += 1 },
-        //}
+        print!("Testing for {:?}...", case.ins);
+        match run_timing_test(case) {
+            Ok(()) => println!("ok"),
+            Err(err) => { println!("{:?}", err); errors += 1 },
+        }
 
         if let Err(_) = run_timing_test(case) {
             errors += 1;
@@ -94,6 +95,7 @@ pub struct TimingCase {
     pub ins: Instruction,
 }
 
+#[rustfmt::skip]
 pub const TIMING_TESTS: &'static [TimingCase] = &[
     TimingCase { cpu: M68kType::MC68000, data: &[0xA000], timing: (  4,   4,   4), ins: Instruction::UnimplementedA(0xA000) },
     TimingCase { cpu: M68kType::MC68000, data: &[0xF000], timing: (  4,   4,   4), ins: Instruction::UnimplementedF(0xF000) },

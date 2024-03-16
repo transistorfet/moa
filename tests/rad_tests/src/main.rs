@@ -449,10 +449,8 @@ fn is_undocumented_instruction(name: &str) -> bool {
         (0xFD, op) => {
             let upper = op & 0xF0;
             let lower = op & 0x0F;
-            !(lower == 0x06 && (0x30..=0xB0).contains(&upper) && upper != 0x70) &&
-            !(lower == 0x0E && (0x40..=0xB0).contains(&upper)) &&
-            !((0x70..=0x77).contains(&op) && op != 0x76) &&
-            !(op >= 0x21 && op <= 0x23 && op >= 0x34 && op <= 0x36 && op >= 0x29 && op <= 0x2B) &&
+            !(lower == 0x0E && (0x40..=0xB0).contains(&upper) || (0x70..=0x77).contains(&op) && op != 0x76 || op != 0x76 && (0x70..=0x77).contains(&op) || lower == 0x06 && (0x30..=0xB0).contains(&upper) && upper != 0x70) &&
+            !((0x21..=0x23).contains(&op) || (0x34..=0x36).contains(&op) || (0x29..=0x2B).contains(&op)) &&
             !(lower == 0x09 && upper <= 0x30) &&
             !(op == 0xE1 || op == 0xE3 || op == 0xE5 || op == 0xE9 || op == 0xF9)
         },

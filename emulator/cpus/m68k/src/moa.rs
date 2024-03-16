@@ -16,7 +16,7 @@ impl Steppable for M68k {
         let mut adapter: bus::BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> = bus::BusAdapter::new(
             &mut *bus,
             |addr| addr as u64,
-            |err| err.try_into().unwrap(),
+            |err| err,
         );
 
         let mut executor = cycle.begin(self, &mut adapter);
@@ -24,7 +24,7 @@ impl Steppable for M68k {
         executor.step()?;
 
         let interrupt = system.get_interrupt_controller().check();
-        if let (priority, Some(ack)) = executor.check_pending_interrupts(interrupt)? {
+        if let (priority, Some(_)) = executor.check_pending_interrupts(interrupt)? {
             log::debug!("interrupt: {:?} @ {} ns", priority, system.clock.as_duration().as_nanos());
             system.get_interrupt_controller().acknowledge(priority as u8)?;
         }
@@ -35,7 +35,7 @@ impl Steppable for M68k {
 
     fn on_error(&mut self, _system: &System) {
         let mut output = String::with_capacity(256);
-        self.dump_state(&mut output);
+        let _ = self.dump_state(&mut output);
         println!("{}", output);
     }
 }
@@ -60,8 +60,8 @@ impl<BusError> From<Error> for M68kError<BusError> {
     fn from(err: Error) -> Self {
         match err {
             Error::Processor(ex) => M68kError::Interrupt(ex as u8),
-            Error::Breakpoint(msg) => M68kError::Breakpoint,
-            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => M68kError::Other(format!("{}", msg)),
+            Error::Breakpoint(_) => M68kError::Breakpoint,
+            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => M68kError::Other(msg.to_string()),
         }
     }
 }
@@ -100,9 +100,17 @@ impl Debuggable for M68k {
         Ok(())
     }
 
-    fn print_disassembly(&mut self, addr: Address, count: usize) {
+    fn print_disassembly(&mut self, system: &System, addr: Address, count: usize) {
         let mut decoder = M68kDecoder::new(self.info.chip, true, 0);
-        decoder.dump_disassembly(&mut self.bus, self.cycle.memory, addr as u32, count as u32);
+
+        let mut bus = system.bus.borrow_mut();
+        let mut adapter: bus::BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> = bus::BusAdapter::new(
+            &mut *bus,
+            |addr| addr as u64,
+            |err| err,
+        );
+
+        decoder.dump_disassembly(&mut adapter, addr as u32, count as u32);
     }
 
     fn run_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {

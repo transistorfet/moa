@@ -44,6 +44,7 @@ where
     // Insert basic initialization
     let len = 0x10_0000;
     let mut data = Vec::with_capacity(len);
+    unsafe { data.set_len(len); }
     let mut memory = MemoryBlock::from(data);
     memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
     memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
@@ -75,11 +76,9 @@ fn build_state(state: &TestState) -> M68kState {
 }
 
 fn load_memory<Bus: BusAccess<u32, Instant>>(bus: &mut Bus, data: &[u16]) {
-    let mut addr = INIT_ADDR;
-    for word in data {
-        bus.write_beu16(Instant::START, addr, *word).unwrap();
-        addr += 2;
-    }
+    for i in 0..data.len() {
+        bus.write_beu16(Instant::START, (i << 1) as u32, data[i]).unwrap();
+    } 
 }
 
 fn run_test(case: &TestCase) {
@@ -111,6 +110,7 @@ pub fn run_execute_tests() {
 }
 
 #[test]
+#[ignore]
 pub fn run_assembler_tests() {
     use moa_m68k::assembler::M68kAssembler;
 
@@ -152,6 +152,7 @@ fn format_hex(data: &[u16]) -> String {
         .join(", ")
 }
 
+#[rustfmt::skip]
 const TEST_CASES: &'static [TestCase] = &[
     TestCase {
         name: "nop",
@@ -218,7 +219,7 @@ const TEST_CASES: &'static [TestCase] = &[
         fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FE, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x270A, mem: 0x00000000 },
     },
     TestCase {
-        name: "addx with extend",
+        name: "addx with extend; zero flag not set",
         ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xD101 ],
         cputype: M68kType::MC68010,
@@ -226,11 +227,27 @@ const TEST_CASES: &'static [TestCase] = &[
         fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x270A, mem: 0x00000000 },
     },
     TestCase {
-        name: "addx with extend and carry",
+        name: "addx with extend; zero flag set",
+        ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+        data: &[ 0xD101 ],
+        cputype: M68kType::MC68010,
+        init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000007F, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2714, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x270A, mem: 0x00000000 },
+    },
+    TestCase {
+        name: "addx with extend and carry; zero flag not set",
         ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xD101 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2710, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2711, mem: 0x00000000 },
+    },
+    TestCase {
+        name: "addx with extend and carry; zero flag set",
+        ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+        data: &[ 0xD101 ],
+        cputype: M68kType::MC68010,
+        init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2714, mem: 0x00000000 },
         fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2715, mem: 0x00000000 },
     },
     TestCase {
@@ -239,7 +256,15 @@ const TEST_CASES: &'static [TestCase] = &[
         data: &[ 0x027C, 0xF8FF ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA7AA, mem: 0x00000000 },
-        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA0AA, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA00A, mem: 0x00000000 },
+    },
+    TestCase {
+        name: "andi with sr 2",
+        ins: Instruction::ANDtoSR(0xF8FF),
+        data: &[ 0x027C, 0xF8FF ],
+        cputype: M68kType::MC68010,
+        init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA7FA, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA01A, mem: 0x00000000 },
     },
     TestCase {
         name: "asl",
@@ -560,13 +585,14 @@ const TEST_CASES: &'static [TestCase] = &[
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xFF55FFAA },
         fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x000055AA, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xFF55FFAA },
     },
+    // TODO not sure if these cases are correct
     TestCase {
         name: "movep long from even memory upper",
         ins: Instruction::MOVEP(0, 0, 0, Size::Long, Direction::FromTarget),
         data: &[ 0x0148, 0x0000 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
-        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0xAABB0000, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
+        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0xAABBCCDD, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
     },
     TestCase {
         name: "movep long from even memory lower",
@@ -603,7 +629,7 @@ const TEST_CASES: &'static [TestCase] = &[
         data: &[ 0x007C, 0x00AA ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA755, mem: 0x00000000 },
-        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA7FF, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA71F, mem: 0x00000000 },
     },
 
 

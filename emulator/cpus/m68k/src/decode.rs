@@ -92,13 +92,14 @@ impl M68kDecoder {
         Ok(())
     }
 
-    pub fn dump_disassembly<Bus>(&mut self, bus: &mut Bus, memory: &mut M68kBusPort, start: u32, length: u32)
+    pub fn dump_disassembly<Bus>(&mut self, bus: &mut Bus, start: u32, length: u32)
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
+        let mut memory = M68kBusPort::default();
         let mut next = start;
         while next < (start + length) {
-            match self.decode_at(bus, memory, self.is_supervisor, next) {
+            match self.decode_at(bus, &mut memory, self.is_supervisor, next) {
                 Ok(()) => {
                     self.dump_decoded(memory.current_clock, bus);
                     next = self.end;

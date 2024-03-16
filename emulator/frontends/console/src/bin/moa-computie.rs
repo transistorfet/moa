@@ -1,5 +1,5 @@
 
-use clap::{Arg, ArgAction};
+use clap::Arg;
 
 use moa_console::ConsoleFrontend;
 use moa_systems_computie::{build_computie, ComputieOptions};
@@ -18,9 +18,9 @@ fn main() {
         options.rom = filename.to_string();
     }
 
-    let mut frontend = ConsoleFrontend::default();
+    let frontend = ConsoleFrontend;
 
-    let system = build_computie(&mut frontend, options).unwrap();
+    let system = build_computie(&frontend, options).unwrap();
     frontend.start(matches, system);
 }
 

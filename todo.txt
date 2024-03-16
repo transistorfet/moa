@@ -1,5 +1,5 @@
 
-* fix dump_state everywhere, which now requires a writer.  Is there an easier way?  Maybe serde?  Is there a way that doesn't require std
+* fix dump_state everywhere, which now requires a writer.  Is there an easier way?  Is there a way that doesn't require std
 * can you clean it up more?
 * implement the inspect and debug traits
 * move the interrupt controller logic to the step() function only, and have a customish interrupt interface into the sim
