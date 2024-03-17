@@ -50,9 +50,14 @@ impl CpalAudioOutput {
         };
 
         let stream = device
-            .build_output_stream(&config, data_callback, move |err| {
-                log::error!("ERROR: {:?}", err);
-            })
+            .build_output_stream(
+                &config,
+                data_callback,
+                move |err| {
+                    log::error!("ERROR: {:?}", err);
+                },
+                None,
+            )
             .unwrap();
 
         stream.play().unwrap();

@@ -31,14 +31,14 @@ jobs:
 
       - name: Run tests with default features
         run: |
-          cargo test
+          cargo test --workspace
 
       - name: Run tests with all features
         run: |
-          cargo test #--features=std,fugit,femtos
+          cargo test --workspace #--features=std,fugit,femtos
 
       - name: Run test with no_std
         run: |
-          cargo test --no-default-features
+          cargo test --workspace --no-default-features
 
 

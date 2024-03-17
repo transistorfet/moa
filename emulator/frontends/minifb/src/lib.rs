@@ -320,20 +320,16 @@ impl MiniFrontend {
                 //println!("ran simulation for {:?}us in {:?}us (avg: {:?}us)", frame_time.as_micros(), sim_time, frame_time.as_micros() as f64 / sim_time as f64);
             }
 
-            if let Some(keys) = window.get_keys_pressed(minifb::KeyRepeat::No) {
-                for key in keys {
-                    self.check_key(key, true);
+            for key in window.get_keys_pressed(minifb::KeyRepeat::No) {
+                self.check_key(key, true);
 
-                    // Process special keys
-                    if let Key::D = key {
-                        run_debugger = true;
-                    }
+                // Process special keys
+                if let Key::D = key {
+                    run_debugger = true;
                 }
             }
-            if let Some(keys) = window.get_keys_released() {
-                for key in keys {
-                    self.check_key(key, false);
-                }
+            for key in window.get_keys_released() {
+                self.check_key(key, false);
             }
 
             if let Some(sender) = self.mouse.as_mut() {

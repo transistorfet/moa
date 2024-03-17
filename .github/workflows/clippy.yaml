@@ -29,4 +29,4 @@ jobs:
 
       - name: Check clippy
         run: |
-          cargo clippy
+          cargo clippy --workspace

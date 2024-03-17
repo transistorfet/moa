@@ -7,7 +7,7 @@ default-run = "moa-computie"
 [dependencies]
 log = "0.4"
 clap = "^4"
-simple_logger = "^2"
+simple_logger = "^4"
 femtos = "0.1"
 
 moa-core = { path = "../../core" }

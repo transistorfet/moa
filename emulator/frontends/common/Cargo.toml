@@ -12,10 +12,10 @@ log = "0.4"
 femtos = "0.1"
 moa-core = { path = "../../core" }
 moa-host = { path = "../../libraries/host" }
-nix = { version = "0.25", optional = true }
+nix = { version = "0.28", optional = true, features = ["term", "fs"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cpal = { version = "0.14", optional = true }
+cpal = { version = "0.15", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-cpal = { version = "0.14", optional = true, features = ["wasm-bindgen"] }
+cpal = { version = "0.15", optional = true, features = ["wasm-bindgen"] }
