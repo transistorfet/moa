@@ -8,9 +8,7 @@ perf.data
 perf.data.old
 flamegraph*.svg
 
-binaries/*/*.asm
-binaries/*/*.bin
-binaries/*/*.smd
+binaries/
 
 emulator/frontends/pixels/dist/
 tests/ProcessorTests/
