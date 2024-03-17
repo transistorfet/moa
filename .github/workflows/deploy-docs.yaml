@@ -3,22 +3,30 @@ on:
   push:
     branches:
       - main
+
 permissions:
   contents: read
   pages: write
   id-token: write
+
 jobs:
   build-docs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
         with:
-          toolchain: stable
-          target: wasm32-unknown-unknown
+          submodules: true
+
+      - name: Select rust version
+        run: |
+          rustup toolchain install 1.70 --profile minimal --no-self-update
+          rustup default 1.70
+          rustup target add wasm32-unknown-unknown
+
       - uses: jetli/wasm-bindgen-action@v0.2.0
 
       - name: Install dependencies
