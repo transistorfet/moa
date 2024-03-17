@@ -6,9 +6,9 @@ default-run = "moa-genesis"
 
 [dependencies]
 log = "0.4"
-minifb = "^0.25"
-clap = "^4"
-simple_logger = "^4"
+minifb = "0.25"
+clap = "4.4"
+simple_logger = "4"
 femtos = "0.1"
 
 moa-core = { path = "../../core" }
