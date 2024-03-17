@@ -1,0 +1,24 @@
+edition = "2021"
+
+max_width = 132
+
+struct_lit_width = 0    # default 18 (24)
+fn_call_width=132       # default 60 (80)
+attr_fn_like_width=100  # default 70 (92)
+array_width=132         # default 60 (80)
+#chain_width=100        # default 60 (80)
+#single_line_if_else_max_width=100  # default 50 (66)
+#struct_variant_width = 0           # default 35 (46)
+
+newline_style = "Unix"
+reorder_imports = false
+match_block_trailing_comma = true
+
+## Experimental Features
+unstable_features = true
+blank_lines_upper_bound = 3
+overflow_delimited_expr = true
+
+# need a newline at the top and bottom of file
+# need to be able to align const equals
+# need to not erase whitespace between end of line and comment
