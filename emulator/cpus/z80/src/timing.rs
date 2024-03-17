@@ -101,7 +101,7 @@ impl Z80InstructionCycles {
                 return Ok(Z80InstructionCycles::Repeating {
                     repeating: 21 + extra,
                     terminating: 16 + extra,
-                })
+                });
             },
 
             Instruction::CPL => 4,

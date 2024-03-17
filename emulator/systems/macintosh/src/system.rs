@@ -80,9 +80,9 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
 
     //cpu.add_breakpoint(0x400170);       // Failed, loops infinitely
     cpu.add_breakpoint(0x4000f4); // Failed, should show the sad mac
-                                  //cpu.add_breakpoint(0x4006ae);
-                                  //cpu.add_breakpoint(0x400706);
-                                  //cpu.add_breakpoint(0x400722);       // end of ram test
+    //cpu.add_breakpoint(0x4006ae);
+    //cpu.add_breakpoint(0x400706);
+    //cpu.add_breakpoint(0x400722);       // end of ram test
 
     //cpu.add_breakpoint(0x40026c);       // System Initialization
     //cpu.add_breakpoint(0x402adc);
@@ -96,12 +96,12 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     //cpu.add_breakpoint(0x40045c);
     //cpu.add_breakpoint(0x400614);     // Start of InitIO
     cpu.add_breakpoint(0x40062a); // Loop in InitIO
-                                  //cpu.add_breakpoint(0x400648);
-                                  //cpu.add_breakpoint(0x40064c);
-                                  //cpu.add_breakpoint(0x4014a6);       // DrvrInstall
-                                  //cpu.add_breakpoint(0x401262);       // $A000 handler, which is where the rom write happens
-                                  //cpu.add_breakpoint(0x4012ec);
-                                  //cpu.add_breakpoint(0x40133a);
+    //cpu.add_breakpoint(0x400648);
+    //cpu.add_breakpoint(0x40064c);
+    //cpu.add_breakpoint(0x4014a6);       // DrvrInstall
+    //cpu.add_breakpoint(0x401262);       // $A000 handler, which is where the rom write happens
+    //cpu.add_breakpoint(0x4012ec);
+    //cpu.add_breakpoint(0x40133a);
 
     // Issue of writing to 0x100000 which doesn't exist
     cpu.add_breakpoint(0x400d62);

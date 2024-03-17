@@ -460,7 +460,7 @@ impl Ym7101State {
 
 
     fn is_inside_window(&mut self, x: usize, y: usize) -> bool {
-        x >= self.window_pos.0 .0 && x <= self.window_pos.1 .0 && y >= self.window_pos.0 .1 && y <= self.window_pos.1 .1
+        x >= self.window_pos.0.0 && x <= self.window_pos.1.0 && y >= self.window_pos.0.1 && y <= self.window_pos.1.1
     }
 
     fn get_palette_colour(&self, palette: u8, colour: u8, mode: ColourMode, encoding: PixelEncoding) -> u32 {
@@ -595,8 +595,8 @@ impl Ym7101State {
             };
 
             if self.window_addr != 0 && self.is_inside_window(x, y) {
-                let pixel_win_x = x - self.window_pos.0 .0 * 8;
-                let pixel_win_y = y - self.window_pos.0 .1 * 8;
+                let pixel_win_x = x - self.window_pos.0.0 * 8;
+                let pixel_win_y = y - self.window_pos.0.1 * 8;
                 let pattern_win_addr = self.get_pattern_addr(self.window_addr, pixel_win_x / 8, pixel_win_y / 8);
                 let pattern_win_word = self.memory.read_beu16(Memory::Vram, pattern_win_addr);
 
