@@ -2,7 +2,7 @@
 const DEFAULT_HARTE_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
 
 use std::io::prelude::*;
-use std::fmt::{Debug, UpperHex};
+use std::fmt::{Write, Debug, UpperHex};
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::fs::{self, File};
@@ -10,12 +10,21 @@ use std::fs::{self, File};
 use clap::{Parser, ArgEnum};
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
-use femtos::Frequency;
+use femtos::{Instant, Frequency};
 
-use moa_core::{System, Error, MemoryBlock, BusPort, Address, Addressable, Steppable, Device};
+use emulator_hal::bus::BusAccess;
+use emulator_hal::step::Step;
+use emulator_hal_memory::MemoryBlock;
 
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::Status;
+
+#[derive(Clone, Debug)]
+enum Error {
+    Assertion(String),
+    Bus(String),
+    Step(String),
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, ArgEnum)]
 enum Selection {
@@ -106,7 +115,7 @@ impl TestState {
         for word in self.prefetch.iter() {
             print!("{:04x} ", *word);
         }
-        println!("");
+        println!();
 
         println!("ram: ");
         for (addr, byte) in self.ram.iter() {
@@ -137,25 +146,20 @@ impl TestCase {
 }
 
 
-fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, System), Error> {
-    let mut system = System::default();
-
+#[allow(clippy::uninit_vec)]
+fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, MemoryBlock<u32, Instant>), Error> {
     // Insert basic initialization
-    let data = vec![0; 0x01000000];
-    let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
+    let len = 0x100_0000;
+    let mut data = Vec::with_capacity(len);
+    unsafe { data.set_len(len); }
+    let mut memory = MemoryBlock::<u32, Instant>::from(data);
 
-    let port = if cputype <= M68kType::MC68010 {
-        BusPort::new(0, 24, 16, system.bus.clone())
-    } else {
-        BusPort::new(0, 32, 32, system.bus.clone())
-    };
-    let mut cpu = M68k::new(cputype, Frequency::from_mhz(10), port);
+    let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
     cpu.state.status = Status::Running;
 
-    load_state(&mut cpu, &mut system, state)?;
+    load_state(&mut cpu, &mut memory, state)?;
 
-    Ok((cpu, system))
+    Ok((cpu, memory))
 }
 
 fn assert_value<T>(actual: T, expected: T, message: &str) -> Result<(), Error>
@@ -165,11 +169,11 @@ where
     if actual == expected {
         Ok(())
     } else {
-        Err(Error::assertion(&format!("{:#X} != {:#X}, {}", actual, expected, message)))
+        Err(Error::Assertion(format!("{:#X} != {:#X}, {}", actual, expected, message)))
     }
 }
 
-fn load_state(cpu: &mut M68k, system: &mut System, initial: &TestState) -> Result<(), Error> {
+fn load_state(cpu: &mut M68k, memory: &mut MemoryBlock<u32, Instant>, initial: &TestState) -> Result<(), Error> {
     cpu.state.d_reg[0] = initial.d0;
     cpu.state.d_reg[1] = initial.d1;
     cpu.state.d_reg[2] = initial.d2;
@@ -193,18 +197,20 @@ fn load_state(cpu: &mut M68k, system: &mut System, initial: &TestState) -> Resul
 
     // Load instructions into memory
     for (i, ins) in initial.prefetch.iter().enumerate() {
-        system.get_bus().write_beu16(system.clock, (initial.pc + (i as u32 * 2)) as u64, *ins)?;
+        memory.write_beu16(Instant::START, initial.pc + (i as u32 * 2), *ins)
+            .map_err(|err| Error::Bus(format!("{:?}", err)))?;
     }
 
     // Load data bytes into memory
     for (addr, byte) in initial.ram.iter() {
-        system.get_bus().write_u8(system.clock, *addr as u64, *byte)?;
+        memory.write_u8(Instant::START, *addr, *byte)
+            .map_err(|err| Error::Bus(format!("{:?}", err)))?;
     }
 
     Ok(())
 }
 
-fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(), Error> {
+fn assert_state(cpu: &M68k, memory: &mut MemoryBlock<u32, Instant>, expected: &TestState) -> Result<(), Error> {
     assert_value(cpu.state.d_reg[0], expected.d0, "d0")?;
     assert_value(cpu.state.d_reg[1], expected.d1, "d1")?;
     assert_value(cpu.state.d_reg[2], expected.d2, "d2")?;
@@ -226,29 +232,32 @@ fn assert_state(cpu: &M68k, system: &System, expected: &TestState) -> Result<(),
     assert_value(cpu.state.sr, expected.sr, "sr")?;
     assert_value(cpu.state.pc, expected.pc, "pc")?;
 
-    let addr_mask = cpu.port.port.address_mask();
+    let addr_mask = 1_u32.wrapping_shl(cpu.info.address_width as u32).wrapping_sub(1);
 
     // Load instructions into memory
     for (i, ins) in expected.prefetch.iter().enumerate() {
         let addr = expected.pc + (i as u32 * 2);
-        let actual = system.get_bus().read_beu16(system.clock, addr as Address & addr_mask)?;
+        let actual = memory.read_beu16(Instant::START, addr & addr_mask)
+            .map_err(|err| Error::Bus(format!("{:?}", err)))?;
         assert_value(actual, *ins, &format!("prefetch at {:x}", addr))?;
     }
 
     // Load data bytes into memory
     for (addr, byte) in expected.ram.iter() {
-        let actual = system.get_bus().read_u8(system.clock, *addr as Address & addr_mask)?;
+        let actual = memory.read_u8(Instant::START, *addr & addr_mask)
+            .map_err(|err| Error::Bus(format!("{:?}", err)))?;
         assert_value(actual, *byte, &format!("ram at {:x}", addr))?;
     }
 
     Ok(())
 }
 
-fn step_cpu_and_assert(cpu: &mut M68k, system: &System, case: &TestCase, test_timing: bool) -> Result<(), Error> {
-    let clock_elapsed = cpu.step(&system)?;
-    let cycles = clock_elapsed / cpu.frequency.period_duration();
+fn step_cpu_and_assert(cpu: &mut M68k, memory: &mut MemoryBlock<u32, Instant>, case: &TestCase, test_timing: bool) -> Result<(), Error> {
+    let clock_elapsed = cpu.step(Instant::START, memory)
+        .map_err(|err| Error::Step(format!("{:?}", err)))?;
+    let cycles = clock_elapsed.as_duration() / cpu.info.frequency.period_duration();
 
-    assert_state(&cpu, &system, &case.final_state)?;
+    assert_state(cpu, memory, &case.final_state)?;
 
     if test_timing {
         assert_value(cycles, case.length as u64, "clock cycles")?;
@@ -257,22 +266,24 @@ fn step_cpu_and_assert(cpu: &mut M68k, system: &System, case: &TestCase, test_ti
 }
 
 fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
-    let (mut cpu, system) = init_execute_test(M68kType::MC68000, &case.initial_state).unwrap();
-    let mut initial_cpu = cpu.clone();
+    let (mut cpu, mut memory) = init_execute_test(M68kType::MC68000, &case.initial_state).unwrap();
+    let initial_cpu = cpu.clone();
 
-    let result = step_cpu_and_assert(&mut cpu, &system, case, args.timing);
+    let result = step_cpu_and_assert(&mut cpu, &mut memory, case, args.timing);
 
     match result {
         Ok(()) => Ok(()),
         Err(err) => {
             if !args.quiet {
+                let mut writer = String::new();
                 if args.debug {
                     case.dump();
-                    println!("");
-                    initial_cpu.dump_state();
-                    cpu.dump_state();
+                    writeln!(writer).unwrap();
+                    initial_cpu.dump_state(&mut writer).unwrap();
+                    cpu.dump_state(&mut writer).unwrap();
                 }
-                println!("FAILED: {:?}",  err);
+                writeln!(writer, "FAILED: {:?}",  err).unwrap();
+                println!("{}", writer);
             }
             Err(err)
         },
@@ -303,11 +314,9 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
         }
 
         // Only run the test if it's selected by the exceptions flag
-        if case.is_extended_exception_case() && args.exceptions == Selection::ExcludeAddr {
-            continue;
-        } else if case.is_exception_case() && args.exceptions == Selection::Exclude {
-            continue;
-        } else if !case.is_exception_case() && args.exceptions == Selection::Only {
+        if case.is_extended_exception_case() && args.exceptions == Selection::ExcludeAddr
+        || case.is_exception_case() && args.exceptions == Selection::Exclude
+        || !case.is_exception_case() && args.exceptions == Selection::Only {
             continue;
         }
 
@@ -391,7 +400,7 @@ fn run_all_tests(args: &Args) {
         }
     }
 
-    println!("");
+    println!();
     println!("passed: {}, failed: {}, total {:.0}%", passed, failed, ((passed as f32) / (passed as f32 + failed as f32)) * 100.0);
     println!("completed in {}m {}s", elapsed_secs / 60, elapsed_secs % 60);
 }

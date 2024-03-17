@@ -1,10 +1,10 @@
 
+use core::cmp;
+use core::fmt::Write;
 use femtos::Instant;
-use emulator_hal::bus::{BusType, BusAccess};
+use emulator_hal::bus::BusAccess;
 
-use moa_core::{Address, Addressable, BusPort};
-
-use crate::state::{M68k, M68kError, Exceptions};
+use crate::state::{M68k, M68kError, CpuInfo, Exceptions};
 use crate::instructions::Size;
 
 #[repr(u8)]
@@ -76,7 +76,7 @@ impl Default for MemoryRequest {
 }
 
 impl MemoryRequest {
-    pub(crate) fn instruction(&mut self, is_supervisor: bool, addr: u32) -> Result<u32, M68kError> {
+    pub(crate) fn instruction<BusError>(&mut self, is_supervisor: bool, addr: u32) -> Result<u32, M68kError<BusError>> {
         self.i_n_bit = false;
         self.code = FunctionCode::program(is_supervisor);
         self.access = MemAccess::Read;
@@ -101,6 +101,9 @@ impl MemoryRequest {
     }
 }
 
+//pub type M68kAddress = (FunctionCode, u32);
+pub type M68kAddress = u32;
+pub type M68kAddressSpace = (FunctionCode, u32);
 
 #[derive(Clone, Debug)]
 pub struct InstructionRequest {
@@ -110,8 +113,9 @@ pub struct InstructionRequest {
 
 #[derive(Clone, Debug)]
 pub struct M68kBusPort {
-    //pub port: BusPort,
     pub request: MemoryRequest,
+    pub data_bytewidth: usize,
+    pub address_mask: u32,
     pub cycle_start_clock: Instant,
     pub current_clock: Instant,
 }
@@ -122,10 +126,11 @@ impl M68k {
 }
 
 impl Default for M68kBusPort {
-    fn default(/* port: BusPort */) -> Self {
+    fn default() -> Self {
         Self {
-            //port,
             request: Default::default(),
+            data_bytewidth: 32 / 8,
+            address_mask: 0xFFFF_FFFF,
             cycle_start_clock: Instant::START,
             current_clock: Instant::START,
         }
@@ -133,43 +138,101 @@ impl Default for M68kBusPort {
 }
 
 impl M68kBusPort {
-    pub fn new(clock: Instant) -> Self {
+    pub fn from_info(info: &CpuInfo, clock: Instant) -> Self {
         Self {
             request: Default::default(),
+            data_bytewidth: info.data_width as usize / 8,
+            address_mask: 1_u32.checked_shl(info.address_width as u32).unwrap_or(0).wrapping_sub(1),
             cycle_start_clock: clock,
             current_clock: clock,
         }
     }
 
-    pub(crate) fn read_data_sized(&mut self, port: &mut BusPort, is_supervisor: bool, addr: Address, size: Size) -> Result<u32, M68kError> {
-        self.start_request(is_supervisor, addr as u32, size, MemAccess::Read, MemType::Data, false)?;
-        Ok(match size {
-            Size::Byte => port.read_u8(self.current_clock, addr).map(|value| value as u32),
-            Size::Word => port.read_beu16(self.current_clock, addr).map(|value| value as u32),
-            Size::Long => port.read_beu32(self.current_clock, addr),
-        }?)
+    fn read<Bus, BusError>(&mut self, bus: &mut Bus, clock: Instant, addr: M68kAddress, data: &mut [u8]) -> Result<(), M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
+        let addr = addr & self.address_mask;
+        for i in (0..data.len()).step_by(self.data_bytewidth) {
+            let addr_index = (addr + i as M68kAddress) & self.address_mask;
+            let end = cmp::min(i + self.data_bytewidth, data.len());
+            bus.read(clock, addr_index, &mut data[i..end])
+                .map_err(|err| M68kError::BusError(err))?;
+        }
+        Ok(())
     }
 
-    pub(crate) fn write_data_sized(&mut self, port: &mut BusPort, is_supervisor: bool, addr: Address, value: u32, size: Size) -> Result<(), M68kError> {
-        self.start_request(is_supervisor, addr as u32, size, MemAccess::Write, MemType::Data, false)?;
-        Ok(match size {
-            Size::Byte => port.write_u8(self.current_clock, addr, value as u8),
-            Size::Word => port.write_beu16(self.current_clock, addr, value as u16),
-            Size::Long => port.write_beu32(self.current_clock, addr, value),
-        }?)
+    fn write<Bus, BusError>(&mut self, bus: &mut Bus, clock: Instant, addr: M68kAddress, data: &[u8]) -> Result<(), M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
+        let addr = addr & self.address_mask;
+        for i in (0..data.len()).step_by(self.data_bytewidth) {
+            let addr_index = (addr + i as M68kAddress) & self.address_mask;
+            let end = cmp::min(i + self.data_bytewidth, data.len());
+            bus.write(clock, addr_index, &data[i..end])
+                .map_err(|err| M68kError::BusError(err))?;
+        }
+        Ok(())
     }
 
-    pub(crate) fn read_instruction_word(&mut self, port: &mut BusPort, is_supervisor: bool, addr: u32) -> Result<u16, M68kError> {
+    fn read_sized<Bus, BusError>(&mut self, bus: &mut Bus, addr: M68kAddress, size: Size) -> Result<u32, M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
+        let mut data = [0; 4];
+        match size {
+            Size::Byte => self.read(bus, self.current_clock, addr, &mut data[3..4]),
+            Size::Word => self.read(bus, self.current_clock, addr, &mut data[2..4]),
+            Size::Long => self.read(bus, self.current_clock, addr, &mut data[0..4]),
+        }.map(|_| u32::from_be_bytes(data))
+    }
+
+    fn write_sized<Bus, BusError>(&mut self, bus: &mut Bus, addr: M68kAddress, size: Size, value: u32) -> Result<(), M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
+        let data = value.to_be_bytes();
+        match size {
+            Size::Byte => self.write(bus, self.current_clock, addr, &data[3..4]),
+            Size::Word => self.write(bus, self.current_clock, addr, &data[2..4]),
+            Size::Long => self.write(bus, self.current_clock, addr, &data[0..4]),
+        }
+    }
+
+    pub(crate) fn read_data_sized<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: M68kAddress, size: Size) -> Result<u32, M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
+        self.start_request(is_supervisor, addr, size, MemAccess::Read, MemType::Data, false)?;
+        self.read_sized(bus, addr, size)
+    }
+
+    pub(crate) fn write_data_sized<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: M68kAddress, size: Size, value: u32) -> Result<(), M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
+        self.start_request(is_supervisor, addr, size, MemAccess::Write, MemType::Data, false)?;
+        self.write_sized(bus, addr, size, value)
+    }
+
+    pub(crate) fn read_instruction_word<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u16, M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
         self.request.instruction(is_supervisor, addr)?;
-        Ok(port.read_beu16(self.current_clock, addr as Address)?)
+        Ok(self.read_sized(bus, addr, Size::Word)? as u16)
     }
 
-    pub(crate) fn read_instruction_long(&mut self, port: &mut BusPort, is_supervisor: bool, addr: u32) -> Result<u32, M68kError> {
+    pub(crate) fn read_instruction_long<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u32, M68kError<BusError>>
+    where
+        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    {
         self.request.instruction(is_supervisor, addr)?;
-        Ok(port.read_beu32(self.current_clock, addr as Address)?)
+        self.read_sized(bus, addr, Size::Long)
     }
 
-    pub(crate) fn start_request(&mut self, is_supervisor: bool, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, M68kError> {
+    pub(crate) fn start_request<BusError>(&mut self, is_supervisor: bool, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, M68kError<BusError>> {
         self.request.i_n_bit = i_n_bit;
         self.request.code = match mtype {
             MemType::Program => FunctionCode::program(is_supervisor),
@@ -185,13 +248,9 @@ impl M68kBusPort {
             validate_address(addr)
         }
     }
-
-    pub(crate) fn dump_memory(&mut self, port: &mut BusPort, addr: u32, length: usize) {
-        port.dump_memory(self.current_clock, addr as Address, length as u64);
-    }
 }
 
-fn validate_address(addr: u32) -> Result<u32, M68kError> {
+fn validate_address<BusError>(addr: u32) -> Result<u32, M68kError<BusError>> {
     if addr & 0x1 == 0 {
         Ok(addr)
     } else {
@@ -199,22 +258,31 @@ fn validate_address(addr: u32) -> Result<u32, M68kError> {
     }
 }
 
-/*
-impl BusType for M68kBusPort {
-    type Instant = Instant;
-    type Error = Error;
-}
+pub fn dump_memory<Bus, Address, Instant>(bus: &mut Bus, clock: Instant, addr: Address, count: Address)
+where
+    Bus: BusAccess<Address, Instant>,
+    Address: From<u32> + Into<u32> + Copy,
+    Instant: Copy,
+{
+    let mut addr = addr.into();
+    let mut count = count.into();
+    while count > 0 {
+        let mut line = format!("{:#010x}: ", addr);
 
-impl BusAccess<u32> for M68kBusPort {
-    fn read(&mut self, now: Self::Instant, addr: Address, data: &mut [u8]) -> Result<usize, Self::Error> {
-        self.
+        let to = if count < 16 { count / 2 } else { 8 };
+        for _ in 0..to {
+            let word = bus.read_beu16(clock, Address::from(addr));
+            if word.is_err() {
+                println!("{}", line);
+                return;
+            }
+            write!(line, "{:#06x} ", word.unwrap()).unwrap();
+            addr += 2;
+            count -= 2;
+        }
+        println!("{}", line);
     }
-
-    fn write(&mut self, now: Self::Instant, addr: Address, data: &[u8]) -> Result<usize, Self::Error> {
-
-    }
 }
-*/
 
 /*
 pub(crate) struct TargetAccess {

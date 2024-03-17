@@ -45,7 +45,7 @@ pub fn build_computie<H: Host>(host: &H, options: ComputieOptions) -> Result<Sys
     system.add_addressable_device(0x00700000, Device::new(serial))?;
 
 
-    let mut cpu = M68k::from_type(M68kType::MC68010, options.frequency, system.bus.clone(), 0);
+    let mut cpu = M68k::from_type(M68kType::MC68010, options.frequency);
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);
@@ -83,7 +83,7 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00700000, Device::new(serial))?;
 
 
-    let cpu = M68k::from_type(M68kType::MC68030, Frequency::from_hz(10_000_000), system.bus.clone(), 0);
+    let cpu = M68k::from_type(M68kType::MC68030, Frequency::from_hz(10_000_000));
 
     //cpu.enable_tracing();
     //cpu.add_breakpoint(0x10781a);

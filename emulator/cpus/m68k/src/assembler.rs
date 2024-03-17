@@ -1,11 +1,25 @@
 
 use std::collections::HashMap;
 
-use moa_core::Error;
-use moa_parsing::{self as parser, AssemblyLine, AssemblyOperand, AssemblyParser};
+use moa_parsing::{self as parser, AssemblyLine, AssemblyOperand, AssemblyParser, ParserError};
 
 use super::state::M68kType;
 use super::instructions::Size;
+
+#[derive(Clone, Debug)]
+pub struct Error(String);
+
+impl Error {
+    pub fn new(msg: String) -> Self {
+        Self(msg)
+    }
+}
+
+impl From<ParserError> for Error {
+    fn from(err: ParserError) -> Self {
+        Self(err.0)
+    }
+}
 
 
 #[repr(usize)]
@@ -114,7 +128,7 @@ impl M68kAssembler {
 
     fn parse(&mut self, text: &str) -> Result<Vec<(usize, AssemblyLine)>, Error> {
         let mut parser = AssemblyParser::new(text);
-        parser.parse()
+        Ok(parser.parse()?)
     }
 
     fn apply_relocations(&mut self) -> Result<(), Error> {

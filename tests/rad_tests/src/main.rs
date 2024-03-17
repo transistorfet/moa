@@ -176,7 +176,7 @@ where
     if actual == expected {
         Ok(())
     } else {
-        Err(Error::assertion(&format!("{:#X} != {:#X}, {}", actual, expected, message)))
+        Err(Error::assertion(format!("{:#X} != {:#X}, {}", actual, expected, message)))
     }
 }
 
@@ -255,7 +255,7 @@ fn assert_state(cpu: &Z80, system: &System, io_bus: Rc<RefCell<Bus>>, expected: 
 
     let expected_im: InterruptMode = expected.im.into();
     if cpu.state.im != expected_im {
-        return Err(Error::assertion(&format!("{:?} != {:?}, im", cpu.state.im, expected_im)));
+        return Err(Error::assertion(format!("{:?} != {:?}, im", cpu.state.im, expected_im)));
     }
     assert_value(cpu.state.iff1 as u8, expected.iff1, "iff1")?;
     assert_value(cpu.state.iff2 as u8, expected.iff2, "iff2")?;
@@ -280,13 +280,13 @@ fn assert_state(cpu: &Z80, system: &System, io_bus: Rc<RefCell<Bus>>, expected: 
 }
 
 fn step_cpu_and_assert(cpu: &mut Z80, system: &System, io_bus: Rc<RefCell<Bus>>, case: &TestCase, args: &Args) -> Result<(), Error> {
-    let clock_elapsed = cpu.step(&system)?;
+    let clock_elapsed = cpu.step(system)?;
 
-    assert_state(&cpu, &system, io_bus, &case.final_state, args.check_extra_flags, &case.ports)?;
+    assert_state(cpu, system, io_bus, &case.final_state, args.check_extra_flags, &case.ports)?;
     if args.check_timings {
         let cycles = clock_elapsed / cpu.frequency.period_duration();
         if cycles != case.cycles.len() as Address {
-            return Err(Error::assertion(&format!("expected instruction to take {} cycles, but took {}", case.cycles.len(), cycles)));
+            return Err(Error::assertion(format!("expected instruction to take {} cycles, but took {}", case.cycles.len(), cycles)));
         }
     }
 
@@ -305,7 +305,7 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
             if !args.quiet {
                 if args.debug {
                     case.dump();
-                    println!("");
+                    println!();
                     initial_cpu.dump_state(system.clock);
                     cpu.dump_state(system.clock);
                 }
@@ -425,7 +425,7 @@ fn run_all_tests(args: &Args) {
         }
     }
 
-    println!("");
+    println!();
     println!("passed: {}, failed: {}, total {:.0}%", passed, failed, ((passed as f32) / (passed as f32 + failed as f32)) * 100.0);
     println!("completed in {}m {}s", elapsed_secs / 60, elapsed_secs % 60);
 }
@@ -439,7 +439,7 @@ fn is_undocumented_instruction(name: &str) -> bool {
 
     match (opcodes[0], opcodes[1]) {
         (0xCB, op) => {
-            op >= 0x30 && op <= 0x37
+            (0x30..=0x37).contains(&op)
         },
         (0xDD, 0xCB) |
         (0xFD, 0xCB) => {
@@ -449,10 +449,8 @@ fn is_undocumented_instruction(name: &str) -> bool {
         (0xFD, op) => {
             let upper = op & 0xF0;
             let lower = op & 0x0F;
-            !(lower == 0x06 && upper >= 0x30 && upper <= 0xB0 && upper != 0x70) &&
-            !(lower == 0x0E && upper >= 0x40 && upper <= 0xB0) &&
-            !(op >= 0x70 && op <= 0x77 && op != 0x76) &&
-            !(op >= 0x21 && op <= 0x23 && op >= 0x34 && op <= 0x36 && op >= 0x29 && op <= 0x2B) &&
+            !(lower == 0x0E && (0x40..=0xB0).contains(&upper) || (0x70..=0x77).contains(&op) && op != 0x76 || op != 0x76 && (0x70..=0x77).contains(&op) || lower == 0x06 && (0x30..=0xB0).contains(&upper) && upper != 0x70) &&
+            !((0x21..=0x23).contains(&op) || (0x34..=0x36).contains(&op) || (0x29..=0x2B).contains(&op)) &&
             !(lower == 0x09 && upper <= 0x30) &&
             !(op == 0xE1 || op == 0xE3 || op == 0xE5 || op == 0xE9 || op == 0xF9)
         },

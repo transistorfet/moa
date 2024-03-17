@@ -9,9 +9,14 @@ use nix::fcntl::OFlag;
 use nix::pty::{self, PtyMaster};
 use nix::fcntl::{fcntl, FcntlArg};
 
-use moa_core::Error;
-use moa_core::host::Tty;
+use moa_host::Tty;
 
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum SimplePtyError {
+    Open,
+    PtsName,
+}
 
 pub struct SimplePty {
     pub name: String,
@@ -28,14 +33,14 @@ impl SimplePty {
         }
     }
 
-    pub fn open() -> Result<SimplePty, Error> {
+    pub fn open() -> Result<SimplePty, SimplePtyError> {
         let pty = pty::posix_openpt(OFlag::O_RDWR).and_then(|pty| {
             pty::grantpt(&pty)?;
             pty::unlockpt(&pty)?;
             Ok(pty)
-        }).map_err(|_| Error::new("Error opening new pseudoterminal"))?;
+        }).map_err(|_| SimplePtyError::Open)?;
 
-        let name = unsafe { pty::ptsname(&pty).map_err(|_| Error::new("Unable to get pty name"))? };
+        let name = unsafe { pty::ptsname(&pty).map_err(|_| SimplePtyError::PtsName)? };
         let (input_tx, input_rx) = mpsc::channel();
         let (output_tx, output_rx) = mpsc::channel();
         let shared = SimplePty::new(name.clone(), input_rx, output_tx);

@@ -24,8 +24,11 @@ pub enum HostError<E> {
     Specific(E),
 }
 
-/*
-impl<E> fmt::Display for HostError<E> {
+
+impl<E> fmt::Display for HostError<E>
+where
+    E: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             HostError::TTYNotSupported => write!(f, "This frontend doesn't support PTYs"),
@@ -38,7 +41,6 @@ impl<E> fmt::Display for HostError<E> {
         }
     }
 }
-*/
 
 pub trait Host {
     type Error: Error;

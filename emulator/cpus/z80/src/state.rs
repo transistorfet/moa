@@ -1,5 +1,4 @@
 
-use std::fmt;
 use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Frequency};

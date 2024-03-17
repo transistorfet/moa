@@ -5,9 +5,10 @@ edition = "2021"
 
 [dependencies]
 femtos = "0.1"
-
-moa-core = { path = "../../emulator/core" }
+emulator-hal = { path = "../../emulator/libraries/emulator-hal/emulator-hal" }
+emulator-hal-memory = { path = "../../emulator/libraries/emulator-hal/emulator-hal-memory" }
 moa-m68k = { path = "../../emulator/cpus/m68k" }
+
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"

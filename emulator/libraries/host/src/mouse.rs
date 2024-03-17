@@ -69,7 +69,7 @@ impl MouseState {
 
             let events: Vec<MouseEvent> = self
                 .buttons.into_iter()
-                .zip(next_state.buttons.into_iter())
+                .zip(next_state.buttons)
                 .enumerate()
                 .filter_map(|(i, (prev, next))| {
                     if prev != next {

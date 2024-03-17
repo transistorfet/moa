@@ -818,7 +818,7 @@ impl Addressable for Ym7101 {
             0x00 | 0x02 => self.state.memory.read_data_port(addr, data)?,
 
             // Read from Control Port
-            0x04 | 0x05 | 0x06 | 0x07 => {
+            0x04..=0x07 => {
                 log::debug!("{}: read status byte {:x}", DEV_NAME, self.state.status);
                 for item in data {
                     *item = if (addr % 2) == 0 {

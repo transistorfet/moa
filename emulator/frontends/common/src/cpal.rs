@@ -1,5 +1,5 @@
 
-use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, StreamInstant, OutputCallbackInfo, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, OutputCallbackInfo, traits::{DeviceTrait, HostTrait, StreamTrait}};
 
 use crate::audio::{AudioOutput, SAMPLE_RATE};
 
@@ -22,7 +22,7 @@ impl CpalAudioOutput {
             .with_sample_rate(SampleRate(SAMPLE_RATE as u32))
             .into();
 
-        let data_callback = move |data: &mut [f32], info: &OutputCallbackInfo| {
+        let data_callback = move |data: &mut [f32], _info: &OutputCallbackInfo| {
             let mut index = 0;
             while index < data.len() {
                 if let Some((clock, mut frame)) = output.receive() {

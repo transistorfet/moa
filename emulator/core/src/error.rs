@@ -1,6 +1,5 @@
 
 use std::fmt;
-use std::error::{Error as StdError};
 use moa_host::HostError;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -75,8 +74,8 @@ impl fmt::Display for Error {
 }
 
 impl<E> From<HostError<E>> for Error {
-    fn from(err: HostError<E>) -> Self {
-        Self::Other(format!("other"))
+    fn from(_err: HostError<E>) -> Self {
+        Self::Other("other".to_string())
     }
 }
 

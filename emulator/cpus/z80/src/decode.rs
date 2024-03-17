@@ -1,4 +1,5 @@
 
+use core::fmt::Write;
 use femtos::Instant;
 
 use moa_core::{Address, Addressable};
@@ -6,17 +7,9 @@ use moa_core::{Address, Addressable};
 use crate::state::Z80Error;
 use crate::instructions::{Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target, LoadTarget, UndocumentedCopy, Instruction};
 
-use emulator_hal::bus::{BusType, BusAccess};
-
-struct Z80Bus;
-
-type Z80Address = (bool, u16);
-
-impl BusType for Z80Bus {
-    //type Address = (bool, u16);
-    type Error = Z80Error;
-    type Instant = Instant;
-}
+//use emulator_hal::bus::BusAccess;
+//
+//type Z80Address = (bool, u16);
 
 #[derive(Clone)]
 pub struct Z80Decoder {
@@ -560,10 +553,10 @@ impl Z80Decoder {
     }
 
     pub fn format_instruction_bytes(&mut self, memory: &mut dyn Addressable) -> String {
-        let ins_data: String =
-            (0..self.end.saturating_sub(self.start)).map(|offset|
-                format!("{:02x} ", memory.read_u8(self.clock, (self.start + offset) as Address).unwrap())
-            ).collect();
+        let mut ins_data = String::new();
+        for offset in 0..self.end.saturating_sub(self.start) {
+            write!(ins_data, "{:02x} ", memory.read_u8(self.clock, (self.start + offset) as Address).unwrap()).unwrap()
+        }
         ins_data
     }
 

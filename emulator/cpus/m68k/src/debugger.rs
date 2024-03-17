@@ -1,9 +1,10 @@
 
-use moa_core::{System, Error, Address, Addressable, Debuggable};
+use femtos::Instant;
+use emulator_hal::bus::BusAccess;
 
-use super::state::M68k;
-use super::decode::M68kDecoder;
+use super::state::M68kError;
 use super::execute::M68kCycleExecutor;
+use super::memory::M68kAddress;
 
 #[derive(Clone, Default)]
 pub struct StackTracer {
@@ -25,54 +26,16 @@ impl StackTracer {
 pub struct M68kDebugger {
     pub(crate) skip_breakpoint: usize,
     pub(crate) breakpoints: Vec<u32>,
+    #[allow(dead_code)]
     pub(crate) step_until_return: Option<usize>,
     pub(crate) stack_tracer: StackTracer,
 }
 
-impl Debuggable for M68k {
-    fn add_breakpoint(&mut self, addr: Address) {
-        self.debugger.breakpoints.push(addr as u32);
-    }
-
-    fn remove_breakpoint(&mut self, addr: Address) {
-        if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == addr as u32) {
-            self.debugger.breakpoints.remove(index);
-        }
-    }
-
-    fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
-        // TODO this is called by the debugger, but should be called some other way
-        //let _ = self.decoder.decode_at(&mut self.port, true, self.state.pc);
-        //self.decoder.dump_decoded(&mut self.port);
-        //self.dump_state();
-        Ok(())
-    }
-
-    fn print_disassembly(&mut self, addr: Address, count: usize) {
-        let mut decoder = M68kDecoder::new(self.info.chip, true, 0);
-        // TODO temporarily disabled
-        //decoder.dump_disassembly(&mut self.port, addr as u32, count as u32);
-    }
-
-    fn run_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {
-        match args[0] {
-            "ds" | "stack" | "dumpstack" => {
-                println!("Stack:");
-                for addr in &self.debugger.stack_tracer.calls {
-                    println!("  {:08x}", self.port.read_beu32(system.clock, *addr as Address)?);
-                }
-            },
-            "so" | "stepout" => {
-                self.debugger.step_until_return = Some(self.debugger.stack_tracer.calls.len() - 1);
-            },
-            _ => { return Ok(true); },
-        }
-        Ok(false)
-    }
-}
-
-impl<'a> M68kCycleExecutor<'a> {
-    pub fn check_breakpoints(&mut self) -> Result<(), Error> {
+impl<'a, Bus, BusError> M68kCycleExecutor<'a, Bus>
+where
+    Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+{
+    pub fn check_breakpoints(&mut self) -> Result<(), M68kError<BusError>> {
         for breakpoint in &self.debugger.breakpoints {
             if *breakpoint == self.state.pc {
                 if self.debugger.skip_breakpoint > 0 {
@@ -80,7 +43,7 @@ impl<'a> M68kCycleExecutor<'a> {
                     return Ok(());
                 } else {
                     self.debugger.skip_breakpoint = 1;
-                    return Err(Error::breakpoint(format!("breakpoint reached: {:08x}", *breakpoint)));
+                    return Err(M68kError::Breakpoint);
                 }
             }
         }

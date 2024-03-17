@@ -171,7 +171,7 @@ pub trait Debuggable {
     fn remove_breakpoint(&mut self, addr: Address);
 
     fn print_current_step(&mut self, system: &System) -> Result<(), Error>;
-    fn print_disassembly(&mut self, addr: Address, count: usize);
+    fn print_disassembly(&mut self, system: &System, addr: Address, count: usize);
     fn run_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error>;
 }
 

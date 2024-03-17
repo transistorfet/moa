@@ -1,23 +1,17 @@
 
-* I want to push System, and BusPort into only the step function
-* first I need to make Decoder take &mut Addressable, and still function like it does
-* next I need to make Executor only access through a &mut Addressable
+* fix dump_state everywhere, which now requires a writer.  Is there an easier way?  Is there a way that doesn't require std
+* can you clean it up more?
+* implement the inspect and debug traits
 * move the interrupt controller logic to the step() function only, and have a customish interrupt interface into the sim
-* move the impls for Step, Transmutable, etc into a moa.rs file or something
-* the remaining code should really use Addressable, and then we can swap it for BusAccess
 
-* the idea would be, instead of argument drilling, you create an object that is short lived, that lasts one instruction, or possibly even parts of one instruction, and
-  it has some references instead of "moving" data (or if you move, you move and move out without cloning), such that you can bundle everything up, call a method on the
-  bundle, with the execution context and state all part of or reference by the bundle, all instructions would be implemented on the bundle and not the state alone, and
-  after the instruction, or when transitioning from one phase to the next, you'd decompose the bundle back into its parts, and return before being called again to
-  repeat the process with the next instruction
-
+* do the Z80?  Should that be another PR?
+* fix the tests
+* fix all the clippy issues
 
 * it doesn't work when using debug due to math checks, so fix them
 
-
-
 * change all the inspection and debugging things to return a struct which can then be printed by the frontend
+
 
 * there are many issues with the coprocessor address space, and the VDP
 * I mapped the sn sound chip into 0xC00010, in the middle of the VDP's address space, and didn't get a runtime error!!! needs fixing
@@ -47,7 +41,6 @@
 * add rust runtime checks for math to look for overflow errors
 * fix the watchers in the Bus, maybe make them manual
 * make it possible to compile without audio support (minifb frontend requires it atm)
-* does Z80 need a customized Z80BusPort like the 68k?
 * can you make it so you don't need borrow_mut() so much?
 
 

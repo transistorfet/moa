@@ -3,8 +3,9 @@ use clap::{Command, Arg, ArgAction, ArgMatches};
 use std::io::{self, Write};
 use femtos::Duration;
 
-use moa_core::{Error, System, DebugControl, Debugger};
-use moa_core::host::{Host, Tty, ControllerEvent, Audio, DummyAudio, FrameReceiver, EventSender};
+use moa_core::{Error, System};
+use moa_debugger::{Debugger, DebugControl};
+use moa_host::{Host, HostError, Tty, ControllerEvent, Audio, DummyAudio, FrameReceiver, EventSender};
 
 pub struct ConsoleFrontend;
 
@@ -13,7 +14,7 @@ impl Host for ConsoleFrontend {
 
     fn add_pty(&self) -> Result<Box<dyn Tty>, HostError<Self::Error>> {
         use moa_common::tty::SimplePty;
-        Ok(Box::new(SimplePty::open()?))
+        Ok(Box::new(SimplePty::open().map_err(|_| HostError::TTYNotSupported)?)) //.map_err(|err| Error::new(format!("console: error opening pty: {:?}", err)))?))
     }
 
     fn add_video_source(&mut self, _receiver: FrameReceiver) -> Result<(), HostError<Self::Error>> {
@@ -32,11 +33,13 @@ impl Host for ConsoleFrontend {
     }
 }
 
-impl ConsoleFrontend {
-    pub fn new() -> Self {
+impl Default for ConsoleFrontend {
+    fn default() -> Self {
         Self
     }
+}
 
+impl ConsoleFrontend {
     pub fn args(application_name: &'static str) -> Command {
         Command::new(application_name)
             .arg(Arg::new("log-level")

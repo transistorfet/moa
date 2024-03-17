@@ -1,12 +1,8 @@
 
-use std::rc::Rc;
-use std::cell::RefCell;
-use femtos::{Instant, Frequency};
-
-use moa_core::{Address, Bus, BusPort};
+use core::fmt::{self, Write};
+use femtos::{Duration, Frequency};
 
 use crate::debugger::M68kDebugger;
-use crate::memory::M68kBusPort;
 use crate::instructions::Target;
 use crate::execute::M68kCycle;
 
@@ -81,7 +77,7 @@ impl From<M68kType> for CoreType {
 }
 
 impl CpuInfo {
-    fn from(cputype: M68kType, frequency: Frequency) -> Self {
+    pub fn from_type(cputype: M68kType, frequency: Frequency) -> Self {
         match cputype {
             M68kType::MC68008 => Self {
                 chip: cputype,
@@ -178,7 +174,7 @@ pub struct M68kState {
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
-pub enum M68kError {
+pub enum M68kError<BusError> {
     #[error("cpu halted")]
     Halted,
     #[error("processor exception {0:?}")]
@@ -189,8 +185,27 @@ pub enum M68kError {
     Breakpoint,
     #[error("invalid instruction target, direct value used as a pointer: {0:?}")]
     InvalidTarget(Target),
+    #[error("bus error")]
+    BusError(BusError),
     #[error("error: {0}")]
     Other(String),
+}
+
+#[derive(Clone)]
+pub struct M68kStatistics {
+    pub cycle_number: usize,
+    pub last_update: usize,
+    pub last_time: std::time::SystemTime,
+}
+
+impl Default for M68kStatistics {
+    fn default() -> Self {
+        Self {
+            cycle_number: 0,
+            last_update: 0,
+            last_time: std::time::SystemTime::now(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -198,7 +213,7 @@ pub struct M68k {
     pub info: CpuInfo,
     pub state: M68kState,
     pub debugger: M68kDebugger,
-    pub port: BusPort,
+    pub stats: M68kStatistics,
     pub cycle: Option<M68kCycle>,
 }
 
@@ -221,20 +236,51 @@ impl Default for M68kState {
     }
 }
 
+impl M68kState {
+    pub fn dump_state<W: Write>(&self, writer: &mut W) -> Result<(), fmt::Error> {
+        writeln!(writer, "Status: {:?}", self.status)?;
+        writeln!(writer, "PC: {:#010x}", self.pc)?;
+        writeln!(writer, "SR: {:#06x}", self.sr)?;
+        for i in 0..7 {
+            writeln!(writer, "D{}: {:#010x}        A{}: {:#010x}", i, self.d_reg[i as usize], i, self.a_reg[i as usize])?;
+        }
+        writeln!(writer, "D7: {:#010x}       USP: {:#010x}", self.d_reg[7], self.usp)?;
+        writeln!(writer, "                     SSP: {:#010x}", self.ssp)?;
+        Ok(())
+    }
+}
+
 impl M68k {
-    pub fn new(info: CpuInfo, port: BusPort) -> M68k {
+    pub fn new(info: CpuInfo) -> Self {
         M68k {
             info,
             state: M68kState::default(),
             debugger: M68kDebugger::default(),
-            port,
+            stats: Default::default(),
             cycle: None,
         }
     }
 
-    pub fn from_type(cputype: M68kType, frequency: Frequency, bus: Rc<RefCell<Bus>>, addr_offset: Address) -> Self {
-        let info = CpuInfo::from(cputype, frequency);
-        Self::new(info, BusPort::new(addr_offset, info.address_width as u8, info.data_width as u8, bus))
+    pub fn from_type(cputype: M68kType, freq: Frequency) -> Self {
+        Self::new(CpuInfo::from_type(cputype, freq))
+    }
+
+    pub fn dump_state<W: Write>(&self, writer: &mut W) -> Result<(), fmt::Error> {
+        self.state.dump_state(writer)?;
+
+        if let Some(cycle) = self.cycle.as_ref() {
+            writeln!(writer, "Current Instruction: {:#010x} {:?}", cycle.decoder.start, cycle.decoder.instruction)?;
+            writeln!(writer)?;
+        }
+        //memory::dump_memory(&mut self.bus, self.cycle.current_clock, self.state.ssp, 0x40);
+        writeln!(writer)?;
+        Ok(())
+    }
+
+    #[inline]
+    pub fn last_cycle_duration(&self) -> Duration {
+        let clocks = self.cycle.as_ref().map(|cycle| cycle.timing.calculate_clocks()).unwrap_or(4);
+        self.info.frequency.period_duration() * clocks as u64
     }
 }
 

@@ -30,7 +30,7 @@ impl Debuggable for Z80 {
         Ok(())
     }
 
-    fn print_disassembly(&mut self, addr: Address, count: usize) {
+    fn print_disassembly(&mut self, _system: &System, addr: Address, count: usize) {
         let mut decoder = Z80Decoder::default();
         decoder.dump_disassembly(&mut self.port, addr as u16, count as u16);
     }

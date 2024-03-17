@@ -11,10 +11,12 @@ simple_logger = "^2"
 femtos = "0.1"
 
 moa-core = { path = "../../core" }
+moa-host = { path = "../../libraries/host" }
 moa-common = { path = "../common", features = ["tty"] }
 
+moa-debugger = { path = "../../libraries/debugger" }
 moa-systems-genesis = { path = "../../systems/genesis" }
 moa-systems-computie = { path = "../../systems/computie" }
-moa-m68k = { path = "../../cpus/m68k" }
+moa-m68k = { path = "../../cpus/m68k", features = ["moa"] }
 moa-peripherals-generic = { path = "../../peripherals/generic" }
 moa-peripherals-motorola = { path = "../../peripherals/motorola" }

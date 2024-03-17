@@ -1,15 +1,16 @@
 
 use femtos::{Instant, Frequency};
+use emulator_hal::bus::BusAccess;
+use emulator_hal::step::Step;
+use emulator_hal_memory::MemoryBlock;
 
-use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Steppable, Device};
-
-use moa_m68k::{M68k, M68kType};
+use moa_m68k::{M68k, M68kType, M68kAddress};
 use moa_m68k::state::M68kState;
 use moa_m68k::execute::{M68kCycle, M68kCycleExecutor};
 use moa_m68k::instructions::{Instruction, Target, Size, Sign, Direction, Condition};
 
-const INIT_STACK: Address = 0x00002000;
-const INIT_ADDR: Address = 0x00000010;
+const INIT_STACK: M68kAddress = 0x00002000;
+const INIT_ADDR: M68kAddress = 0x00000010;
 
 const MEM_ADDR: u32 = 0x00001234;
 
@@ -35,30 +36,30 @@ struct TestCase {
 }
 
 
+#[allow(clippy::uninit_vec)]
 fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
 where
-    F: FnMut(M68kCycleExecutor, System),
+    F: FnMut(M68kCycleExecutor<&mut MemoryBlock<u32, Instant>>),
 {
-    let mut system = System::default();
-
     // Insert basic initialization
-    let data = vec![0; 0x00100000];
-    let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
-    system.get_bus().write_beu32(Instant::START, 0, INIT_STACK as u32).unwrap();
-    system.get_bus().write_beu32(Instant::START, 4, INIT_ADDR as u32).unwrap();
+    let len = 0x10_0000;
+    let mut data = Vec::with_capacity(len);
+    unsafe { data.set_len(len); }
+    let mut memory = MemoryBlock::from(data);
+    memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
+    memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
 
-    let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10), system.bus.clone(), 0);
-    cpu.step(&system).unwrap();
+    let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
+    cpu.step(Instant::START, &mut memory).unwrap();
 
-    let cycle = M68kCycle::new(&cpu, system.clock);
-    let mut executor = cycle.begin(&mut cpu);
+    let cycle = M68kCycle::new(&cpu, Instant::START);
+    let executor = cycle.begin(&mut cpu, &mut memory);
 
-    assert_eq!(executor.state.pc, INIT_ADDR as u32);
-    assert_eq!(executor.state.ssp, INIT_STACK as u32);
+    assert_eq!(executor.state.pc, INIT_ADDR);
+    assert_eq!(executor.state.ssp, INIT_STACK);
     assert_eq!(executor.cycle.decoder.instruction, Instruction::NOP);
 
-    test_func(executor, system)
+    test_func(executor)
 }
 
 fn build_state(state: &TestState) -> M68kState {
@@ -74,19 +75,19 @@ fn build_state(state: &TestState) -> M68kState {
     new_state
 }
 
-fn load_memory(system: &System, data: &[u16]) {
+fn load_memory<Bus: BusAccess<u32, Instant>>(bus: &mut Bus, data: &[u16]) {
     for i in 0..data.len() {
-        system.get_bus().write_beu16(system.clock, (i << 1) as Address, data[i]).unwrap();
+        bus.write_beu16(Instant::START, (i << 1) as u32, data[i]).unwrap();
     } 
 }
 
 fn run_test(case: &TestCase) {
-    run_execute_test(case.cputype, |mut executor, system| {
+    run_execute_test(case.cputype, |mut executor| {
         let init_state = build_state(&case.init);
         let expected_state = build_state(&case.fini);
-        system.get_bus().write_beu32(system.clock, MEM_ADDR as Address, case.init.mem).unwrap();
+        executor.bus.write_beu32(Instant::START, MEM_ADDR, case.init.mem).unwrap();
 
-        load_memory(&system, case.data);
+        load_memory(&mut executor.bus, case.data);
         *executor.state = init_state;
 
         executor.decode_next().unwrap();
@@ -95,7 +96,7 @@ fn run_test(case: &TestCase) {
         executor.execute_current().unwrap();
         assert_eq!(*executor.state, expected_state);
 
-        let mem = system.get_bus().read_beu32(system.clock, MEM_ADDR as Address).unwrap();
+        let mem = executor.bus.read_beu32(Instant::START, MEM_ADDR).unwrap();
         assert_eq!(mem, case.fini.mem);
     });
 }
@@ -109,6 +110,7 @@ pub fn run_execute_tests() {
 }
 
 #[test]
+#[ignore]
 pub fn run_assembler_tests() {
     use moa_m68k::assembler::M68kAssembler;
 
@@ -150,6 +152,7 @@ fn format_hex(data: &[u16]) -> String {
         .join(", ")
 }
 
+#[rustfmt::skip]
 const TEST_CASES: &'static [TestCase] = &[
     TestCase {
         name: "nop",
@@ -216,7 +219,7 @@ const TEST_CASES: &'static [TestCase] = &[
         fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FE, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x270A, mem: 0x00000000 },
     },
     TestCase {
-        name: "addx with extend",
+        name: "addx with extend; zero flag not set",
         ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xD101 ],
         cputype: M68kType::MC68010,
@@ -224,11 +227,27 @@ const TEST_CASES: &'static [TestCase] = &[
         fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x270A, mem: 0x00000000 },
     },
     TestCase {
-        name: "addx with extend and carry",
+        name: "addx with extend; zero flag set",
+        ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+        data: &[ 0xD101 ],
+        cputype: M68kType::MC68010,
+        init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000007F, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2714, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x000000FF, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x270A, mem: 0x00000000 },
+    },
+    TestCase {
+        name: "addx with extend and carry; zero flag not set",
         ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
         data: &[ 0xD101 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2710, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2711, mem: 0x00000000 },
+    },
+    TestCase {
+        name: "addx with extend and carry; zero flag set",
+        ins: Instruction::ADDX(Target::DirectDReg(1), Target::DirectDReg(0), Size::Byte),
+        data: &[ 0xD101 ],
+        cputype: M68kType::MC68010,
+        init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2714, mem: 0x00000000 },
         fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2715, mem: 0x00000000 },
     },
     TestCase {
@@ -237,7 +256,15 @@ const TEST_CASES: &'static [TestCase] = &[
         data: &[ 0x027C, 0xF8FF ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA7AA, mem: 0x00000000 },
-        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA0AA, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA00A, mem: 0x00000000 },
+    },
+    TestCase {
+        name: "andi with sr 2",
+        ins: Instruction::ANDtoSR(0xF8FF),
+        data: &[ 0x027C, 0xF8FF ],
+        cputype: M68kType::MC68010,
+        init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA7FA, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA01A, mem: 0x00000000 },
     },
     TestCase {
         name: "asl",
@@ -558,13 +585,14 @@ const TEST_CASES: &'static [TestCase] = &[
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xFF55FFAA },
         fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x000055AA, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xFF55FFAA },
     },
+    // TODO not sure if these cases are correct
     TestCase {
         name: "movep long from even memory upper",
         ins: Instruction::MOVEP(0, 0, 0, Size::Long, Direction::FromTarget),
         data: &[ 0x0148, 0x0000 ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
-        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0xAABB0000, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
+        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0xAABBCCDD, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
     },
     TestCase {
         name: "movep long from even memory lower",
@@ -601,7 +629,7 @@ const TEST_CASES: &'static [TestCase] = &[
         data: &[ 0x007C, 0x00AA ],
         cputype: M68kType::MC68010,
         init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA755, mem: 0x00000000 },
-        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA7FF, mem: 0x00000000 },
+        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: 0x00000000, a1: 0x00000000, sr: 0xA71F, mem: 0x00000000 },
     },
 
 

@@ -2,8 +2,14 @@
 use std::str::Chars;
 use std::iter::Peekable;
 
-use moa_core::Error;
 
+pub struct ParserError(pub String);
+
+impl ParserError {
+    pub fn new(msg: String) -> Self {
+        Self(msg)
+    }
+}
 
 #[derive(Debug)]
 pub enum AssemblyLine {
@@ -34,7 +40,7 @@ impl<'input> AssemblyParser<'input> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<(usize, AssemblyLine)>, Error> {
+    pub fn parse(&mut self) -> Result<Vec<(usize, AssemblyLine)>, ParserError> {
         let mut output = vec![];
         loop {
             let lineno = self.lexer.get_next_lineno();
@@ -47,7 +53,7 @@ impl<'input> AssemblyParser<'input> {
         Ok(output)
     }
 
-    fn parse_line(&mut self) -> Result<Option<AssemblyLine>, Error> {
+    fn parse_line(&mut self) -> Result<Option<AssemblyLine>, ParserError> {
         let token = loop {
             match self.lexer.get_next() {
                 Some(token) if token == "\n" => { },
@@ -73,7 +79,7 @@ impl<'input> AssemblyParser<'input> {
                 }
             },
             _ => {
-                return Err(Error::new(format!("parse error at line {}: expected word, found {:?}", self.lexer.lineno(), token)));
+                return Err(ParserError::new(format!("parse error at line {}: expected word, found {:?}", self.lexer.lineno(), token)));
             },
         };
 
@@ -81,7 +87,7 @@ impl<'input> AssemblyParser<'input> {
         Ok(Some(result))
     }
 
-    fn parse_list_of_words(&mut self) -> Result<Vec<String>, Error> {
+    fn parse_list_of_words(&mut self) -> Result<Vec<String>, ParserError> {
         let mut list = vec![];
 
         // If we're already at the end of the line, then it's an empty list, so return
@@ -101,7 +107,7 @@ impl<'input> AssemblyParser<'input> {
         }
     }
 
-    fn parse_list_of_operands(&mut self) -> Result<Vec<AssemblyOperand>, Error> {
+    fn parse_list_of_operands(&mut self) -> Result<Vec<AssemblyOperand>, ParserError> {
         let mut list = vec![];
 
         // If we're already at the end of the line, then it's an empty list, so return
@@ -121,7 +127,7 @@ impl<'input> AssemblyParser<'input> {
         }
     }
 
-    fn parse_operand(&mut self) -> Result<AssemblyOperand, Error> {
+    fn parse_operand(&mut self) -> Result<AssemblyOperand, ParserError> {
         let token = self.lexer.expect_next()?;
         match token.as_str() {
             "%" => {
@@ -163,7 +169,7 @@ impl<'input> AssemblyParser<'input> {
     }
 }
 
-fn parse_any_number(lineno: usize, string: &str) -> Result<usize, Error> {
+fn parse_any_number(lineno: usize, string: &str) -> Result<usize, ParserError> {
     let (radix, numeric) = if let Some(s) = string.strip_prefix("0x") {
         (16, s)
     } else if let Some(s) = string.strip_prefix("0b") {
@@ -174,7 +180,7 @@ fn parse_any_number(lineno: usize, string: &str) -> Result<usize, Error> {
         (10, string)
     };
     usize::from_str_radix(numeric, radix)
-        .map_err(|_| Error::new(format!("parse error at line {}: expected number after #, but found {:?}", lineno, string)))
+        .map_err(|_| ParserError::new(format!("parse error at line {}: expected number after #, but found {:?}", lineno, string)))
 }
 
 
@@ -230,25 +236,25 @@ impl<'input> AssemblyLexer<'input> {
         self.peeked.clone()
     }
 
-    pub fn expect_next(&mut self) -> Result<String, Error> {
-        self.get_next().ok_or_else(|| Error::new(format!("unexpected end of input at line {}", self.lineno)))
+    pub fn expect_next(&mut self) -> Result<String, ParserError> {
+        self.get_next().ok_or_else(|| ParserError::new(format!("unexpected end of input at line {}", self.lineno)))
     }
 
-    pub fn expect_token(&mut self, expected: &str) -> Result<(), Error> {
+    pub fn expect_token(&mut self, expected: &str) -> Result<(), ParserError> {
         let token = self.expect_next()?;
         if token == expected {
             Ok(())
         } else {
-            Err(Error::new(format!("parse error at line {}: expected {:?}, found {:?}", self.lineno, expected, token)))
+            Err(ParserError::new(format!("parse error at line {}: expected {:?}, found {:?}", self.lineno, expected, token)))
         }
     }
 
-    pub fn expect_end(&mut self) -> Result<(), Error> {
+    pub fn expect_end(&mut self) -> Result<(), ParserError> {
         let token = self.get_next();
         if token.is_none() || token.as_ref().unwrap() == "\n" {
             Ok(())
         } else {
-            Err(Error::new(format!("expected end of line at {}: found {:?}", self.lineno, token)))
+            Err(ParserError::new(format!("expected end of line at {}: found {:?}", self.lineno, token)))
         }
     }
 
@@ -266,8 +272,6 @@ impl<'input> AssemblyLexer<'input> {
                             break;
                         }
                     }
-                } else {
-
                 }
             } else if *ch == ' ' || *ch == '\t' || *ch == '\r' {
                 self.chars.next();
@@ -301,28 +305,28 @@ fn is_digit(ch: char) -> bool {
     ch.is_ascii_digit()
 }
 
-pub fn expect_args(lineno: usize, args: &[AssemblyOperand], expected: usize) -> Result<(), Error> {
+pub fn expect_args(lineno: usize, args: &[AssemblyOperand], expected: usize) -> Result<(), ParserError> {
     if args.len() == expected {
         Ok(())
     } else {
-        Err(Error::new(format!("error at line {}: expected {} args, but found {}", lineno, expected, args.len())))
+        Err(ParserError::new(format!("error at line {}: expected {} args, but found {}", lineno, expected, args.len())))
     }
 }
 
-pub fn expect_label(lineno: usize, args: &[AssemblyOperand]) -> Result<String, Error> {
+pub fn expect_label(lineno: usize, args: &[AssemblyOperand]) -> Result<String, ParserError> {
     expect_args(lineno, args, 1)?;
     if let AssemblyOperand::Label(name) = &args[0] {
         Ok(name.clone())
     } else {
-        Err(Error::new(format!("error at line {}: expected a label, but found {:?}", lineno, args)))
+        Err(ParserError::new(format!("error at line {}: expected a label, but found {:?}", lineno, args)))
     }
 }
 
-pub fn expect_immediate(lineno: usize, operand: &AssemblyOperand) -> Result<usize, Error> {
+pub fn expect_immediate(lineno: usize, operand: &AssemblyOperand) -> Result<usize, ParserError> {
     if let AssemblyOperand::Immediate(value) = operand {
         Ok(*value)
     } else {
-        Err(Error::new(format!("error at line {}: expected an immediate value, but found {:?}", lineno, operand)))
+        Err(ParserError::new(format!("error at line {}: expected an immediate value, but found {:?}", lineno, operand)))
     }
 }
 
