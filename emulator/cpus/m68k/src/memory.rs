@@ -10,6 +10,7 @@ use crate::instructions::Size;
 #[repr(u8)]
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[rustfmt::skip]
 pub enum FunctionCode {
     Reserved0           = 0,
     UserData            = 1,

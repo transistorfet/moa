@@ -28,6 +28,7 @@ pub enum Status {
 #[repr(u8)]
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[rustfmt::skip]
 pub enum Flags {
     Carry       = 0x01,
     AddSubtract = 0x02,

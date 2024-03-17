@@ -28,6 +28,7 @@ use moa_host::{Host, HostError, Audio, Sample};
 ///
 /// The value here is used to shift a bit to get the number of global cycles between each increment
 /// of the envelope attenuation, based on the rate that's currently active
+#[rustfmt::skip]
 const COUNTER_SHIFT_VALUES: &[u16] = &[
     11, 11, 11, 11,
     10, 10, 10, 10,
@@ -53,6 +54,7 @@ const COUNTER_SHIFT_VALUES: &[u16] = &[
 /// than attenuation, and the values will always be below 64.  This table maps each of the 64
 /// possible angle values to a sequence of 8 cycles, and the amount to increment the attenuation
 /// at each point in that cycle
+#[rustfmt::skip]
 const RATE_TABLE: &[u16] = &[
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -120,6 +122,7 @@ const RATE_TABLE: &[u16] = &[
     8, 8, 8, 8, 8, 8, 8, 8,
 ];
 
+#[rustfmt::skip]
 const DETUNE_TABLE: &[u8] = &[
     0,  0,  1,  2,
     0,  0,  1,  2,
@@ -271,9 +274,6 @@ impl EnvelopeGenerator {
         let rate = self.get_scaled_rate(self.envelope_state, rate_adjust);
         let counter_shift = COUNTER_SHIFT_VALUES[rate];
 
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} {:4x} {:4x}", envelope_clock, counter_shift, envelope_clock % (1 << counter_shift));
-//}
         if envelope_clock % (1 << counter_shift) == 0 {
             let update_cycle = (envelope_clock >> counter_shift) & 0x07;
             let increment = RATE_TABLE[rate * 8 + update_cycle as usize];
@@ -286,9 +286,6 @@ impl EnvelopeGenerator {
                     // to bitwise-and with 0xFFC instead, which will wrap the number to a 12-bit signed number, which when
                     // clamped to MAX_ENVELOPE will produce the same results
                     let new_envelope = self.envelope + (((!self.envelope * increment) as i16) >> 4) as u16;
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} {:4x} {:4x} {:4x} {:4x}", self.envelope, update_cycle, rate * 8 + update_cycle as usize, (((!self.envelope * increment) as i16) >> 4) as u16 & 0xFFFC, new_envelope);
-//}
                     if new_envelope > self.envelope {
                         self.envelope_state = EnvelopeState::Decay;
                         self.envelope = 0;
@@ -306,9 +303,6 @@ impl EnvelopeGenerator {
                     }
                 },
             }
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} {:4x} {:4x} {:4x} {:4x}", rate, counter_shift, self.envelope_state as usize, increment, self.envelope);
-//}
         }
     }
 
@@ -440,6 +434,7 @@ impl PhaseGenerator {
 ///
 /// K1 = F11
 /// K0 = F11 & (F10 | F9 | F8) | !F11 & (F10 & F9 & F8)
+#[rustfmt::skip]
 const FNUMBER_TO_KEYCODE: &[u8] = &[
     0, 0, 0, 0, 0, 0, 0, 1,
     2, 3, 3, 3, 3, 3, 3, 3,
@@ -518,10 +513,6 @@ impl Operator {
         let phase = self.phase.update_phase(fm_clock);
 
         let mod_phase = phase + modulator;
-
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} = {:4x} + {:4x} + {:4x}, e: {:x}, {:4x} {:4x}", mod_phase, phase, self.phase.increment, modulator, self.envelope.envelope_state as usize, envelope, self.envelope.envelope);
-//}
 
         // The sine table contains the first half of the wave as an attenuation value
         // Use the phase with the sign truncated to get the attenuation, plus the
@@ -617,10 +608,6 @@ impl Channel {
 
         //let output = sign_extend_u16(output, 14);
 
-        //let output = output * 2 / 3;
-//if self.debug_name == "ch 2" {
-//println!("{:6x}", output);
-//}
         let sample = output as f32 / (1 << 13) as f32;
 
         let left = if self.enabled.0 { sample } else { 0.0 };

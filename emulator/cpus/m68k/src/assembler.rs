@@ -24,6 +24,7 @@ impl From<ParserError> for Error {
 
 #[repr(usize)]
 #[derive(Copy, Clone)]
+#[rustfmt::skip]
 pub enum Disallow {
     None                        = 0x0000,
     NoDReg                      = 0x0001,

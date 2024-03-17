@@ -55,6 +55,7 @@ fn run_all_decode_tests() {
     }
 }
 
+#[rustfmt::skip]
 const DECODE_TESTS: &'static [(&[u8], Instruction)] = &[
     (&[0x00],               Instruction::NOP),
     (&[0x01, 0x01, 0x02],   Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::BC), LoadTarget::ImmediateWord(0x0201))),

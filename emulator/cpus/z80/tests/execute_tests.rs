@@ -26,6 +26,7 @@ struct TestCase {
     fini: TestState,
 }
 
+#[rustfmt::skip]
 const TEST_CASES: &'static [TestCase] = &[
     /*
     TestCase {

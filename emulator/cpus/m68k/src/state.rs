@@ -109,6 +109,7 @@ const FLAGS_ON_RESET: u16 = 0x2700;
 #[repr(u16)]
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[rustfmt::skip]
 pub enum Flags {
     Carry       = 0x0001,
     Overflow    = 0x0002,
@@ -124,6 +125,7 @@ pub enum Flags {
 #[repr(u8)]
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[rustfmt::skip]
 pub enum Exceptions {
     BusError            = 2,
     AddressError        = 3,

@@ -47,15 +47,6 @@ pub fn build_computie<H: Host>(host: &H, options: ComputieOptions) -> Result<Sys
 
     let mut cpu = M68k::from_type(M68kType::MC68010, options.frequency);
 
-    //cpu.enable_tracing();
-    //cpu.add_breakpoint(0x10781a);
-    //cpu.add_breakpoint(0x10bc9c);
-    //cpu.add_breakpoint(0x106a94);
-    //cpu.add_breakpoint(0x1015b2);
-    //cpu.add_breakpoint(0x103332);
-    //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
-    //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
-
     cpu.add_breakpoint(0);
 
     system.add_interruptable_device("cpu", Device::new(cpu))?;
@@ -84,15 +75,6 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
 
 
     let cpu = M68k::from_type(M68kType::MC68030, Frequency::from_hz(10_000_000));
-
-    //cpu.enable_tracing();
-    //cpu.add_breakpoint(0x10781a);
-    //cpu.add_breakpoint(0x10bc9c);
-    //cpu.add_breakpoint(0x106a94);
-    //cpu.add_breakpoint(0x1015b2);
-    //cpu.add_breakpoint(0x103332);
-    //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
-    //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
 
     system.add_interruptable_device("cpu", Device::new(cpu))?;
 
