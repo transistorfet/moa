@@ -23,8 +23,8 @@ jobs:
 
       - name: Select rust version
         run: |
-          rustup toolchain install 1.70 --profile minimal --no-self-update
-          rustup default 1.70
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
           rustup target add wasm32-unknown-unknown
 
       - uses: jetli/wasm-bindgen-action@v0.2.0
@@ -35,8 +35,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
-          # NOTE version here is pinned because it must be compilable with MSRV
-          cargo install just --version 1.22.0
+          cargo install just
 
       - name: Make build directory
         run: mkdir build
