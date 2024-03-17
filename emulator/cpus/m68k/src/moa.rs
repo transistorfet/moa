@@ -57,7 +57,7 @@ impl<BusError> From<Error> for M68kError<BusError> {
         match err {
             Error::Processor(ex) => M68kError::Interrupt(ex as u8),
             Error::Breakpoint(_) => M68kError::Breakpoint,
-            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => M68kError::Other(msg.to_string()),
+            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => M68kError::Other(msg),
         }
     }
 }

@@ -71,7 +71,7 @@ impl From<Error> for Z80Error {
         match err {
             Error::Processor(ex) => Z80Error::BusError(format!("processor error {}", ex)),
             Error::Breakpoint(_) => Z80Error::Breakpoint,
-            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => Z80Error::BusError(msg.to_string()),
+            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => Z80Error::BusError(msg),
         }
     }
 }

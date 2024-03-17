@@ -156,7 +156,7 @@ fn init_execute_test(cputype: Z80Type, state: &TestState, ports: &[TestPort]) ->
     let io_ram = Device::new(MemoryBlock::new(vec![0; 0x10000]));
     let io_bus = Rc::new(RefCell::new(Bus::default()));
     io_bus.borrow_mut().set_ignore_unmapped(true);
-    io_bus.borrow_mut().insert(0x0000, io_ram.clone());
+    io_bus.borrow_mut().insert(0x0000, io_ram);
 
     let port = BusPort::new(0, 16, 8, system.bus.clone());
     let ioport = BusPort::new(0, 16, 8, io_bus.clone());

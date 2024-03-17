@@ -1,9 +1,9 @@
 
-* convert the Z80
 * implement Inspect/Debug traits
 * fix dump_state everywhere, which now requires a writer.  Is there an easier way?  Is there a way that doesn't require std
 * fix it to use the full 68k address space, and maybe see if it's possible to make the address translation cleaner/nicer/simpler/faster
 * figure out how to do interrupts, and add them to emulator-hal, implement them in m68k
+* convert the Z80
 * convert peripherals to use BusAccess and Step
 * replace Addressable/Steppable and modify Transmutable to use the emulator-hal traits
 * remove the custom moa impls from m68k if possible at this point

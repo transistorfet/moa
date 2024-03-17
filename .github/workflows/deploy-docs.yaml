@@ -29,12 +29,14 @@ jobs:
 
       - uses: jetli/wasm-bindgen-action@v0.2.0
         with:
+          # NOTE version here must match the emulator/frontends/pixels/Cargo.lock version
           version: 0.2.92
 
       - name: Install dependencies
         run: |
           sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
-          cargo install just
+          # NOTE version here is pinned because it must be compilable with MSRV
+          cargo install just --version 1.22.0
 
       - name: Make build directory
         run: mkdir build
