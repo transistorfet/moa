@@ -1,4 +1,3 @@
-
 use femtos::Instant;
 use emulator_hal::bus::{self, BusAccess};
 use emulator_hal::step::Step;
@@ -9,19 +8,8 @@ use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
 use crate::timing::M68kInstructionTiming;
 use crate::instructions::{
-    Register,
-    Size,
-    Sign,
-    Direction,
-    XRegister,
-    BaseRegister,
-    IndexRegister,
-    RegOrImmediate,
-    ControlRegister,
-    Condition,
-    Target,
-    Instruction,
-    sign_extend_to_long,
+    Register, Size, Sign, Direction, XRegister, BaseRegister, IndexRegister, RegOrImmediate, ControlRegister, Condition, Target,
+    Instruction, sign_extend_to_long,
 };
 
 
@@ -55,7 +43,7 @@ impl M68kCycle {
 
     #[inline]
     pub fn new(cpu: &M68k, clock: Instant) -> Self {
-        let is_supervisor = cpu.state.sr & (Flags:: Supervisor as u16) != 0;
+        let is_supervisor = cpu.state.sr & (Flags::Supervisor as u16) != 0;
         Self {
             decoder: M68kDecoder::new(cpu.info.chip, is_supervisor, cpu.state.pc),
             timing: M68kInstructionTiming::new(cpu.info.chip, cpu.info.data_width as u8),
@@ -174,7 +162,10 @@ where
     }
 
     #[inline]
-    pub fn check_pending_interrupts(&mut self, interrupt: (bool, u8, u8)) -> Result<(InterruptPriority, Option<u8>), M68kError<Bus::Error>> {
+    pub fn check_pending_interrupts(
+        &mut self,
+        interrupt: (bool, u8, u8),
+    ) -> Result<(InterruptPriority, Option<u8>), M68kError<Bus::Error>> {
         let ack_num;
         (self.state.pending_ipl, ack_num) = match interrupt {
             (true, priority, ack) => (InterruptPriority::from_u8(priority), ack),
@@ -300,7 +291,9 @@ where
     #[inline]
     pub fn decode_next(&mut self) -> Result<(), M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
-        self.cycle.decoder.decode_at(&mut self.bus, &mut self.cycle.memory, is_supervisor, self.state.pc)?;
+        self.cycle
+            .decoder
+            .decode_at(&mut self.bus, &mut self.cycle.memory, is_supervisor, self.state.pc)?;
 
         self.cycle.timing.add_instruction(&self.cycle.decoder.instruction);
 
@@ -400,7 +393,9 @@ where
             Instruction::UNLK(reg) => self.execute_unlk(reg),
             Instruction::UnimplementedA(value) => self.execute_unimplemented_a(value),
             Instruction::UnimplementedF(value) => self.execute_unimplemented_f(value),
-            _ => { return Err(M68kError::Other("Unsupported instruction".to_string())); },
+            _ => {
+                return Err(M68kError::Other("Unsupported instruction".to_string()));
+            },
         }?;
 
         Ok(())
@@ -416,9 +411,13 @@ where
 
         let binary_result = src_val.wrapping_add(dest_val).wrapping_add(extend_flag);
         let mut result = src_parts.1.wrapping_add(dest_parts.1).wrapping_add(extend_flag);
-        if result > 0x09 { result = result.wrapping_add(0x06) };
+        if result > 0x09 {
+            result = result.wrapping_add(0x06)
+        };
         result += src_parts.0 + dest_parts.0;
-        if result > 0x99 { result = result.wrapping_add(0x60) };
+        if result > 0x99 {
+            result = result.wrapping_add(0x60)
+        };
         let carry = (result & 0xFFFFFF00) != 0;
 
         self.set_target_value(dest, result, Size::Byte, Used::Twice)?;
@@ -607,7 +606,12 @@ where
         Ok(())
     }
 
-    fn execute_bfchg(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_bfchg(
+        &mut self,
+        target: Target,
+        offset: RegOrImmediate,
+        width: RegOrImmediate,
+    ) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Twice)?;
@@ -617,7 +621,12 @@ where
         Ok(())
     }
 
-    fn execute_bfclr(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_bfclr(
+        &mut self,
+        target: Target,
+        offset: RegOrImmediate,
+        width: RegOrImmediate,
+    ) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Twice)?;
@@ -627,7 +636,13 @@ where
         Ok(())
     }
 
-    fn execute_bfexts(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate, reg: Register) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_bfexts(
+        &mut self,
+        target: Target,
+        offset: RegOrImmediate,
+        width: RegOrImmediate,
+        reg: Register,
+    ) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Once)?;
@@ -643,7 +658,13 @@ where
         Ok(())
     }
 
-    fn execute_bfextu(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate, reg: Register) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_bfextu(
+        &mut self,
+        target: Target,
+        offset: RegOrImmediate,
+        width: RegOrImmediate,
+        reg: Register,
+    ) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Once)?;
@@ -653,7 +674,12 @@ where
         Ok(())
     }
 
-    fn execute_bfset(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_bfset(
+        &mut self,
+        target: Target,
+        offset: RegOrImmediate,
+        width: RegOrImmediate,
+    ) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Twice)?;
@@ -663,7 +689,12 @@ where
         Ok(())
     }
 
-    fn execute_bftst(&mut self, target: Target, offset: RegOrImmediate, width: RegOrImmediate) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_bftst(
+        &mut self,
+        target: Target,
+        offset: RegOrImmediate,
+        width: RegOrImmediate,
+    ) -> Result<(), M68kError<Bus::Error>> {
         let (offset, width) = self.get_bit_field_args(offset, width);
         let mask = get_bit_field_mask(offset, width);
         let value = self.get_target_value(target, Size::Long, Used::Once)?;
@@ -749,16 +780,12 @@ where
                 (
                     (dest_val % src_val) as u32,
                     quotient as u32,
-                    quotient > i16::MAX as i32 || quotient < i16::MIN as i32
+                    quotient > i16::MAX as i32 || quotient < i16::MIN as i32,
                 )
             },
             Sign::Unsigned => {
                 let quotient = dest_val / src_val;
-                (
-                    dest_val % src_val,
-                    quotient,
-                    (quotient & 0xFFFF0000) != 0
-                )
+                (dest_val % src_val, quotient, (quotient & 0xFFFF0000) != 0)
             },
         };
 
@@ -773,7 +800,13 @@ where
         Ok(())
     }
 
-    fn execute_divl(&mut self, src: Target, dest_h: Option<Register>, dest_l: Register, sign: Sign) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_divl(
+        &mut self,
+        src: Target,
+        dest_h: Option<Register>,
+        dest_l: Register,
+        sign: Sign,
+    ) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, Size::Long, Used::Once)?;
         if src_val == 0 {
             self.exception(Exceptions::ZeroDivide as u8, false)?;
@@ -988,8 +1021,8 @@ where
                 Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
                     let a_reg_mut = self.get_a_reg_mut(reg);
                     *a_reg_mut = addr + (mask.count_ones() * size.in_bytes());
-                }
-                _ => { },
+                },
+                _ => {},
             }
         }
 
@@ -1006,11 +1039,9 @@ where
                 }
                 self.move_registers_to_memory_reverse(addr, size, mask)?
             },
-            _ => {
-                match dir {
-                    Direction::ToTarget => self.move_registers_to_memory(addr, size, mask)?,
-                    Direction::FromTarget => self.move_memory_to_registers(addr, size, mask)?,
-                }
+            _ => match dir {
+                Direction::ToTarget => self.move_registers_to_memory(addr, size, mask)?,
+                Direction::FromTarget => self.move_memory_to_registers(addr, size, mask)?,
             },
         };
 
@@ -1019,8 +1050,8 @@ where
             Target::IndirectARegInc(reg) | Target::IndirectARegDec(reg) => {
                 let a_reg_mut = self.get_a_reg_mut(reg);
                 *a_reg_mut = post_addr;
-            }
-            _ => { },
+            },
+            _ => {},
         }
 
         Ok(())
@@ -1082,7 +1113,14 @@ where
         Ok(addr)
     }
 
-    fn execute_movep(&mut self, dreg: Register, areg: Register, offset: i16, size: Size, dir: Direction) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_movep(
+        &mut self,
+        dreg: Register,
+        areg: Register,
+        offset: i16,
+        size: Size,
+        dir: Direction,
+    ) -> Result<(), M68kError<Bus::Error>> {
         match dir {
             Direction::ToTarget => {
                 let mut shift = (size.in_bits() as i32) - 8;
@@ -1119,7 +1157,9 @@ where
         self.require_supervisor()?;
         match dir {
             Direction::ToTarget => self.set_target_value(target, self.state.usp, Size::Long, Used::Once)?,
-            Direction::FromTarget => { self.state.usp = self.get_target_value(target, Size::Long, Used::Once)?; },
+            Direction::FromTarget => {
+                self.state.usp = self.get_target_value(target, Size::Long, Used::Once)?;
+            },
         }
         Ok(())
     }
@@ -1137,7 +1177,13 @@ where
         Ok(())
     }
 
-    fn execute_mull(&mut self, src: Target, dest_h: Option<Register>, dest_l: Register, sign: Sign) -> Result<(), M68kError<Bus::Error>> {
+    fn execute_mull(
+        &mut self,
+        src: Target,
+        dest_h: Option<Register>,
+        dest_l: Register,
+        sign: Sign,
+    ) -> Result<(), M68kError<Bus::Error>> {
         let src_val = self.get_target_value(src, Size::Long, Used::Once)?;
         let dest_val = get_value_sized(self.state.d_reg[dest_l as usize], Size::Long);
         let result = match sign {
@@ -1353,10 +1399,14 @@ where
 
         let binary_result = dest_val.wrapping_sub(src_val).wrapping_sub(extend_flag);
         let mut result = dest_parts.1.wrapping_sub(src_parts.1).wrapping_sub(extend_flag);
-        if (result & 0x1F) > 0x09 { result -= 0x06 };
+        if (result & 0x1F) > 0x09 {
+            result -= 0x06
+        };
         result = result.wrapping_add(dest_parts.0.wrapping_sub(src_parts.0));
         let carry = (result & 0x1FF) > 0x99;
-        if carry { result -= 0x60 };
+        if carry {
+            result -= 0x60
+        };
 
         self.set_flag(Flags::Negative, get_msb(result, Size::Byte));
         self.set_flag(Flags::Zero, (result & 0xFF) == 0);
@@ -1489,7 +1539,8 @@ where
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
+                let intermediate =
+                    self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
                 self.get_address_sized(intermediate.wrapping_add(outer_disp as u32), size)
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
@@ -1498,13 +1549,17 @@ where
                 let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32), Size::Long)?;
                 self.get_address_sized(intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32), size)
             },
-            Target::IndirectMemory(addr, _) => {
-                self.get_address_sized(addr, size)
-            },
+            Target::IndirectMemory(addr, _) => self.get_address_sized(addr, size),
         }
     }
 
-    pub(super) fn set_target_value(&mut self, target: Target, value: u32, size: Size, used: Used) -> Result<(), M68kError<Bus::Error>> {
+    pub(super) fn set_target_value(
+        &mut self,
+        target: Target,
+        value: u32,
+        size: Size,
+        used: Used,
+    ) -> Result<(), M68kError<Bus::Error>> {
         match target {
             Target::DirectDReg(reg) => {
                 set_value_sized(&mut self.state.d_reg[reg as usize], value, size);
@@ -1532,7 +1587,8 @@ where
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
+                let intermediate =
+                    self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
                 self.set_address_sized(intermediate.wrapping_add(outer_disp as u32), value, size)?;
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
@@ -1560,7 +1616,8 @@ where
             Target::IndirectMemoryPreindexed(base_reg, index_reg, base_disp, outer_disp) => {
                 let base_value = self.get_base_reg_value(base_reg);
                 let index_value = self.get_index_reg_value(&index_reg);
-                let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
+                let intermediate =
+                    self.get_address_sized(base_value.wrapping_add(base_disp as u32).wrapping_add(index_value as u32), Size::Long)?;
                 intermediate.wrapping_add(outer_disp as u32)
             },
             Target::IndirectMemoryPostindexed(base_reg, index_reg, base_disp, outer_disp) => {
@@ -1569,9 +1626,7 @@ where
                 let intermediate = self.get_address_sized(base_value.wrapping_add(base_disp as u32), Size::Long)?;
                 intermediate.wrapping_add(index_value as u32).wrapping_add(outer_disp as u32)
             },
-            Target::IndirectMemory(addr, _) => {
-                addr
-            },
+            Target::IndirectMemory(addr, _) => addr,
             _ => return Err(M68kError::InvalidTarget(target)),
         };
         Ok(addr)
@@ -1611,21 +1666,28 @@ where
 
     fn set_address_sized(&mut self, addr: M68kAddress, value: u32, size: Size) -> Result<(), M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
-        self.cycle.memory.write_data_sized(&mut self.bus, is_supervisor, addr, size, value)
+        self.cycle
+            .memory
+            .write_data_sized(&mut self.bus, is_supervisor, addr, size, value)
     }
 
     fn push_word(&mut self, value: u16) -> Result<(), M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
         *self.get_stack_pointer_mut() -= 2;
         let addr = *self.get_stack_pointer_mut();
-        self.cycle.memory.write_data_sized(&mut self.bus, is_supervisor, addr, Size::Word, value as u32)?;
+        self.cycle
+            .memory
+            .write_data_sized(&mut self.bus, is_supervisor, addr, Size::Word, value as u32)?;
         Ok(())
     }
 
     fn pop_word(&mut self) -> Result<u16, M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
         let addr = *self.get_stack_pointer_mut();
-        let value = self.cycle.memory.read_data_sized(&mut self.bus, is_supervisor, addr, Size::Word)?;
+        let value = self
+            .cycle
+            .memory
+            .read_data_sized(&mut self.bus, is_supervisor, addr, Size::Word)?;
         *self.get_stack_pointer_mut() += 2;
         Ok(value as u16)
     }
@@ -1634,21 +1696,33 @@ where
         let is_supervisor = self.is_supervisor();
         *self.get_stack_pointer_mut() -= 4;
         let addr = *self.get_stack_pointer_mut();
-        self.cycle.memory.write_data_sized(&mut self.bus, is_supervisor, addr, Size::Long, value)?;
+        self.cycle
+            .memory
+            .write_data_sized(&mut self.bus, is_supervisor, addr, Size::Long, value)?;
         Ok(())
     }
 
     fn pop_long(&mut self) -> Result<u32, M68kError<Bus::Error>> {
         let is_supervisor = self.is_supervisor();
         let addr = *self.get_stack_pointer_mut();
-        let value = self.cycle.memory.read_data_sized(&mut self.bus, is_supervisor, addr, Size::Long)?;
+        let value = self
+            .cycle
+            .memory
+            .read_data_sized(&mut self.bus, is_supervisor, addr, Size::Long)?;
         *self.get_stack_pointer_mut() += 4;
         Ok(value)
     }
 
     fn set_pc(&mut self, value: u32) -> Result<(), M68kError<Bus::Error>> {
         self.state.pc = value;
-        self.cycle.memory.start_request(self.is_supervisor(), self.state.pc, Size::Word, MemAccess::Read, MemType::Program, true)?;
+        self.cycle.memory.start_request(
+            self.is_supervisor(),
+            self.state.pc,
+            Size::Word,
+            MemAccess::Read,
+            MemType::Program,
+            true,
+        )?;
         Ok(())
     }
 
@@ -1679,7 +1753,13 @@ where
         match base_reg {
             BaseRegister::None => 0,
             BaseRegister::PC => self.cycle.decoder.start + 2,
-            BaseRegister::AReg(7) => if self.is_supervisor() { self.state.ssp } else { self.state.usp },
+            BaseRegister::AReg(7) => {
+                if self.is_supervisor() {
+                    self.state.ssp
+                } else {
+                    self.state.usp
+                }
+            },
             BaseRegister::AReg(reg) => self.state.a_reg[reg as usize],
         }
     }
@@ -1687,9 +1767,11 @@ where
     fn get_index_reg_value(&self, index_reg: &Option<IndexRegister>) -> i32 {
         match index_reg {
             None => 0,
-            Some(IndexRegister { xreg, scale, size }) => {
-                sign_extend_to_long(self.get_x_reg_value(*xreg), *size) << scale
-            }
+            Some(IndexRegister {
+                xreg,
+                scale,
+                size,
+            }) => sign_extend_to_long(self.get_x_reg_value(*xreg), *size) << scale,
         }
     }
 
@@ -1700,12 +1782,20 @@ where
     }
 
     fn get_stack_pointer_mut(&mut self) -> &mut u32 {
-        if self.is_supervisor() { &mut self.state.ssp } else { &mut self.state.usp }
+        if self.is_supervisor() {
+            &mut self.state.ssp
+        } else {
+            &mut self.state.usp
+        }
     }
 
     fn get_a_reg(&self, reg: Register) -> u32 {
         if reg == 7 {
-            if self.is_supervisor() { self.state.ssp } else { self.state.usp }
+            if self.is_supervisor() {
+                self.state.ssp
+            } else {
+                self.state.usp
+            }
         } else {
             self.state.a_reg[reg as usize]
         }
@@ -1713,14 +1803,18 @@ where
 
     fn get_a_reg_mut(&mut self, reg: Register) -> &mut u32 {
         if reg == 7 {
-            if self.is_supervisor() { &mut self.state.ssp } else { &mut self.state.usp }
+            if self.is_supervisor() {
+                &mut self.state.ssp
+            } else {
+                &mut self.state.usp
+            }
         } else {
             &mut self.state.a_reg[reg as usize]
         }
     }
 
     fn is_supervisor(&self) -> bool {
-        self.state.sr & (Flags:: Supervisor as u16) != 0
+        self.state.sr & (Flags::Supervisor as u16) != 0
     }
 
     fn require_supervisor(&self) -> Result<(), M68kError<Bus::Error>> {
@@ -1732,7 +1826,11 @@ where
     }
 
     fn set_sr(&mut self, value: u16) {
-        let mask = if self.cycle.decoder.cputype <= M68kType::MC68010 { 0xA71F } else { 0xF71F };
+        let mask = if self.cycle.decoder.cputype <= M68kType::MC68010 {
+            0xA71F
+        } else {
+            0xF71F
+        };
         self.state.sr = value & mask;
     }
 
@@ -1805,15 +1903,23 @@ where
             Condition::OverflowSet => self.get_flag(Flags::Overflow),
             Condition::Plus => !self.get_flag(Flags::Negative),
             Condition::Minus => self.get_flag(Flags::Negative),
-            Condition::GreaterThanOrEqual => (self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow)) || (!self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow)),
-            Condition::LessThan => (self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow)) || (!self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow)),
-            Condition::GreaterThan =>
+            Condition::GreaterThanOrEqual => {
+                (self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow))
+                    || (!self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow))
+            },
+            Condition::LessThan => {
+                (self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow))
+                    || (!self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow))
+            },
+            Condition::GreaterThan => {
                 (self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow) && !self.get_flag(Flags::Zero))
-                || (!self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow) && !self.get_flag(Flags::Zero)),
-            Condition::LessThanOrEqual =>
+                    || (!self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow) && !self.get_flag(Flags::Zero))
+            },
+            Condition::LessThanOrEqual => {
                 self.get_flag(Flags::Zero)
-                || (self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow))
-                || (!self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow)),
+                    || (self.get_flag(Flags::Negative) && !self.get_flag(Flags::Overflow))
+                    || (!self.get_flag(Flags::Negative) && self.get_flag(Flags::Overflow))
+            },
         }
     }
 }
@@ -1889,7 +1995,11 @@ fn rotate_left(value: u32, size: Size, use_extend: Option<bool>) -> (u32, bool) 
 
 fn rotate_right(value: u32, size: Size, use_extend: Option<bool>) -> (u32, bool) {
     let bit = (value & 0x01) != 0;
-    let mask = if use_extend.unwrap_or(bit) { get_msb_mask(0xffffffff, size) } else { 0x0 };
+    let mask = if use_extend.unwrap_or(bit) {
+        get_msb_mask(0xffffffff, size)
+    } else {
+        0x0
+    };
     ((value >> 1) | mask, bit)
 }
 
@@ -1899,17 +2009,23 @@ fn get_nibbles_from_byte(value: u32) -> (u32, u32) {
 
 fn get_value_sized(value: u32, size: Size) -> u32 {
     match size {
-        Size::Byte => { 0x000000FF & value },
-        Size::Word => { 0x0000FFFF & value },
-        Size::Long => { value },
+        Size::Byte => 0x000000FF & value,
+        Size::Word => 0x0000FFFF & value,
+        Size::Long => value,
     }
 }
 
 fn set_value_sized(addr: &mut u32, value: u32, size: Size) {
     match size {
-        Size::Byte => { *addr = (*addr & 0xFFFFFF00) | (0x000000FF & value); }
-        Size::Word => { *addr = (*addr & 0xFFFF0000) | (0x0000FFFF & value); }
-        Size::Long => { *addr = value; }
+        Size::Byte => {
+            *addr = (*addr & 0xFFFFFF00) | (0x000000FF & value);
+        },
+        Size::Word => {
+            *addr = (*addr & 0xFFFF0000) | (0x0000FFFF & value);
+        },
+        Size::Long => {
+            *addr = value;
+        },
     }
 }
 
@@ -1956,5 +2072,3 @@ fn get_bit_field_mask(offset: u32, width: u32) -> u32 {
 fn get_bit_field_msb(offset: u32) -> u32 {
     0x80000000 >> offset
 }
-
-

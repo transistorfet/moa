@@ -1,4 +1,3 @@
-
 use femtos::Frequency;
 
 use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device};
@@ -26,6 +25,7 @@ struct TestCase {
     fini: TestState,
 }
 
+#[rustfmt::skip]
 const TEST_CASES: &'static [TestCase] = &[
     /*
     TestCase {
@@ -551,4 +551,3 @@ pub fn run_execute_tests() {
         run_test(case);
     }
 }
-

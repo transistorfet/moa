@@ -28,6 +28,7 @@ use moa_host::{Host, HostError, Audio, Sample};
 ///
 /// The value here is used to shift a bit to get the number of global cycles between each increment
 /// of the envelope attenuation, based on the rate that's currently active
+#[rustfmt::skip]
 const COUNTER_SHIFT_VALUES: &[u16] = &[
     11, 11, 11, 11,
     10, 10, 10, 10,
@@ -53,6 +54,7 @@ const COUNTER_SHIFT_VALUES: &[u16] = &[
 /// than attenuation, and the values will always be below 64.  This table maps each of the 64
 /// possible angle values to a sequence of 8 cycles, and the amount to increment the attenuation
 /// at each point in that cycle
+#[rustfmt::skip]
 const RATE_TABLE: &[u16] = &[
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -120,6 +122,7 @@ const RATE_TABLE: &[u16] = &[
     8, 8, 8, 8, 8, 8, 8, 8,
 ];
 
+#[rustfmt::skip]
 const DETUNE_TABLE: &[u8] = &[
     0,  0,  1,  2,
     0,  0,  1,  2,
@@ -271,9 +274,6 @@ impl EnvelopeGenerator {
         let rate = self.get_scaled_rate(self.envelope_state, rate_adjust);
         let counter_shift = COUNTER_SHIFT_VALUES[rate];
 
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} {:4x} {:4x}", envelope_clock, counter_shift, envelope_clock % (1 << counter_shift));
-//}
         if envelope_clock % (1 << counter_shift) == 0 {
             let update_cycle = (envelope_clock >> counter_shift) & 0x07;
             let increment = RATE_TABLE[rate * 8 + update_cycle as usize];
@@ -286,9 +286,6 @@ impl EnvelopeGenerator {
                     // to bitwise-and with 0xFFC instead, which will wrap the number to a 12-bit signed number, which when
                     // clamped to MAX_ENVELOPE will produce the same results
                     let new_envelope = self.envelope + (((!self.envelope * increment) as i16) >> 4) as u16;
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} {:4x} {:4x} {:4x} {:4x}", self.envelope, update_cycle, rate * 8 + update_cycle as usize, (((!self.envelope * increment) as i16) >> 4) as u16 & 0xFFFC, new_envelope);
-//}
                     if new_envelope > self.envelope {
                         self.envelope_state = EnvelopeState::Decay;
                         self.envelope = 0;
@@ -296,19 +293,16 @@ impl EnvelopeGenerator {
                         self.envelope = new_envelope.min(MAX_ENVELOPE);
                     }
                 },
-                EnvelopeState::Decay |
-                EnvelopeState::Sustain |
-                EnvelopeState::Release => {
+                EnvelopeState::Decay | EnvelopeState::Sustain | EnvelopeState::Release => {
                     // Convert it to a fixed point decimal number of 4 bit : 8 bits, which will be the output
                     self.envelope += increment << 2;
-                    if self.envelope > MAX_ENVELOPE || self.envelope_state == EnvelopeState::Release && self.envelope >= ENVELOPE_CENTER {
+                    if self.envelope > MAX_ENVELOPE
+                        || self.envelope_state == EnvelopeState::Release && self.envelope >= ENVELOPE_CENTER
+                    {
                         self.envelope = MAX_ENVELOPE;
                     }
                 },
             }
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} {:4x} {:4x} {:4x} {:4x}", rate, counter_shift, self.envelope_state as usize, increment, self.envelope);
-//}
         }
     }
 
@@ -411,7 +405,8 @@ impl PhaseGenerator {
             increment.saturating_add(detune)
         } else {
             increment.saturating_sub(detune)
-        }.min(0x1FFFF);
+        }
+        .min(0x1FFFF);
 
         // Apply multiple
         let increment = if self.multiple == 0 {
@@ -440,6 +435,7 @@ impl PhaseGenerator {
 ///
 /// K1 = F11
 /// K0 = F11 & (F10 | F9 | F8) | !F11 & (F10 & F9 & F8)
+#[rustfmt::skip]
 const FNUMBER_TO_KEYCODE: &[u8] = &[
     0, 0, 0, 0, 0, 0, 0, 1,
     2, 3, 3, 3, 3, 3, 3, 3,
@@ -507,7 +503,8 @@ impl Operator {
     }
 
     fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
-        self.envelope.notify_key_change(state, envelope_clock, self.phase.get_rate_adjust());
+        self.envelope
+            .notify_key_change(state, envelope_clock, self.phase.get_rate_adjust());
         self.phase.reset();
     }
 
@@ -518,10 +515,6 @@ impl Operator {
         let phase = self.phase.update_phase(fm_clock);
 
         let mod_phase = phase + modulator;
-
-//if self.debug_name == "ch 2, op 0" {
-//println!("{:4x} = {:4x} + {:4x} + {:4x}, e: {:x}, {:4x} {:4x}", mod_phase, phase, self.phase.increment, modulator, self.envelope.envelope_state as usize, envelope, self.envelope.envelope);
-//}
 
         // The sine table contains the first half of the wave as an attenuation value
         // Use the phase with the sign truncated to get the attenuation, plus the
@@ -567,7 +560,9 @@ impl Channel {
         Self {
             debug_name: debug_name.clone(),
             enabled: (true, true),
-            operators: (0..OPERATORS).map(|i| Operator::new(format!("{}, op {}", debug_name, i))).collect(),
+            operators: (0..OPERATORS)
+                .map(|i| Operator::new(format!("{}, op {}", debug_name, i)))
+                .collect(),
             algorithm: OperatorAlgorithm::A0,
             feedback: 0,
 
@@ -617,10 +612,6 @@ impl Channel {
 
         //let output = sign_extend_u16(output, 14);
 
-        //let output = output * 2 / 3;
-//if self.debug_name == "ch 2" {
-//println!("{:6x}", output);
-//}
         let sample = output as f32 / (1 << 13) as f32;
 
         let left = if self.enabled.0 { sample } else { 0.0 };
@@ -663,7 +654,9 @@ impl Channel {
             },
             OperatorAlgorithm::A5 => {
                 let output1 = self.operators[0].get_output(feedback, clocks);
-                self.operators[1].get_output(output1, clocks) + self.operators[2].get_output(output1, clocks) + self.operators[3].get_output(output1, clocks)
+                self.operators[1].get_output(output1, clocks)
+                    + self.operators[2].get_output(output1, clocks)
+                    + self.operators[3].get_output(output1, clocks)
             },
             OperatorAlgorithm::A6 => {
                 let output1 = self.operators[0].get_output(feedback, clocks);
@@ -672,9 +665,9 @@ impl Channel {
             },
             OperatorAlgorithm::A7 => {
                 self.operators[0].get_output(feedback, clocks)
-                + self.operators[1].get_output(0, clocks)
-                + self.operators[2].get_output(0, clocks)
-                + self.operators[3].get_output(0, clocks)
+                    + self.operators[1].get_output(0, clocks)
+                    + self.operators[2].get_output(0, clocks)
+                    + self.operators[3].get_output(0, clocks)
             },
         }
     }
@@ -808,7 +801,7 @@ impl Steppable for Ym2612 {
         }
         self.source.write_samples(system.clock, &buffer);
 
-        Ok(Duration::from_millis(1))          // Every 1ms of simulated time
+        Ok(Duration::from_millis(1)) // Every 1ms of simulated time
     }
 }
 
@@ -919,7 +912,7 @@ impl Ym2612 {
                 self.channels[ch].operators[op].set_rate(EnvelopeState::Decay, first_decay_rate);
             },
 
-            reg if is_reg_range(reg, 0x70)=> {
+            reg if is_reg_range(reg, 0x70) => {
                 let (ch, op) = get_ch_op(bank, reg);
                 let index = get_index(bank, reg);
 
@@ -938,7 +931,11 @@ impl Ym2612 {
                 // Register is 4 bits, so adjust it to match total_level's scale
                 let sustain_level = (self.registers[0x80 + index] as u16 & 0xF0) << 3;
                 // Adjust the maximum storable value to be the max attenuation
-                let sustain_level = if sustain_level == (0x00F0 << 3) { MAX_ENVELOPE } else { sustain_level };
+                let sustain_level = if sustain_level == (0x00F0 << 3) {
+                    MAX_ENVELOPE
+                } else {
+                    sustain_level
+                };
                 self.channels[ch].operators[op].set_sustain_level(sustain_level);
             },
 
@@ -1033,7 +1030,7 @@ impl Addressable for Ym2612 {
             0..=3 => {
                 // Read the status byte (busy/overflow)
                 data[0] = ((self.timer_a_overflow as u8) << 1) | (self.timer_b_overflow as u8);
-            }
+            },
             _ => {
                 log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
             },
@@ -1078,4 +1075,3 @@ impl Transmutable for Ym2612 {
         Some(self)
     }
 }
-

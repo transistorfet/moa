@@ -1,4 +1,3 @@
-
 use std::f32::consts::PI;
 
 
@@ -72,7 +71,11 @@ impl Iterator for SquareWave {
     fn next(&mut self) -> Option<f32> {
         self.position += 1;
         let samples_per_hz = self.sample_rate as f32 / self.frequency;
-        let result = if (self.position as f32 % samples_per_hz) < (samples_per_hz / 2.0) { 1.0 } else { -1.0 };
+        let result = if (self.position as f32 % samples_per_hz) < (samples_per_hz / 2.0) {
+            1.0
+        } else {
+            -1.0
+        };
         Some(result)
     }
 }
@@ -162,4 +165,3 @@ impl Iterator for SkewedSquareWave {
 pub fn db_to_gain(db: f32) -> f32 {
     (10.0_f32).powf(db / 20.0)
 }
-

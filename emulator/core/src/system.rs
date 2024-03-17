@@ -1,4 +1,3 @@
-
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
@@ -45,7 +44,10 @@ impl System {
     }
 
     pub fn get_device(&self, name: &str) -> Result<Device, Error> {
-        self.devices.get(name).cloned().ok_or_else(|| Error::new(format!("system: no device named {}", name)))
+        self.devices
+            .get(name)
+            .cloned()
+            .ok_or_else(|| Error::new(format!("system: no device named {}", name)))
     }
 
     pub fn add_device(&mut self, name: &str, device: Device) -> Result<(), Error> {

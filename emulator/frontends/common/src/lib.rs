@@ -1,4 +1,3 @@
-
 #[cfg(feature = "tty")]
 pub mod tty;
 
@@ -9,4 +8,3 @@ pub use crate::audio::{AudioMixer, AudioSource};
 pub mod cpal;
 #[cfg(feature = "audio")]
 pub use crate::cpal::CpalAudioOutput;
-

@@ -1,0 +1,32 @@
+name: rustfmt
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
+
+      - name: Select rust version
+        run: |
+          rustup toolchain install nightly --profile minimal --no-self-update
+          rustup default nightly
+          rustup component add rustfmt
+
+      - name: Check rustfmt
+        run: |
+          cargo +nightly fmt --check

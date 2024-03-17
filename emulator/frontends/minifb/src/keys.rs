@@ -1,4 +1,3 @@
-
 use minifb::Key as MiniKey;
 use moa_host::Key;
 
@@ -109,4 +108,3 @@ pub fn map_key(key: MiniKey) -> Key {
         _ => Key::Unknown,
     }
 }
-

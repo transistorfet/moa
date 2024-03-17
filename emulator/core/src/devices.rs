@@ -1,4 +1,3 @@
-
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut, BorrowMutError};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,7 +16,7 @@ pub type Address = u64;
 /// information that might be helpful for debugging.
 pub trait Steppable {
     fn step(&mut self, system: &System) -> Result<Duration, Error>;
-    fn on_error(&mut self, _system: &System) { }
+    fn on_error(&mut self, _system: &System) {}
 }
 
 /// A device that can receive an interrupt.  The `interrupt_state_change()` method
@@ -104,30 +103,22 @@ pub trait Addressable {
 
 #[inline]
 pub fn read_beu16(data: &[u8]) -> u16 {
-    (data[0] as u16) << 8 |
-    (data[1] as u16)
+    (data[0] as u16) << 8 | (data[1] as u16)
 }
 
 #[inline]
 pub fn read_leu16(data: &[u8]) -> u16 {
-    (data[1] as u16) << 8 |
-    (data[0] as u16)
+    (data[1] as u16) << 8 | (data[0] as u16)
 }
 
 #[inline]
 pub fn read_beu32(data: &[u8]) -> u32 {
-    (data[0] as u32) << 24 |
-    (data[1] as u32) << 16 |
-    (data[2] as u32) << 8 |
-    (data[3] as u32)
+    (data[0] as u32) << 24 | (data[1] as u32) << 16 | (data[2] as u32) << 8 | (data[3] as u32)
 }
 
 #[inline]
 pub fn read_leu32(data: &[u8]) -> u32 {
-    (data[3] as u32) << 24 |
-    (data[2] as u32) << 16 |
-    (data[1] as u32) << 8 |
-    (data[0] as u32)
+    (data[3] as u32) << 24 | (data[2] as u32) << 16 | (data[1] as u32) << 8 | (data[0] as u32)
 }
 
 
@@ -239,7 +230,7 @@ pub struct Device(DeviceId, TransmutableBox);
 impl Device {
     pub fn new<T>(value: T) -> Self
     where
-        T: Transmutable + 'static
+        T: Transmutable + 'static,
     {
         Self(DeviceId::new(), wrap_transmutable(value))
     }

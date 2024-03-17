@@ -1,4 +1,3 @@
-
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use femtos::Instant;
@@ -31,9 +30,15 @@ impl Addressable for CoprocessorCoordinator {
     fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             0x100 => {
-                data[0] = if self.bus_request.get() && self.reset.get() { 0x01 } else { 0x00 };
+                data[0] = if self.bus_request.get() && self.reset.get() {
+                    0x01
+                } else {
+                    0x00
+                };
             },
-            _ => { log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr); },
+            _ => {
+                log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
+            },
         }
         log::info!("{}: read from register {:x} of {:?}", DEV_NAME, addr, data);
         Ok(())
@@ -49,7 +54,9 @@ impl Addressable for CoprocessorCoordinator {
             0x200 => {
                 self.reset.set(data[0] == 0);
             },
-            _ => { log::warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+            _ => {
+                log::warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);
+            },
         }
         Ok(())
     }
@@ -101,7 +108,9 @@ pub struct CoprocessorBankArea {
 impl CoprocessorBankArea {
     pub fn new(bus: Rc<RefCell<Bus>>) -> (Self, CoprocessorBankRegister) {
         let base = Rc::new(Cell::new(0));
-        let register = CoprocessorBankRegister { base: base.clone() };
+        let register = CoprocessorBankRegister {
+            base: base.clone(),
+        };
         let bank = Self {
             base,
             bus,
@@ -129,4 +138,3 @@ impl Transmutable for CoprocessorBankArea {
         Some(self)
     }
 }
-

@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Frequency};
 use emulator_hal::bus::BusAccess;
 use emulator_hal_memory::MemoryBlock;
@@ -69,7 +68,9 @@ fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Ins
     // Insert basic initialization
     let len = 0x2000;
     let mut data = Vec::with_capacity(len);
-    unsafe { data.set_len(len); }
+    unsafe {
+        data.set_len(len);
+    }
     let mut memory = MemoryBlock::from(data);
     memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
     memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
@@ -194,4 +195,3 @@ pub fn run_assembler_opcode_tests() {
     }
 }
 */
-

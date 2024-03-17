@@ -1,4 +1,3 @@
-
 use femtos::Frequency;
 
 use moa_core::{System, Error, Debuggable, MemoryBlock, Device};
@@ -47,15 +46,6 @@ pub fn build_computie<H: Host>(host: &H, options: ComputieOptions) -> Result<Sys
 
     let mut cpu = M68k::from_type(M68kType::MC68010, options.frequency);
 
-    //cpu.enable_tracing();
-    //cpu.add_breakpoint(0x10781a);
-    //cpu.add_breakpoint(0x10bc9c);
-    //cpu.add_breakpoint(0x106a94);
-    //cpu.add_breakpoint(0x1015b2);
-    //cpu.add_breakpoint(0x103332);
-    //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
-    //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
-
     cpu.add_breakpoint(0);
 
     system.add_interruptable_device("cpu", Device::new(cpu))?;
@@ -85,15 +75,6 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
 
     let cpu = M68k::from_type(M68kType::MC68030, Frequency::from_hz(10_000_000));
 
-    //cpu.enable_tracing();
-    //cpu.add_breakpoint(0x10781a);
-    //cpu.add_breakpoint(0x10bc9c);
-    //cpu.add_breakpoint(0x106a94);
-    //cpu.add_breakpoint(0x1015b2);
-    //cpu.add_breakpoint(0x103332);
-    //cpu.decoder.dump_disassembly(&mut system, 0x100000, 0x2000);
-    //cpu.decoder.dump_disassembly(&mut system, 0x2ac, 0x200);
-
     system.add_interruptable_device("cpu", Device::new(cpu))?;
 
     Ok(system)
@@ -104,18 +85,39 @@ pub fn launch_terminal_emulator(name: String) {
     use std::time::Duration;
     use std::process::Command;
 
-    Command::new("x-terminal-emulator").arg("-e").arg(&format!("pyserial-miniterm {}", name)).spawn().unwrap();
+    Command::new("x-terminal-emulator")
+        .arg("-e")
+        .arg(&format!("pyserial-miniterm {}", name))
+        .spawn()
+        .unwrap();
     thread::sleep(Duration::from_secs(1));
 }
 
 pub fn launch_slip_connection(name: String) {
     use std::process::Command;
 
-    Command::new("sudo").args(["slattach", "-s", "38400", "-p", "slip", &name]).spawn().unwrap();
-    Command::new("sudo").args(["ifconfig", "sl0", "192.168.1.2", "pointopoint", "192.168.1.200", "up"]).status().unwrap();
-    Command::new("sudo").args(["arp", "-Ds", "192.168.1.200", "enp4s0", "pub"]).status().unwrap();
-    Command::new("sudo").args(["iptables", "-A", "FORWARD", "-i", "sl0", "-j", "ACCEPT"]).status().unwrap();
-    Command::new("sudo").args(["iptables", "-A", "FORWARD", "-o", "sl0", "-j", "ACCEPT"]).status().unwrap();
-    Command::new("sudo").args(["sh", "-c", "echo 1 > /proc/sys/net/ipv4/ip_forward"]).status().unwrap();
+    Command::new("sudo")
+        .args(["slattach", "-s", "38400", "-p", "slip", &name])
+        .spawn()
+        .unwrap();
+    Command::new("sudo")
+        .args(["ifconfig", "sl0", "192.168.1.2", "pointopoint", "192.168.1.200", "up"])
+        .status()
+        .unwrap();
+    Command::new("sudo")
+        .args(["arp", "-Ds", "192.168.1.200", "enp4s0", "pub"])
+        .status()
+        .unwrap();
+    Command::new("sudo")
+        .args(["iptables", "-A", "FORWARD", "-i", "sl0", "-j", "ACCEPT"])
+        .status()
+        .unwrap();
+    Command::new("sudo")
+        .args(["iptables", "-A", "FORWARD", "-o", "sl0", "-j", "ACCEPT"])
+        .status()
+        .unwrap();
+    Command::new("sudo")
+        .args(["sh", "-c", "echo 1 > /proc/sys/net/ipv4/ip_forward"])
+        .status()
+        .unwrap();
 }
-

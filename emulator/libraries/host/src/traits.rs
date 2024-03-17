@@ -1,4 +1,3 @@
-
 use std::fmt;
 use std::error::Error;
 use std::collections::VecDeque;
@@ -131,4 +130,3 @@ impl Audio for DummyAudio {
 
     fn write_samples(&mut self, _clock: Instant, _buffer: &[Sample]) {}
 }
-

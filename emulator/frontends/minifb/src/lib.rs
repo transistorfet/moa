@@ -1,4 +1,3 @@
-
 use std::thread;
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
@@ -10,13 +9,16 @@ use femtos::{Duration as FemtosDuration};
 
 use moa_core::{System, Error, Device};
 use moa_debugger::{Debugger, DebugControl};
-use moa_host::{Host, HostError, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame, FrameReceiver};
+use moa_host::{
+    Host, HostError, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame,
+    FrameReceiver,
+};
 
 use moa_common::{AudioMixer, AudioSource};
 use moa_common::CpalAudioOutput;
 
-mod keys;
 mod controllers;
+mod keys;
 
 use crate::keys::map_key;
 use crate::controllers::map_controller_a;
@@ -28,36 +30,46 @@ const HEIGHT: u32 = 224;
 
 pub fn new(name: &'static str) -> Command {
     Command::new(name)
-        .arg(Arg::new("scale")
-            .short('s')
-            .long("scale")
-            .help("Scale the screen"))
-        .arg(Arg::new("speed")
-            .short('x')
-            .long("speed")
-            .help("Adjust the speed of the simulation"))
-        .arg(Arg::new("threaded")
-            .short('t')
-            .long("threaded")
-            .action(ArgAction::SetTrue)
-            .help("Run the simulation in a separate thread"))
-        .arg(Arg::new("log-level")
-            .short('l')
-            .long("log-level")
-            .help("Set the type of log messages to print"))
-        .arg(Arg::new("debugger")
-            .short('d')
-            .long("debugger")
-            .action(ArgAction::SetTrue)
-            .help("Start the debugger before running machine"))
-        .arg(Arg::new("disable-audio")
-            .short('a')
-            .long("disable-audio")
-            .action(ArgAction::SetTrue)
-            .help("Disable audio output"))
+        .arg(Arg::new("scale").short('s').long("scale").help("Scale the screen"))
+        .arg(
+            Arg::new("speed")
+                .short('x')
+                .long("speed")
+                .help("Adjust the speed of the simulation"),
+        )
+        .arg(
+            Arg::new("threaded")
+                .short('t')
+                .long("threaded")
+                .action(ArgAction::SetTrue)
+                .help("Run the simulation in a separate thread"),
+        )
+        .arg(
+            Arg::new("log-level")
+                .short('l')
+                .long("log-level")
+                .help("Set the type of log messages to print"),
+        )
+        .arg(
+            Arg::new("debugger")
+                .short('d')
+                .long("debugger")
+                .action(ArgAction::SetTrue)
+                .help("Start the debugger before running machine"),
+        )
+        .arg(
+            Arg::new("disable-audio")
+                .short('a')
+                .long("disable-audio")
+                .action(ArgAction::SetTrue)
+                .help("Disable audio output"),
+        )
 }
 
-pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
+pub fn run<I>(matches: ArgMatches, init: I)
+where
+    I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static,
+{
     if matches.get_flag("threaded") {
         run_threaded(matches, init);
     } else {
@@ -65,16 +77,20 @@ pub fn run<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBui
     }
 }
 
-pub fn run_inline<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> {
+pub fn run_inline<I>(matches: ArgMatches, init: I)
+where
+    I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error>,
+{
     let mut frontend = MiniFrontendBuilder::default();
     let system = init(&mut frontend).unwrap();
 
-    frontend
-        .build()
-        .start(matches, Some(system));
+    frontend.build().start(matches, Some(system));
 }
 
-pub fn run_threaded<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static {
+pub fn run_threaded<I>(matches: ArgMatches, init: I)
+where
+    I: FnOnce(&mut MiniFrontendBuilder) -> Result<System, Error> + Send + 'static,
+{
     let frontend = Arc::new(Mutex::new(MiniFrontendBuilder::default()));
 
     {
@@ -88,10 +104,7 @@ pub fn run_threaded<I>(matches: ArgMatches, init: I) where I: FnOnce(&mut MiniFr
 
     wait_until_initialized(frontend.clone());
 
-    frontend
-        .lock().unwrap()
-        .build()
-        .start(matches, None);
+    frontend.lock().unwrap().build().start(matches, None);
 }
 
 fn wait_until_initialized(frontend: Arc<Mutex<MiniFrontendBuilder>>) {
@@ -156,7 +169,9 @@ impl Host for MiniFrontendBuilder {
 
     fn register_controllers(&mut self, sender: EventSender<ControllerEvent>) -> Result<(), HostError<Self::Error>> {
         if self.controllers.is_some() {
-            return Err(HostError::Specific(Error::new("A controller updater has already been registered with the frontend")));
+            return Err(HostError::Specific(Error::new(
+                "A controller updater has already been registered with the frontend",
+            )));
         }
         self.controllers = Some(sender);
         Ok(())
@@ -253,13 +268,7 @@ impl MiniFrontend {
             queue.request_encoding(PixelEncoding::ARGB);
         }
 
-        let mut window = minifb::Window::new(
-            "Test - ESC to exit",
-            size.0 as usize,
-            size.1 as usize,
-            options,
-        )
-        .unwrap_or_else(|e| {
+        let mut window = minifb::Window::new("Test - ESC to exit", size.0 as usize, size.1 as usize, options).unwrap_or_else(|e| {
             panic!("{}", e);
         });
 
@@ -345,7 +354,9 @@ impl MiniFrontend {
                 if let Some((_clock, frame)) = queue.latest() {
                     last_frame = frame
                 }
-                window.update_with_buffer(&last_frame.bitmap, last_frame.width as usize, last_frame.height as usize).unwrap();
+                window
+                    .update_with_buffer(&last_frame.bitmap, last_frame.width as usize, last_frame.height as usize)
+                    .unwrap();
             }
         }
     }
@@ -363,4 +374,3 @@ impl MiniFrontend {
         }
     }
 }
-

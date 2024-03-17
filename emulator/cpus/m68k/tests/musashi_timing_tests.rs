@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Frequency};
 use emulator_hal::bus::BusAccess;
 use emulator_hal_memory::MemoryBlock;
@@ -17,7 +16,9 @@ fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Ins
     // Insert basic initialization
     let len = 0x10_0000;
     let mut data = Vec::with_capacity(len);
-    unsafe { data.set_len(len); }
+    unsafe {
+        data.set_len(len);
+    }
     let mut memory = MemoryBlock::from(data);
     memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
     memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
@@ -75,7 +76,10 @@ pub fn run_timing_tests() {
         print!("Testing for {:?}...", case.ins);
         match run_timing_test(case) {
             Ok(()) => println!("ok"),
-            Err(err) => { println!("{:?}", err); errors += 1 },
+            Err(err) => {
+                println!("{:?}", err);
+                errors += 1
+            },
         }
 
         if let Err(_) = run_timing_test(case) {
@@ -1624,4 +1628,3 @@ pub const TIMING_TESTS: &'static [TimingCase] = &[
     TimingCase { cpu: M68kType::MC68000, data: &[0x4A98], timing: ( 12,  12,   6), ins: Instruction::TST(Target::IndirectARegInc(0), Size::Long) },
     TimingCase { cpu: M68kType::MC68000, data: &[0x4E58], timing: ( 12,  12,   6), ins: Instruction::UNLK(0) },
 ];
-

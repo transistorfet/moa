@@ -1,4 +1,3 @@
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Direction {
     ToAcc,
@@ -206,5 +205,3 @@ impl RegisterPair {
         matches!(self, RegisterPair::IX | RegisterPair::IY)
     }
 }
-
-

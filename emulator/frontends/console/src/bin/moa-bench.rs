@@ -1,4 +1,3 @@
-
 use std::thread;
 use std::time::Duration;
 use femtos::Frequency;
@@ -45,4 +44,3 @@ fn main() {
     });
     thread::sleep(Duration::from_secs(10));
 }
-

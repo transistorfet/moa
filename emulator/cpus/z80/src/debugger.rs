@@ -1,4 +1,3 @@
-
 use moa_core::{System, Error, Address, Debuggable};
 
 use crate::state::{Z80, Z80Error};
@@ -37,10 +36,10 @@ impl Debuggable for Z80 {
 
     fn run_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
         match args[0] {
-            "l" => {
-                self.state.reg[Register::L as usize] = 0x05
+            "l" => self.state.reg[Register::L as usize] = 0x05,
+            _ => {
+                return Ok(true);
             },
-            _ => { return Ok(true); },
         }
         Ok(false)
     }
@@ -62,4 +61,3 @@ impl Z80 {
         Ok(())
     }
 }
-

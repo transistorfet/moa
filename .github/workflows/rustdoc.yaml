@@ -1,0 +1,32 @@
+name: rustdoc
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  rustdocs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
+
+      - name: Select rust version
+        run: |
+          rm Cargo.lock
+          rustup toolchain install nightly --profile minimal --no-self-update
+          rustup default nightly
+
+      - name: Build rustdoc
+        run: |
+          RUSTDOCFLAGS="--deny=warnings --cfg=docsrs" cargo doc --all-features

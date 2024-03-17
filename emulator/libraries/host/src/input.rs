@@ -1,4 +1,3 @@
-
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 
@@ -35,4 +34,3 @@ impl<T> EventReceiver<T> {
         self.queue.lock().unwrap().pop_front()
     }
 }
-

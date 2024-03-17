@@ -1,4 +1,3 @@
-
 use std::fs;
 
 use moa_core::Error;
@@ -39,5 +38,3 @@ pub fn load_rom_file(filename: &str) -> Result<Vec<u8>, Error> {
 
     Ok(contents)
 }
-
-

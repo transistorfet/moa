@@ -1,4 +1,3 @@
- 
 mod audio;
 mod controllers;
 mod gfx;
@@ -14,4 +13,3 @@ pub use crate::mouse::{MouseButton, MouseEventType, MouseEvent, MouseState};
 pub use crate::controllers::{ControllerDevice, ControllerInput, ControllerEvent};
 pub use crate::input::{EventSender, EventReceiver, event_queue};
 pub use crate::traits::{Host, HostError, Tty, Audio, ClockedQueue, DummyAudio};
-

@@ -1,4 +1,3 @@
-
 use femtos::Frequency;
 
 use moa_core::{System, Error, MemoryBlock, Debuggable, Device};
@@ -80,7 +79,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     //cpu.add_breakpoint(0x400694);       // Ram Test
 
     //cpu.add_breakpoint(0x400170);       // Failed, loops infinitely
-    cpu.add_breakpoint(0x4000f4);       // Failed, should show the sad mac
+    cpu.add_breakpoint(0x4000f4); // Failed, should show the sad mac
     //cpu.add_breakpoint(0x4006ae);
     //cpu.add_breakpoint(0x400706);
     //cpu.add_breakpoint(0x400722);       // end of ram test
@@ -96,7 +95,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
 
     //cpu.add_breakpoint(0x40045c);
     //cpu.add_breakpoint(0x400614);     // Start of InitIO
-    cpu.add_breakpoint(0x40062a);     // Loop in InitIO
+    cpu.add_breakpoint(0x40062a); // Loop in InitIO
     //cpu.add_breakpoint(0x400648);
     //cpu.add_breakpoint(0x40064c);
     //cpu.add_breakpoint(0x4014a6);       // DrvrInstall
@@ -107,7 +106,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     // Issue of writing to 0x100000 which doesn't exist
     cpu.add_breakpoint(0x400d62);
 
-    cpu.add_breakpoint(0x400464);       // Boot Screen
+    cpu.add_breakpoint(0x400464); // Boot Screen
 
     /*
     use crate::devices::Addressable;
@@ -127,4 +126,3 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
 
     Ok(system)
 }
-

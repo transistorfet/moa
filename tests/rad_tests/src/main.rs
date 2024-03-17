@@ -1,4 +1,3 @@
-
 const DEFAULT_RAD_TESTS: &str = "tests/jsmoo/misc/tests/GeneratedTests/z80/v1/";
 
 use std::rc::Rc;
@@ -171,7 +170,7 @@ fn init_execute_test(cputype: Z80Type, state: &TestState, ports: &[TestPort]) ->
 
 fn assert_value<T>(actual: T, expected: T, message: &str) -> Result<(), Error>
 where
-    T: PartialEq + Debug + UpperHex
+    T: PartialEq + Debug + UpperHex,
 {
     if actual == expected {
         Ok(())
@@ -180,7 +179,13 @@ where
     }
 }
 
-fn load_state(cpu: &mut Z80, system: &mut System, io_bus: Rc<RefCell<Bus>>, initial: &TestState, ports: &[TestPort]) -> Result<(), Error> {
+fn load_state(
+    cpu: &mut Z80,
+    system: &mut System,
+    io_bus: Rc<RefCell<Bus>>,
+    initial: &TestState,
+    ports: &[TestPort],
+) -> Result<(), Error> {
     cpu.state.reg[0] = initial.b;
     cpu.state.reg[1] = initial.c;
     cpu.state.reg[2] = initial.d;
@@ -223,7 +228,14 @@ fn load_state(cpu: &mut Z80, system: &mut System, io_bus: Rc<RefCell<Bus>>, init
 
 const IGNORE_FLAG_MASK: u8 = Flags::F3 as u8 | Flags::F5 as u8;
 
-fn assert_state(cpu: &Z80, system: &System, io_bus: Rc<RefCell<Bus>>, expected: &TestState, check_extra_flags: bool, ports: &[TestPort]) -> Result<(), Error> {
+fn assert_state(
+    cpu: &Z80,
+    system: &System,
+    io_bus: Rc<RefCell<Bus>>,
+    expected: &TestState,
+    check_extra_flags: bool,
+    ports: &[TestPort],
+) -> Result<(), Error> {
     assert_value(cpu.state.reg[0], expected.b, "b")?;
     assert_value(cpu.state.reg[1], expected.c, "c")?;
     assert_value(cpu.state.reg[2], expected.d, "d")?;
@@ -279,14 +291,24 @@ fn assert_state(cpu: &Z80, system: &System, io_bus: Rc<RefCell<Bus>>, expected: 
     Ok(())
 }
 
-fn step_cpu_and_assert(cpu: &mut Z80, system: &System, io_bus: Rc<RefCell<Bus>>, case: &TestCase, args: &Args) -> Result<(), Error> {
+fn step_cpu_and_assert(
+    cpu: &mut Z80,
+    system: &System,
+    io_bus: Rc<RefCell<Bus>>,
+    case: &TestCase,
+    args: &Args,
+) -> Result<(), Error> {
     let clock_elapsed = cpu.step(system)?;
 
     assert_state(cpu, system, io_bus, &case.final_state, args.check_extra_flags, &case.ports)?;
     if args.check_timings {
         let cycles = clock_elapsed / cpu.frequency.period_duration();
         if cycles != case.cycles.len() as Address {
-            return Err(Error::assertion(format!("expected instruction to take {} cycles, but took {}", case.cycles.len(), cycles)));
+            return Err(Error::assertion(format!(
+                "expected instruction to take {} cycles, but took {}",
+                case.cycles.len(),
+                cycles
+            )));
         }
     }
 
@@ -309,7 +331,7 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                     initial_cpu.dump_state(system.clock);
                     cpu.dump_state(system.clock);
                 }
-                println!("FAILED: {:?}",  err);
+                println!("FAILED: {:?}", err);
             }
             Err(err)
         },
@@ -353,7 +375,7 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
         if let Err(err) = result {
             failed += 1;
             if !args.quiet {
-                println!("FAILED: {:?}",  err);
+                println!("FAILED: {:?}", err);
             }
         } else {
             passed += 1
@@ -426,7 +448,12 @@ fn run_all_tests(args: &Args) {
     }
 
     println!();
-    println!("passed: {}, failed: {}, total {:.0}%", passed, failed, ((passed as f32) / (passed as f32 + failed as f32)) * 100.0);
+    println!(
+        "passed: {}, failed: {}, total {:.0}%",
+        passed,
+        failed,
+        ((passed as f32) / (passed as f32 + failed as f32)) * 100.0
+    );
     println!("completed in {}m {}s", elapsed_secs / 60, elapsed_secs % 60);
 }
 
@@ -438,28 +465,24 @@ fn is_undocumented_instruction(name: &str) -> bool {
     opcodes.extend(vec![0; 3 - opcodes.len()]);
 
     match (opcodes[0], opcodes[1]) {
-        (0xCB, op) => {
-            (0x30..=0x37).contains(&op)
-        },
-        (0xDD, 0xCB) |
-        (0xFD, 0xCB) => {
-            !(opcodes[2] & 0x07 == 0x06 && opcodes[2] != 0x36)
-        },
-        (0xDD, op) |
-        (0xFD, op) => {
+        (0xCB, op) => (0x30..=0x37).contains(&op),
+        (0xDD, 0xCB) | (0xFD, 0xCB) => !(opcodes[2] & 0x07 == 0x06 && opcodes[2] != 0x36),
+        (0xDD, op) | (0xFD, op) => {
             let upper = op & 0xF0;
             let lower = op & 0x0F;
-            !(lower == 0x0E && (0x40..=0xB0).contains(&upper) || (0x70..=0x77).contains(&op) && op != 0x76 || op != 0x76 && (0x70..=0x77).contains(&op) || lower == 0x06 && (0x30..=0xB0).contains(&upper) && upper != 0x70) &&
-            !((0x21..=0x23).contains(&op) || (0x34..=0x36).contains(&op) || (0x29..=0x2B).contains(&op)) &&
-            !(lower == 0x09 && upper <= 0x30) &&
-            !(op == 0xE1 || op == 0xE3 || op == 0xE5 || op == 0xE9 || op == 0xF9)
+            !(lower == 0x0E && (0x40..=0xB0).contains(&upper)
+                || (0x70..=0x77).contains(&op) && op != 0x76
+                || op != 0x76 && (0x70..=0x77).contains(&op)
+                || lower == 0x06 && (0x30..=0xB0).contains(&upper) && upper != 0x70)
+                && !((0x21..=0x23).contains(&op) || (0x34..=0x36).contains(&op) || (0x29..=0x2B).contains(&op))
+                && !(lower == 0x09 && upper <= 0x30)
+                && !(op == 0xE1 || op == 0xE3 || op == 0xE5 || op == 0xE9 || op == 0xF9)
         },
         (0xED, op) => {
             // NOTE this assumes the tests don't have the missing instructions, or the Z180 instructions
             //      so it only checks for the undocumented ones
             op == 0x63 || op == 0x6B || op == 0x70 || op == 0x71
         },
-        _ => false
+        _ => false,
     }
 }
-

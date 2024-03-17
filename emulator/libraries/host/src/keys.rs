@@ -1,4 +1,3 @@
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Key {
     A,
@@ -124,4 +123,3 @@ impl KeyEvent {
         }
     }
 }
-

@@ -1,20 +1,19 @@
-
 use femtos::{Instant, Duration};
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 use moa_host::{self, Host, HostError, ControllerDevice, ControllerInput, ControllerEvent, EventReceiver};
 use moa_signals::{Signal};
 
-const REG_VERSION: Address      = 0x01;
-const REG_DATA1: Address        = 0x03;
-const REG_DATA2: Address        = 0x05;
-const REG_DATA3: Address        = 0x07;
-const REG_CTRL1: Address        = 0x09;
-const REG_CTRL2: Address        = 0x0B;
-const REG_CTRL3: Address        = 0x0D;
-const REG_S_CTRL1: Address      = 0x13;
-const REG_S_CTRL2: Address      = 0x19;
-const REG_S_CTRL3: Address      = 0x1F;
+const REG_VERSION: Address = 0x01;
+const REG_DATA1: Address = 0x03;
+const REG_DATA2: Address = 0x05;
+const REG_DATA3: Address = 0x07;
+const REG_CTRL1: Address = 0x09;
+const REG_CTRL2: Address = 0x0B;
+const REG_CTRL3: Address = 0x0D;
+const REG_S_CTRL1: Address = 0x13;
+const REG_S_CTRL2: Address = 0x19;
+const REG_S_CTRL3: Address = 0x1F;
 
 
 const DEV_NAME: &str = "genesis_controller";
@@ -50,13 +49,13 @@ impl GenesisControllerPort {
         let th_state = (self.outputs & 0x40) != 0;
 
         match (th_state, self.th_count) {
-            (true,  0) => self.outputs | ((inputs & 0x003F) as u8),
+            (true, 0) => self.outputs | ((inputs & 0x003F) as u8),
             (false, 1) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
-            (true,  1) => self.outputs | ((inputs & 0x003F) as u8),
+            (true, 1) => self.outputs | ((inputs & 0x003F) as u8),
             (false, 2) => self.outputs | (((inputs & 0x00C0) >> 2) as u8),
-            (true,  2) => self.outputs | ((inputs & 0x0030) as u8) | (((inputs & 0x0F00) >> 8) as u8),
+            (true, 2) => self.outputs | ((inputs & 0x0030) as u8) | (((inputs & 0x0F00) >> 8) as u8),
             (false, 3) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | 0x0F,
-            (true,  3) => self.outputs | ((inputs & 0x003F) as u8),
+            (true, 3) => self.outputs | ((inputs & 0x003F) as u8),
             (false, 0) => self.outputs | (((inputs & 0x00C0) >> 2) as u8) | ((inputs & 0x0003) as u8),
             _ => 0,
         }
@@ -159,17 +158,39 @@ impl Addressable for GenesisControllers {
         }
 
         match addr {
-            REG_VERSION => { data[i] = 0xA0; } // Overseas Version, NTSC, No Expansion
-            REG_DATA1 => { data[i] = self.port_1.get_data(); },
-            REG_DATA2 => { data[i] = self.port_2.get_data(); },
-            REG_DATA3 => { data[i] = self.expansion.get_data(); },
-            REG_CTRL1 => { data[i] = self.port_1.ctrl; },
-            REG_CTRL2 => { data[i] = self.port_2.ctrl; },
-            REG_CTRL3 => { data[i] = self.expansion.ctrl; },
-            REG_S_CTRL1 => { data[i] = self.port_1.s_ctrl | 0x02; },
-            REG_S_CTRL2 => { data[i] = self.port_2.s_ctrl | 0x02; },
-            REG_S_CTRL3 => { data[i] = self.expansion.s_ctrl | 0x02; },
-            _ => { log::warn!("{}: !!! unhandled reading from {:0x}", DEV_NAME, addr); },
+            REG_VERSION => {
+                data[i] = 0xA0;
+            }, // Overseas Version, NTSC, No Expansion
+            REG_DATA1 => {
+                data[i] = self.port_1.get_data();
+            },
+            REG_DATA2 => {
+                data[i] = self.port_2.get_data();
+            },
+            REG_DATA3 => {
+                data[i] = self.expansion.get_data();
+            },
+            REG_CTRL1 => {
+                data[i] = self.port_1.ctrl;
+            },
+            REG_CTRL2 => {
+                data[i] = self.port_2.ctrl;
+            },
+            REG_CTRL3 => {
+                data[i] = self.expansion.ctrl;
+            },
+            REG_S_CTRL1 => {
+                data[i] = self.port_1.s_ctrl | 0x02;
+            },
+            REG_S_CTRL2 => {
+                data[i] = self.port_2.s_ctrl | 0x02;
+            },
+            REG_S_CTRL3 => {
+                data[i] = self.expansion.s_ctrl | 0x02;
+            },
+            _ => {
+                log::warn!("{}: !!! unhandled reading from {:0x}", DEV_NAME, addr);
+            },
         }
         log::info!("{}: read from register {:x} the value {:x}", DEV_NAME, addr, data[0]);
         Ok(())
@@ -180,16 +201,36 @@ impl Addressable for GenesisControllers {
 
         log::info!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
         match addr {
-            REG_DATA1 => { self.port_1.set_data(data[0]); }
-            REG_DATA2 => { self.port_2.set_data(data[0]); },
-            REG_DATA3 => { self.expansion.set_data(data[0]); },
-            REG_CTRL1 => { self.port_1.set_ctrl(data[0]); },
-            REG_CTRL2 => { self.port_2.set_ctrl(data[0]); },
-            REG_CTRL3 => { self.expansion.set_ctrl(data[0]); },
-            REG_S_CTRL1 => { self.port_1.s_ctrl = data[0] & 0xF8; },
-            REG_S_CTRL2 => { self.port_2.s_ctrl = data[0] & 0xF8; },
-            REG_S_CTRL3 => { self.expansion.s_ctrl = data[0] & 0xF8; },
-            _ => { log::warn!("{}: !!! unhandled write of {:0x} to {:0x}", DEV_NAME, data[0], addr); },
+            REG_DATA1 => {
+                self.port_1.set_data(data[0]);
+            },
+            REG_DATA2 => {
+                self.port_2.set_data(data[0]);
+            },
+            REG_DATA3 => {
+                self.expansion.set_data(data[0]);
+            },
+            REG_CTRL1 => {
+                self.port_1.set_ctrl(data[0]);
+            },
+            REG_CTRL2 => {
+                self.port_2.set_ctrl(data[0]);
+            },
+            REG_CTRL3 => {
+                self.expansion.set_ctrl(data[0]);
+            },
+            REG_S_CTRL1 => {
+                self.port_1.s_ctrl = data[0] & 0xF8;
+            },
+            REG_S_CTRL2 => {
+                self.port_2.s_ctrl = data[0] & 0xF8;
+            },
+            REG_S_CTRL3 => {
+                self.expansion.s_ctrl = data[0] & 0xF8;
+            },
+            _ => {
+                log::warn!("{}: !!! unhandled write of {:0x} to {:0x}", DEV_NAME, data[0], addr);
+            },
         }
         Ok(())
     }
@@ -197,7 +238,7 @@ impl Addressable for GenesisControllers {
 
 impl Steppable for GenesisControllers {
     fn step(&mut self, _system: &System) -> Result<Duration, Error> {
-        let duration = Duration::from_micros(100);     // Update every 100us
+        let duration = Duration::from_micros(100); // Update every 100us
 
         while let Some(event) = self.receiver.receive() {
             self.process_event(event);
@@ -222,5 +263,3 @@ impl Transmutable for GenesisControllers {
         Some(self)
     }
 }
-
-

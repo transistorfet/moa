@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Frequency};
 use emulator_hal::bus::BusAccess;
 use emulator_hal::step::Step;
@@ -44,7 +43,9 @@ where
     // Insert basic initialization
     let len = 0x10_0000;
     let mut data = Vec::with_capacity(len);
-    unsafe { data.set_len(len); }
+    unsafe {
+        data.set_len(len);
+    }
     let mut memory = MemoryBlock::from(data);
     memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
     memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
@@ -78,7 +79,7 @@ fn build_state(state: &TestState) -> M68kState {
 fn load_memory<Bus: BusAccess<u32, Instant>>(bus: &mut Bus, data: &[u16]) {
     for i in 0..data.len() {
         bus.write_beu16(Instant::START, (i << 1) as u32, data[i]).unwrap();
-    } 
+    }
 }
 
 fn run_test(case: &TestCase) {
@@ -708,4 +709,3 @@ const TEST_CASES: &'static [TestCase] = &[
         fini: TestState { pc: 0x00000002, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000080, d1: 0x0000007F, a0: 0x00000000, a1: 0x00000000, sr: 0x2719, mem: 0x00000000 },
     },
 ];
-

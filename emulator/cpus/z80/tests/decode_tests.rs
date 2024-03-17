@@ -1,4 +1,3 @@
-
 use femtos::Frequency;
 
 use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device};
@@ -55,6 +54,7 @@ fn run_all_decode_tests() {
     }
 }
 
+#[rustfmt::skip]
 const DECODE_TESTS: &'static [(&[u8], Instruction)] = &[
     (&[0x00],               Instruction::NOP),
     (&[0x01, 0x01, 0x02],   Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::BC), LoadTarget::ImmediateWord(0x0201))),
@@ -70,4 +70,3 @@ const DECODE_TESTS: &'static [(&[u8], Instruction)] = &[
     (&[0xDD, 0x84],         Instruction::ADDa(Target::DirectRegHalf(IndexRegisterHalf::IXH))),
     (&[0xDD, 0x85],         Instruction::ADDa(Target::DirectRegHalf(IndexRegisterHalf::IXL))),
 ];
-

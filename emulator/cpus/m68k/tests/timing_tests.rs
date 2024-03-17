@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Frequency};
 use emulator_hal::bus::BusAccess;
 use emulator_hal_memory::MemoryBlock;
@@ -19,16 +18,21 @@ struct TimingCase {
     ins: Instruction,
 }
 
-const TIMING_TESTS: &'static [TimingCase] = &[
-    TimingCase { cpu: M68kType::MC68000, data: &[0xD090], timing: ( 14,  14,   6), ins: Instruction::ADD(Target::IndirectAReg(0), Target::DirectDReg(0), Size::Long) },
-];
+const TIMING_TESTS: &'static [TimingCase] = &[TimingCase {
+    cpu: M68kType::MC68000,
+    data: &[0xD090],
+    timing: (14, 14, 6),
+    ins: Instruction::ADD(Target::IndirectAReg(0), Target::DirectDReg(0), Size::Long),
+}];
 
 
 fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Instant>) {
     // Insert basic initialization
     let len = 0x10_0000;
     let mut data = Vec::with_capacity(len);
-    unsafe { data.set_len(len); }
+    unsafe {
+        data.set_len(len);
+    }
     let mut memory = MemoryBlock::from(data);
     memory.write_beu32(Instant::START, 0, INIT_STACK).unwrap();
     memory.write_beu32(Instant::START, 4, INIT_ADDR).unwrap();
@@ -85,7 +89,10 @@ pub fn run_timing_tests() {
         print!("Testing for {:?}...", case.ins);
         match run_timing_test(case) {
             Ok(()) => println!("ok"),
-            Err(err) => { println!("{:?}", err); errors += 1 },
+            Err(err) => {
+                println!("{:?}", err);
+                errors += 1
+            },
         }
 
         if let Err(_) = run_timing_test(case) {
@@ -97,4 +104,3 @@ pub fn run_timing_tests() {
         panic!("{} errors", errors);
     }
 }
-

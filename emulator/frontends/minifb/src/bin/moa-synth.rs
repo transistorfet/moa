@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Duration, Frequency};
 
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
@@ -26,20 +25,23 @@ impl SynthControl {
 impl Steppable for SynthControl {
     fn step(&mut self, system: &System) -> Result<Duration, Error> {
         if let Some(event) = self.key_receiver.receive() {
-
             match event.key {
                 Key::Enter => {
                     system.get_bus().write_u8(system.clock, 0x00, 0x28)?;
-                    system.get_bus().write_u8(system.clock, 0x01, if event.state { 0xF0 } else { 0x00 })?;
+                    system
+                        .get_bus()
+                        .write_u8(system.clock, 0x01, if event.state { 0xF0 } else { 0x00 })?;
                 },
 
                 Key::A => {
                     system.get_bus().write_u8(system.clock, 0x10, 0x84)?;
                     system.get_bus().write_u8(system.clock, 0x10, 0x0F)?;
-                    system.get_bus().write_u8(system.clock, 0x10, if event.state { 0x90 } else { 0x9F })?;
+                    system
+                        .get_bus()
+                        .write_u8(system.clock, 0x10, if event.state { 0x90 } else { 0x9F })?;
                 },
 
-                _ => { },
+                _ => {},
             }
         }
 
@@ -79,8 +81,7 @@ fn initialize_ym(ym_sound: Device) -> Result<(), Error> {
 }
 
 fn main() {
-    let matches = moa_minifb::new("YM2612 Tester/Synth")
-        .get_matches();
+    let matches = moa_minifb::new("YM2612 Tester/Synth").get_matches();
 
     moa_minifb::run(matches, |host| {
         let mut system = System::default();
@@ -103,5 +104,3 @@ fn main() {
         Ok(system)
     });
 }
-
-

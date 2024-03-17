@@ -1,4 +1,3 @@
-
 use core::fmt::{self, Write};
 use femtos::{Duration, Frequency};
 
@@ -14,10 +13,10 @@ pub type ClockCycles = u16;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum AddressWidth {
-    A32 = 32,    // MC68020+
-    A24 = 24,    // MC68000 64-Pin, MC68010
-    A22 = 22,    // MC68008 52-Pin
-    A20 = 20,    // MC68008 48-Pin
+    A32 = 32, // MC68020+
+    A24 = 24, // MC68000 64-Pin, MC68010
+    A22 = 22, // MC68008 52-Pin
+    A20 = 20, // MC68008 48-Pin
 }
 
 #[allow(dead_code)]
@@ -99,7 +98,7 @@ impl CpuInfo {
                 address_width: AddressWidth::A32,
                 data_width: DataWidth::D32,
                 frequency,
-            }
+            },
         }
     }
 }
@@ -109,6 +108,7 @@ const FLAGS_ON_RESET: u16 = 0x2700;
 #[repr(u16)]
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[rustfmt::skip]
 pub enum Flags {
     Carry       = 0x0001,
     Overflow    = 0x0002,
@@ -124,6 +124,7 @@ pub enum Flags {
 #[repr(u8)]
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[rustfmt::skip]
 pub enum Exceptions {
     BusError            = 2,
     AddressError        = 3,
@@ -298,4 +299,3 @@ impl InterruptPriority {
         }
     }
 }
-

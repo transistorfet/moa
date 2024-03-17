@@ -1,4 +1,3 @@
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ControllerDevice {
     A,
@@ -37,4 +36,3 @@ impl ControllerEvent {
         }
     }
 }
-

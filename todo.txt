@@ -1,17 +1,19 @@
 
+* convert the Z80
+* implement Inspect/Debug traits
 * fix dump_state everywhere, which now requires a writer.  Is there an easier way?  Is there a way that doesn't require std
-* can you clean it up more?
-* implement the inspect and debug traits
-* move the interrupt controller logic to the step() function only, and have a customish interrupt interface into the sim
+* fix it to use the full 68k address space, and maybe see if it's possible to make the address translation cleaner/nicer/simpler/faster
+* figure out how to do interrupts, and add them to emulator-hal, implement them in m68k
+* convert peripherals to use BusAccess and Step
+* replace Addressable/Steppable and modify Transmutable to use the emulator-hal traits
+* remove the custom moa impls from m68k if possible at this point
+* publish the emulator-hal crate
+* publish the m68k and z80 crates
 
-* do the Z80?  Should that be another PR?
-* fix the tests
-* fix all the clippy issues
 
 * it doesn't work when using debug due to math checks, so fix them
 
-* change all the inspection and debugging things to return a struct which can then be printed by the frontend
-
+-----
 
 * there are many issues with the coprocessor address space, and the VDP
 * I mapped the sn sound chip into 0xC00010, in the middle of the VDP's address space, and didn't get a runtime error!!! needs fixing

@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Duration, Frequency};
 
 use moa_core::{System, Error, Address, Steppable, Addressable, Transmutable};
@@ -95,15 +94,23 @@ impl MC68681Port {
 
     pub fn set_tx_status(&mut self, value: bool) {
         match value {
-            true => { self.status |= SR_TX_READY | SR_TX_EMPTY; },
-            false => { self.status &= !(SR_TX_READY | SR_TX_EMPTY); },
+            true => {
+                self.status |= SR_TX_READY | SR_TX_EMPTY;
+            },
+            false => {
+                self.status &= !(SR_TX_READY | SR_TX_EMPTY);
+            },
         }
     }
 
     pub fn set_rx_status(&mut self, value: bool) {
         match value {
-            true => { self.status |= SR_RX_READY; },
-            false => { self.status &= !SR_RX_READY; },
+            true => {
+                self.status |= SR_RX_READY;
+            },
+            false => {
+                self.status &= !SR_RX_READY;
+            },
         }
     }
 
@@ -126,7 +133,7 @@ impl MC68681Port {
     }
 
     pub fn handle_command(&mut self, data: u8) -> Option<bool> {
-        let rx_cmd = data& 0x03;
+        let rx_cmd = data & 0x03;
         if rx_cmd == 0b01 {
             self.rx_enabled = true;
         } else if rx_cmd == 0b10 {
@@ -202,7 +209,9 @@ impl MC68681 {
     }
 
     fn check_interrupt_state(&mut self, system: &System) -> Result<(), Error> {
-        system.get_interrupt_controller().set((self.int_status & self.int_mask) != 0, 4, self.int_vector)
+        system
+            .get_interrupt_controller()
+            .set((self.int_status & self.int_mask) != 0, 4, self.int_vector)
     }
 }
 
@@ -254,17 +263,13 @@ impl Addressable for MC68681 {
 
     fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
-            REG_SRA_RD => {
-                data[0] = self.port_a.status
-            },
+            REG_SRA_RD => data[0] = self.port_a.status,
             REG_RBA_RD => {
                 data[0] = self.port_a.input;
                 self.port_a.set_rx_status(false);
                 self.set_interrupt_flag(ISR_CH_A_RX_READY_FULL, false);
             },
-            REG_SRB_RD => {
-                data[0] = self.port_b.status
-            },
+            REG_SRB_RD => data[0] = self.port_b.status,
             REG_RBB_RD => {
                 data[0] = self.port_b.input;
                 self.port_b.set_rx_status(false);
@@ -294,7 +299,7 @@ impl Addressable for MC68681 {
                 }
                 self.set_interrupt_flag(ISR_TIMER_CHANGE, false);
             },
-            _ => { },
+            _ => {},
         }
 
         if addr != REG_SRA_RD && addr != REG_SRB_RD {
@@ -312,7 +317,7 @@ impl Addressable for MC68681 {
             },
             REG_ACR_WR => {
                 self.acr = data[0];
-            }
+            },
             REG_TBA_WR => {
                 log::debug!("{}a: write {}", DEV_NAME, data[0] as char);
                 self.port_a.send_byte(data[0]);
@@ -354,7 +359,7 @@ impl Addressable for MC68681 {
             REG_OUT_RESET => {
                 self.output_state &= !data[0];
             },
-            _ => { },
+            _ => {},
         }
         Ok(())
     }
