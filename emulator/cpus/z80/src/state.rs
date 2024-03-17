@@ -1,4 +1,3 @@
-
 use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Frequency};
@@ -135,9 +134,20 @@ impl Z80 {
         }
     }
 
-    pub fn from_type(cputype: Z80Type, frequency: Frequency, bus: Rc<RefCell<Bus>>, addr_offset: Address, io_bus: Option<(Rc<RefCell<Bus>>, Address)>) -> Self {
+    pub fn from_type(
+        cputype: Z80Type,
+        frequency: Frequency,
+        bus: Rc<RefCell<Bus>>,
+        addr_offset: Address,
+        io_bus: Option<(Rc<RefCell<Bus>>, Address)>,
+    ) -> Self {
         match cputype {
-            Z80Type::Z80 => Self::new(cputype, frequency, BusPort::new(addr_offset, 16, 8, bus), io_bus.map(|(io_bus, io_offset)| BusPort::new(io_offset, 16, 8, io_bus))),
+            Z80Type::Z80 => Self::new(
+                cputype,
+                frequency,
+                BusPort::new(addr_offset, 16, 8, bus),
+                io_bus.map(|(io_bus, io_offset)| BusPort::new(io_offset, 16, 8, io_bus)),
+            ),
         }
     }
 
@@ -156,18 +166,45 @@ impl Z80 {
         println!("IX: {:#06x}", self.state.ix);
         println!("IY: {:#06x}", self.state.iy);
 
-        println!("A: {:#04x}    F:  {:#04x}           A': {:#04x}    F':  {:#04x}", self.state.reg[Register::A as usize], self.state.reg[Register::F as usize], self.state.shadow_reg[Register::A as usize], self.state.shadow_reg[Register::F as usize]);
-        println!("B: {:#04x}    C:  {:#04x}           B': {:#04x}    C':  {:#04x}", self.state.reg[Register::B as usize], self.state.reg[Register::C as usize], self.state.shadow_reg[Register::B as usize], self.state.shadow_reg[Register::C as usize]);
-        println!("D: {:#04x}    E:  {:#04x}           D': {:#04x}    E':  {:#04x}", self.state.reg[Register::D as usize], self.state.reg[Register::E as usize], self.state.shadow_reg[Register::D as usize], self.state.shadow_reg[Register::E as usize]);
-        println!("H: {:#04x}    L:  {:#04x}           H': {:#04x}    L':  {:#04x}", self.state.reg[Register::H as usize], self.state.reg[Register::L as usize], self.state.shadow_reg[Register::H as usize], self.state.shadow_reg[Register::L as usize]);
+        println!(
+            "A: {:#04x}    F:  {:#04x}           A': {:#04x}    F':  {:#04x}",
+            self.state.reg[Register::A as usize],
+            self.state.reg[Register::F as usize],
+            self.state.shadow_reg[Register::A as usize],
+            self.state.shadow_reg[Register::F as usize]
+        );
+        println!(
+            "B: {:#04x}    C:  {:#04x}           B': {:#04x}    C':  {:#04x}",
+            self.state.reg[Register::B as usize],
+            self.state.reg[Register::C as usize],
+            self.state.shadow_reg[Register::B as usize],
+            self.state.shadow_reg[Register::C as usize]
+        );
+        println!(
+            "D: {:#04x}    E:  {:#04x}           D': {:#04x}    E':  {:#04x}",
+            self.state.reg[Register::D as usize],
+            self.state.reg[Register::E as usize],
+            self.state.shadow_reg[Register::D as usize],
+            self.state.shadow_reg[Register::E as usize]
+        );
+        println!(
+            "H: {:#04x}    L:  {:#04x}           H': {:#04x}    L':  {:#04x}",
+            self.state.reg[Register::H as usize],
+            self.state.reg[Register::L as usize],
+            self.state.shadow_reg[Register::H as usize],
+            self.state.shadow_reg[Register::L as usize]
+        );
 
         println!("I: {:#04x}    R:  {:#04x}", self.state.i, self.state.r);
         println!("IM: {:?}  IFF1: {:?}  IFF2: {:?}", self.state.im, self.state.iff1, self.state.iff2);
 
-        println!("Current Instruction: {} {:?}", self.decoder.format_instruction_bytes(&mut self.port), self.decoder.instruction);
+        println!(
+            "Current Instruction: {} {:?}",
+            self.decoder.format_instruction_bytes(&mut self.port),
+            self.decoder.instruction
+        );
         println!();
         self.port.dump_memory(clock, self.state.sp as Address, 0x40);
         println!();
     }
 }
-

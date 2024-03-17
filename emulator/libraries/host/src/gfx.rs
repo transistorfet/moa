@@ -30,12 +30,9 @@ impl Pixel {
         };
 
         match encoding {
-            PixelEncoding::RGBA =>
-                (r << 24) | (g << 16) | (b << 8) | a,
-            PixelEncoding::ARGB =>
-                (a << 24) | (r << 16) | (g << 8) | b,
-            PixelEncoding::ABGR =>
-                (a << 24) | (b << 16) | (g << 8) | r,
+            PixelEncoding::RGBA => (r << 24) | (g << 16) | (b << 8) | a,
+            PixelEncoding::ARGB => (a << 24) | (r << 16) | (g << 8) | b,
+            PixelEncoding::ABGR => (a << 24) | (b << 16) | (g << 8) | r,
         }
     }
 }
@@ -71,22 +68,22 @@ impl Frame {
     #[inline]
     pub fn set_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: Pixel) {
         match pixel {
-            Pixel::Mask => {}
+            Pixel::Mask => {},
             value if pos_x < self.width && pos_y < self.height => {
                 self.bitmap[(pos_x + (pos_y * self.width)) as usize] = value.encode(self.encoding);
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 
     #[inline]
     pub fn set_encoded_pixel(&mut self, pos_x: u32, pos_y: u32, pixel: u32) {
         match pixel {
-            MASK_COLOUR => { },
+            MASK_COLOUR => {},
             value if pos_x < self.width && pos_y < self.height => {
                 self.bitmap[(pos_x + (pos_y * self.width)) as usize] = value;
             },
-            _ => { },
+            _ => {},
         }
     }
 
@@ -94,11 +91,11 @@ impl Frame {
         for y in pos_y..(pos_y + height) {
             for x in pos_x..(pos_x + width) {
                 match bitmap.next().unwrap() {
-                    Pixel::Mask => {}
+                    Pixel::Mask => {},
                     value if x < self.width && y < self.height => {
                         self.bitmap[(x + (y * self.width)) as usize] = value.encode(self.encoding);
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
             }
         }
@@ -159,4 +156,3 @@ impl FrameReceiver {
         self.queue.pop_latest()
     }
 }
-

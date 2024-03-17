@@ -1,11 +1,13 @@
-
 use core::fmt::Write;
 use femtos::Instant;
 
 use moa_core::{Address, Addressable};
 
 use crate::state::Z80Error;
-use crate::instructions::{Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target, LoadTarget, UndocumentedCopy, Instruction};
+use crate::instructions::{
+    Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target,
+    LoadTarget, UndocumentedCopy, Instruction,
+};
 
 //use emulator_hal::bus::BusAccess;
 //
@@ -57,177 +59,169 @@ impl Z80Decoder {
         self.decode_bare(memory, ins, 0)
     }
 
-    pub fn decode_bare(&mut self, memory: &mut dyn Addressable, ins: u8, extra_instruction_bytes: u16) -> Result<Instruction, Z80Error> {
+    pub fn decode_bare(
+        &mut self,
+        memory: &mut dyn Addressable,
+        ins: u8,
+        extra_instruction_bytes: u16,
+    ) -> Result<Instruction, Z80Error> {
         self.extra_instruction_bytes = extra_instruction_bytes;
         match get_ins_x(ins) {
-            0 => {
-                match get_ins_z(ins) {
-                    0 => {
-                        match get_ins_y(ins) {
-                            0 => Ok(Instruction::NOP),
-                            1 => Ok(Instruction::EXafaf),
-                            2 => {
-                                let offset = self.read_instruction_byte(memory)? as i8;
-                                Ok(Instruction::DJNZ(offset))
-                            },
-                            3 => {
-                                let offset = self.read_instruction_byte(memory)? as i8;
-                                Ok(Instruction::JR(offset))
-                            },
-                            y => {
-                                let offset = self.read_instruction_byte(memory)? as i8;
-                                Ok(Instruction::JRcc(get_condition(y - 4), offset))
-                            },
-                        }
-                    },
-                    1 => {
-                        if get_ins_q(ins) == 0 {
-                            let data = self.read_instruction_word(memory)?;
-                            Ok(Instruction::LD(LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins))), LoadTarget::ImmediateWord(data)))
-                        } else {
-                            Ok(Instruction::ADD16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
-                        }
-                    },
+            0 => match get_ins_z(ins) {
+                0 => match get_ins_y(ins) {
+                    0 => Ok(Instruction::NOP),
+                    1 => Ok(Instruction::EXafaf),
                     2 => {
-                        if (ins & 0x20) == 0 {
-                            let target = match (ins & 0x10) != 0 {
-                                false => LoadTarget::IndirectRegByte(RegisterPair::BC),
-                                true => LoadTarget::IndirectRegByte(RegisterPair::DE),
-                            };
-
-                            match get_ins_q(ins) != 0 {
-                                false => Ok(Instruction::LD(target, LoadTarget::DirectRegByte(Register::A))),
-                                true => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), target)),
-                            }
-                        } else {
-                            let addr = self.read_instruction_word(memory)?;
-                            match (ins >> 3) & 0x03 {
-                                0 => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(RegisterPair::HL))),
-                                1 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::HL), LoadTarget::IndirectWord(addr))),
-                                2 => Ok(Instruction::LD(LoadTarget::IndirectByte(addr), LoadTarget::DirectRegByte(Register::A))),
-                                3 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), LoadTarget::IndirectByte(addr))),
-                                _ => panic!("InternalError: impossible value"),
-                            }
-                        }
+                        let offset = self.read_instruction_byte(memory)? as i8;
+                        Ok(Instruction::DJNZ(offset))
                     },
                     3 => {
-                        if get_ins_q(ins) == 0 {
-                            Ok(Instruction::INC16(get_register_pair(get_ins_p(ins))))
-                        } else {
-                            Ok(Instruction::DEC16(get_register_pair(get_ins_p(ins))))
+                        let offset = self.read_instruction_byte(memory)? as i8;
+                        Ok(Instruction::JR(offset))
+                    },
+                    y => {
+                        let offset = self.read_instruction_byte(memory)? as i8;
+                        Ok(Instruction::JRcc(get_condition(y - 4), offset))
+                    },
+                },
+                1 => {
+                    if get_ins_q(ins) == 0 {
+                        let data = self.read_instruction_word(memory)?;
+                        Ok(Instruction::LD(
+                            LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins))),
+                            LoadTarget::ImmediateWord(data),
+                        ))
+                    } else {
+                        Ok(Instruction::ADD16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
+                    }
+                },
+                2 => {
+                    if (ins & 0x20) == 0 {
+                        let target = match (ins & 0x10) != 0 {
+                            false => LoadTarget::IndirectRegByte(RegisterPair::BC),
+                            true => LoadTarget::IndirectRegByte(RegisterPair::DE),
+                        };
+
+                        match get_ins_q(ins) != 0 {
+                            false => Ok(Instruction::LD(target, LoadTarget::DirectRegByte(Register::A))),
+                            true => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), target)),
                         }
-                    },
-                    4 => {
-                        Ok(Instruction::INC8(get_register(get_ins_y(ins))))
-                    },
-                    5 => {
-                        Ok(Instruction::DEC8(get_register(get_ins_y(ins))))
-                    },
-                    6 => {
-                        let data = self.read_instruction_byte(memory)?;
-                        Ok(Instruction::LD(to_load_target(get_register(get_ins_y(ins))), LoadTarget::ImmediateByte(data)))
-                    },
-                    7 => {
-                        match get_ins_y(ins) {
-                            0 => Ok(Instruction::RLCA),
-                            1 => Ok(Instruction::RRCA),
-                            2 => Ok(Instruction::RLA),
-                            3 => Ok(Instruction::RRA),
-                            4 => Ok(Instruction::DAA),
-                            5 => Ok(Instruction::CPL),
-                            6 => Ok(Instruction::SCF),
-                            7 => Ok(Instruction::CCF),
+                    } else {
+                        let addr = self.read_instruction_word(memory)?;
+                        match (ins >> 3) & 0x03 {
+                            0 => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(RegisterPair::HL))),
+                            1 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::HL), LoadTarget::IndirectWord(addr))),
+                            2 => Ok(Instruction::LD(LoadTarget::IndirectByte(addr), LoadTarget::DirectRegByte(Register::A))),
+                            3 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), LoadTarget::IndirectByte(addr))),
                             _ => panic!("InternalError: impossible value"),
                         }
-                    },
+                    }
+                },
+                3 => {
+                    if get_ins_q(ins) == 0 {
+                        Ok(Instruction::INC16(get_register_pair(get_ins_p(ins))))
+                    } else {
+                        Ok(Instruction::DEC16(get_register_pair(get_ins_p(ins))))
+                    }
+                },
+                4 => Ok(Instruction::INC8(get_register(get_ins_y(ins)))),
+                5 => Ok(Instruction::DEC8(get_register(get_ins_y(ins)))),
+                6 => {
+                    let data = self.read_instruction_byte(memory)?;
+                    Ok(Instruction::LD(to_load_target(get_register(get_ins_y(ins))), LoadTarget::ImmediateByte(data)))
+                },
+                7 => match get_ins_y(ins) {
+                    0 => Ok(Instruction::RLCA),
+                    1 => Ok(Instruction::RRCA),
+                    2 => Ok(Instruction::RLA),
+                    3 => Ok(Instruction::RRA),
+                    4 => Ok(Instruction::DAA),
+                    5 => Ok(Instruction::CPL),
+                    6 => Ok(Instruction::SCF),
+                    7 => Ok(Instruction::CCF),
                     _ => panic!("InternalError: impossible value"),
-                }
+                },
+                _ => panic!("InternalError: impossible value"),
             },
             1 => {
                 if ins == 0x76 {
                     Ok(Instruction::HALT)
                 } else {
-                    Ok(Instruction::LD(to_load_target(get_register(get_ins_y(ins))), to_load_target(get_register(get_ins_z(ins)))))
+                    Ok(Instruction::LD(
+                        to_load_target(get_register(get_ins_y(ins))),
+                        to_load_target(get_register(get_ins_z(ins))),
+                    ))
                 }
             },
-            2 => {
-                Ok(get_alu_instruction(get_ins_y(ins), get_register(get_ins_z(ins))))
-            },
-            3 => {
-                match get_ins_z(ins) {
-                    0 => {
-                        Ok(Instruction::RETcc(get_condition(get_ins_y(ins))))
-                    },
-                    1 => {
-                        if get_ins_q(ins) == 0 {
-                            Ok(Instruction::POP(get_register_pair_alt(get_ins_p(ins))))
-                        } else {
-                            match get_ins_p(ins) {
-                                0 => Ok(Instruction::RET),
-                                1 => Ok(Instruction::EXX),
-                                2 => Ok(Instruction::JPIndirect(RegisterPair::HL)),
-                                3 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::SP), LoadTarget::DirectRegWord(RegisterPair::HL))),
-                                _ => panic!("InternalError: impossible value"),
-                            }
-                        }
-                    },
-                    2 => {
-                        let addr = self.read_instruction_word(memory)?;
-                        Ok(Instruction::JPcc(get_condition(get_ins_y(ins)), addr))
-                    },
-                    3 => {
-                        match get_ins_y(ins) {
-                            0 => {
-                                let addr = self.read_instruction_word(memory)?;
-                                Ok(Instruction::JP(addr))
-                            },
-                            1 => {
-                                self.decode_prefix_cb(memory)
-                            },
-                            2 => {
-                                let port = self.read_instruction_byte(memory)?;
-                                Ok(Instruction::OUTx(port))
-                            },
-                            3 => {
-                                let port = self.read_instruction_byte(memory)?;
-                                Ok(Instruction::INx(port))
-                            },
-                            4 => Ok(Instruction::EXsp(RegisterPair::HL)),
-                            5 => Ok(Instruction::EXhlde),
-                            6 => Ok(Instruction::DI),
-                            7 => Ok(Instruction::EI),
+            2 => Ok(get_alu_instruction(get_ins_y(ins), get_register(get_ins_z(ins)))),
+            3 => match get_ins_z(ins) {
+                0 => Ok(Instruction::RETcc(get_condition(get_ins_y(ins)))),
+                1 => {
+                    if get_ins_q(ins) == 0 {
+                        Ok(Instruction::POP(get_register_pair_alt(get_ins_p(ins))))
+                    } else {
+                        match get_ins_p(ins) {
+                            0 => Ok(Instruction::RET),
+                            1 => Ok(Instruction::EXX),
+                            2 => Ok(Instruction::JPIndirect(RegisterPair::HL)),
+                            3 => Ok(Instruction::LD(
+                                LoadTarget::DirectRegWord(RegisterPair::SP),
+                                LoadTarget::DirectRegWord(RegisterPair::HL),
+                            )),
                             _ => panic!("InternalError: impossible value"),
                         }
-                    },
-                    4 => {
-                        let addr = self.read_instruction_word(memory)?;
-                        Ok(Instruction::CALLcc(get_condition(get_ins_y(ins)), addr))
                     }
-                    5 => {
-                        if get_ins_q(ins) == 0 {
-                            Ok(Instruction::PUSH(get_register_pair_alt(get_ins_p(ins))))
-                        } else {
-                            match get_ins_p(ins) {
-                                0 => {
-                                    let addr = self.read_instruction_word(memory)?;
-                                    Ok(Instruction::CALL(addr))
-                                },
-                                1 => self.decode_prefix_dd_fd(memory, IndexRegister::IX),
-                                2 => self.decode_prefix_ed(memory),
-                                3 => self.decode_prefix_dd_fd(memory, IndexRegister::IY),
-                                _ => panic!("InternalError: impossible value"),
-                            }
+                },
+                2 => {
+                    let addr = self.read_instruction_word(memory)?;
+                    Ok(Instruction::JPcc(get_condition(get_ins_y(ins)), addr))
+                },
+                3 => match get_ins_y(ins) {
+                    0 => {
+                        let addr = self.read_instruction_word(memory)?;
+                        Ok(Instruction::JP(addr))
+                    },
+                    1 => self.decode_prefix_cb(memory),
+                    2 => {
+                        let port = self.read_instruction_byte(memory)?;
+                        Ok(Instruction::OUTx(port))
+                    },
+                    3 => {
+                        let port = self.read_instruction_byte(memory)?;
+                        Ok(Instruction::INx(port))
+                    },
+                    4 => Ok(Instruction::EXsp(RegisterPair::HL)),
+                    5 => Ok(Instruction::EXhlde),
+                    6 => Ok(Instruction::DI),
+                    7 => Ok(Instruction::EI),
+                    _ => panic!("InternalError: impossible value"),
+                },
+                4 => {
+                    let addr = self.read_instruction_word(memory)?;
+                    Ok(Instruction::CALLcc(get_condition(get_ins_y(ins)), addr))
+                },
+                5 => {
+                    if get_ins_q(ins) == 0 {
+                        Ok(Instruction::PUSH(get_register_pair_alt(get_ins_p(ins))))
+                    } else {
+                        match get_ins_p(ins) {
+                            0 => {
+                                let addr = self.read_instruction_word(memory)?;
+                                Ok(Instruction::CALL(addr))
+                            },
+                            1 => self.decode_prefix_dd_fd(memory, IndexRegister::IX),
+                            2 => self.decode_prefix_ed(memory),
+                            3 => self.decode_prefix_dd_fd(memory, IndexRegister::IY),
+                            _ => panic!("InternalError: impossible value"),
                         }
                     }
-                    6 => {
-                        let data = self.read_instruction_byte(memory)?;
-                        Ok(get_alu_instruction(get_ins_y(ins), Target::Immediate(data)))
-                    },
-                    7 => {
-                        Ok(Instruction::RST(get_ins_y(ins) * 8))
-                    },
-                    _ => panic!("InternalError: impossible value"),
-                }
+                },
+                6 => {
+                    let data = self.read_instruction_byte(memory)?;
+                    Ok(get_alu_instruction(get_ins_y(ins), Target::Immediate(data)))
+                },
+                7 => Ok(Instruction::RST(get_ins_y(ins) * 8)),
+                _ => panic!("InternalError: impossible value"),
             },
             _ => panic!("InternalError: impossible value"),
         }
@@ -266,92 +260,88 @@ impl Z80Decoder {
 
         match get_ins_x(ins) {
             0 => Ok(Instruction::NOP),
-            1 => {
-                match get_ins_z(ins) {
-                    0 => {
-                        let target = get_register(get_ins_y(ins));
-                        if let Target::DirectReg(reg) = target {
-                            Ok(Instruction::INic(reg))
-                        } else {
-                            Ok(Instruction::INicz)
-                        }
-                    },
-                    1 => {
-                        let target = get_register(get_ins_y(ins));
-                        if let Target::DirectReg(reg) = target {
-                            Ok(Instruction::OUTic(reg))
-                        } else {
-                            Ok(Instruction::OUTicz)
-                        }
-                    },
-                    2 => {
-                        if get_ins_q(ins) == 0 {
-                            Ok(Instruction::SBC16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
-                        } else {
-                            Ok(Instruction::ADC16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
-                        }
-                    },
-                    3 => {
-                        let addr = self.read_instruction_word(memory)?;
-                        if get_ins_q(ins) == 0 {
-                            Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins)))))
-                        } else {
-                            Ok(Instruction::LD(LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins))), LoadTarget::IndirectWord(addr)))
-                        }
-                    },
-                    4 => {
-                        Ok(Instruction::NEG)
-                    },
-                    5 => {
-                        if get_ins_y(ins) == 1 {
-                            Ok(Instruction::RETI)
-                        } else {
-                            Ok(Instruction::RETN)
-                        }
-                    },
-                    6 => {
-                        match get_ins_y(ins) & 0x03 {
-                            0 => Ok(Instruction::IM(InterruptMode::Mode0)),
-                            1 => Ok(Instruction::IM(InterruptMode::Mode0)),
-                            2 => Ok(Instruction::IM(InterruptMode::Mode1)),
-                            3 => Ok(Instruction::IM(InterruptMode::Mode2)),
-                            _ => panic!("InternalError: impossible value"),
-                        }
-                    },
-                    7 => {
-                        match get_ins_y(ins) {
-                            0 => Ok(Instruction::LDsr(SpecialRegister::I, Direction::FromAcc)),
-                            1 => Ok(Instruction::LDsr(SpecialRegister::R, Direction::FromAcc)),
-                            2 => Ok(Instruction::LDsr(SpecialRegister::I, Direction::ToAcc)),
-                            3 => Ok(Instruction::LDsr(SpecialRegister::R, Direction::ToAcc)),
-                            4 => Ok(Instruction::RRD),
-                            5 => Ok(Instruction::RLD),
-                            _ => Ok(Instruction::NOP),
-                        }
-                    },
+            1 => match get_ins_z(ins) {
+                0 => {
+                    let target = get_register(get_ins_y(ins));
+                    if let Target::DirectReg(reg) = target {
+                        Ok(Instruction::INic(reg))
+                    } else {
+                        Ok(Instruction::INicz)
+                    }
+                },
+                1 => {
+                    let target = get_register(get_ins_y(ins));
+                    if let Target::DirectReg(reg) = target {
+                        Ok(Instruction::OUTic(reg))
+                    } else {
+                        Ok(Instruction::OUTicz)
+                    }
+                },
+                2 => {
+                    if get_ins_q(ins) == 0 {
+                        Ok(Instruction::SBC16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
+                    } else {
+                        Ok(Instruction::ADC16(RegisterPair::HL, get_register_pair(get_ins_p(ins))))
+                    }
+                },
+                3 => {
+                    let addr = self.read_instruction_word(memory)?;
+                    if get_ins_q(ins) == 0 {
+                        Ok(Instruction::LD(
+                            LoadTarget::IndirectWord(addr),
+                            LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins))),
+                        ))
+                    } else {
+                        Ok(Instruction::LD(
+                            LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins))),
+                            LoadTarget::IndirectWord(addr),
+                        ))
+                    }
+                },
+                4 => Ok(Instruction::NEG),
+                5 => {
+                    if get_ins_y(ins) == 1 {
+                        Ok(Instruction::RETI)
+                    } else {
+                        Ok(Instruction::RETN)
+                    }
+                },
+                6 => match get_ins_y(ins) & 0x03 {
+                    0 => Ok(Instruction::IM(InterruptMode::Mode0)),
+                    1 => Ok(Instruction::IM(InterruptMode::Mode0)),
+                    2 => Ok(Instruction::IM(InterruptMode::Mode1)),
+                    3 => Ok(Instruction::IM(InterruptMode::Mode2)),
                     _ => panic!("InternalError: impossible value"),
-                }
-            },
-            2 => {
-                match ins {
-                    0xA0 => Ok(Instruction::LDI),
-                    0xA1 => Ok(Instruction::CPI),
-                    0xA2 => Ok(Instruction::INI),
-                    0xA3 => Ok(Instruction::OUTI),
-                    0xA8 => Ok(Instruction::LDD),
-                    0xA9 => Ok(Instruction::CPD),
-                    0xAA => Ok(Instruction::IND),
-                    0xAB => Ok(Instruction::OUTD),
-                    0xB0 => Ok(Instruction::LDIR),
-                    0xB1 => Ok(Instruction::CPIR),
-                    0xB2 => Ok(Instruction::INIR),
-                    0xB3 => Ok(Instruction::OTIR),
-                    0xB8 => Ok(Instruction::LDDR),
-                    0xB9 => Ok(Instruction::CPDR),
-                    0xBA => Ok(Instruction::INDR),
-                    0xBB => Ok(Instruction::OTDR),
+                },
+                7 => match get_ins_y(ins) {
+                    0 => Ok(Instruction::LDsr(SpecialRegister::I, Direction::FromAcc)),
+                    1 => Ok(Instruction::LDsr(SpecialRegister::R, Direction::FromAcc)),
+                    2 => Ok(Instruction::LDsr(SpecialRegister::I, Direction::ToAcc)),
+                    3 => Ok(Instruction::LDsr(SpecialRegister::R, Direction::ToAcc)),
+                    4 => Ok(Instruction::RRD),
+                    5 => Ok(Instruction::RLD),
                     _ => Ok(Instruction::NOP),
-                }
+                },
+                _ => panic!("InternalError: impossible value"),
+            },
+            2 => match ins {
+                0xA0 => Ok(Instruction::LDI),
+                0xA1 => Ok(Instruction::CPI),
+                0xA2 => Ok(Instruction::INI),
+                0xA3 => Ok(Instruction::OUTI),
+                0xA8 => Ok(Instruction::LDD),
+                0xA9 => Ok(Instruction::CPD),
+                0xAA => Ok(Instruction::IND),
+                0xAB => Ok(Instruction::OUTD),
+                0xB0 => Ok(Instruction::LDIR),
+                0xB1 => Ok(Instruction::CPIR),
+                0xB2 => Ok(Instruction::INIR),
+                0xB3 => Ok(Instruction::OTIR),
+                0xB8 => Ok(Instruction::LDDR),
+                0xB9 => Ok(Instruction::CPDR),
+                0xBA => Ok(Instruction::INDR),
+                0xBB => Ok(Instruction::OTDR),
+                _ => Ok(Instruction::NOP),
             },
             3 => Ok(Instruction::NOP),
             _ => panic!("InternalError: impossible value"),
@@ -372,125 +362,120 @@ impl Z80Decoder {
                 }
 
                 match get_ins_p(ins) {
-                    2 => {
-                        match get_ins_z(ins) {
-                            1 => {
-                                let data = self.read_instruction_word(memory)?;
-                                Ok(Instruction::LD(LoadTarget::DirectRegWord(index_reg.into()), LoadTarget::ImmediateWord(data)))
-                            },
-                            2 => {
-                                let addr = self.read_instruction_word(memory)?;
-                                let regpair = index_reg.into();
-                                match get_ins_q(ins) != 0 {
-                                    false => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(regpair))),
-                                    true => Ok(Instruction::LD(LoadTarget::DirectRegWord(regpair), LoadTarget::IndirectWord(addr))),
-                                }
-                            },
-                            3 => {
-                                match get_ins_q(ins) != 0 {
-                                    false => Ok(Instruction::INC16(index_reg.into())),
-                                    true => Ok(Instruction::DEC16(index_reg.into())),
-                                }
-                            },
-                            4 => {
-                                self.extra_instruction_bytes = 4;
-                                let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
-                                Ok(Instruction::INC8(half_target))
-                            },
-                            5 => {
-                                self.extra_instruction_bytes = 4;
-                                let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
-                                Ok(Instruction::DEC8(half_target))
-                            },
-                            6 => {
-                                self.extra_instruction_bytes = 4;
-                                let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
-                                let data = self.read_instruction_byte(memory)?;
-                                Ok(Instruction::LD(to_load_target(half_target), LoadTarget::ImmediateByte(data)))
-                            },
-                            _ => self.decode_bare(memory, ins, 4),
-                        }
+                    2 => match get_ins_z(ins) {
+                        1 => {
+                            let data = self.read_instruction_word(memory)?;
+                            Ok(Instruction::LD(LoadTarget::DirectRegWord(index_reg.into()), LoadTarget::ImmediateWord(data)))
+                        },
+                        2 => {
+                            let addr = self.read_instruction_word(memory)?;
+                            let regpair = index_reg.into();
+                            match get_ins_q(ins) != 0 {
+                                false => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(regpair))),
+                                true => Ok(Instruction::LD(LoadTarget::DirectRegWord(regpair), LoadTarget::IndirectWord(addr))),
+                            }
+                        },
+                        3 => match get_ins_q(ins) != 0 {
+                            false => Ok(Instruction::INC16(index_reg.into())),
+                            true => Ok(Instruction::DEC16(index_reg.into())),
+                        },
+                        4 => {
+                            self.extra_instruction_bytes = 4;
+                            let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
+                            Ok(Instruction::INC8(half_target))
+                        },
+                        5 => {
+                            self.extra_instruction_bytes = 4;
+                            let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
+                            Ok(Instruction::DEC8(half_target))
+                        },
+                        6 => {
+                            self.extra_instruction_bytes = 4;
+                            let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
+                            let data = self.read_instruction_byte(memory)?;
+                            Ok(Instruction::LD(to_load_target(half_target), LoadTarget::ImmediateByte(data)))
+                        },
+                        _ => self.decode_bare(memory, ins, 4),
                     },
-                    3 => {
-                        match ins {
-                            0x34 => {
-                                let offset = self.read_instruction_byte(memory)? as i8;
-                                Ok(Instruction::INC8(Target::IndirectOffset(index_reg, offset)))
-                            },
-                            0x35 => {
-                                let offset = self.read_instruction_byte(memory)? as i8;
-                                Ok(Instruction::DEC8(Target::IndirectOffset(index_reg, offset)))
-                            },
-                            0x36 => {
-                                let offset = self.read_instruction_byte(memory)? as i8;
-                                let immediate = self.read_instruction_byte(memory)?;
-                                Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), LoadTarget::ImmediateByte(immediate)))
-                            },
-                            _ => self.decode_bare(memory, ins, 4),
-                        }
+                    3 => match ins {
+                        0x34 => {
+                            let offset = self.read_instruction_byte(memory)? as i8;
+                            Ok(Instruction::INC8(Target::IndirectOffset(index_reg, offset)))
+                        },
+                        0x35 => {
+                            let offset = self.read_instruction_byte(memory)? as i8;
+                            Ok(Instruction::DEC8(Target::IndirectOffset(index_reg, offset)))
+                        },
+                        0x36 => {
+                            let offset = self.read_instruction_byte(memory)? as i8;
+                            let immediate = self.read_instruction_byte(memory)?;
+                            Ok(Instruction::LD(
+                                LoadTarget::IndirectOffsetByte(index_reg, offset),
+                                LoadTarget::ImmediateByte(immediate),
+                            ))
+                        },
+                        _ => self.decode_bare(memory, ins, 4),
                     },
                     _ => self.decode_bare(memory, ins, 4),
                 }
             },
-            1 => {
-                match get_ins_p(ins) {
-                    0 | 1 => {
+            1 => match get_ins_p(ins) {
+                0 | 1 => {
+                    let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
+                        Some(target) => target,
+                        None => return self.decode_bare(memory, ins, 4),
+                    };
+
+                    match (ins & 0x18) >> 3 {
+                        0 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::B), to_load_target(target))),
+                        1 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::C), to_load_target(target))),
+                        2 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::D), to_load_target(target))),
+                        3 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::E), to_load_target(target))),
+                        _ => panic!("InternalError: impossible value"),
+                    }
+                },
+                2 => {
+                    let src = match get_ins_z(ins) {
+                        0 => Target::DirectReg(Register::B),
+                        1 => Target::DirectReg(Register::C),
+                        2 => Target::DirectReg(Register::D),
+                        3 => Target::DirectReg(Register::E),
+                        4 => Target::DirectRegHalf(get_index_register_half(index_reg, 0)),
+                        5 => Target::DirectRegHalf(get_index_register_half(index_reg, 1)),
+                        6 => {
+                            let offset = self.read_instruction_byte(memory)? as i8;
+                            let src = to_load_target(Target::IndirectOffset(index_reg, offset));
+                            if get_ins_q(ins) == 0 {
+                                return Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::H), src));
+                            } else {
+                                return Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::L), src));
+                            }
+                        },
+                        7 => Target::DirectReg(Register::A),
+                        _ => panic!("InternalError: impossible value"),
+                    };
+
+                    let dest = get_index_register_half(index_reg, get_ins_q(ins));
+                    Ok(Instruction::LD(LoadTarget::DirectRegHalfByte(dest), to_load_target(src)))
+                },
+                3 => {
+                    if get_ins_q(ins) == 0 {
+                        if get_ins_z(ins) == 6 {
+                            return self.decode_bare(memory, ins, 4);
+                        }
+                        let src = get_register(get_ins_z(ins));
+                        let offset = self.read_instruction_byte(memory)? as i8;
+                        Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), to_load_target(src)))
+                    } else {
                         let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
                             Some(target) => target,
                             None => return self.decode_bare(memory, ins, 4),
                         };
 
-                        match (ins & 0x18) >> 3 {
-                            0 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::B), to_load_target(target))),
-                            1 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::C), to_load_target(target))),
-                            2 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::D), to_load_target(target))),
-                            3 => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::E), to_load_target(target))),
-                            _ => panic!("InternalError: impossible value"),
-                        }
-                    },
-                    2 => {
-                        let src = match get_ins_z(ins) {
-                            0 => Target::DirectReg(Register::B),
-                            1 => Target::DirectReg(Register::C),
-                            2 => Target::DirectReg(Register::D),
-                            3 => Target::DirectReg(Register::E),
-                            4 => Target::DirectRegHalf(get_index_register_half(index_reg, 0)),
-                            5 => Target::DirectRegHalf(get_index_register_half(index_reg, 1)),
-                            6 => {
-                                let offset = self.read_instruction_byte(memory)? as i8;
-                                let src = to_load_target(Target::IndirectOffset(index_reg, offset));
-                                if get_ins_q(ins) == 0 {
-                                    return Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::H), src));
-                                } else {
-                                    return Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::L), src));
-                                }
-                            },
-                            7 => Target::DirectReg(Register::A),
-                            _ => panic!("InternalError: impossible value"),
-                        };
-
-                        let dest = get_index_register_half(index_reg, get_ins_q(ins));
-                        Ok(Instruction::LD(LoadTarget::DirectRegHalfByte(dest), to_load_target(src)))
-                    },
-                    3 => {
-                        if get_ins_q(ins) == 0 {
-                            if get_ins_z(ins) == 6 {
-                                return self.decode_bare(memory, ins, 4);
-                            }
-                            let src = get_register(get_ins_z(ins));
-                            let offset = self.read_instruction_byte(memory)? as i8;
-                            Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), to_load_target(src)))
-                        } else {
-                            let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
-                                Some(target) => target,
-                                None => return self.decode_bare(memory, ins, 4),
-                            };
-
-                            Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), to_load_target(target)))
-                        }
-                    },
-                    _ => panic!("InternalError: impossible value"),
-                }
+                        Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), to_load_target(target)))
+                    }
+                },
+                _ => panic!("InternalError: impossible value"),
             },
             2 => {
                 self.extra_instruction_bytes = 4;
@@ -512,21 +497,27 @@ impl Z80Decoder {
                     _ => panic!("InternalError: impossible value"),
                 }
             },
-            3 => {
-                match ins {
-                    0xE1 => Ok(Instruction::POP(index_reg.into())),
-                    0xE3 => Ok(Instruction::EXsp(index_reg.into())),
-                    0xE5 => Ok(Instruction::PUSH(index_reg.into())),
-                    0xE9 => Ok(Instruction::JPIndirect(index_reg.into())),
-                    0xF9 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::SP), LoadTarget::DirectRegWord(index_reg.into()))),
-                    _ => self.decode_bare(memory, ins, 4),
-                }
+            3 => match ins {
+                0xE1 => Ok(Instruction::POP(index_reg.into())),
+                0xE3 => Ok(Instruction::EXsp(index_reg.into())),
+                0xE5 => Ok(Instruction::PUSH(index_reg.into())),
+                0xE9 => Ok(Instruction::JPIndirect(index_reg.into())),
+                0xF9 => Ok(Instruction::LD(
+                    LoadTarget::DirectRegWord(RegisterPair::SP),
+                    LoadTarget::DirectRegWord(index_reg.into()),
+                )),
+                _ => self.decode_bare(memory, ins, 4),
             },
             _ => panic!("InternalError: impossible value"),
         }
     }
 
-    fn decode_index_target(&mut self, memory: &mut dyn Addressable, index_reg: IndexRegister, z: u8) -> Result<Option<Target>, Z80Error> {
+    fn decode_index_target(
+        &mut self,
+        memory: &mut dyn Addressable,
+        index_reg: IndexRegister,
+        z: u8,
+    ) -> Result<Option<Target>, Z80Error> {
         let result = match z {
             4 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 0))),
             5 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 1))),
@@ -675,8 +666,20 @@ fn get_register_pair_alt(reg: u8) -> RegisterPair {
 
 fn get_index_register_half(reg: IndexRegister, q: u8) -> IndexRegisterHalf {
     match reg {
-        IndexRegister::IX => if q == 0 { IndexRegisterHalf::IXH } else { IndexRegisterHalf::IXL },
-        IndexRegister::IY => if q == 0 { IndexRegisterHalf::IYH } else { IndexRegisterHalf::IYL },
+        IndexRegister::IX => {
+            if q == 0 {
+                IndexRegisterHalf::IXH
+            } else {
+                IndexRegisterHalf::IXL
+            }
+        },
+        IndexRegister::IY => {
+            if q == 0 {
+                IndexRegisterHalf::IYH
+            } else {
+                IndexRegisterHalf::IYL
+            }
+        },
     }
 }
 
@@ -726,4 +729,3 @@ fn get_ins_p(ins: u8) -> u8 {
 fn get_ins_q(ins: u8) -> u8 {
     (ins >> 3) & 0x01
 }
-

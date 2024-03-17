@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Duration};
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
@@ -8,10 +7,10 @@ use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 //const CA1: u8           = 0x02;
 //const CA2: u8           = 0x04;
 //const LSTRB: u8         = 0x08;
-const ENABLE: u8        = 0x10;
+const ENABLE: u8 = 0x10;
 //const SELECT: u8        = 0x20;
-const Q6: u8            = 0x40;
-const Q7: u8            = 0x80;
+const Q6: u8 = 0x40;
+const Q7: u8 = 0x80;
 
 const DEV_NAME: &str = "iwm";
 
@@ -61,7 +60,7 @@ impl Addressable for IWM {
             Q7 => {
                 // read "write-handshake" register
                 data[i] = 0x3F | self.handshake;
-            }
+            },
             b if b == (Q7 | Q6) => {
                 panic!("");
             },
@@ -111,4 +110,3 @@ impl Transmutable for IWM {
         Some(self)
     }
 }
-

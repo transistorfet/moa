@@ -1,4 +1,3 @@
-
 use clap::{Command, Arg, ArgAction, ArgMatches};
 use std::io::{self, Write};
 use femtos::Duration;
@@ -14,7 +13,8 @@ impl Host for ConsoleFrontend {
 
     fn add_pty(&self) -> Result<Box<dyn Tty>, HostError<Self::Error>> {
         use moa_common::tty::SimplePty;
-        Ok(Box::new(SimplePty::open().map_err(|_| HostError::TTYNotSupported)?)) //.map_err(|err| Error::new(format!("console: error opening pty: {:?}", err)))?))
+        Ok(Box::new(SimplePty::open().map_err(|_| HostError::TTYNotSupported)?))
+        //.map_err(|err| Error::new(format!("console: error opening pty: {:?}", err)))?))
     }
 
     fn add_video_source(&mut self, _receiver: FrameReceiver) -> Result<(), HostError<Self::Error>> {
@@ -42,15 +42,19 @@ impl Default for ConsoleFrontend {
 impl ConsoleFrontend {
     pub fn args(application_name: &'static str) -> Command {
         Command::new(application_name)
-            .arg(Arg::new("log-level")
-                .short('l')
-                .long("log-level")
-                .help("Set the type of log messages to print"))
-            .arg(Arg::new("debugger")
-                .short('d')
-                .long("debugger")
-                .action(ArgAction::SetTrue)
-                .help("Start the debugger before running machine"))
+            .arg(
+                Arg::new("log-level")
+                    .short('l')
+                    .long("log-level")
+                    .help("Set the type of log messages to print"),
+            )
+            .arg(
+                Arg::new("debugger")
+                    .short('d')
+                    .long("debugger")
+                    .action(ArgAction::SetTrue)
+                    .help("Start the debugger before running machine"),
+            )
     }
 
     pub fn start(self, matches: ArgMatches, mut system: System) {
@@ -108,4 +112,3 @@ impl ConsoleFrontend {
         }
     }
 }
-

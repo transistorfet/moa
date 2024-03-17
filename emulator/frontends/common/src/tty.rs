@@ -1,4 +1,3 @@
-
 use std::thread;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -34,11 +33,13 @@ impl SimplePty {
     }
 
     pub fn open() -> Result<SimplePty, SimplePtyError> {
-        let pty = pty::posix_openpt(OFlag::O_RDWR).and_then(|pty| {
-            pty::grantpt(&pty)?;
-            pty::unlockpt(&pty)?;
-            Ok(pty)
-        }).map_err(|_| SimplePtyError::Open)?;
+        let pty = pty::posix_openpt(OFlag::O_RDWR)
+            .and_then(|pty| {
+                pty::grantpt(&pty)?;
+                pty::unlockpt(&pty)?;
+                Ok(pty)
+            })
+            .map_err(|_| SimplePtyError::Open)?;
 
         let name = unsafe { pty::ptsname(&pty).map_err(|_| SimplePtyError::PtsName)? };
         let (input_tx, input_rx) = mpsc::channel();
@@ -61,8 +62,10 @@ impl SimplePty {
                     Ok(_) => {
                         input_tx.send(buf[0]).unwrap();
                     },
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => { },
-                    Err(err) => { println!("ERROR: {:?}", err); }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {},
+                    Err(err) => {
+                        println!("ERROR: {:?}", err);
+                    },
                 }
 
                 while let Ok(data) = output_rx.try_recv() {
@@ -92,4 +95,3 @@ impl Tty for SimplePty {
         true
     }
 }
-

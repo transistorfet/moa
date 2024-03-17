@@ -1,5 +1,7 @@
-
-use cpal::{Stream, SampleRate, SampleFormat, StreamConfig, OutputCallbackInfo, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use cpal::{
+    Stream, SampleRate, SampleFormat, StreamConfig, OutputCallbackInfo,
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+};
 
 use crate::audio::{AudioOutput, SAMPLE_RATE};
 
@@ -27,7 +29,9 @@ impl CpalAudioOutput {
             while index < data.len() {
                 if let Some((clock, mut frame)) = output.receive() {
                     let size = (frame.data.len() * 2).min(data.len() - index);
-                    frame.data.iter()
+                    frame
+                        .data
+                        .iter()
                         .zip(data[index..index + size].chunks_mut(2))
                         .for_each(|(sample, location)| {
                             location[0] = sample.0;
@@ -45,13 +49,11 @@ impl CpalAudioOutput {
             }
         };
 
-        let stream = device.build_output_stream(
-            &config,
-            data_callback,
-            move |err| {
+        let stream = device
+            .build_output_stream(&config, data_callback, move |err| {
                 log::error!("ERROR: {:?}", err);
-            },
-        ).unwrap();
+            })
+            .unwrap();
 
         stream.play().unwrap();
 
@@ -68,4 +70,3 @@ impl CpalAudioOutput {
         }
     }
 }
-

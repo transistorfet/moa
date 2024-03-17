@@ -1,4 +1,3 @@
-
 use std::sync::{Arc, Mutex, MutexGuard};
 use femtos::{Instant, Duration};
 
@@ -21,10 +20,7 @@ impl AudioSource {
         let (id, sample_rate) = {
             let mut mixer = mixer.borrow_mut();
             let id = mixer.add_source(queue.clone());
-            (
-                id,
-                mixer.sample_rate(),
-            )
+            (id, mixer.sample_rate())
         };
 
         Self {
@@ -122,7 +118,9 @@ impl AudioMixerInner {
                 if let Some((clock, mut frame)) = source.pop_next() {
                     index = (clock.duration_since(frame_start) / sample_duration) as usize;
                     let size = frame.data.len().min(data.len() - index);
-                    frame.data.iter()
+                    frame
+                        .data
+                        .iter()
                         .zip(&mut data[index..index + size])
                         .for_each(|(source, dest)| {
                             dest.0 += source.0;
@@ -198,4 +196,3 @@ impl AudioOutput {
         self.queue.is_empty()
     }
 }
-

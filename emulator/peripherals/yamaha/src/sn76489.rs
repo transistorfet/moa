@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Duration, Frequency};
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
@@ -96,7 +95,7 @@ pub struct Sn76489 {
 impl Sn76489 {
     pub fn new<H, E>(host: &mut H, _clock_frequency: Frequency) -> Result<Self, HostError<E>>
     where
-        H: Host<Error = E>
+        H: Host<Error = E>,
     {
         let source = host.add_audio_source()?;
         let sample_rate = source.samples_per_second();
@@ -134,7 +133,7 @@ impl Steppable for Sn76489 {
         }
         self.source.write_samples(system.clock, &buffer);
 
-        Ok(Duration::from_millis(1))          // Every 1ms of simulated time
+        Ok(Duration::from_millis(1)) // Every 1ms of simulated time
     }
 }
 
@@ -163,7 +162,9 @@ impl Addressable for Sn76489 {
                 5 => self.tones[2].set_attenuation(value),
                 6 => self.noise.set_control(value),
                 7 => self.noise.set_attenuation(value),
-                _ => { self.first_byte = Some(data[0]); },
+                _ => {
+                    self.first_byte = Some(data[0]);
+                },
             }
         } else {
             let first = self.first_byte.unwrap_or(0);
@@ -173,7 +174,7 @@ impl Addressable for Sn76489 {
                 0 => self.tones[0].set_counter(value),
                 2 => self.tones[1].set_counter(value),
                 4 => self.tones[2].set_counter(value),
-                _ => { },
+                _ => {},
             }
         }
         log::debug!("{}: write to register {:x} with {:x}", DEV_NAME, addr, data[0]);
@@ -190,4 +191,3 @@ impl Transmutable for Sn76489 {
         Some(self)
     }
 }
-

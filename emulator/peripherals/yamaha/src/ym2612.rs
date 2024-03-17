@@ -293,12 +293,12 @@ impl EnvelopeGenerator {
                         self.envelope = new_envelope.min(MAX_ENVELOPE);
                     }
                 },
-                EnvelopeState::Decay |
-                EnvelopeState::Sustain |
-                EnvelopeState::Release => {
+                EnvelopeState::Decay | EnvelopeState::Sustain | EnvelopeState::Release => {
                     // Convert it to a fixed point decimal number of 4 bit : 8 bits, which will be the output
                     self.envelope += increment << 2;
-                    if self.envelope > MAX_ENVELOPE || self.envelope_state == EnvelopeState::Release && self.envelope >= ENVELOPE_CENTER {
+                    if self.envelope > MAX_ENVELOPE
+                        || self.envelope_state == EnvelopeState::Release && self.envelope >= ENVELOPE_CENTER
+                    {
                         self.envelope = MAX_ENVELOPE;
                     }
                 },
@@ -405,7 +405,8 @@ impl PhaseGenerator {
             increment.saturating_add(detune)
         } else {
             increment.saturating_sub(detune)
-        }.min(0x1FFFF);
+        }
+        .min(0x1FFFF);
 
         // Apply multiple
         let increment = if self.multiple == 0 {
@@ -502,7 +503,8 @@ impl Operator {
     }
 
     fn notify_key_change(&mut self, state: bool, envelope_clock: EnvelopeClock) {
-        self.envelope.notify_key_change(state, envelope_clock, self.phase.get_rate_adjust());
+        self.envelope
+            .notify_key_change(state, envelope_clock, self.phase.get_rate_adjust());
         self.phase.reset();
     }
 
@@ -558,7 +560,9 @@ impl Channel {
         Self {
             debug_name: debug_name.clone(),
             enabled: (true, true),
-            operators: (0..OPERATORS).map(|i| Operator::new(format!("{}, op {}", debug_name, i))).collect(),
+            operators: (0..OPERATORS)
+                .map(|i| Operator::new(format!("{}, op {}", debug_name, i)))
+                .collect(),
             algorithm: OperatorAlgorithm::A0,
             feedback: 0,
 
@@ -650,7 +654,9 @@ impl Channel {
             },
             OperatorAlgorithm::A5 => {
                 let output1 = self.operators[0].get_output(feedback, clocks);
-                self.operators[1].get_output(output1, clocks) + self.operators[2].get_output(output1, clocks) + self.operators[3].get_output(output1, clocks)
+                self.operators[1].get_output(output1, clocks)
+                    + self.operators[2].get_output(output1, clocks)
+                    + self.operators[3].get_output(output1, clocks)
             },
             OperatorAlgorithm::A6 => {
                 let output1 = self.operators[0].get_output(feedback, clocks);
@@ -659,9 +665,9 @@ impl Channel {
             },
             OperatorAlgorithm::A7 => {
                 self.operators[0].get_output(feedback, clocks)
-                + self.operators[1].get_output(0, clocks)
-                + self.operators[2].get_output(0, clocks)
-                + self.operators[3].get_output(0, clocks)
+                    + self.operators[1].get_output(0, clocks)
+                    + self.operators[2].get_output(0, clocks)
+                    + self.operators[3].get_output(0, clocks)
             },
         }
     }
@@ -795,7 +801,7 @@ impl Steppable for Ym2612 {
         }
         self.source.write_samples(system.clock, &buffer);
 
-        Ok(Duration::from_millis(1))          // Every 1ms of simulated time
+        Ok(Duration::from_millis(1)) // Every 1ms of simulated time
     }
 }
 
@@ -906,7 +912,7 @@ impl Ym2612 {
                 self.channels[ch].operators[op].set_rate(EnvelopeState::Decay, first_decay_rate);
             },
 
-            reg if is_reg_range(reg, 0x70)=> {
+            reg if is_reg_range(reg, 0x70) => {
                 let (ch, op) = get_ch_op(bank, reg);
                 let index = get_index(bank, reg);
 
@@ -925,7 +931,11 @@ impl Ym2612 {
                 // Register is 4 bits, so adjust it to match total_level's scale
                 let sustain_level = (self.registers[0x80 + index] as u16 & 0xF0) << 3;
                 // Adjust the maximum storable value to be the max attenuation
-                let sustain_level = if sustain_level == (0x00F0 << 3) { MAX_ENVELOPE } else { sustain_level };
+                let sustain_level = if sustain_level == (0x00F0 << 3) {
+                    MAX_ENVELOPE
+                } else {
+                    sustain_level
+                };
                 self.channels[ch].operators[op].set_sustain_level(sustain_level);
             },
 
@@ -1020,7 +1030,7 @@ impl Addressable for Ym2612 {
             0..=3 => {
                 // Read the status byte (busy/overflow)
                 data[0] = ((self.timer_a_overflow as u8) << 1) | (self.timer_b_overflow as u8);
-            }
+            },
             _ => {
                 log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
             },
@@ -1065,4 +1075,3 @@ impl Transmutable for Ym2612 {
         Some(self)
     }
 }
-

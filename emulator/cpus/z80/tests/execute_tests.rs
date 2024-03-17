@@ -1,4 +1,3 @@
-
 use femtos::Frequency;
 
 use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device};
@@ -552,4 +551,3 @@ pub fn run_execute_tests() {
         run_test(case);
     }
 }
-

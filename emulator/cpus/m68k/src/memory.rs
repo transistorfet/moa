@@ -1,4 +1,3 @@
-
 use core::cmp;
 use core::fmt::Write;
 use femtos::Instant;
@@ -149,7 +148,13 @@ impl M68kBusPort {
         }
     }
 
-    fn read<Bus, BusError>(&mut self, bus: &mut Bus, clock: Instant, addr: M68kAddress, data: &mut [u8]) -> Result<(), M68kError<BusError>>
+    fn read<Bus, BusError>(
+        &mut self,
+        bus: &mut Bus,
+        clock: Instant,
+        addr: M68kAddress,
+        data: &mut [u8],
+    ) -> Result<(), M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
@@ -163,7 +168,13 @@ impl M68kBusPort {
         Ok(())
     }
 
-    fn write<Bus, BusError>(&mut self, bus: &mut Bus, clock: Instant, addr: M68kAddress, data: &[u8]) -> Result<(), M68kError<BusError>>
+    fn write<Bus, BusError>(
+        &mut self,
+        bus: &mut Bus,
+        clock: Instant,
+        addr: M68kAddress,
+        data: &[u8],
+    ) -> Result<(), M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
@@ -186,10 +197,17 @@ impl M68kBusPort {
             Size::Byte => self.read(bus, self.current_clock, addr, &mut data[3..4]),
             Size::Word => self.read(bus, self.current_clock, addr, &mut data[2..4]),
             Size::Long => self.read(bus, self.current_clock, addr, &mut data[0..4]),
-        }.map(|_| u32::from_be_bytes(data))
+        }
+        .map(|_| u32::from_be_bytes(data))
     }
 
-    fn write_sized<Bus, BusError>(&mut self, bus: &mut Bus, addr: M68kAddress, size: Size, value: u32) -> Result<(), M68kError<BusError>>
+    fn write_sized<Bus, BusError>(
+        &mut self,
+        bus: &mut Bus,
+        addr: M68kAddress,
+        size: Size,
+        value: u32,
+    ) -> Result<(), M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
@@ -201,7 +219,13 @@ impl M68kBusPort {
         }
     }
 
-    pub(crate) fn read_data_sized<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: M68kAddress, size: Size) -> Result<u32, M68kError<BusError>>
+    pub(crate) fn read_data_sized<Bus, BusError>(
+        &mut self,
+        bus: &mut Bus,
+        is_supervisor: bool,
+        addr: M68kAddress,
+        size: Size,
+    ) -> Result<u32, M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
@@ -209,7 +233,14 @@ impl M68kBusPort {
         self.read_sized(bus, addr, size)
     }
 
-    pub(crate) fn write_data_sized<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: M68kAddress, size: Size, value: u32) -> Result<(), M68kError<BusError>>
+    pub(crate) fn write_data_sized<Bus, BusError>(
+        &mut self,
+        bus: &mut Bus,
+        is_supervisor: bool,
+        addr: M68kAddress,
+        size: Size,
+        value: u32,
+    ) -> Result<(), M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
@@ -217,7 +248,12 @@ impl M68kBusPort {
         self.write_sized(bus, addr, size, value)
     }
 
-    pub(crate) fn read_instruction_word<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u16, M68kError<BusError>>
+    pub(crate) fn read_instruction_word<Bus, BusError>(
+        &mut self,
+        bus: &mut Bus,
+        is_supervisor: bool,
+        addr: u32,
+    ) -> Result<u16, M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
@@ -225,7 +261,12 @@ impl M68kBusPort {
         Ok(self.read_sized(bus, addr, Size::Word)? as u16)
     }
 
-    pub(crate) fn read_instruction_long<Bus, BusError>(&mut self, bus: &mut Bus, is_supervisor: bool, addr: u32) -> Result<u32, M68kError<BusError>>
+    pub(crate) fn read_instruction_long<Bus, BusError>(
+        &mut self,
+        bus: &mut Bus,
+        is_supervisor: bool,
+        addr: u32,
+    ) -> Result<u32, M68kError<BusError>>
     where
         Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
     {
@@ -233,7 +274,15 @@ impl M68kBusPort {
         self.read_sized(bus, addr, Size::Long)
     }
 
-    pub(crate) fn start_request<BusError>(&mut self, is_supervisor: bool, addr: u32, size: Size, access: MemAccess, mtype: MemType, i_n_bit: bool) -> Result<u32, M68kError<BusError>> {
+    pub(crate) fn start_request<BusError>(
+        &mut self,
+        is_supervisor: bool,
+        addr: u32,
+        size: Size,
+        access: MemAccess,
+        mtype: MemType,
+        i_n_bit: bool,
+    ) -> Result<u32, M68kError<BusError>> {
         self.request.i_n_bit = i_n_bit;
         self.request.code = match mtype {
             MemType::Program => FunctionCode::program(is_supervisor),
@@ -315,7 +364,7 @@ impl TargetAccess {
     }
 
     pub(crate) fn complete(&self) -> Result<Self, M68kError> {
-        
+
     }
 }
 
@@ -358,7 +407,7 @@ impl ReadOnceAccess {
     }
 
     pub(crate) fn complete(&self) -> Result<Self, M68kError> {
-        
+
     }
 }
 
@@ -377,7 +426,7 @@ impl ReadUpdateAccess {
     }
 
     pub(crate) fn complete(&self) -> Result<Self, M68kError> {
-        
+
     }
 }
 
@@ -392,7 +441,7 @@ impl WriteOnceAccess {
     }
 
     pub(crate) fn complete(&self) -> Result<Self, M68kError> {
-        
+
     }
 }
 */

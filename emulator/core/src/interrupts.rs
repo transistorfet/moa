@@ -1,4 +1,3 @@
-
 use crate::error::Error;
 
 
@@ -43,4 +42,3 @@ impl InterruptController {
         Ok(acknowledge)
     }
 }
-

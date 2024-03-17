@@ -1,4 +1,3 @@
-
 use std::fmt;
 use moa_host::HostError;
 
@@ -52,10 +51,7 @@ impl Error {
 
     pub fn msg(&self) -> &str {
         match self {
-            Error::Assertion(msg) |
-            Error::Breakpoint(msg) |
-            Error::Other(msg) |
-            Error::Emulator(_, msg) => msg.as_str(),
+            Error::Assertion(msg) | Error::Breakpoint(msg) | Error::Other(msg) | Error::Emulator(_, msg) => msg.as_str(),
             Error::Processor(_) => "native exception",
         }
     }
@@ -64,10 +60,7 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::Assertion(msg) |
-            Error::Breakpoint(msg) |
-            Error::Other(msg) |
-            Error::Emulator(_, msg) => write!(f, "{}", msg),
+            Error::Assertion(msg) | Error::Breakpoint(msg) | Error::Other(msg) | Error::Emulator(_, msg) => write!(f, "{}", msg),
             Error::Processor(_) => write!(f, "native exception"),
         }
     }
@@ -78,4 +71,3 @@ impl<E> From<HostError<E>> for Error {
         Self::Other("other".to_string())
     }
 }
-

@@ -1,4 +1,3 @@
-
 use moa_core::{Error, System, Address, Addressable};
 
 
@@ -56,11 +55,7 @@ impl Debugger {
         let args: Vec<&str> = command.split_whitespace().collect();
 
         // If no command given, then run the `step` command
-        let args = if args.is_empty() {
-            vec!["step"]
-        } else {
-            args
-        };
+        let args = if args.is_empty() { vec!["step"] } else { args };
 
         match args[0] {
             "b" | "break" | "breakpoint" => {
@@ -123,7 +118,11 @@ impl Debugger {
             "d" | "dump" => {
                 if args.len() > 1 {
                     let addr = u32::from_str_radix(args[1], 16).map_err(|_| Error::new("Unable to parse address"))?;
-                    let len = if args.len() > 2 { u32::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse length"))? } else { 0x20 };
+                    let len = if args.len() > 2 {
+                        u32::from_str_radix(args[2], 16).map_err(|_| Error::new("Unable to parse length"))?
+                    } else {
+                        0x20
+                    };
                     system.get_bus().dump_memory(system.clock, addr as Address, len as Address);
                 } else {
                     //self.port.dump_memory(self.state.ssp as Address, 0x40 as Address);
@@ -135,7 +134,9 @@ impl Debugger {
                 } else {
                     let device = system.get_device(args[1])?;
                     let subargs = if args.len() > 2 { &args[2..] } else { &[""] };
-                    device.borrow_mut().as_inspectable()
+                    device
+                        .borrow_mut()
+                        .as_inspectable()
                         .ok_or_else(|| Error::new("That device is not inspectable"))?
                         .inspect(system, subargs)?;
                 }
@@ -154,7 +155,11 @@ impl Debugger {
                 };
 
                 if let Some(device) = system.get_next_debuggable_device() {
-                    device.borrow_mut().as_debuggable().unwrap().print_disassembly(system, addr, count);
+                    device
+                        .borrow_mut()
+                        .as_debuggable()
+                        .unwrap()
+                        .print_disassembly(system, addr, count);
                 }
             },
             "c" | "continue" => {
@@ -170,7 +175,7 @@ impl Debugger {
                 self.trace_only = true;
                 system.step_until_debuggable()?;
                 return Ok(DebugControl::Continue);
-            }
+            },
             "setb" | "setw" | "setl" => {
                 if args.len() != 3 {
                     println!("Usage: set[b|w|l] <addr> <data>");
@@ -208,7 +213,9 @@ impl Debugger {
 
     fn check_repeat_arg(&mut self, args: &[&str]) -> Result<(), Error> {
         if args.len() > 1 {
-            let count = args[1].parse::<u32>().map_err(|_| Error::new("Unable to parse repeat number"))?;
+            let count = args[1]
+                .parse::<u32>()
+                .map_err(|_| Error::new("Unable to parse repeat number"))?;
             self.repeat_command = Some((count, args[0].to_string()));
         }
         Ok(())
@@ -227,4 +234,3 @@ fn parse_address(arg: &str) -> Result<(Option<&str>, Address), Error> {
     let addr = Address::from_str_radix(addrstr, 16).map_err(|_| Error::new("Unable to parse address"))?;
     Ok((name, addr))
 }
-

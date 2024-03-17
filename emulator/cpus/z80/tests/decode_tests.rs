@@ -1,4 +1,3 @@
-
 use femtos::Frequency;
 
 use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device};
@@ -71,4 +70,3 @@ const DECODE_TESTS: &'static [(&[u8], Instruction)] = &[
     (&[0xDD, 0x84],         Instruction::ADDa(Target::DirectRegHalf(IndexRegisterHalf::IXH))),
     (&[0xDD, 0x85],         Instruction::ADDa(Target::DirectRegHalf(IndexRegisterHalf::IXL))),
 ];
-

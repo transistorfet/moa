@@ -1,4 +1,3 @@
-
 use core::fmt::{self, Write};
 use femtos::{Duration, Frequency};
 
@@ -14,10 +13,10 @@ pub type ClockCycles = u16;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum AddressWidth {
-    A32 = 32,    // MC68020+
-    A24 = 24,    // MC68000 64-Pin, MC68010
-    A22 = 22,    // MC68008 52-Pin
-    A20 = 20,    // MC68008 48-Pin
+    A32 = 32, // MC68020+
+    A24 = 24, // MC68000 64-Pin, MC68010
+    A22 = 22, // MC68008 52-Pin
+    A20 = 20, // MC68008 48-Pin
 }
 
 #[allow(dead_code)]
@@ -99,7 +98,7 @@ impl CpuInfo {
                 address_width: AddressWidth::A32,
                 data_width: DataWidth::D32,
                 frequency,
-            }
+            },
         }
     }
 }
@@ -300,4 +299,3 @@ impl InterruptPriority {
         }
     }
 }
-

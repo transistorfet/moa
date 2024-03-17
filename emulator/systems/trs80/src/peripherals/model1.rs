@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Duration};
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
@@ -8,12 +7,12 @@ use super::keymap;
 use super::charset::CharacterGenerator;
 
 
-const DEV_NAME: &str    = "model1";
-const SCREEN_SIZE: (u32, u32)   = (384, 128);
+const DEV_NAME: &str = "model1";
+const SCREEN_SIZE: (u32, u32) = (384, 128);
 
 
 pub struct Model1Keyboard {
-            receiver: EventReceiver<KeyEvent>,
+    receiver: EventReceiver<KeyEvent>,
     keyboard_mem: [u8; 8],
 }
 
@@ -41,14 +40,30 @@ impl Addressable for Model1Keyboard {
         if (0x20..=0xA0).contains(&addr) {
             let offset = addr - 0x20;
             data[0] = 0;
-            if (offset & 0x01) != 0 { data[0] |= self.keyboard_mem[0]; }
-            if (offset & 0x02) != 0 { data[0] |= self.keyboard_mem[1]; }
-            if (offset & 0x04) != 0 { data[0] |= self.keyboard_mem[2]; }
-            if (offset & 0x08) != 0 { data[0] |= self.keyboard_mem[3]; }
-            if (offset & 0x10) != 0 { data[0] |= self.keyboard_mem[4]; }
-            if (offset & 0x20) != 0 { data[0] |= self.keyboard_mem[5]; }
-            if (offset & 0x40) != 0 { data[0] |= self.keyboard_mem[6]; }
-            if (offset & 0x80) != 0 { data[0] |= self.keyboard_mem[7]; }
+            if (offset & 0x01) != 0 {
+                data[0] |= self.keyboard_mem[0];
+            }
+            if (offset & 0x02) != 0 {
+                data[0] |= self.keyboard_mem[1];
+            }
+            if (offset & 0x04) != 0 {
+                data[0] |= self.keyboard_mem[2];
+            }
+            if (offset & 0x08) != 0 {
+                data[0] |= self.keyboard_mem[3];
+            }
+            if (offset & 0x10) != 0 {
+                data[0] |= self.keyboard_mem[4];
+            }
+            if (offset & 0x20) != 0 {
+                data[0] |= self.keyboard_mem[5];
+            }
+            if (offset & 0x40) != 0 {
+                data[0] |= self.keyboard_mem[6];
+            }
+            if (offset & 0x80) != 0 {
+                data[0] |= self.keyboard_mem[7];
+            }
             //info!("{}: read from keyboard {:x} of {:?}", DEV_NAME, addr, data);
         } else {
             log::warn!("{}: !!! unhandled read from {:0x}", DEV_NAME, addr);
@@ -147,4 +162,3 @@ impl Transmutable for Model1Video {
         Some(self)
     }
 }
-

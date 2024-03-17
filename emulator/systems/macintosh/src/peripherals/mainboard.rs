@@ -1,4 +1,3 @@
-
 use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Duration};
@@ -47,16 +46,30 @@ impl Mainboard {
             if (port.data & 0x10) == 0 {
                 println!("{}: overlay is 0 (normal)", DEV_NAME);
                 lower_bus.borrow_mut().clear_all_bus_devices();
-                lower_bus.borrow_mut().insert(0x000000, Device::new(AddressRepeater::new(ram.clone(), 0x400000)));
-                lower_bus.borrow_mut().insert(0x400000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
-                lower_bus.borrow_mut().insert(0x600000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus
+                    .borrow_mut()
+                    .insert(0x000000, Device::new(AddressRepeater::new(ram.clone(), 0x400000)));
+                lower_bus
+                    .borrow_mut()
+                    .insert(0x400000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus
+                    .borrow_mut()
+                    .insert(0x600000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
             } else {
                 println!("{}: overlay is 1 (startup)", DEV_NAME);
                 lower_bus.borrow_mut().clear_all_bus_devices();
-                lower_bus.borrow_mut().insert(0x000000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
-                lower_bus.borrow_mut().insert(0x200000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
-                lower_bus.borrow_mut().insert(0x400000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
-                lower_bus.borrow_mut().insert(0x600000, Device::new(AddressRepeater::new(ram.clone(), 0x200000)));
+                lower_bus
+                    .borrow_mut()
+                    .insert(0x000000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus
+                    .borrow_mut()
+                    .insert(0x200000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus
+                    .borrow_mut()
+                    .insert(0x400000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                lower_bus
+                    .borrow_mut()
+                    .insert(0x600000, Device::new(AddressRepeater::new(ram.clone(), 0x200000)));
             }
         });
 
@@ -139,9 +152,7 @@ impl Transmutable for Mainboard {
 
 
 #[derive(Default)]
-pub struct PhaseRead {
-
-}
+pub struct PhaseRead {}
 
 impl Addressable for PhaseRead {
     fn size(&self) -> usize {
@@ -159,4 +170,3 @@ impl Addressable for PhaseRead {
         Ok(())
     }
 }
-

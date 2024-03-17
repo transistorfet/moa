@@ -1,21 +1,10 @@
-
 use femtos::Instant;
 use emulator_hal::bus::BusAccess;
 
 use crate::state::{M68kType, M68kError, Exceptions};
 use crate::memory::{M68kBusPort, M68kAddress};
 use crate::instructions::{
-    Size,
-    Sign,
-    Direction,
-    XRegister,
-    BaseRegister,
-    IndexRegister,
-    RegOrImmediate,
-    ControlRegister,
-    Condition,
-    Target,
-    Instruction,
+    Size, Sign, Direction, XRegister, BaseRegister, IndexRegister, RegOrImmediate, ControlRegister, Condition, Target, Instruction,
     sign_extend_to_long,
 };
 
@@ -78,7 +67,13 @@ impl M68kDecoder {
     }
 
     #[inline]
-    pub fn decode_at<Bus>(&mut self, bus: &mut Bus, memory: &mut M68kBusPort, is_supervisor: bool, start: u32) -> Result<(), M68kError<Bus::Error>>
+    pub fn decode_at<Bus>(
+        &mut self,
+        bus: &mut Bus,
+        memory: &mut M68kBusPort,
+        is_supervisor: bool,
+        start: u32,
+    ) -> Result<(), M68kError<Bus::Error>>
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
@@ -119,10 +114,9 @@ impl M68kDecoder {
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
-        let ins_data: Result<String, M68kError<Bus::Error>> =
-            (0..((self.end - self.start) / 2)).map(|offset|
-                Ok(format!("{:04x} ", bus.read_beu16(clock, self.start + (offset * 2)).unwrap()))
-            ).collect();
+        let ins_data: Result<String, M68kError<Bus::Error>> = (0..((self.end - self.start) / 2))
+            .map(|offset| Ok(format!("{:04x} ", bus.read_beu16(clock, self.start + (offset * 2)).unwrap())))
+            .collect();
         println!("{:#010x}: {}\n\t{}\n", self.start, ins_data.unwrap(), self.instruction);
     }
 }
@@ -186,7 +180,11 @@ where
         } else if (ins & 0x138) == 0x108 {
             let dreg = get_high_reg(ins);
             let areg = get_low_reg(ins);
-            let dir = if (ins & 0x0080) == 0 { Direction::FromTarget } else { Direction::ToTarget };
+            let dir = if (ins & 0x0080) == 0 {
+                Direction::FromTarget
+            } else {
+                Direction::ToTarget
+            };
             let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
             let offset = self.read_instruction_word()? as i16;
             Ok(Instruction::MOVEP(dreg, areg, offset, size, dir))
@@ -288,11 +286,19 @@ where
             let size = if (ins & 0x0040) == 0 { Size::Word } else { Size::Long };
             let data = self.read_instruction_word()?;
             let target = self.decode_lower_effective_address(ins, None)?;
-            let dir = if (ins & 0x0400) == 0 { Direction::ToTarget } else { Direction::FromTarget };
+            let dir = if (ins & 0x0400) == 0 {
+                Direction::ToTarget
+            } else {
+                Direction::FromTarget
+            };
             Ok(Instruction::MOVEM(target, size, dir, data))
         } else if (ins & 0xF80) == 0xC00 && self.decoder.cputype >= M68kType::MC68020 {
             let extension = self.read_instruction_word()?;
-            let reg_h = if (extension & 0x0400) != 0 { Some(get_low_reg(ins)) } else { None };
+            let reg_h = if (extension & 0x0400) != 0 {
+                Some(get_low_reg(ins))
+            } else {
+                None
+            };
             let reg_l = ((extension & 0x7000) >> 12) as u8;
             let target = self.decode_lower_effective_address(ins, Some(Size::Long))?;
             let sign = if (ins & 0x0800) == 0 { Sign::Unsigned } else { Sign::Signed };
@@ -303,30 +309,22 @@ where
         } else if (ins & 0x800) == 0 {
             let target = self.decode_lower_effective_address(ins, Some(Size::Word))?;
             match (ins & 0x0700) >> 8 {
-                0b000 => {
-                    match get_size(ins) {
-                        Some(size) => Ok(Instruction::NEGX(target, size)),
-                        None => Ok(Instruction::MOVEfromSR(target)),
-                    }
+                0b000 => match get_size(ins) {
+                    Some(size) => Ok(Instruction::NEGX(target, size)),
+                    None => Ok(Instruction::MOVEfromSR(target)),
                 },
-                0b010 => {
-                    match get_size(ins) {
-                        Some(size) => Ok(Instruction::CLR(target, size)),
-                        None if self.decoder.cputype >= M68kType::MC68010 => Ok(Instruction::MOVEfromCCR(target)),
-                        None => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
-                    }
+                0b010 => match get_size(ins) {
+                    Some(size) => Ok(Instruction::CLR(target, size)),
+                    None if self.decoder.cputype >= M68kType::MC68010 => Ok(Instruction::MOVEfromCCR(target)),
+                    None => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                 },
-                0b100 => {
-                    match get_size(ins) {
-                        Some(size) => Ok(Instruction::NEG(target, size)),
-                        None => Ok(Instruction::MOVEtoCCR(target)),
-                    }
+                0b100 => match get_size(ins) {
+                    Some(size) => Ok(Instruction::NEG(target, size)),
+                    None => Ok(Instruction::MOVEtoCCR(target)),
                 },
-                0b110 => {
-                    match get_size(ins) {
-                        Some(size) => Ok(Instruction::NOT(target, size)),
-                        None => Ok(Instruction::MOVEtoSR(target)),
-                    }
+                0b110 => match get_size(ins) {
+                    Some(size) => Ok(Instruction::NOT(target, size)),
+                    None => Ok(Instruction::MOVEtoSR(target)),
                 },
                 _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             }
@@ -342,25 +340,15 @@ where
                     let target = self.decode_lower_effective_address(ins, Some(Size::Byte))?;
                     Ok(Instruction::NBCD(target))
                 },
-                (0b001, 0b000) => {
-                    Ok(Instruction::SWAP(get_low_reg(ins)))
-                },
-                (0b001, 0b001) => {
-                    Ok(Instruction::BKPT(get_low_reg(ins)))
-                },
+                (0b001, 0b000) => Ok(Instruction::SWAP(get_low_reg(ins))),
+                (0b001, 0b001) => Ok(Instruction::BKPT(get_low_reg(ins))),
                 (0b001, _) => {
                     let target = self.decode_lower_effective_address(ins, None)?;
                     Ok(Instruction::PEA(target))
                 },
-                (0b010, 0b000) => {
-                    Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Word))
-                },
-                (0b011, 0b000) => {
-                    Ok(Instruction::EXT(get_low_reg(ins), Size::Word, Size::Long))
-                },
-                (0b111, 0b000) => {
-                    Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Long))
-                },
+                (0b010, 0b000) => Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Word)),
+                (0b011, 0b000) => Ok(Instruction::EXT(get_low_reg(ins), Size::Word, Size::Long)),
+                (0b111, 0b000) => Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Long)),
                 _ => Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             }
         } else if ins_0f00 == 0xA00 {
@@ -393,7 +381,11 @@ where
                 }
             } else if ins_00f0 == 0x60 {
                 let reg = get_low_reg(ins);
-                let dir = if (ins & 0b1000) == 0 { Direction::FromTarget } else { Direction::ToTarget };
+                let dir = if (ins & 0b1000) == 0 {
+                    Direction::FromTarget
+                } else {
+                    Direction::ToTarget
+                };
                 Ok(Instruction::MOVEUSP(Target::DirectAReg(reg), dir))
             } else {
                 match ins & 0x00FF {
@@ -412,7 +404,11 @@ where
                     0x76 => Ok(Instruction::TRAPV),
                     0x77 => Ok(Instruction::RTR),
                     0x7A | 0x7B if self.decoder.cputype >= M68kType::MC68010 => {
-                        let dir = if ins & 0x01 == 0 { Direction::ToTarget } else { Direction::FromTarget };
+                        let dir = if ins & 0x01 == 0 {
+                            Direction::ToTarget
+                        } else {
+                            Direction::FromTarget
+                        };
                         let ins2 = self.read_instruction_word()?;
                         let target = match ins2 & 0x8000 {
                             0 => Target::DirectDReg(((ins2 & 0x7000) >> 12) as u8),
@@ -511,7 +507,11 @@ where
         } else if let Some(size) = size {
             let data_reg = Target::DirectDReg(get_high_reg(ins));
             let effective_addr = self.decode_lower_effective_address(ins, Some(size))?;
-            let (from, to) = if (ins & 0x0100) == 0 { (effective_addr, data_reg) } else { (data_reg, effective_addr) };
+            let (from, to) = if (ins & 0x0100) == 0 {
+                (effective_addr, data_reg)
+            } else {
+                (data_reg, effective_addr)
+            };
             Ok(Instruction::OR(from, to, size))
         } else {
             let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
@@ -602,7 +602,11 @@ where
         } else if let Some(size) = size {
             let data_reg = Target::DirectDReg(get_high_reg(ins));
             let effective_addr = self.decode_lower_effective_address(ins, Some(size))?;
-            let (from, to) = if (ins & 0x0100) == 0 { (effective_addr, data_reg) } else { (data_reg, effective_addr) };
+            let (from, to) = if (ins & 0x0100) == 0 {
+                (effective_addr, data_reg)
+            } else {
+                (data_reg, effective_addr)
+            };
             Ok(Instruction::AND(from, to, size))
         } else {
             let sign = if (ins & 0x0100) == 0 { Sign::Unsigned } else { Sign::Signed };
@@ -729,13 +733,17 @@ where
     }
 
     fn read_instruction_word(&mut self) -> Result<u16, M68kError<Bus::Error>> {
-        let word = self.memory.read_instruction_word(self.bus, self.decoder.is_supervisor, self.decoder.end)?;
+        let word = self
+            .memory
+            .read_instruction_word(self.bus, self.decoder.is_supervisor, self.decoder.end)?;
         self.decoder.end += 2;
         Ok(word)
     }
 
     fn read_instruction_long(&mut self) -> Result<u32, M68kError<Bus::Error>> {
-        let word = self.memory.read_instruction_long(self.bus, self.decoder.is_supervisor, self.decoder.end)?;
+        let word = self
+            .memory
+            .read_instruction_long(self.bus, self.decoder.is_supervisor, self.decoder.end)?;
         self.decoder.end += 4;
         Ok(word)
     }
@@ -769,11 +777,23 @@ where
 
         // Decode Index Register
         let xreg_num = ((brief_extension & 0x7000) >> 12) as u8;
-        let xreg = if (brief_extension & 0x8000) == 0 { XRegister::DReg(xreg_num) } else { XRegister::AReg(xreg_num) };
-        let size = if (brief_extension & 0x0800) == 0 { Size::Word } else { Size::Long };
+        let xreg = if (brief_extension & 0x8000) == 0 {
+            XRegister::DReg(xreg_num)
+        } else {
+            XRegister::AReg(xreg_num)
+        };
+        let size = if (brief_extension & 0x0800) == 0 {
+            Size::Word
+        } else {
+            Size::Long
+        };
 
         if self.decoder.cputype <= M68kType::MC68010 {
-            let index_reg = IndexRegister { xreg, scale: 0, size };
+            let index_reg = IndexRegister {
+                xreg,
+                scale: 0,
+                size,
+            };
             let displacement = sign_extend_to_long((brief_extension & 0x00FF) as u32, Size::Byte);
 
             match areg {
@@ -782,7 +802,11 @@ where
             }
         } else if use_brief {
             let scale = ((brief_extension & 0x0600) >> 9) as u8;
-            let index_reg = IndexRegister { xreg, scale, size };
+            let index_reg = IndexRegister {
+                xreg,
+                scale,
+                size,
+            };
             let displacement = sign_extend_to_long((brief_extension & 0x00FF) as u32, Size::Byte);
 
             match areg {
@@ -791,7 +815,11 @@ where
             }
         } else {
             let scale = ((brief_extension & 0x0600) >> 9) as u8;
-            let index_reg = IndexRegister { xreg, scale, size };
+            let index_reg = IndexRegister {
+                xreg,
+                scale,
+                size,
+            };
 
             let use_base_reg = (brief_extension & 0x0080) == 0;
             let use_index = (brief_extension & 0x0040) == 0;
@@ -826,43 +854,35 @@ where
                 let displacement = sign_extend_to_long(self.read_instruction_word()? as u32, Size::Word);
                 Target::IndirectRegOffset(BaseRegister::AReg(reg), None, displacement)
             },
-            0b110 => {
-                self.decode_extension_word(Some(reg))?
-            },
-            0b111 => {
-                match reg {
-                    0b000 => {
-                        let value = sign_extend_to_long(self.read_instruction_word()? as u32, Size::Word) as u32;
-                        Target::IndirectMemory(value, Size::Word)
-                    },
-                    0b001 => {
-                        let value = self.read_instruction_long()?;
-                        Target::IndirectMemory(value, Size::Long)
-                    },
-                    0b010 => {
-                        let displacement = sign_extend_to_long(self.read_instruction_word()? as u32, Size::Word);
-                        Target::IndirectRegOffset(BaseRegister::PC, None, displacement)
-                    },
-                    0b011 => {
-                        self.decode_extension_word(None)?
-                    },
-                    0b100 => {
-                        let data = match size {
-                            Some(Size::Byte) | Some(Size::Word) => self.read_instruction_word()? as u32,
-                            Some(Size::Long) => self.read_instruction_long()?,
-                            None => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
-                        };
-                        Target::Immediate(data)
-                    },
-                    _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
-                }
+            0b110 => self.decode_extension_word(Some(reg))?,
+            0b111 => match reg {
+                0b000 => {
+                    let value = sign_extend_to_long(self.read_instruction_word()? as u32, Size::Word) as u32;
+                    Target::IndirectMemory(value, Size::Word)
+                },
+                0b001 => {
+                    let value = self.read_instruction_long()?;
+                    Target::IndirectMemory(value, Size::Long)
+                },
+                0b010 => {
+                    let displacement = sign_extend_to_long(self.read_instruction_word()? as u32, Size::Word);
+                    Target::IndirectRegOffset(BaseRegister::PC, None, displacement)
+                },
+                0b011 => self.decode_extension_word(None)?,
+                0b100 => {
+                    let data = match size {
+                        Some(Size::Byte) | Some(Size::Word) => self.read_instruction_word()? as u32,
+                        Some(Size::Long) => self.read_instruction_long()?,
+                        None => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
+                    };
+                    Target::Immediate(data)
+                },
+                _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
             },
             _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
         };
         Ok(value)
     }
-
-
 }
 
 #[inline(always)]
@@ -917,4 +937,3 @@ fn get_condition(ins: u16) -> Condition {
         _ => Condition::True,
     }
 }
-

@@ -1,11 +1,10 @@
-
 use femtos::Duration;
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 use moa_host::{self, Host, HostError, Frame, FrameSender, Pixel};
 
 
-const SCRN_BASE: u32        = 0x07A700;
+const SCRN_BASE: u32 = 0x07A700;
 const SCRN_SIZE: (u32, u32) = (512, 342);
 
 pub struct MacVideo {
@@ -81,4 +80,3 @@ impl Transmutable for MacVideo {
         Some(self)
     }
 }
-

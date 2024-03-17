@@ -1,4 +1,3 @@
-
 use femtos::Instant;
 use emulator_hal::bus::BusAccess;
 
@@ -50,4 +49,3 @@ where
         Ok(())
     }
 }
-

@@ -1,4 +1,3 @@
-
 const DEFAULT_HARTE_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
 
 use std::io::prelude::*;
@@ -95,7 +94,7 @@ struct TestCase {
     initial_state: TestState,
     #[serde(rename(deserialize = "final"))]
     final_state: TestState,
-    length: usize
+    length: usize,
 }
 
 impl TestState {
@@ -151,7 +150,9 @@ fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, Memo
     // Insert basic initialization
     let len = 0x100_0000;
     let mut data = Vec::with_capacity(len);
-    unsafe { data.set_len(len); }
+    unsafe {
+        data.set_len(len);
+    }
     let mut memory = MemoryBlock::<u32, Instant>::from(data);
 
     let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
@@ -164,7 +165,7 @@ fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, Memo
 
 fn assert_value<T>(actual: T, expected: T, message: &str) -> Result<(), Error>
 where
-    T: PartialEq + Debug + UpperHex
+    T: PartialEq + Debug + UpperHex,
 {
     if actual == expected {
         Ok(())
@@ -197,13 +198,15 @@ fn load_state(cpu: &mut M68k, memory: &mut MemoryBlock<u32, Instant>, initial: &
 
     // Load instructions into memory
     for (i, ins) in initial.prefetch.iter().enumerate() {
-        memory.write_beu16(Instant::START, initial.pc + (i as u32 * 2), *ins)
+        memory
+            .write_beu16(Instant::START, initial.pc + (i as u32 * 2), *ins)
             .map_err(|err| Error::Bus(format!("{:?}", err)))?;
     }
 
     // Load data bytes into memory
     for (addr, byte) in initial.ram.iter() {
-        memory.write_u8(Instant::START, *addr, *byte)
+        memory
+            .write_u8(Instant::START, *addr, *byte)
             .map_err(|err| Error::Bus(format!("{:?}", err)))?;
     }
 
@@ -237,14 +240,16 @@ fn assert_state(cpu: &M68k, memory: &mut MemoryBlock<u32, Instant>, expected: &T
     // Load instructions into memory
     for (i, ins) in expected.prefetch.iter().enumerate() {
         let addr = expected.pc + (i as u32 * 2);
-        let actual = memory.read_beu16(Instant::START, addr & addr_mask)
+        let actual = memory
+            .read_beu16(Instant::START, addr & addr_mask)
             .map_err(|err| Error::Bus(format!("{:?}", err)))?;
         assert_value(actual, *ins, &format!("prefetch at {:x}", addr))?;
     }
 
     // Load data bytes into memory
     for (addr, byte) in expected.ram.iter() {
-        let actual = memory.read_u8(Instant::START, *addr & addr_mask)
+        let actual = memory
+            .read_u8(Instant::START, *addr & addr_mask)
             .map_err(|err| Error::Bus(format!("{:?}", err)))?;
         assert_value(actual, *byte, &format!("ram at {:x}", addr))?;
     }
@@ -252,8 +257,14 @@ fn assert_state(cpu: &M68k, memory: &mut MemoryBlock<u32, Instant>, expected: &T
     Ok(())
 }
 
-fn step_cpu_and_assert(cpu: &mut M68k, memory: &mut MemoryBlock<u32, Instant>, case: &TestCase, test_timing: bool) -> Result<(), Error> {
-    let clock_elapsed = cpu.step(Instant::START, memory)
+fn step_cpu_and_assert(
+    cpu: &mut M68k,
+    memory: &mut MemoryBlock<u32, Instant>,
+    case: &TestCase,
+    test_timing: bool,
+) -> Result<(), Error> {
+    let clock_elapsed = cpu
+        .step(Instant::START, memory)
         .map_err(|err| Error::Step(format!("{:?}", err)))?;
     let cycles = clock_elapsed.as_duration() / cpu.info.frequency.period_duration();
 
@@ -282,7 +293,7 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                     initial_cpu.dump_state(&mut writer).unwrap();
                     cpu.dump_state(&mut writer).unwrap();
                 }
-                writeln!(writer, "FAILED: {:?}",  err).unwrap();
+                writeln!(writer, "FAILED: {:?}", err).unwrap();
                 println!("{}", writer);
             }
             Err(err)
@@ -315,8 +326,9 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
 
         // Only run the test if it's selected by the exceptions flag
         if case.is_extended_exception_case() && args.exceptions == Selection::ExcludeAddr
-        || case.is_exception_case() && args.exceptions == Selection::Exclude
-        || !case.is_exception_case() && args.exceptions == Selection::Only {
+            || case.is_exception_case() && args.exceptions == Selection::Exclude
+            || !case.is_exception_case() && args.exceptions == Selection::Only
+        {
             continue;
         }
 
@@ -334,7 +346,7 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
         if let Err(err) = result {
             failed += 1;
             if !args.quiet {
-                println!("FAILED: {:?}",  err);
+                println!("FAILED: {:?}", err);
             }
         } else {
             passed += 1
@@ -401,7 +413,11 @@ fn run_all_tests(args: &Args) {
     }
 
     println!();
-    println!("passed: {}, failed: {}, total {:.0}%", passed, failed, ((passed as f32) / (passed as f32 + failed as f32)) * 100.0);
+    println!(
+        "passed: {}, failed: {}, total {:.0}%",
+        passed,
+        failed,
+        ((passed as f32) / (passed as f32 + failed as f32)) * 100.0
+    );
     println!("completed in {}m {}s", elapsed_secs / 60, elapsed_secs % 60);
 }
-

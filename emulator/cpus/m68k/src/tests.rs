@@ -1,4 +1,3 @@
-
 #[cfg(test)]
 mod decode_unit_tests {
     use femtos::Instant;
@@ -96,7 +95,10 @@ mod decode_unit_tests {
             let size = Size::Long;
             let offset = -8;
 
-            decoder.bus.write_beu16(Instant::START, INIT_ADDR, (offset as i16) as u16).unwrap();
+            decoder
+                .bus
+                .write_beu16(Instant::START, INIT_ADDR, (offset as i16) as u16)
+                .unwrap();
 
             let target = decoder.get_mode_as_target(0b101, 0b100, Some(size)).unwrap();
             assert_eq!(target, Target::IndirectRegOffset(BaseRegister::AReg(4), None, offset));
@@ -111,10 +113,24 @@ mod decode_unit_tests {
             let brief_extension = 0x3800 | (((offset as i8) as u8) as u16);
 
             decoder.bus.write_beu16(Instant::START, INIT_ADDR, brief_extension).unwrap();
-            decoder.bus.write_beu16(Instant::START, INIT_ADDR + 2, (offset as i16) as u16).unwrap();
+            decoder
+                .bus
+                .write_beu16(Instant::START, INIT_ADDR + 2, (offset as i16) as u16)
+                .unwrap();
 
             let target = decoder.get_mode_as_target(0b110, 0b010, Some(size)).unwrap();
-            assert_eq!(target, Target::IndirectRegOffset(BaseRegister::AReg(2), Some(IndexRegister { xreg: XRegister::DReg(3), scale: 0, size: size }), offset));
+            assert_eq!(
+                target,
+                Target::IndirectRegOffset(
+                    BaseRegister::AReg(2),
+                    Some(IndexRegister {
+                        xreg: XRegister::DReg(3),
+                        scale: 0,
+                        size: size
+                    }),
+                    offset
+                )
+            );
         });
     }
 
@@ -129,7 +145,18 @@ mod decode_unit_tests {
             decoder.bus.write_beu32(Instant::START, INIT_ADDR + 2, offset as u32).unwrap();
 
             let target = decoder.get_mode_as_target(0b110, 0b010, Some(size)).unwrap();
-            assert_eq!(target, Target::IndirectRegOffset(BaseRegister::AReg(2), Some(IndexRegister { xreg: XRegister::AReg(7), scale: 1, size: size }), offset));
+            assert_eq!(
+                target,
+                Target::IndirectRegOffset(
+                    BaseRegister::AReg(2),
+                    Some(IndexRegister {
+                        xreg: XRegister::AReg(7),
+                        scale: 1,
+                        size: size
+                    }),
+                    offset
+                )
+            );
         });
     }
 
@@ -144,7 +171,18 @@ mod decode_unit_tests {
             decoder.bus.write_beu32(Instant::START, INIT_ADDR + 2, offset as u32).unwrap();
 
             let target = decoder.get_mode_as_target(0b110, 0b010, Some(size)).unwrap();
-            assert_eq!(target, Target::IndirectRegOffset(BaseRegister::None, Some(IndexRegister { xreg: XRegister::AReg(7), scale: 1, size: size }), offset));
+            assert_eq!(
+                target,
+                Target::IndirectRegOffset(
+                    BaseRegister::None,
+                    Some(IndexRegister {
+                        xreg: XRegister::AReg(7),
+                        scale: 1,
+                        size: size
+                    }),
+                    offset
+                )
+            );
         });
     }
 
@@ -169,7 +207,10 @@ mod decode_unit_tests {
             let size = Size::Long;
             let offset = -8;
 
-            decoder.bus.write_beu16(Instant::START, INIT_ADDR, (offset as i16) as u16).unwrap();
+            decoder
+                .bus
+                .write_beu16(Instant::START, INIT_ADDR, (offset as i16) as u16)
+                .unwrap();
 
             let target = decoder.get_mode_as_target(0b111, 0b010, Some(size)).unwrap();
             assert_eq!(target, Target::IndirectRegOffset(BaseRegister::PC, None, offset));
@@ -184,10 +225,24 @@ mod decode_unit_tests {
             let brief_extension = 0x3000 | (((offset as i8) as u8) as u16);
 
             decoder.bus.write_beu16(Instant::START, INIT_ADDR, brief_extension).unwrap();
-            decoder.bus.write_beu16(Instant::START, INIT_ADDR + 2, (offset as i16) as u16).unwrap();
+            decoder
+                .bus
+                .write_beu16(Instant::START, INIT_ADDR + 2, (offset as i16) as u16)
+                .unwrap();
 
             let target = decoder.get_mode_as_target(0b111, 0b011, Some(size)).unwrap();
-            assert_eq!(target, Target::IndirectRegOffset(BaseRegister::PC, Some(IndexRegister { xreg: XRegister::DReg(3), scale: 0, size: size }), offset));
+            assert_eq!(
+                target,
+                Target::IndirectRegOffset(
+                    BaseRegister::PC,
+                    Some(IndexRegister {
+                        xreg: XRegister::DReg(3),
+                        scale: 0,
+                        size: size
+                    }),
+                    offset
+                )
+            );
         });
     }
 
@@ -202,7 +257,18 @@ mod decode_unit_tests {
             decoder.bus.write_beu32(Instant::START, INIT_ADDR + 2, offset as u32).unwrap();
 
             let target = decoder.get_mode_as_target(0b111, 0b011, Some(size)).unwrap();
-            assert_eq!(target, Target::IndirectRegOffset(BaseRegister::PC, Some(IndexRegister { xreg: XRegister::AReg(7), scale: 1, size: size }), offset));
+            assert_eq!(
+                target,
+                Target::IndirectRegOffset(
+                    BaseRegister::PC,
+                    Some(IndexRegister {
+                        xreg: XRegister::AReg(7),
+                        scale: 1,
+                        size: size
+                    }),
+                    offset
+                )
+            );
         });
     }
 
@@ -269,7 +335,9 @@ mod execute_unit_tests {
         // Insert basic initialization
         let len = 0x10_0000;
         let mut data = Vec::with_capacity(len);
-        unsafe { data.set_len(len); }
+        unsafe {
+            data.set_len(len);
+        }
         let mut memory = MemoryBlock::from(data);
         memory.write_beu32(Instant::START, 0, INIT_STACK as u32).unwrap();
         memory.write_beu32(Instant::START, 4, INIT_ADDR as u32).unwrap();

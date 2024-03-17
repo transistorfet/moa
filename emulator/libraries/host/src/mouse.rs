@@ -1,4 +1,3 @@
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MouseButton {
     Left,
@@ -68,7 +67,8 @@ impl MouseState {
             self.pos = next_state.pos;
 
             let events: Vec<MouseEvent> = self
-                .buttons.into_iter()
+                .buttons
+                .into_iter()
                 .zip(next_state.buttons)
                 .enumerate()
                 .filter_map(|(i, (prev, next))| {
@@ -102,8 +102,7 @@ impl MouseState {
         match event.etype {
             MouseEventType::Up(button) => self.buttons[usize::from(button)] = false,
             MouseEventType::Down(button) => self.buttons[usize::from(button)] = true,
-            MouseEventType::Move => { },
+            MouseEventType::Move => {},
         }
     }
 }
-

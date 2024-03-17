@@ -1,4 +1,3 @@
-
 use femtos::Frequency;
 
 use moa_core::{System, Error, MemoryBlock, Device};
@@ -51,4 +50,3 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
 
     Ok(system)
 }
-

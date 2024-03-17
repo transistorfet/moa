@@ -1,4 +1,3 @@
-
 #[derive(Copy, Clone, Default)]
 pub struct Sample(pub f32, pub f32);
 
@@ -22,4 +21,3 @@ impl AudioFrame {
         }
     }
 }
-

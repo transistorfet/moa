@@ -1,4 +1,3 @@
-
 use std::fs;
 use std::cmp;
 use std::rc::Rc;
@@ -20,7 +19,7 @@ impl MemoryBlock {
     pub fn new(contents: Vec<u8>) -> MemoryBlock {
         MemoryBlock {
             read_only: false,
-            contents
+            contents,
         }
     }
 
@@ -62,10 +61,13 @@ impl Addressable for MemoryBlock {
 
     fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
         if self.read_only {
-            return Err(Error::breakpoint(format!("Attempt to write to read-only memory at {:x} with data {:?}", addr, data)));
+            return Err(Error::breakpoint(format!(
+                "Attempt to write to read-only memory at {:x} with data {:?}",
+                addr, data
+            )));
         }
 
-        self.contents[(addr as usize) .. (addr as usize) + data.len()].copy_from_slice(data);
+        self.contents[(addr as usize)..(addr as usize) + data.len()].copy_from_slice(data);
         Ok(())
     }
 }
@@ -99,12 +101,20 @@ impl Addressable for AddressRepeater {
 
     fn read(&mut self, clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         let size = self.subdevice.borrow_mut().as_addressable().unwrap().size() as Address;
-        self.subdevice.borrow_mut().as_addressable().unwrap().read(clock, addr % size, data)
+        self.subdevice
+            .borrow_mut()
+            .as_addressable()
+            .unwrap()
+            .read(clock, addr % size, data)
     }
 
     fn write(&mut self, clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
         let size = self.subdevice.borrow_mut().as_addressable().unwrap().size() as Address;
-        self.subdevice.borrow_mut().as_addressable().unwrap().write(clock, addr % size, data)
+        self.subdevice
+            .borrow_mut()
+            .as_addressable()
+            .unwrap()
+            .write(clock, addr % size, data)
     }
 }
 
@@ -125,7 +135,7 @@ pub struct AddressTranslator {
 impl AddressTranslator {
     pub fn new<F>(subdevice: Device, size: usize, func: F) -> Self
     where
-        F: Fn(Address) -> Address + 'static
+        F: Fn(Address) -> Address + 'static,
     {
         Self {
             subdevice,
@@ -141,11 +151,19 @@ impl Addressable for AddressTranslator {
     }
 
     fn read(&mut self, clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
-        self.subdevice.borrow_mut().as_addressable().unwrap().read(clock, (self.func)(addr), data)
+        self.subdevice
+            .borrow_mut()
+            .as_addressable()
+            .unwrap()
+            .read(clock, (self.func)(addr), data)
     }
 
     fn write(&mut self, clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
-        self.subdevice.borrow_mut().as_addressable().unwrap().write(clock, (self.func)(addr), data)
+        self.subdevice
+            .borrow_mut()
+            .as_addressable()
+            .unwrap()
+            .write(clock, (self.func)(addr), data)
     }
 }
 
@@ -185,8 +203,16 @@ impl Bus {
 
     pub fn insert(&mut self, base: Address, dev: Device) {
         let size = dev.borrow_mut().as_addressable().unwrap().size();
-        let block = Block { base, size, dev };
-        let i = self.blocks.iter().position(|cur| cur.base > block.base).unwrap_or(self.blocks.len());
+        let block = Block {
+            base,
+            size,
+            dev,
+        };
+        let i = self
+            .blocks
+            .iter()
+            .position(|cur| cur.base > block.base)
+            .unwrap_or(self.blocks.len());
         self.blocks.insert(i, block);
     }
 
@@ -252,7 +278,7 @@ impl Addressable for Bus {
             Ok(result) => result,
             Err(err) if self.ignore_unmapped => {
                 log::info!("{:?}", err);
-                return Ok(())
+                return Ok(());
             },
             Err(err) => return Err(err),
         };
@@ -270,7 +296,7 @@ impl Addressable for Bus {
             Ok(result) => result,
             Err(err) if self.ignore_unmapped => {
                 log::info!("{:?}", err);
-                return Ok(())
+                return Ok(());
             },
             Err(err) => return Err(err),
         };
@@ -300,7 +326,9 @@ impl BusPort {
     }
 
     pub fn dump_memory(&mut self, clock: Instant, addr: Address, count: Address) {
-        self.subdevice.borrow_mut().dump_memory(clock, self.offset + (addr & self.address_mask), count)
+        self.subdevice
+            .borrow_mut()
+            .dump_memory(clock, self.offset + (addr & self.address_mask), count)
     }
 
     #[inline]
@@ -401,4 +429,3 @@ impl BusAccess<u64, Instant> for &mut dyn Addressable {
         Ok(data.len())
     }
 }
-

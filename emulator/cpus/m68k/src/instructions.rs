@@ -1,4 +1,3 @@
-
 use std::fmt::{self, Write};
 
 
@@ -336,10 +335,12 @@ impl fmt::Display for Target {
                 let index_str = fmt_index_disp(index_reg);
                 write!(f, "([{}#{:08x}]{} + #{:08x})", base_reg, base_disp, index_str, outer_disp)
             },
-            Target::IndirectMemory(value, size) => if *size == Size::Word {
-                write!(f, "(#{:04x})", value)
-            } else {
-                write!(f, "(#{:08x})", value)
+            Target::IndirectMemory(value, size) => {
+                if *size == Size::Word {
+                    write!(f, "(#{:04x})", value)
+                } else {
+                    write!(f, "(#{:08x})", value)
+                }
             },
         }
     }
@@ -432,7 +433,17 @@ impl fmt::Display for Instruction {
             Instruction::EORtoCCR(value) => write!(f, "eorib\t#{:#02x}, %ccr", value),
             Instruction::EORtoSR(value) => write!(f, "eoriw\t#{:#04x}, %sr", value),
             Instruction::EXG(src, dest) => write!(f, "exg\t{}, {}", src, dest),
-            Instruction::EXT(reg, from_size, to_size) => write!(f, "ext{}{}\t%d{}", if *from_size == Size::Byte && *to_size == Size::Long { "b" } else { "" }, to_size, reg),
+            Instruction::EXT(reg, from_size, to_size) => write!(
+                f,
+                "ext{}{}\t%d{}",
+                if *from_size == Size::Byte && *to_size == Size::Long {
+                    "b"
+                } else {
+                    ""
+                },
+                to_size,
+                reg
+            ),
 
             Instruction::ILLEGAL => write!(f, "illegal"),
 
@@ -517,4 +528,3 @@ impl fmt::Display for Instruction {
         }
     }
 }
-

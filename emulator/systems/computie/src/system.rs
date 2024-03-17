@@ -1,4 +1,3 @@
-
 use femtos::Frequency;
 
 use moa_core::{System, Error, Debuggable, MemoryBlock, Device};
@@ -86,18 +85,39 @@ pub fn launch_terminal_emulator(name: String) {
     use std::time::Duration;
     use std::process::Command;
 
-    Command::new("x-terminal-emulator").arg("-e").arg(&format!("pyserial-miniterm {}", name)).spawn().unwrap();
+    Command::new("x-terminal-emulator")
+        .arg("-e")
+        .arg(&format!("pyserial-miniterm {}", name))
+        .spawn()
+        .unwrap();
     thread::sleep(Duration::from_secs(1));
 }
 
 pub fn launch_slip_connection(name: String) {
     use std::process::Command;
 
-    Command::new("sudo").args(["slattach", "-s", "38400", "-p", "slip", &name]).spawn().unwrap();
-    Command::new("sudo").args(["ifconfig", "sl0", "192.168.1.2", "pointopoint", "192.168.1.200", "up"]).status().unwrap();
-    Command::new("sudo").args(["arp", "-Ds", "192.168.1.200", "enp4s0", "pub"]).status().unwrap();
-    Command::new("sudo").args(["iptables", "-A", "FORWARD", "-i", "sl0", "-j", "ACCEPT"]).status().unwrap();
-    Command::new("sudo").args(["iptables", "-A", "FORWARD", "-o", "sl0", "-j", "ACCEPT"]).status().unwrap();
-    Command::new("sudo").args(["sh", "-c", "echo 1 > /proc/sys/net/ipv4/ip_forward"]).status().unwrap();
+    Command::new("sudo")
+        .args(["slattach", "-s", "38400", "-p", "slip", &name])
+        .spawn()
+        .unwrap();
+    Command::new("sudo")
+        .args(["ifconfig", "sl0", "192.168.1.2", "pointopoint", "192.168.1.200", "up"])
+        .status()
+        .unwrap();
+    Command::new("sudo")
+        .args(["arp", "-Ds", "192.168.1.200", "enp4s0", "pub"])
+        .status()
+        .unwrap();
+    Command::new("sudo")
+        .args(["iptables", "-A", "FORWARD", "-i", "sl0", "-j", "ACCEPT"])
+        .status()
+        .unwrap();
+    Command::new("sudo")
+        .args(["iptables", "-A", "FORWARD", "-o", "sl0", "-j", "ACCEPT"])
+        .status()
+        .unwrap();
+    Command::new("sudo")
+        .args(["sh", "-c", "echo 1 > /proc/sys/net/ipv4/ip_forward"])
+        .status()
+        .unwrap();
 }
-

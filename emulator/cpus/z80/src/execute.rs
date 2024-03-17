@@ -1,16 +1,18 @@
-
 use femtos::{Instant, Duration};
 
 use moa_core::{System, Error, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
 
-use crate::instructions::{Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister, IndexRegisterHalf, Size, Direction, UndocumentedCopy};
+use crate::instructions::{
+    Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister,
+    IndexRegisterHalf, Size, Direction, UndocumentedCopy,
+};
 use crate::state::{Z80, Z80Error, Status, Flags};
 use crate::timing::Z80InstructionCycles;
 
 
-const FLAGS_NUMERIC: u8                 = 0xC0;
-const FLAGS_ARITHMETIC: u8              = 0x17;
-const FLAGS_CARRY_HALF_CARRY: u8        = 0x11;
+const FLAGS_NUMERIC: u8 = 0xC0;
+const FLAGS_ARITHMETIC: u8 = 0x17;
+const FLAGS_CARRY_HALF_CARRY: u8 = 0x11;
 
 
 enum RotateType {
@@ -36,7 +38,7 @@ impl Steppable for Z80 {
     }
 }
 
-impl Interruptable for Z80 { }
+impl Interruptable for Z80 {}
 
 
 impl Transmutable for Z80 {
@@ -72,7 +74,6 @@ impl From<Error> for Z80Error {
             Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => Z80Error::BusError(msg.to_string()),
         }
     }
-
 }
 #[derive(Clone)]
 pub struct Z80Executor {
@@ -95,11 +96,9 @@ impl Z80 {
         match self.state.status {
             Status::Init => self.init(),
             Status::Halted => Err(Z80Error::Halted),
-            Status::Running => {
-                match self.cycle_one() {
-                    Ok(clocks) => Ok(clocks),
-                    Err(err) => Err(err),
-                }
+            Status::Running => match self.cycle_one() {
+                Ok(clocks) => Ok(clocks),
+                Err(err) => Err(err),
             },
         }
     }
@@ -120,12 +119,15 @@ impl Z80 {
 
         self.decode_next()?;
         self.execute_current()?;
-        Ok(Z80InstructionCycles::from_instruction(&self.decoder.instruction, self.decoder.extra_instruction_bytes)?
-            .calculate_cycles(self.executor.took_branch))
+        Ok(
+            Z80InstructionCycles::from_instruction(&self.decoder.instruction, self.decoder.extra_instruction_bytes)?
+                .calculate_cycles(self.executor.took_branch),
+        )
     }
 
     pub fn decode_next(&mut self) -> Result<(), Z80Error> {
-        self.decoder.decode_at(&mut self.port, self.executor.current_clock, self.state.pc)?;
+        self.decoder
+            .decode_at(&mut self.port, self.executor.current_clock, self.state.pc)?;
         self.increment_refresh(self.decoder.end.saturating_sub(self.decoder.start) as u8);
         self.state.pc = self.decoder.end;
         Ok(())
@@ -186,9 +188,7 @@ impl Z80 {
             Instruction::LDsr(special_reg, dir) => self.execute_ldsr(special_reg, dir),
             Instruction::LDD | Instruction::LDDR | Instruction::LDI | Instruction::LDIR => self.execute_ldx(),
             Instruction::NEG => self.execute_neg(),
-            Instruction::NOP => {
-                Ok(())
-            },
+            Instruction::NOP => Ok(()),
             Instruction::OR(target) => self.execute_or(target),
             //Instruction::OTDR => {
             //},
@@ -230,9 +230,7 @@ impl Z80 {
             Instruction::SRL(target, opt_copy) => self.execute_srl(target, opt_copy),
             Instruction::SUB(target) => self.execute_sub(target),
             Instruction::XOR(target) => self.execute_xor(target),
-            _ => {
-                Err(Z80Error::Unimplemented(self.decoder.instruction.clone()))
-            }
+            _ => Err(Z80Error::Unimplemented(self.decoder.instruction.clone())),
         }
     }
 
@@ -242,7 +240,14 @@ impl Z80 {
 
         let (result1, carry1, overflow1, half_carry1) = add_bytes(acc, self.get_flag(Flags::Carry) as u8);
         let (result2, carry2, overflow2, half_carry2) = add_bytes(result1, src);
-        self.set_arithmetic_op_flags(result2 as u16, Size::Byte, false, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
+        self.set_arithmetic_op_flags(
+            result2 as u16,
+            Size::Byte,
+            false,
+            carry1 | carry2,
+            overflow1 ^ overflow2,
+            half_carry1 | half_carry2,
+        );
 
         self.set_register_value(Register::A, result2);
         Ok(())
@@ -410,7 +415,7 @@ impl Z80 {
         let value = self.get_target_value(target)?;
 
         let (result, _, overflow, half_carry) = sub_bytes(value, 1);
-        let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
+        let carry = self.get_flag(Flags::Carry); // Preserve the carry bit, according to Z80 reference
         self.set_arithmetic_op_flags(result as u16, Size::Byte, true, carry, overflow, half_carry);
 
         self.set_target_value(target, result)?;
@@ -498,7 +503,7 @@ impl Z80 {
     fn execute_inc8(&mut self, target: Target) -> Result<(), Z80Error> {
         let value = self.get_target_value(target)?;
         let (result, _, overflow, half_carry) = add_bytes(value, 1);
-        let carry = self.get_flag(Flags::Carry);        // Preserve the carry bit, according to Z80 reference
+        let carry = self.get_flag(Flags::Carry); // Preserve the carry bit, according to Z80 reference
         self.set_arithmetic_op_flags(result as u16, Size::Byte, false, carry, overflow, half_carry);
 
         self.set_target_value(target, result)?;
@@ -626,9 +631,7 @@ impl Z80 {
         let parity = if count != 0 { Flags::Parity as u8 } else { 0 };
         self.set_flags(mask, parity);
 
-        if (self.decoder.instruction == Instruction::LDIR || self.decoder.instruction == Instruction::LDDR)
-            && count != 0
-        {
+        if (self.decoder.instruction == Instruction::LDIR || self.decoder.instruction == Instruction::LDDR) && count != 0 {
             self.executor.took_branch = true;
             self.state.pc -= 2;
         }
@@ -860,7 +863,14 @@ impl Z80 {
 
         let (result1, carry1, overflow1, half_carry1) = sub_bytes(acc, src);
         let (result2, carry2, overflow2, half_carry2) = sub_bytes(result1, self.get_flag(Flags::Carry) as u8);
-        self.set_arithmetic_op_flags(result2 as u16, Size::Byte, true, carry1 | carry2, overflow1 ^ overflow2, half_carry1 | half_carry2);
+        self.set_arithmetic_op_flags(
+            result2 as u16,
+            Size::Byte,
+            true,
+            carry1 | carry2,
+            overflow1 ^ overflow2,
+            half_carry1 | half_carry2,
+        );
 
         self.set_register_value(Register::A, result2);
         Ok(())
@@ -1041,12 +1051,8 @@ impl Z80 {
                 let addr = self.get_register_pair_value(regpair);
                 self.read_port_u16(addr)?
             },
-            LoadTarget::IndirectByte(addr) => {
-                self.read_port_u8(addr)? as u16
-            },
-            LoadTarget::IndirectWord(addr) => {
-                self.read_port_u16(addr)?
-            },
+            LoadTarget::IndirectByte(addr) => self.read_port_u8(addr)? as u16,
+            LoadTarget::IndirectWord(addr) => self.read_port_u16(addr)?,
             LoadTarget::ImmediateByte(data) => data as u16,
             LoadTarget::ImmediateWord(data) => data,
             _ => panic!("Unsupported LoadTarget for set"),
@@ -1176,10 +1182,18 @@ impl Z80 {
 
     fn set_index_register_half_value(&mut self, reg: IndexRegisterHalf, value: u8) {
         match reg {
-            IndexRegisterHalf::IXH => { self.state.ix = (self.state.ix & 0x00FF) | (value as u16) << 8; },
-            IndexRegisterHalf::IXL => { self.state.ix = (self.state.ix & 0xFF00) | value as u16; },
-            IndexRegisterHalf::IYH => { self.state.iy = (self.state.iy & 0x00FF) | (value as u16) << 8; },
-            IndexRegisterHalf::IYL => { self.state.iy = (self.state.iy & 0xFF00) | value as u16; },
+            IndexRegisterHalf::IXH => {
+                self.state.ix = (self.state.ix & 0x00FF) | (value as u16) << 8;
+            },
+            IndexRegisterHalf::IXL => {
+                self.state.ix = (self.state.ix & 0xFF00) | value as u16;
+            },
+            IndexRegisterHalf::IYH => {
+                self.state.iy = (self.state.iy & 0x00FF) | (value as u16) << 8;
+            },
+            IndexRegisterHalf::IYL => {
+                self.state.iy = (self.state.iy & 0xFF00) | value as u16;
+            },
         }
     }
 
@@ -1197,13 +1211,27 @@ impl Z80 {
 
     fn set_register_pair_value(&mut self, regpair: RegisterPair, value: u16) {
         match regpair {
-            RegisterPair::BC => { write_beu16(&mut self.state.reg[0..2], value); },
-            RegisterPair::DE => { write_beu16(&mut self.state.reg[2..4], value); },
-            RegisterPair::HL => { write_beu16(&mut self.state.reg[4..6], value); },
-            RegisterPair::AF => { write_beu16(&mut self.state.reg[6..8], value); },
-            RegisterPair::SP => { self.state.sp = value; },
-            RegisterPair::IX => { self.state.ix = value; },
-            RegisterPair::IY => { self.state.iy = value; },
+            RegisterPair::BC => {
+                write_beu16(&mut self.state.reg[0..2], value);
+            },
+            RegisterPair::DE => {
+                write_beu16(&mut self.state.reg[2..4], value);
+            },
+            RegisterPair::HL => {
+                write_beu16(&mut self.state.reg[4..6], value);
+            },
+            RegisterPair::AF => {
+                write_beu16(&mut self.state.reg[6..8], value);
+            },
+            RegisterPair::SP => {
+                self.state.sp = value;
+            },
+            RegisterPair::IX => {
+                self.state.ix = value;
+            },
+            RegisterPair::IY => {
+                self.state.iy = value;
+            },
         }
     }
 
@@ -1234,7 +1262,11 @@ impl Z80 {
     }
 
     fn set_parity_flags(&mut self, value: u8) {
-        let parity = if (value.count_ones() & 0x01) == 0 { Flags::Parity as u8 } else { 0 };
+        let parity = if (value.count_ones() & 0x01) == 0 {
+            Flags::Parity as u8
+        } else {
+            0
+        };
         self.set_flags(Flags::Parity as u8, parity);
     }
 
@@ -1313,4 +1345,3 @@ fn get_msb(value: u16, size: Size) -> bool {
         Size::Word => (value & 0x8000) != 0,
     }
 }
-

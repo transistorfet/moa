@@ -1,4 +1,3 @@
-
 use std::str::Chars;
 use std::iter::Peekable;
 
@@ -56,9 +55,13 @@ impl<'input> AssemblyParser<'input> {
     fn parse_line(&mut self) -> Result<Option<AssemblyLine>, ParserError> {
         let token = loop {
             match self.lexer.get_next() {
-                Some(token) if token == "\n" => { },
-                Some(token) => { break token; }
-                None => { return Ok(None); },
+                Some(token) if token == "\n" => {},
+                Some(token) => {
+                    break token;
+                },
+                None => {
+                    return Ok(None);
+                },
             }
         };
 
@@ -79,7 +82,11 @@ impl<'input> AssemblyParser<'input> {
                 }
             },
             _ => {
-                return Err(ParserError::new(format!("parse error at line {}: expected word, found {:?}", self.lexer.lineno(), token)));
+                return Err(ParserError::new(format!(
+                    "parse error at line {}: expected word, found {:?}",
+                    self.lexer.lineno(),
+                    token
+                )));
             },
         };
 
@@ -164,7 +171,7 @@ impl<'input> AssemblyParser<'input> {
                 } else {
                     Ok(AssemblyOperand::Label(token))
                 }
-            }
+            },
         }
     }
 }
@@ -237,7 +244,8 @@ impl<'input> AssemblyLexer<'input> {
     }
 
     pub fn expect_next(&mut self) -> Result<String, ParserError> {
-        self.get_next().ok_or_else(|| ParserError::new(format!("unexpected end of input at line {}", self.lineno)))
+        self.get_next()
+            .ok_or_else(|| ParserError::new(format!("unexpected end of input at line {}", self.lineno)))
     }
 
     pub fn expect_token(&mut self, expected: &str) -> Result<(), ParserError> {
@@ -245,7 +253,10 @@ impl<'input> AssemblyLexer<'input> {
         if token == expected {
             Ok(())
         } else {
-            Err(ParserError::new(format!("parse error at line {}: expected {:?}, found {:?}", self.lineno, expected, token)))
+            Err(ParserError::new(format!(
+                "parse error at line {}: expected {:?}, found {:?}",
+                self.lineno, expected, token
+            )))
         }
     }
 
@@ -309,7 +320,12 @@ pub fn expect_args(lineno: usize, args: &[AssemblyOperand], expected: usize) -> 
     if args.len() == expected {
         Ok(())
     } else {
-        Err(ParserError::new(format!("error at line {}: expected {} args, but found {}", lineno, expected, args.len())))
+        Err(ParserError::new(format!(
+            "error at line {}: expected {} args, but found {}",
+            lineno,
+            expected,
+            args.len()
+        )))
     }
 }
 
@@ -326,7 +342,9 @@ pub fn expect_immediate(lineno: usize, operand: &AssemblyOperand) -> Result<usiz
     if let AssemblyOperand::Immediate(value) = operand {
         Ok(*value)
     } else {
-        Err(ParserError::new(format!("error at line {}: expected an immediate value, but found {:?}", lineno, operand)))
+        Err(ParserError::new(format!(
+            "error at line {}: expected an immediate value, but found {:?}",
+            lineno, operand
+        )))
     }
 }
-

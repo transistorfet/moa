@@ -1,4 +1,3 @@
-
 use femtos::{Instant, Duration};
 
 use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
@@ -6,9 +5,7 @@ use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable};
 const DEV_NAME: &str = "z8530";
 
 #[derive(Default)]
-pub struct Z8530 {
-
-}
+pub struct Z8530 {}
 
 impl Addressable for Z8530 {
     fn size(&self) -> usize {
@@ -30,7 +27,6 @@ impl Addressable for Z8530 {
 
 impl Steppable for Z8530 {
     fn step(&mut self, _system: &System) -> Result<Duration, Error> {
-
         Ok(Duration::from_secs(1))
     }
 }
@@ -44,5 +40,3 @@ impl Transmutable for Z8530 {
         Some(self)
     }
 }
-
-
