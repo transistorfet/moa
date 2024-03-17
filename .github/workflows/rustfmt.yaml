@@ -25,6 +25,7 @@ jobs:
         run: |
           rustup toolchain install nightly --profile minimal --no-self-update
           rustup default nightly
+          rustup component add rustfmt
 
       - name: Check rustfmt
         run: |
