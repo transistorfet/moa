@@ -11,6 +11,8 @@ members = [
 exclude = [
     "emulator/frontends/pixels",
     "emulator/frontends/macroquad",
+    "emulator/libraries/femtos",
+    "emulator/libraries/emulator-hal",
 ]
 default-members = ["emulator/frontends/minifb"]
 
