@@ -768,7 +768,7 @@ impl Steppable for Ym7101 {
                 });
         }
 
-        Ok(Frequency::from_hz(13_423_294).period_duration() * 4)
+        Ok(Frequency::from_hz(13_423_294).period_duration() * 4_u32)
     }
 }
 

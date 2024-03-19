@@ -1,7 +1,11 @@
 
-* implement Inspect/Debug traits
-* fix dump_state everywhere, which now requires a writer.  Is there an easier way?  Is there a way that doesn't require std
+* decide if you should continue expecting Instant to usable through the trait alone, despite issues
 * fix it to use the full 68k address space, and maybe see if it's possible to make the address translation cleaner/nicer/simpler/faster
+* now that you have Instant as generic in m68k, try making it an associated type to see if it's possible to hide it away
+
+* try using the debug and inspect traits elsewhere in moa
+* convert all code to use fmt::Writer instead of println
+
 * figure out how to do interrupts, and add them to emulator-hal, implement them in m68k
 * convert the Z80
 * convert peripherals to use BusAccess and Step
@@ -14,6 +18,8 @@
 * it doesn't work when using debug due to math checks, so fix them
 
 -----
+
+* add pub use for all the pub types to the lib.rs of the m68k crate
 
 * there are many issues with the coprocessor address space, and the VDP
 * I mapped the sn sound chip into 0xC00010, in the middle of the VDP's address space, and didn't get a runtime error!!! needs fixing

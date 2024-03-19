@@ -145,7 +145,7 @@ pub fn run_system_for(handle: &mut SystemHandle, nanos: u32) -> usize {
         log::error!("{:?}", err);
     }
     let run_time = run_timer.elapsed().as_millis();
-    log::debug!("ran simulation for {:?}ms in {:?}ms", nanoseconds_per_frame / 1_000_000, run_time);
+    log::debug!("ran simulation for {:?}ms in {:?}ms", nanoseconds_per_frame / 1_000_000_u32, run_time);
     run_time as usize
 }
 
@@ -272,7 +272,7 @@ fn update(emulator: Rc<RefCell<Emulator>>) {
         log::error!("{:?}", err);
     }
     let run_time = run_timer.elapsed().as_millis();
-    log::debug!("ran simulation for {:?}ms in {:?}ms", nanoseconds_per_frame / 1_000_000, run_time);
+    log::debug!("ran simulation for {:?}ms in {:?}ms", nanoseconds_per_frame / 1_000_000_u32, run_time);
 
     let running = emulator.borrow().running;
     if running {

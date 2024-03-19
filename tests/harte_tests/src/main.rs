@@ -146,7 +146,7 @@ impl TestCase {
 
 
 #[allow(clippy::uninit_vec)]
-fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k, MemoryBlock<u32, Instant>), Error> {
+fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k<Instant>, MemoryBlock<u32, Instant>), Error> {
     // Insert basic initialization
     let len = 0x100_0000;
     let mut data = Vec::with_capacity(len);
@@ -174,7 +174,7 @@ where
     }
 }
 
-fn load_state(cpu: &mut M68k, memory: &mut MemoryBlock<u32, Instant>, initial: &TestState) -> Result<(), Error> {
+fn load_state(cpu: &mut M68k<Instant>, memory: &mut MemoryBlock<u32, Instant>, initial: &TestState) -> Result<(), Error> {
     cpu.state.d_reg[0] = initial.d0;
     cpu.state.d_reg[1] = initial.d1;
     cpu.state.d_reg[2] = initial.d2;
@@ -213,7 +213,7 @@ fn load_state(cpu: &mut M68k, memory: &mut MemoryBlock<u32, Instant>, initial: &
     Ok(())
 }
 
-fn assert_state(cpu: &M68k, memory: &mut MemoryBlock<u32, Instant>, expected: &TestState) -> Result<(), Error> {
+fn assert_state(cpu: &M68k<Instant>, memory: &mut MemoryBlock<u32, Instant>, expected: &TestState) -> Result<(), Error> {
     assert_value(cpu.state.d_reg[0], expected.d0, "d0")?;
     assert_value(cpu.state.d_reg[1], expected.d1, "d1")?;
     assert_value(cpu.state.d_reg[2], expected.d2, "d2")?;
@@ -258,7 +258,7 @@ fn assert_state(cpu: &M68k, memory: &mut MemoryBlock<u32, Instant>, expected: &T
 }
 
 fn step_cpu_and_assert(
-    cpu: &mut M68k,
+    cpu: &mut M68k<Instant>,
     memory: &mut MemoryBlock<u32, Instant>,
     case: &TestCase,
     test_timing: bool,

@@ -1,3 +1,5 @@
+// m68k Instruction Timing Calclator
+
 use crate::M68kType;
 use crate::state::ClockCycles;
 use crate::instructions::{Size, Sign, Direction, Target, Instruction};

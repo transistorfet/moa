@@ -1,8 +1,9 @@
-use femtos::Instant;
+// Instruction Decoding
+
+use core::marker::PhantomData;
 use emulator_hal::bus::BusAccess;
 
-use crate::state::{M68kType, M68kError, Exceptions};
-use crate::memory::{M68kBusPort, M68kAddress};
+use crate::{M68kType, M68kError, M68kBusPort, M68kAddress, Exceptions};
 use crate::instructions::{
     Size, Sign, Direction, XRegister, BaseRegister, IndexRegister, RegOrImmediate, ControlRegister, Condition, Target, Instruction,
     sign_extend_to_long,
@@ -28,27 +29,31 @@ const OPCG_FLINE: u8 = 0xF;
 
 
 #[derive(Clone, Debug)]
-pub struct M68kDecoder {
+pub struct M68kDecoder<Instant> {
     pub cputype: M68kType,
     pub is_supervisor: bool,
     pub start: u32,
     pub end: u32,
     pub instruction_word: u16,
     pub instruction: Instruction,
+    pub instant: PhantomData<Instant>,
 }
 
-pub struct InstructionDecoding<'a, Bus>
+pub struct InstructionDecoding<'a, Bus, Instant>
 where
     Bus: BusAccess<M68kAddress, Instant>,
 {
     pub(crate) bus: &'a mut Bus,
-    pub(crate) memory: &'a mut M68kBusPort,
-    pub(crate) decoder: &'a mut M68kDecoder,
+    pub(crate) memory: &'a mut M68kBusPort<Instant>,
+    pub(crate) decoder: &'a mut M68kDecoder<Instant>,
 }
 
-impl M68kDecoder {
+impl<Instant> M68kDecoder<Instant>
+where
+    Instant: Copy,
+{
     #[inline]
-    pub fn new(cputype: M68kType, is_supervisor: bool, start: u32) -> M68kDecoder {
+    pub fn new(cputype: M68kType, is_supervisor: bool, start: u32) -> M68kDecoder<Instant> {
         M68kDecoder {
             cputype,
             is_supervisor,
@@ -56,6 +61,7 @@ impl M68kDecoder {
             end: start,
             instruction_word: 0,
             instruction: Instruction::NOP,
+            instant: PhantomData,
         }
     }
 
@@ -70,7 +76,7 @@ impl M68kDecoder {
     pub fn decode_at<Bus>(
         &mut self,
         bus: &mut Bus,
-        memory: &mut M68kBusPort,
+        memory: &mut M68kBusPort<Instant>,
         is_supervisor: bool,
         start: u32,
     ) -> Result<(), M68kError<Bus::Error>>
@@ -87,14 +93,13 @@ impl M68kDecoder {
         Ok(())
     }
 
-    pub fn dump_disassembly<Bus>(&mut self, bus: &mut Bus, start: u32, length: u32)
+    pub fn dump_disassembly<Bus>(&mut self, bus: &mut Bus, memory: &mut M68kBusPort<Instant>, start: u32, length: u32)
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
-        let mut memory = M68kBusPort::default();
         let mut next = start;
         while next < (start + length) {
-            match self.decode_at(bus, &mut memory, self.is_supervisor, next) {
+            match self.decode_at(bus, memory, self.is_supervisor, next) {
                 Ok(()) => {
                     self.dump_decoded(memory.current_clock, bus);
                     next = self.end;
@@ -121,9 +126,10 @@ impl M68kDecoder {
     }
 }
 
-impl<'a, Bus> InstructionDecoding<'a, Bus>
+impl<'a, Bus, Instant> InstructionDecoding<'a, Bus, Instant>
 where
     Bus: BusAccess<M68kAddress, Instant>,
+    Instant: Copy,
 {
     #[inline]
     pub fn decode_next(&mut self) -> Result<Instruction, M68kError<Bus::Error>> {
