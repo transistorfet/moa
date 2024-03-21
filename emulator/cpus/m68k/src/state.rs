@@ -194,17 +194,9 @@ pub enum M68kError<BusError> {
     Other(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct M68kStatistics {
     pub cycle_number: usize,
-}
-
-impl Default for M68kStatistics {
-    fn default() -> Self {
-        Self {
-            cycle_number: 0,
-        }
-    }
 }
 
 #[derive(Clone)]

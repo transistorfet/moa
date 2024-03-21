@@ -38,7 +38,7 @@ where
 
     type Error = M68kError<BusError>;
 
-    fn inspect(&mut self, info: Self::InfoType, bus: &mut Bus, writer: &mut Writer) -> Result<(), Self::Error> {
+    fn inspect(&mut self, info: Self::InfoType, _bus: &mut Bus, writer: &mut Writer) -> Result<(), Self::Error> {
         match info {
             M68kInfo::State => self
                 .state
@@ -77,11 +77,11 @@ where
     }
 
     fn add_breakpoint(&mut self, address: M68kAddress) {
-        self.debugger.breakpoints.push(address as u32);
+        self.debugger.breakpoints.push(address);
     }
 
     fn remove_breakpoint(&mut self, address: M68kAddress) {
-        if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == address as u32) {
+        if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == address) {
             self.debugger.breakpoints.remove(index);
         }
     }
