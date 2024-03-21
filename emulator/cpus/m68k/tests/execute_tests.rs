@@ -76,7 +76,7 @@ fn build_state(state: &TestState) -> M68kState {
     new_state
 }
 
-fn load_memory<Bus: BusAccess<u32, Instant>>(bus: &mut Bus, data: &[u16]) {
+fn load_memory<Bus: BusAccess<u32, Instant = Instant>>(bus: &mut Bus, data: &[u16]) {
     for i in 0..data.len() {
         bus.write_beu16(Instant::START, (i << 1) as u32, data[i]).unwrap();
     }

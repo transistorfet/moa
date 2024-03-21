@@ -388,7 +388,7 @@ pub fn dump_slice(data: &[u8], mut count: usize) {
 
 pub fn dump_memory<Bus, Address, Instant>(bus: &mut Bus, clock: Instant, addr: Address, count: Address)
 where
-    Bus: BusAccess<Address, Instant>,
+    Bus: BusAccess<Address, Instant = Instant>,
     Address: From<u64> + Into<u64> + Copy,
     Instant: Copy,
 {
@@ -416,7 +416,8 @@ use emulator_hal::bus::{self, BusAccess};
 
 impl bus::Error for Error {}
 
-impl BusAccess<u64, Instant> for &mut dyn Addressable {
+impl BusAccess<u64> for &mut dyn Addressable {
+    type Instant = Instant;
     type Error = Error;
 
     fn read(&mut self, now: Instant, addr: Address, data: &mut [u8]) -> Result<usize, Self::Error> {

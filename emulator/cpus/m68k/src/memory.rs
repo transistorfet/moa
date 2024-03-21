@@ -173,7 +173,7 @@ where
         data: &mut [u8],
     ) -> Result<(), M68kError<BusError>>
     where
-        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+        Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     {
         let addr = addr & self.address_mask;
         for i in (0..data.len()).step_by(self.data_bytewidth) {
@@ -193,7 +193,7 @@ where
         data: &[u8],
     ) -> Result<(), M68kError<BusError>>
     where
-        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+        Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     {
         let addr = addr & self.address_mask;
         for i in (0..data.len()).step_by(self.data_bytewidth) {
@@ -207,7 +207,7 @@ where
 
     fn read_sized<Bus, BusError>(&mut self, bus: &mut Bus, addr: M68kAddress, size: Size) -> Result<u32, M68kError<BusError>>
     where
-        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+        Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     {
         let mut data = [0; 4];
         match size {
@@ -226,7 +226,7 @@ where
         value: u32,
     ) -> Result<(), M68kError<BusError>>
     where
-        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+        Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     {
         let data = value.to_be_bytes();
         match size {
@@ -244,7 +244,7 @@ where
         size: Size,
     ) -> Result<u32, M68kError<BusError>>
     where
-        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+        Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     {
         self.start_request(is_supervisor, addr, size, MemAccess::Read, MemType::Data, false)?;
         self.read_sized(bus, addr, size)
@@ -259,7 +259,7 @@ where
         value: u32,
     ) -> Result<(), M68kError<BusError>>
     where
-        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+        Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     {
         self.start_request(is_supervisor, addr, size, MemAccess::Write, MemType::Data, false)?;
         self.write_sized(bus, addr, size, value)
@@ -272,7 +272,7 @@ where
         addr: u32,
     ) -> Result<u16, M68kError<BusError>>
     where
-        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+        Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     {
         self.request.instruction(is_supervisor, addr)?;
         Ok(self.read_sized(bus, addr, Size::Word)? as u16)
@@ -285,7 +285,7 @@ where
         addr: u32,
     ) -> Result<u32, M68kError<BusError>>
     where
-        Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+        Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     {
         self.request.instruction(is_supervisor, addr)?;
         self.read_sized(bus, addr, Size::Long)
@@ -327,7 +327,7 @@ fn validate_address<BusError>(addr: u32) -> Result<u32, M68kError<BusError>> {
 
 pub fn dump_memory<Bus, Address, Instant>(bus: &mut Bus, clock: Instant, addr: Address, count: Address)
 where
-    Bus: BusAccess<Address, Instant>,
+    Bus: BusAccess<Address, Instant = Instant>,
     Address: From<u32> + Into<u32> + Copy,
     Instant: Copy,
 {
