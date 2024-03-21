@@ -64,7 +64,7 @@ const DECODE_TESTS: &'static [TestCase] = &[
 ];
 
 
-fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Instant>) {
+fn init_decode_test(cputype: M68kType) -> (M68k<Instant>, M68kCycle<Instant>, MemoryBlock<u32, Instant>) {
     // Insert basic initialization
     let len = 0x2000;
     let mut data = Vec::with_capacity(len);

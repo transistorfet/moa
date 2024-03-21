@@ -38,7 +38,7 @@ struct TestCase {
 #[allow(clippy::uninit_vec)]
 fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
 where
-    F: FnMut(M68kCycleExecutor<&mut MemoryBlock<u32, Instant>>),
+    F: FnMut(M68kCycleExecutor<&mut MemoryBlock<u32, Instant>, Instant>),
 {
     // Insert basic initialization
     let len = 0x10_0000;

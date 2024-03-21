@@ -8,7 +8,7 @@ log = "0.4"
 thiserror = "1.0"
 femtos = "0.1"
 moa-parsing = { path = "../../libraries/parsing" }
-emulator-hal = { path = "../../libraries/emulator-hal/emulator-hal" }
+emulator-hal = { path = "../../libraries/emulator-hal/emulator-hal", features = ["femtos"] }
 
 moa-core = { path = "../../core", optional = true }
 

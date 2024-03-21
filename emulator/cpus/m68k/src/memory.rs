@@ -1,9 +1,10 @@
 use core::cmp;
 use core::fmt::Write;
-use femtos::Instant;
+use emulator_hal::time;
 use emulator_hal::bus::BusAccess;
 
-use crate::state::{M68k, M68kError, CpuInfo, Exceptions};
+use crate::{M68kError, CpuInfo};
+use crate::state::Exceptions;
 use crate::instructions::Size;
 
 #[repr(u8)]
@@ -35,7 +36,7 @@ pub enum MemAccess {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 // TODO change to MemoryState or RequestState or AccessState or maybe even BusState
-pub struct MemoryRequest {
+pub struct MemoryRequest<Instant> {
     pub i_n_bit: bool,
     pub access: MemAccess,
     pub code: FunctionCode,
@@ -62,7 +63,10 @@ impl FunctionCode {
     }
 }
 
-impl Default for MemoryRequest {
+impl<Instant> Default for MemoryRequest<Instant>
+where
+    Instant: time::Instant,
+{
     fn default() -> Self {
         Self {
             i_n_bit: false,
@@ -75,7 +79,18 @@ impl Default for MemoryRequest {
     }
 }
 
-impl MemoryRequest {
+impl<Instant> MemoryRequest<Instant> {
+    fn new(clock: Instant) -> Self {
+        Self {
+            i_n_bit: false,
+            access: MemAccess::Read,
+            code: FunctionCode::Reserved0,
+            size: Size::Word,
+            address: 0,
+            clock,
+        }
+    }
+
     pub(crate) fn instruction<BusError>(&mut self, is_supervisor: bool, addr: u32) -> Result<u32, M68kError<BusError>> {
         self.i_n_bit = false;
         self.code = FunctionCode::program(is_supervisor);
@@ -106,14 +121,14 @@ pub type M68kAddress = u32;
 pub type M68kAddressSpace = (FunctionCode, u32);
 
 #[derive(Clone, Debug)]
-pub struct InstructionRequest {
-    pub request: MemoryRequest,
+pub struct InstructionRequest<Instant> {
+    pub request: MemoryRequest<Instant>,
     pub current_clock: Instant,
 }
 
 #[derive(Clone, Debug)]
-pub struct M68kBusPort {
-    pub request: MemoryRequest,
+pub struct M68kBusPort<Instant> {
+    pub request: MemoryRequest<Instant>,
     pub data_bytewidth: usize,
     pub address_mask: u32,
     pub cycle_start_clock: Instant,
@@ -121,11 +136,10 @@ pub struct M68kBusPort {
 }
 
 
-impl M68k {
-    // TODO should some of the ones from execute.rs move here
-}
-
-impl Default for M68kBusPort {
+impl<Instant> Default for M68kBusPort<Instant>
+where
+    Instant: time::Instant,
+{
     fn default() -> Self {
         Self {
             request: Default::default(),
@@ -137,10 +151,13 @@ impl Default for M68kBusPort {
     }
 }
 
-impl M68kBusPort {
+impl<Instant> M68kBusPort<Instant>
+where
+    Instant: Copy,
+{
     pub fn from_info(info: &CpuInfo, clock: Instant) -> Self {
         Self {
-            request: Default::default(),
+            request: MemoryRequest::new(clock),
             data_bytewidth: info.data_width as usize / 8,
             address_mask: 1_u32.checked_shl(info.address_width as u32).unwrap_or(0).wrapping_sub(1),
             cycle_start_clock: clock,

@@ -3,11 +3,9 @@ use emulator_hal::bus;
 
 use moa_core::{System, Error, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
-use crate::state::{M68k, M68kError};
-use crate::decode::M68kDecoder;
-use crate::execute::M68kCycle;
+use crate::{M68k, M68kError, M68kDecoder, M68kCycle, M68kBusPort};
 
-impl Steppable for M68k {
+impl Steppable for M68k<Instant> {
     fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let cycle = M68kCycle::new(self, system.clock);
 
@@ -36,9 +34,9 @@ impl Steppable for M68k {
     }
 }
 
-impl Interruptable for M68k {}
+impl Interruptable for M68k<Instant> {}
 
-impl Transmutable for M68k {
+impl Transmutable for M68k<Instant> {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
         Some(self)
     }
@@ -77,7 +75,7 @@ impl<BusError: bus::Error> From<M68kError<BusError>> for Error {
 }
 
 
-impl Debuggable for M68k {
+impl Debuggable for M68k<Instant> {
     fn add_breakpoint(&mut self, addr: Address) {
         self.debugger.breakpoints.push(addr as u32);
     }
@@ -98,12 +96,13 @@ impl Debuggable for M68k {
 
     fn print_disassembly(&mut self, system: &System, addr: Address, count: usize) {
         let mut decoder = M68kDecoder::new(self.info.chip, true, 0);
+        let mut memory = M68kBusPort::from_info(&self.info, system.clock);
 
         let mut bus = system.bus.borrow_mut();
         let mut adapter: bus::BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> =
             bus::BusAdapter::new(&mut *bus, |addr| addr as u64, |err| err);
 
-        decoder.dump_disassembly(&mut adapter, addr as u32, count as u32);
+        decoder.dump_disassembly(&mut adapter, &mut memory, addr as u32, count as u32);
     }
 
     fn run_command(&mut self, system: &System, args: &[&str]) -> Result<bool, Error> {

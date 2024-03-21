@@ -1,8 +1,11 @@
-use femtos::Instant;
-use emulator_hal::bus::{self, BusAccess};
-use emulator_hal::step::Step;
+// Instruction Execution
 
-use crate::state::{M68k, M68kType, M68kError, M68kState, Status, Flags, Exceptions, InterruptPriority};
+use emulator_hal::time;
+use emulator_hal::step::Step;
+use emulator_hal::bus::{self, BusAccess};
+
+use crate::{M68k, M68kType, M68kError, M68kState};
+use crate::state::{Status, Flags, Exceptions, InterruptPriority};
 use crate::memory::{MemType, MemAccess, M68kBusPort, M68kAddress};
 use crate::decode::M68kDecoder;
 use crate::debugger::M68kDebugger;
@@ -23,14 +26,17 @@ pub enum Used {
 
 
 #[derive(Clone, Debug)]
-pub struct M68kCycle {
-    pub decoder: M68kDecoder,
+pub struct M68kCycle<Instant> {
+    pub decoder: M68kDecoder<Instant>,
     pub timing: M68kInstructionTiming,
-    pub memory: M68kBusPort,
+    pub memory: M68kBusPort<Instant>,
     pub current_clock: Instant,
 }
 
-impl M68kCycle {
+impl<Instant> M68kCycle<Instant>
+where
+    Instant: time::Instant,
+{
     #[inline]
     pub fn default(cputype: M68kType, data_width: u8) -> Self {
         Self {
@@ -42,7 +48,7 @@ impl M68kCycle {
     }
 
     #[inline]
-    pub fn new(cpu: &M68k, clock: Instant) -> Self {
+    pub fn new(cpu: &M68k<Instant>, clock: Instant) -> Self {
         let is_supervisor = cpu.state.sr & (Flags::Supervisor as u16) != 0;
         Self {
             decoder: M68kDecoder::new(cpu.info.chip, is_supervisor, cpu.state.pc),
@@ -53,17 +59,11 @@ impl M68kCycle {
     }
 
     #[inline]
-    pub fn begin<Bus>(self, cpu: &mut M68k, bus: Bus) -> M68kCycleExecutor<'_, Bus>
+    pub fn begin<Bus>(self, cpu: &mut M68k<Instant>, bus: Bus) -> M68kCycleExecutor<'_, Bus, Instant>
     where
         Bus: BusAccess<M68kAddress, Instant>,
     {
-        cpu.stats.cycle_number += 1;
-        if cpu.stats.cycle_number > cpu.stats.last_update {
-            cpu.stats.last_update += 1_000_000;
-            let now = std::time::SystemTime::now();
-            log::warn!("{} per million", now.duration_since(cpu.stats.last_time).unwrap().as_micros());
-            cpu.stats.last_time = now;
-        }
+        cpu.stats.cycle_number = cpu.stats.cycle_number.wrapping_add(1);
 
         M68kCycleExecutor {
             state: &mut cpu.state,
@@ -74,10 +74,11 @@ impl M68kCycle {
     }
 }
 
-impl<Bus, BusError> Step<M68kAddress, Instant, Bus> for M68k
+impl<Bus, BusError, Instant> Step<M68kAddress, Instant, Bus> for M68k<Instant>
 where
-    BusError: bus::Error,
     Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    BusError: bus::Error,
+    Instant: time::Instant,
 {
     type Error = M68kError<BusError>;
 
@@ -107,28 +108,30 @@ where
     }
 }
 
-pub struct M68kCycleExecutor<'a, Bus>
+pub struct M68kCycleExecutor<'a, Bus, Instant>
 where
     Bus: BusAccess<M68kAddress, Instant>,
 {
     pub state: &'a mut M68kState,
     pub bus: Bus,
     pub debugger: &'a mut M68kDebugger,
-    pub cycle: M68kCycle,
+    pub cycle: M68kCycle<Instant>,
 }
 
-impl<'a, Bus> M68kCycleExecutor<'a, Bus>
+impl<'a, Bus, Instant> M68kCycleExecutor<'a, Bus, Instant>
 where
     Bus: BusAccess<M68kAddress, Instant>,
+    Instant: Copy,
 {
-    pub fn end(self) -> M68kCycle {
+    pub fn end(self) -> M68kCycle<Instant> {
         self.cycle
     }
 }
 
-impl<'a, Bus> M68kCycleExecutor<'a, Bus>
+impl<'a, Bus, Instant> M68kCycleExecutor<'a, Bus, Instant>
 where
     Bus: BusAccess<M68kAddress, Instant>,
+    Instant: Copy,
 {
     #[inline]
     pub fn step(&mut self) -> Result<(), M68kError<Bus::Error>> {

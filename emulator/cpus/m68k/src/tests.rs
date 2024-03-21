@@ -13,7 +13,7 @@ mod decode_unit_tests {
 
     fn run_decode_test<F>(cputype: M68kType, mut test_func: F)
     where
-        F: FnMut(&mut InstructionDecoding<'_, MemoryBlock<u32, Instant>>),
+        F: FnMut(&mut InstructionDecoding<'_, MemoryBlock<u32, Instant>, Instant>),
     {
         let mut memory = MemoryBlock::from(vec![0; 0x0000100]);
         let mut decoder = M68kDecoder::new(cputype, true, 0);
@@ -330,7 +330,7 @@ mod execute_unit_tests {
     #[allow(clippy::uninit_vec)]
     fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
     where
-        F: FnMut(M68kCycleExecutor<&mut MemoryBlock<u32, Instant>>),
+        F: FnMut(M68kCycleExecutor<&mut MemoryBlock<u32, Instant>, Instant>),
     {
         // Insert basic initialization
         let len = 0x10_0000;

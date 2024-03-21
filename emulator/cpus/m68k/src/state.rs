@@ -1,9 +1,11 @@
-use core::fmt::{self, Write};
-use femtos::{Duration, Frequency};
+// m68k CPU State
 
-use crate::debugger::M68kDebugger;
+use femtos::Frequency;
+use core::fmt::{self, Write};
+use emulator_hal::time;
+
+use crate::{M68kDebugger, M68kCycle};
 use crate::instructions::Target;
-use crate::execute::M68kCycle;
 
 
 pub type ClockCycles = u16;
@@ -192,30 +194,18 @@ pub enum M68kError<BusError> {
     Other(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct M68kStatistics {
     pub cycle_number: usize,
-    pub last_update: usize,
-    pub last_time: std::time::SystemTime,
-}
-
-impl Default for M68kStatistics {
-    fn default() -> Self {
-        Self {
-            cycle_number: 0,
-            last_update: 0,
-            last_time: std::time::SystemTime::now(),
-        }
-    }
 }
 
 #[derive(Clone)]
-pub struct M68k {
+pub struct M68k<Instant> {
     pub info: CpuInfo,
     pub state: M68kState,
     pub debugger: M68kDebugger,
     pub stats: M68kStatistics,
-    pub cycle: Option<M68kCycle>,
+    pub cycle: Option<M68kCycle<Instant>>,
 }
 
 impl Default for M68kState {
@@ -251,7 +241,10 @@ impl M68kState {
     }
 }
 
-impl M68k {
+impl<Instant> M68k<Instant>
+where
+    Instant: time::Instant,
+{
     pub fn new(info: CpuInfo) -> Self {
         M68k {
             info,
@@ -279,9 +272,10 @@ impl M68k {
     }
 
     #[inline]
-    pub fn last_cycle_duration(&self) -> Duration {
+    pub fn last_cycle_duration(&self) -> Instant::Duration {
         let clocks = self.cycle.as_ref().map(|cycle| cycle.timing.calculate_clocks()).unwrap_or(4);
-        self.info.frequency.period_duration() * clocks as u64
+        //self.info.frequency.period_duration() * clocks as u64
+        Instant::hertz_to_duration(self.info.frequency.as_hz() as u64) * clocks as u32
     }
 }
 
