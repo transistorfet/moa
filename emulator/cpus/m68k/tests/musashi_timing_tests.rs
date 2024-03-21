@@ -12,7 +12,7 @@ const INIT_STACK: M68kAddress = 0x00002000;
 const INIT_ADDR: M68kAddress = 0x00000010;
 
 #[allow(clippy::uninit_vec)]
-fn init_decode_test(cputype: M68kType) -> (M68k, M68kCycle, MemoryBlock<u32, Instant>) {
+fn init_decode_test(cputype: M68kType) -> (M68k<Instant>, M68kCycle<Instant>, MemoryBlock<u32, Instant>) {
     // Insert basic initialization
     let len = 0x10_0000;
     let mut data = Vec::with_capacity(len);
