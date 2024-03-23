@@ -61,7 +61,7 @@ where
     #[inline]
     pub fn begin<Bus>(self, cpu: &mut M68k<Instant>, bus: Bus) -> M68kCycleExecutor<'_, Bus, Instant>
     where
-        Bus: BusAccess<M68kAddress, Instant>,
+        Bus: BusAccess<M68kAddress, Instant = Instant>,
     {
         cpu.stats.cycle_number = cpu.stats.cycle_number.wrapping_add(1);
 
@@ -74,9 +74,9 @@ where
     }
 }
 
-impl<Bus, BusError, Instant> Step<M68kAddress, Instant, Bus> for M68k<Instant>
+impl<Bus, BusError, Instant> Step<M68kAddress, Bus> for M68k<Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     BusError: bus::Error,
     Instant: time::Instant,
 {
@@ -110,7 +110,7 @@ where
 
 pub struct M68kCycleExecutor<'a, Bus, Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant>,
+    Bus: BusAccess<M68kAddress, Instant = Instant>,
 {
     pub state: &'a mut M68kState,
     pub bus: Bus,
@@ -120,7 +120,7 @@ where
 
 impl<'a, Bus, Instant> M68kCycleExecutor<'a, Bus, Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant>,
+    Bus: BusAccess<M68kAddress, Instant = Instant>,
     Instant: Copy,
 {
     pub fn end(self) -> M68kCycle<Instant> {
@@ -130,7 +130,7 @@ where
 
 impl<'a, Bus, Instant> M68kCycleExecutor<'a, Bus, Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant>,
+    Bus: BusAccess<M68kAddress, Instant = Instant>,
     Instant: Copy,
 {
     #[inline]

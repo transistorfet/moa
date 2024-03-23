@@ -28,9 +28,9 @@ pub enum M68kInfo {
     State,
 }
 
-impl<Bus, BusError, Instant, Writer> Inspect<M68kAddress, Instant, Bus, Writer> for M68k<Instant>
+impl<Bus, BusError, Instant, Writer> Inspect<M68kAddress, Bus, Writer> for M68k<Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     BusError: bus::Error,
     Writer: fmt::Write,
 {
@@ -57,9 +57,9 @@ where
 }
 
 /// Control the execution of a CPU device for debugging purposes
-impl<Bus, BusError, Instant, Writer> Debug<M68kAddress, Instant, Bus, Writer> for M68k<Instant>
+impl<Bus, BusError, Instant, Writer> Debug<M68kAddress, Bus, Writer> for M68k<Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     BusError: bus::Error,
     Instant: time::Instant,
     Writer: fmt::Write,
@@ -103,7 +103,7 @@ pub struct M68kDebugger {
 
 impl<'a, Bus, BusError, Instant> M68kCycleExecutor<'a, Bus, Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant, Error = BusError>,
+    Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     Instant: Copy,
 {
     pub fn check_breakpoints(&mut self) -> Result<(), M68kError<BusError>> {

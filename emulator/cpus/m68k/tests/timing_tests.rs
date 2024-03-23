@@ -43,7 +43,7 @@ fn init_decode_test(cputype: M68kType) -> (M68k<Instant>, M68kCycle<Instant>, Me
     (cpu, cycle, memory)
 }
 
-fn load_memory<Bus: BusAccess<u32, Instant>>(bus: &mut Bus, data: &[u16]) {
+fn load_memory<Bus: BusAccess<u32, Instant = Instant>>(bus: &mut Bus, data: &[u16]) {
     let mut addr = INIT_ADDR;
     for word in data {
         bus.write_beu16(Instant::START, addr, *word).unwrap();

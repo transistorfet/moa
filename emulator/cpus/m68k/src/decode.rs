@@ -41,7 +41,7 @@ pub struct M68kDecoder<Instant> {
 
 pub struct InstructionDecoding<'a, Bus, Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant>,
+    Bus: BusAccess<M68kAddress, Instant = Instant>,
 {
     pub(crate) bus: &'a mut Bus,
     pub(crate) memory: &'a mut M68kBusPort<Instant>,
@@ -81,7 +81,7 @@ where
         start: u32,
     ) -> Result<(), M68kError<Bus::Error>>
     where
-        Bus: BusAccess<M68kAddress, Instant>,
+        Bus: BusAccess<M68kAddress, Instant = Instant>,
     {
         self.init(is_supervisor, start);
         let mut decoding = InstructionDecoding {
@@ -95,7 +95,7 @@ where
 
     pub fn dump_disassembly<Bus>(&mut self, bus: &mut Bus, memory: &mut M68kBusPort<Instant>, start: u32, length: u32)
     where
-        Bus: BusAccess<M68kAddress, Instant>,
+        Bus: BusAccess<M68kAddress, Instant = Instant>,
     {
         let mut next = start;
         while next < (start + length) {
@@ -117,7 +117,7 @@ where
 
     pub fn dump_decoded<Bus>(&mut self, clock: Instant, bus: &mut Bus)
     where
-        Bus: BusAccess<M68kAddress, Instant>,
+        Bus: BusAccess<M68kAddress, Instant = Instant>,
     {
         let ins_data: Result<String, M68kError<Bus::Error>> = (0..((self.end - self.start) / 2))
             .map(|offset| Ok(format!("{:04x} ", bus.read_beu16(clock, self.start + (offset * 2)).unwrap())))
@@ -128,7 +128,7 @@ where
 
 impl<'a, Bus, Instant> InstructionDecoding<'a, Bus, Instant>
 where
-    Bus: BusAccess<M68kAddress, Instant>,
+    Bus: BusAccess<M68kAddress, Instant = Instant>,
     Instant: Copy,
 {
     #[inline]

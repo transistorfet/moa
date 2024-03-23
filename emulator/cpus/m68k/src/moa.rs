@@ -10,7 +10,7 @@ impl Steppable for M68k<Instant> {
         let cycle = M68kCycle::new(self, system.clock);
 
         let mut bus = system.bus.borrow_mut();
-        let mut adapter: bus::BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> =
+        let mut adapter: bus::BusAdapter<u32, u64, &mut dyn Addressable, Error> =
             bus::BusAdapter::new(&mut *bus, |addr| addr as u64, |err| err);
 
         let mut executor = cycle.begin(self, &mut adapter);
@@ -99,7 +99,7 @@ impl Debuggable for M68k<Instant> {
         let mut memory = M68kBusPort::from_info(&self.info, system.clock);
 
         let mut bus = system.bus.borrow_mut();
-        let mut adapter: bus::BusAdapter<u32, u64, Instant, &mut dyn Addressable, Error> =
+        let mut adapter: bus::BusAdapter<u32, u64, &mut dyn Addressable, Error> =
             bus::BusAdapter::new(&mut *bus, |addr| addr as u64, |err| err);
 
         decoder.dump_disassembly(&mut adapter, &mut memory, addr as u32, count as u32);
