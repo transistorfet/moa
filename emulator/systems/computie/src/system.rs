@@ -1,6 +1,7 @@
-use femtos::Frequency;
+use femtos::{Instant, Frequency};
 
-use moa_core::{System, Error, Debuggable, MemoryBlock, Device};
+//use moa_core::{System, Error, Debuggable, MemoryBlock, Device};
+use moa_system::{System, Error, MoaBus, MoaStep, MemoryBlock, Device, DeviceInterface, BusAdapter};
 use moa_host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -23,32 +24,86 @@ impl Default for ComputieOptions {
     }
 }
 
+struct MoaM68k(M68k<Instant>);
+
+use moa_system::emulator_hal::{Step, BusAccess};
+
+impl<Bus> Step<Bus> for MoaM68k
+where
+    Bus: BusAccess<u64, Instant = Instant> + ?Sized,
+{
+    type Instant = Instant;
+    type Error = Error;
+
+    fn is_running(&mut self) -> bool {
+        true
+    }
+
+    fn reset(&mut self, _now: Self::Instant, _bus: &mut Bus) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn step(&mut self, now: Self::Instant, bus: &mut Bus) -> Result<Self::Instant, Self::Error> {
+        self.0.step(now, &mut BusAdapter::new(bus, |addr| addr as u64, |err| Error::new(format!("{:?}", err))))
+            .map_err(|err| Error::new(format!("{:?}", err)))
+    }
+}
+
+impl MoaM68k {
+    pub fn new(cpu: M68k<Instant>) -> Self {
+        Self(cpu)
+    }
+}
+
+impl DeviceInterface for MoaM68k {
+    fn as_step(&mut self) -> Option<&mut MoaStep> {
+        Some(self)
+    }
+}
+
+use core::ops::{Deref, DerefMut};
+impl Deref for MoaM68k {
+    type Target = M68k<Instant>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for MoaM68k {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 pub fn build_computie<H: Host>(host: &H, options: ComputieOptions) -> Result<System, Error> {
     let mut system = System::default();
 
     let mut rom = MemoryBlock::new(vec![0; 0x10000]);
     rom.load_at(0x0000, &options.rom)?;
-    system.add_addressable_device(0x00000000, Device::new(rom))?;
+    system.add_addressable_device(0x00000000, rom.size(), Device::new(rom))?;
 
     let mut ram = MemoryBlock::new(vec![0; options.ram]);
-    ram.load_at(0, "binaries/computie/kernel.bin")?;
-    system.add_addressable_device(0x00100000, Device::new(ram))?;
+    ram.load_at(0, "binaries/computie/kernel.bin")
+        .map_err(|err| Error::new(format!("{}", err)))?;
+    system.add_addressable_device(0x00100000, ram.size(), Device::new(ram))?;
 
     let mut ata = AtaDevice::default();
-    ata.load("binaries/computie/disk-with-partition-table.img")?;
-    system.add_addressable_device(0x00600000, Device::new(ata))?;
+    ata.load("binaries/computie/disk-with-partition-table.img")
+        .map_err(|err| Error::new(format!("{}", err)))?;
+    system.add_addressable_device(0x00600000, ata.address_space(), Device::new(ata))?;
 
     let mut serial = MC68681::default();
-    launch_terminal_emulator(serial.port_a.connect(host.add_pty()?)?);
-    launch_slip_connection(serial.port_b.connect(host.add_pty()?)?);
-    system.add_addressable_device(0x00700000, Device::new(serial))?;
+    launch_terminal_emulator(serial.port_a.connect(host.add_pty()?));
+    launch_slip_connection(serial.port_b.connect(host.add_pty()?));
+    system.add_addressable_device(0x00700000, serial.address_space(), Device::new(serial))?;
 
 
     let mut cpu = M68k::from_type(M68kType::MC68010, options.frequency);
 
-    cpu.add_breakpoint(0);
+    //cpu.add_breakpoint(0);
 
-    system.add_interruptable_device("cpu", Device::new(cpu))?;
+    system.add_interruptable_device("cpu", Device::new(MoaM68k::new(cpu)))?;
 
     Ok(system)
 }
@@ -57,25 +112,27 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     let mut system = System::default();
 
     let monitor = MemoryBlock::load("binaries/computie/monitor-68030.bin")?;
-    system.add_addressable_device(0x00000000, Device::new(monitor))?;
+    system.add_addressable_device(0x00000000, monitor.size(), Device::new(monitor))?;
 
     let mut ram = MemoryBlock::new(vec![0; 0x00100000]);
-    ram.load_at(0, "binaries/computie/kernel-68030.bin")?;
-    system.add_addressable_device(0x00100000, Device::new(ram))?;
+    ram.load_at(0, "binaries/computie/kernel-68030.bin")
+        .map_err(|err| Error::new(format!("{}", err)))?;
+    system.add_addressable_device(0x00100000, ram.size(), Device::new(ram))?;
 
     let mut ata = AtaDevice::default();
-    ata.load("binaries/computie/disk-with-partition-table.img")?;
-    system.add_addressable_device(0x00600000, Device::new(ata))?;
+    ata.load("binaries/computie/disk-with-partition-table.img")
+        .map_err(|err| Error::new(format!("{}", err)))?;
+    system.add_addressable_device(0x00600000, ata.address_space(), Device::new(ata))?;
 
     let mut serial = MC68681::default();
-    launch_terminal_emulator(serial.port_a.connect(host.add_pty()?)?);
+    launch_terminal_emulator(serial.port_a.connect(host.add_pty()?));
     //launch_slip_connection(serial.port_b.connect(host.add_pty()?)?);
-    system.add_addressable_device(0x00700000, Device::new(serial))?;
+    system.add_addressable_device(0x00700000, serial.address_space(), Device::new(serial))?;
 
 
     let cpu = M68k::from_type(M68kType::MC68030, Frequency::from_hz(10_000_000));
 
-    system.add_interruptable_device("cpu", Device::new(cpu))?;
+    system.add_interruptable_device("cpu", Device::new(MoaM68k::new(cpu)))?;
 
     Ok(system)
 }

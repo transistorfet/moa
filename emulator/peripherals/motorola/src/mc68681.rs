@@ -1,39 +1,46 @@
+use core::marker::PhantomData;
+use core::convert::Infallible;
+use core::ops::{Deref, DerefMut};
 use femtos::{Instant, Duration, Frequency};
+use emulator_hal::{BusAccess, BusAdapter, Step, Instant as EmuInstant, Error as EmuError};
 
-use moa_core::{System, Error, Address, Steppable, Addressable, Transmutable};
+use moa_core::{System, Bus, Address, Steppable, Addressable, Transmutable};
 use moa_host::Tty;
 
+use moa_system::{DeviceInterface, Error, MoaBus, MoaStep};
 
-const REG_MR1A_MR2A: Address = 0x01;
-const REG_SRA_RD: Address = 0x03;
-const REG_CSRA_WR: Address = 0x03;
-const REG_CRA_WR: Address = 0x05;
-const REG_TBA_WR: Address = 0x07;
-const REG_RBA_RD: Address = 0x07;
+type DeviceAddress = u64;
 
-const REG_MR1B_MR2B: Address = 0x11;
-const REG_SRB_RD: Address = 0x13;
-const REG_CSRB_WR: Address = 0x13;
-const REG_CRB_WR: Address = 0x15;
-const REG_TBB_WR: Address = 0x17;
-const REG_RBB_RD: Address = 0x17;
+const REG_MR1A_MR2A: DeviceAddress = 0x01;
+const REG_SRA_RD: DeviceAddress = 0x03;
+const REG_CSRA_WR: DeviceAddress = 0x03;
+const REG_CRA_WR: DeviceAddress = 0x05;
+const REG_TBA_WR: DeviceAddress = 0x07;
+const REG_RBA_RD: DeviceAddress = 0x07;
 
-const REG_ACR_WR: Address = 0x09;
+const REG_MR1B_MR2B: DeviceAddress = 0x11;
+const REG_SRB_RD: DeviceAddress = 0x13;
+const REG_CSRB_WR: DeviceAddress = 0x13;
+const REG_CRB_WR: DeviceAddress = 0x15;
+const REG_TBB_WR: DeviceAddress = 0x17;
+const REG_RBB_RD: DeviceAddress = 0x17;
 
-const REG_CTUR_WR: Address = 0x0D;
-const REG_CTLR_WR: Address = 0x0F;
-const REG_START_RD: Address = 0x1D;
-const REG_STOP_RD: Address = 0x1F;
+const REG_ACR_WR: DeviceAddress = 0x09;
 
-const REG_IPCR_RD: Address = 0x09;
-const REG_OPCR_WR: Address = 0x1B;
-const REG_INPUT_RD: Address = 0x1B;
-const REG_OUT_SET: Address = 0x1D;
-const REG_OUT_RESET: Address = 0x1F;
+const REG_CTUR_WR: DeviceAddress = 0x0D;
+const REG_CTLR_WR: DeviceAddress = 0x0F;
+const REG_START_RD: DeviceAddress = 0x1D;
+const REG_STOP_RD: DeviceAddress = 0x1F;
 
-const REG_ISR_RD: Address = 0x0B;
-const REG_IMR_WR: Address = 0x0B;
-const REG_IVR_WR: Address = 0x19;
+const REG_IPCR_RD: DeviceAddress = 0x09;
+const REG_OPCR_WR: DeviceAddress = 0x1B;
+const REG_INPUT_RD: DeviceAddress = 0x1B;
+const REG_OUT_SET: DeviceAddress = 0x1D;
+const REG_OUT_RESET: DeviceAddress = 0x1F;
+
+const REG_ISR_RD: DeviceAddress = 0x0B;
+const REG_IMR_WR: DeviceAddress = 0x0B;
+const REG_IVR_WR: DeviceAddress = 0x19;
 
 
 // Status Register Bits (SRA/SRB)
@@ -80,11 +87,11 @@ pub struct MC68681Port {
 }
 
 impl MC68681Port {
-    pub fn connect(&mut self, pty: Box<dyn Tty>) -> Result<String, Error> {
+    pub fn connect(&mut self, pty: Box<dyn Tty>) -> String {
         let name = pty.device_name();
         println!("{}: opening pts {}", DEV_NAME, name);
         self.tty = Some(pty);
-        Ok(name)
+        name
     }
 
     pub fn send_byte(&mut self, data: u8) {
@@ -114,17 +121,17 @@ impl MC68681Port {
         }
     }
 
-    pub fn check_rx(&mut self) -> Result<bool, Error> {
+    pub fn check_rx(&mut self) -> bool {
         if self.rx_enabled && (self.status & SR_RX_READY) == 0 && self.tty.is_some() {
             let tty = self.tty.as_mut().unwrap();
             let result = tty.read();
             if let Some(input) = result {
                 self.input = input;
                 self.set_rx_status(true);
-                return Ok(true);
+                return true;
             }
         }
-        Ok(false)
+        false
     }
 
     pub fn check_tx(&mut self) -> bool {
@@ -155,7 +162,7 @@ impl MC68681Port {
     }
 }
 
-pub struct MC68681 {
+pub struct MC68681<Address, Instant, Error> {
     frequency: Frequency,
 
     acr: u8,
@@ -175,11 +182,15 @@ pub struct MC68681 {
     input_state: u8,
     output_conf: u8,
     output_state: u8,
+
+    address: PhantomData<Address>,
+    instant: PhantomData<Instant>,
+    error: PhantomData<Error>,
 }
 
-impl Default for MC68681 {
+impl<Address, Instant, Error> Default for MC68681<Address, Instant, Error> {
     fn default() -> Self {
-        MC68681 {
+        Self {
             frequency: Frequency::from_hz(3_686_400),
 
             acr: 0,
@@ -199,29 +210,51 @@ impl Default for MC68681 {
             input_state: 0,
             output_conf: 0,
             output_state: 0,
+
+            address: PhantomData,
+            instant: PhantomData,
+            error: PhantomData,
         }
     }
 }
 
-impl MC68681 {
-    fn set_interrupt_flag(&mut self, flag: u8, value: bool) {
+impl<Address, Instant, Error> MC68681<Address, Instant, Error> {
+    pub fn address_space(&self) -> usize {
+        0x30
+    }
+
+    pub fn set_interrupt_flag(&mut self, flag: u8, value: bool) {
         self.int_status = (self.int_status & !flag) | (if value { flag } else { 0 });
     }
 
-    fn check_interrupt_state(&mut self, system: &System) -> Result<(), Error> {
-        system
-            .get_interrupt_controller()
-            .set((self.int_status & self.int_mask) != 0, 4, self.int_vector)
+    pub fn get_interrupt_flag(&mut self) -> (bool, u8, u8) {
+        ((self.int_status & self.int_mask) != 0, 4, self.int_vector)
     }
 }
 
-impl Steppable for MC68681 {
-    fn step(&mut self, system: &System) -> Result<Duration, Error> {
-        if self.port_a.check_rx()? {
+impl<Address, Instant, Error, Bus> Step<Bus> for MC68681<Address, Instant, Error>
+where
+    Address: Into<DeviceAddress> + Copy,
+    Instant: EmuInstant,
+    Bus: BusAccess<Address, Instant = Instant> + ?Sized,
+{
+    type Instant = Instant;
+    type Error = Error;
+
+    fn is_running(&mut self) -> bool {
+        true
+    }
+
+    fn reset(&mut self, _now: Self::Instant, _bus: &mut Bus) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn step(&mut self, now: Self::Instant, bus: &mut Bus) -> Result<Self::Instant, Self::Error> {
+        if self.port_a.check_rx() {
             self.set_interrupt_flag(ISR_CH_A_RX_READY_FULL, true);
         }
 
-        if self.port_b.check_rx()? {
+        if self.port_b.check_rx() {
             self.set_interrupt_flag(ISR_CH_B_RX_READY_FULL, true);
         }
 
@@ -242,7 +275,8 @@ impl Steppable for MC68681 {
             }
         }
 
-        self.check_interrupt_state(system)?;
+        // TODO this has been added to the Steppable impl, but isn't handled by Step
+        //self.check_interrupt_state(system)?;
 
         if self.port_a.check_tx() {
             self.set_interrupt_flag(ISR_CH_A_TX_READY, true);
@@ -252,16 +286,23 @@ impl Steppable for MC68681 {
             self.set_interrupt_flag(ISR_CH_B_TX_READY, true);
         }
 
-        Ok(self.frequency.period_duration())
+        Ok(now + Instant::hertz_to_duration(self.frequency.as_hz() as u64))
     }
 }
 
-impl Addressable for MC68681 {
-    fn size(&self) -> usize {
-        0x30
-    }
+impl<Address, Instant, Error> BusAccess<Address> for MC68681<Address, Instant, Error>
+where
+    Address: Into<DeviceAddress> + Copy,
+    Instant: EmuInstant,
+    Error: EmuError,
+{
+    type Instant = Instant;
+    type Error = Error;
 
-    fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+    #[inline]
+    fn read(&mut self, _clock: Self::Instant, addr: Address, data: &mut [u8]) -> Result<usize, Self::Error> {
+        let addr = addr.into();
+
         match addr {
             REG_SRA_RD => data[0] = self.port_a.status,
             REG_RBA_RD => {
@@ -306,10 +347,13 @@ impl Addressable for MC68681 {
             log::debug!("{}: read from {:0x} of {:0x}", DEV_NAME, addr, data[0]);
         }
 
-        Ok(())
+        Ok(1)
     }
 
-    fn write(&mut self, _clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+    #[inline]
+    fn write(&mut self, _clock: Self::Instant, addr: Address, data: &[u8]) -> Result<usize, Self::Error> {
+        let addr = addr.into();
+
         log::debug!("{}: writing {:0x} to {:0x}", DEV_NAME, data[0], addr);
         match addr {
             REG_MR1A_MR2A | REG_MR1B_MR2B | REG_CSRA_WR | REG_CSRB_WR => {
@@ -361,6 +405,71 @@ impl Addressable for MC68681 {
             },
             _ => {},
         }
+        Ok(1)
+    }
+}
+
+pub struct MoaMC68681(MC68681<u64, Instant, Error>);
+
+impl Default for MoaMC68681 {
+    fn default() -> Self {
+        MoaMC68681(MC68681::default())
+    }
+}
+
+impl DeviceInterface for MC68681<u64, Instant, Error> {
+    fn as_bus_access(&mut self) -> Option<&mut MoaBus> {
+        Some(self)
+    }
+
+    fn as_step(&mut self) -> Option<&mut MoaStep> {
+        Some(self)
+    }
+}
+
+impl Deref for MoaMC68681 {
+    type Target = MC68681<u64, Instant, Error>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for MoaMC68681 {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+//// OLD INTERFACE
+/*
+impl Steppable for MC68681 {
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
+        let duration = <Self as Step<u64, Bus>>::step(self, system.clock, &mut *system.bus.borrow_mut())
+            .map(|next| next.duration_since(system.clock));
+
+        let flags = self.get_interrupt_flag();
+        system
+            .get_interrupt_controller()
+            .set(flags.0, flags.1, flags.2)?;
+        duration
+    }
+}
+
+impl Addressable for MC68681 {
+    fn size(&self) -> usize {
+        self.address_space()
+    }
+
+    fn read(&mut self, clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
+        <Self as BusAccess<u8>>::read(self, clock, addr as u8, data)
+            .map_err(|err| Error::new(format!("{:?}", err)))?;
+        Ok(())
+    }
+
+    fn write(&mut self, clock: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        <Self as BusAccess<u8>>::write(self, clock, addr as u8, data)
+            .map_err(|err| Error::new(format!("{:?}", err)))?;
         Ok(())
     }
 }
@@ -374,3 +483,4 @@ impl Transmutable for MC68681 {
         Some(self)
     }
 }
+*/
