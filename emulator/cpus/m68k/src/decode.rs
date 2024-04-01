@@ -1,7 +1,7 @@
 // Instruction Decoding
 
 use core::marker::PhantomData;
-use emulator_hal::bus::BusAccess;
+use emulator_hal::{Instant as BusInstant, Error as BusError, BusAccess, Step};
 
 use crate::{M68kType, M68kError, M68kBusPort, M68kAddress, Exceptions};
 use crate::instructions::{

@@ -1,5 +1,5 @@
 use femtos::{Instant, Duration};
-use emulator_hal::bus;
+use emulator_hal::{Error as ErrorType, BusAdapter};
 
 use moa_core::{System, Error, Address, Steppable, Interruptable, Addressable, Debuggable, Transmutable};
 
@@ -10,8 +10,8 @@ impl Steppable for M68k<Instant> {
         let cycle = M68kCycle::new(self, system.clock);
 
         let mut bus = system.bus.borrow_mut();
-        let mut adapter: bus::BusAdapter<u32, u64, &mut dyn Addressable, Error> =
-            bus::BusAdapter::new(&mut *bus, |addr| addr as u64, |err| err);
+        let mut adapter: BusAdapter<u32, u64, &mut dyn Addressable, Error> =
+            BusAdapter::new(&mut *bus, |addr| addr as u64, |err| err);
 
         let mut executor = cycle.begin(self, &mut adapter);
         executor.check_breakpoints()?;
@@ -60,7 +60,7 @@ impl<BusError> From<Error> for M68kError<BusError> {
     }
 }
 
-impl<BusError: bus::Error> From<M68kError<BusError>> for Error {
+impl<BusError: ErrorType> From<M68kError<BusError>> for Error {
     fn from(err: M68kError<BusError>) -> Self {
         match err {
             M68kError::Halted => Self::Other("cpu halted".to_string()),
@@ -99,8 +99,8 @@ impl Debuggable for M68k<Instant> {
         let mut memory = M68kBusPort::from_info(&self.info, system.clock);
 
         let mut bus = system.bus.borrow_mut();
-        let mut adapter: bus::BusAdapter<u32, u64, &mut dyn Addressable, Error> =
-            bus::BusAdapter::new(&mut *bus, |addr| addr as u64, |err| err);
+        let mut adapter: BusAdapter<u32, u64, &mut dyn Addressable, Error> =
+            BusAdapter::new(&mut *bus, |addr| addr as u64, |err| err);
 
         decoder.dump_disassembly(&mut adapter, &mut memory, addr as u32, count as u32);
     }

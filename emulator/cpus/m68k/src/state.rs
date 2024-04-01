@@ -2,7 +2,7 @@
 
 use femtos::Frequency;
 use core::fmt::{self, Write};
-use emulator_hal::time;
+use emulator_hal::Instant as BusInstant;
 
 use crate::{M68kDebugger, M68kCycle};
 use crate::instructions::Target;
@@ -243,7 +243,7 @@ impl M68kState {
 
 impl<Instant> M68k<Instant>
 where
-    Instant: time::Instant,
+    Instant: BusInstant,
 {
     pub fn new(info: CpuInfo) -> Self {
         M68k {

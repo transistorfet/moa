@@ -1,5 +1,5 @@
 use femtos::{Instant, Frequency};
-use emulator_hal::bus::BusAccess;
+use emulator_hal::BusAccess;
 use emulator_hal_memory::MemoryBlock;
 
 use moa_m68k::{M68k, M68kType, M68kAddress};

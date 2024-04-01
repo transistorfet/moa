@@ -1,0 +1,106 @@
+
+use femtos::{Instant, Duration};
+use emulator_hal::{BusAdapter, Instant as EmuInstant};
+
+use moa_core::{System, Error, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable};
+
+use crate::{Z80, Z80Error, Z80Decoder};
+use crate::instructions::Register;
+
+impl Steppable for Z80<Instant>
+where
+    Instant: EmuInstant,
+{
+    fn step(&mut self, system: &System) -> Result<Duration, Error> {
+        let bus = &mut *system.bus.borrow_mut();
+        let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
+
+        let mut executor = self.begin(system.clock, &mut adapter)?;
+        let clocks = executor.step_one()?;
+        self.previous_cycle = executor.end();
+        Ok(Instant::hertz_to_duration(self.frequency.as_hz() as u64) * clocks as u32)
+    }
+
+    fn on_error(&mut self, system: &System) {
+        self.dump_state(system.clock);
+    }
+}
+
+impl Interruptable for Z80<Instant> {}
+
+
+impl Transmutable for Z80<Instant> {
+    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
+        Some(self)
+    }
+
+    fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
+        Some(self)
+    }
+
+    fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
+        Some(self)
+    }
+}
+
+impl From<Z80Error> for Error {
+    fn from(err: Z80Error) -> Self {
+        match err {
+            Z80Error::Halted => Self::Other("cpu halted".to_string()),
+            Z80Error::Breakpoint => Self::Breakpoint("breakpoint".to_string()),
+            Z80Error::Unimplemented(instruction) => Self::new(format!("unimplemented instruction {:?}", instruction)),
+            Z80Error::BusError(msg) => Self::Other(msg),
+        }
+    }
+}
+
+impl From<Error> for Z80Error {
+    fn from(err: Error) -> Self {
+        match err {
+            Error::Processor(ex) => Z80Error::BusError(format!("processor error {}", ex)),
+            Error::Breakpoint(_) => Z80Error::Breakpoint,
+            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => Z80Error::BusError(msg),
+        }
+    }
+}
+
+impl Debuggable for Z80<Instant> {
+    fn add_breakpoint(&mut self, addr: Address) {
+        self.debugger.breakpoints.push(addr as u16);
+    }
+
+    fn remove_breakpoint(&mut self, addr: Address) {
+        if let Some(index) = self.debugger.breakpoints.iter().position(|a| *a == addr as u16) {
+            self.debugger.breakpoints.remove(index);
+        }
+    }
+
+    fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
+        let bus = &mut *system.bus.borrow_mut();
+        let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
+
+        let decoder = Z80Decoder::decode_at(&mut adapter, system.clock, self.state.pc)?;
+        // TODO disabled until decoder is fixed
+        //self.decoder.dump_decoded(&mut self.port);
+        self.dump_state(system.clock);
+        Ok(())
+    }
+
+    fn print_disassembly(&mut self, _system: &System, addr: Address, count: usize) {
+        // TODO disabled until decoder is fixed
+        //let mut decoder = Z80Decoder::default();
+        //decoder.dump_disassembly(&mut self.port, addr as u16, count as u16);
+    }
+
+    fn run_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
+        match args[0] {
+            "l" => self.state.reg[Register::L as usize] = 0x05,
+            _ => {
+                return Ok(true);
+            },
+        }
+        Ok(false)
+    }
+}
+
+

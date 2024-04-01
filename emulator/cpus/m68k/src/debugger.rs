@@ -2,9 +2,7 @@
 
 use core::fmt;
 
-use emulator_hal::time;
-use emulator_hal::bus::{self, BusAccess};
-use emulator_hal::step::{Inspect, Debug};
+use emulator_hal::{Instant as BusInstant, Error as ErrorType, BusAccess, Inspect, Debug};
 
 use crate::{M68k, M68kError, M68kAddress, M68kCycleExecutor};
 
@@ -28,10 +26,10 @@ pub enum M68kInfo {
     State,
 }
 
-impl<Bus, BusError, Instant, Writer> Inspect<M68kAddress, Bus, Writer> for M68k<Instant>
+impl<Bus, BusError, Instant, Writer> Inspect<Bus, Writer> for M68k<Instant>
 where
     Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
-    BusError: bus::Error,
+    BusError: ErrorType,
     Writer: fmt::Write,
 {
     type InfoType = M68kInfo;
@@ -60,8 +58,8 @@ where
 impl<Bus, BusError, Instant, Writer> Debug<M68kAddress, Bus, Writer> for M68k<Instant>
 where
     Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
-    BusError: bus::Error,
-    Instant: time::Instant,
+    BusError: ErrorType,
+    Instant: BusInstant,
     Writer: fmt::Write,
 {
     // TODO this should be a new type

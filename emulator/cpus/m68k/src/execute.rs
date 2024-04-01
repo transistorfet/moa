@@ -1,8 +1,6 @@
 // Instruction Execution
 
-use emulator_hal::time;
-use emulator_hal::step::Step;
-use emulator_hal::bus::{self, BusAccess};
+use emulator_hal::{Instant as BusInstant, Error, BusAccess, Step};
 
 use crate::{M68k, M68kType, M68kError, M68kState};
 use crate::state::{Status, Flags, Exceptions, InterruptPriority};
@@ -35,7 +33,7 @@ pub struct M68kCycle<Instant> {
 
 impl<Instant> M68kCycle<Instant>
 where
-    Instant: time::Instant,
+    Instant: BusInstant,
 {
     #[inline]
     pub fn default(cputype: M68kType, data_width: u8) -> Self {
@@ -74,12 +72,13 @@ where
     }
 }
 
-impl<Bus, BusError, Instant> Step<M68kAddress, Bus> for M68k<Instant>
+impl<Bus, BusError, Instant> Step<Bus> for M68k<Instant>
 where
     Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
-    BusError: bus::Error,
-    Instant: time::Instant,
+    BusError: Error,
+    Instant: BusInstant,
 {
+    type Instant = Instant;
     type Error = M68kError<BusError>;
 
     fn is_running(&mut self) -> bool {

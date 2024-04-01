@@ -1,13 +1,13 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Frequency};
+use emulator_hal::Instant as EmuInstant;
 
 use moa_core::{Address, Bus, BusPort};
 use moa_signals::Signal;
 
-use crate::decode::Z80Decoder;
 use crate::debugger::Z80Debugger;
-use crate::execute::Z80Executor;
+use crate::execute::Z80Cycle;
 use crate::instructions::{Instruction, Register, InterruptMode};
 
 
@@ -104,33 +104,44 @@ pub enum Z80Error /* <B: fmt::Display> */ {
     BusError(String /* B */),
 }
 
+
+pub type Z80Address = u16;
+pub type Z80IOAddress = u16;
+
+pub enum Z80AddressSpace {
+    Memory(Z80Address),
+    IO(Z80IOAddress),
+}
+
 #[derive(Clone)]
-pub struct Z80 {
+pub struct Z80<Instant> {
     pub cputype: Z80Type,
     pub frequency: Frequency,
     pub state: Z80State,
-    pub decoder: Z80Decoder,
     pub debugger: Z80Debugger,
-    pub executor: Z80Executor,
-    pub port: BusPort,
-    pub ioport: Option<BusPort>,
-    pub reset: Signal<bool>,
-    pub bus_request: Signal<bool>,
+    pub previous_cycle: Z80Cycle<Instant>,
+    //pub port: BusPort,
+    //pub ioport: Option<BusPort>,
+    // TODO activate later
+    //pub reset: Signal<bool>,
+    //pub bus_request: Signal<bool>,
 }
 
-impl Z80 {
-    pub fn new(cputype: Z80Type, frequency: Frequency, port: BusPort, ioport: Option<BusPort>) -> Self {
+impl<Instant> Z80<Instant>
+where
+    Instant: EmuInstant,
+{
+    pub fn new(cputype: Z80Type, frequency: Frequency /*, port: BusPort, ioport: Option<BusPort>*/) -> Self {
         Self {
             cputype,
             frequency,
             state: Z80State::default(),
-            decoder: Z80Decoder::default(),
             debugger: Z80Debugger::default(),
-            executor: Z80Executor::at_time(Instant::START),
-            port,
-            ioport,
-            reset: Signal::new(false),
-            bus_request: Signal::new(false),
+            previous_cycle: Z80Cycle::at_time(Instant::START),
+            //port,
+            //ioport,
+            //reset: Signal::new(false),
+            //bus_request: Signal::new(false),
         }
     }
 
@@ -145,8 +156,8 @@ impl Z80 {
             Z80Type::Z80 => Self::new(
                 cputype,
                 frequency,
-                BusPort::new(addr_offset, 16, 8, bus),
-                io_bus.map(|(io_bus, io_offset)| BusPort::new(io_offset, 16, 8, io_bus)),
+                //BusPort::new(addr_offset, 16, 8, bus),
+                //io_bus.map(|(io_bus, io_offset)| BusPort::new(io_offset, 16, 8, io_bus)),
             ),
         }
     }
@@ -154,9 +165,7 @@ impl Z80 {
     #[allow(dead_code)]
     pub fn clear_state(&mut self) {
         self.state = Z80State::default();
-        self.decoder = Z80Decoder::default();
         self.debugger = Z80Debugger::default();
-        self.executor = Z80Executor::at_time(Instant::START);
     }
 
     pub fn dump_state(&mut self, clock: Instant) {
@@ -198,13 +207,16 @@ impl Z80 {
         println!("I: {:#04x}    R:  {:#04x}", self.state.i, self.state.r);
         println!("IM: {:?}  IFF1: {:?}  IFF2: {:?}", self.state.im, self.state.iff1, self.state.iff2);
 
-        println!(
-            "Current Instruction: {} {:?}",
-            self.decoder.format_instruction_bytes(&mut self.port),
-            self.decoder.instruction
-        );
+        // TODO disabled until function is reimplemented
+        //println!(
+        //    "Current Instruction: {} {:?}",
+        //    self.decoder.format_instruction_bytes(&mut self.port),
+        //    self.decoder.instruction
+        //);
+        println!("Previous Instruction: {:?}", self.previous_cycle.decoder.instruction);
         println!();
-        self.port.dump_memory(clock, self.state.sp as Address, 0x40);
+        // TODO disabled until function is reimplemented
+        //self.port.dump_memory(clock, self.state.sp as Address, 0x40);
         println!();
     }
 }
