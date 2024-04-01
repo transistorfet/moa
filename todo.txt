@@ -1,14 +1,20 @@
 
-* decide if you should continue expecting Instant to usable through the trait alone, despite issues
-* fix it to use the full 68k address space, and maybe see if it's possible to make the address translation cleaner/nicer/simpler/faster
-* now that you have Instant as generic in m68k, try making it an associated type to see if it's possible to hide it away
+* fix the Z80 dumping functions
+* fix the Z80 reset and bus_request signals
+* the emulator_hal_memory should throw an error when an access will straddle the end of memory?  Or should it autowrap?
 
-* try using the debug and inspect traits elsewhere in moa
+* convert computie system to use the new moa-system library crate to replace the old core crate
+* change package names to drop the 's', so moa-systems-computie becomes moa-system-computie
+
 * convert all code to use fmt::Writer instead of println
+* fix it to use the full 68k address space, and maybe see if it's possible to make the address translation cleaner/nicer/simpler/faster
 
-* figure out how to do interrupts, and add them to emulator-hal, implement them in m68k
 * convert the Z80
 * convert peripherals to use BusAccess and Step
+* try using the debug and inspect traits elsewhere in moa
+
+* decide if you should continue expecting Instant to usable through the trait alone, despite issues
+* figure out how to do interrupts, and add them to emulator-hal, implement them in m68k
 * replace Addressable/Steppable and modify Transmutable to use the emulator-hal traits
 * remove the custom moa impls from m68k if possible at this point
 * publish the emulator-hal crate
@@ -79,7 +85,7 @@
 * add doc strings everywhere
 * get rustfmt, rustdoc, and clippy working in some kind of semi-automatic fashion
 
-* you really need a full web-based debugger
+* you really need a full web-based debugger; look into egui as the basis for it?
 
 
 
