@@ -44,7 +44,7 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
     system.add_addressable_device(0x37E0 + 0x420, Device::new(video)).unwrap();
 
     // TODO the ioport needs to be hooked up
-    let cpu = Z80::from_type(Z80Type::Z80, options.frequency, system.bus.clone(), 0, None);
+    let cpu = Z80::from_type(Z80Type::Z80, options.frequency);
 
     system.add_interruptable_device("cpu", Device::new(cpu))?;
 

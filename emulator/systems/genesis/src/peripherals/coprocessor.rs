@@ -1,23 +1,27 @@
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
+use std::any::Any;
 use femtos::Instant;
 
-use moa_core::{Bus, Error, Address, Addressable, Transmutable};
-use moa_signals::Signal;
+use moa_core::{Bus, Device, Error, Address, Addressable, Signal, Transmutable};
+//use moa_signals::Signal;
+use moa_z80::Z80;
 
 const DEV_NAME: &str = "coprocessor";
 
 pub struct CoprocessorCoordinator {
-    bus_request: Signal<bool>,
-    reset: Signal<bool>,
+    z80: Device,
+    //bus_request: Signal<bool>,
+    //reset: Signal<bool>,
 }
 
 
 impl CoprocessorCoordinator {
-    pub fn new(reset: Signal<bool>, bus_request: Signal<bool>) -> Self {
+    pub fn new(z80: Device) -> Self {
         Self {
-            bus_request,
-            reset,
+            z80,
+            //bus_request,
+            //reset,
         }
     }
 }
@@ -30,7 +34,9 @@ impl Addressable for CoprocessorCoordinator {
     fn read(&mut self, _clock: Instant, addr: Address, data: &mut [u8]) -> Result<(), Error> {
         match addr {
             0x100 => {
-                data[0] = if self.bus_request.get() && self.reset.get() {
+                let mut device = self.z80.borrow_mut();
+                let z80 = device.as_signalable().unwrap();
+                data[0] = if z80.signal(Signal::BusRequest).unwrap_or(false) && z80.signal(Signal::Reset).unwrap_or(false) {
                     0x01
                 } else {
                     0x00
@@ -49,10 +55,14 @@ impl Addressable for CoprocessorCoordinator {
         match addr {
             0x000 => { /* ROM vs DRAM mode */ },
             0x100 => {
-                self.bus_request.set(data[0] != 0);
+                let mut device = self.z80.borrow_mut();
+                let z80 = device.as_signalable().unwrap();
+                z80.set_signal(Signal::BusRequest, data[0] == 0)?;
             },
             0x200 => {
-                self.reset.set(data[0] == 0);
+                let mut device = self.z80.borrow_mut();
+                let z80 = device.as_signalable().unwrap();
+                z80.set_signal(Signal::Reset, data[0] == 0)?;
             },
             _ => {
                 log::warn!("{}: !!! unhandled write {:0x} to {:0x}", DEV_NAME, data[0], addr);

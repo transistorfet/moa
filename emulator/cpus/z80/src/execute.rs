@@ -5,7 +5,7 @@ use crate::instructions::{
     Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister,
     IndexRegisterHalf, Size, Direction, UndocumentedCopy,
 };
-use crate::state::{Z80, Z80Error, Z80State, Z80Address, Status, Flags};
+use crate::state::{Z80, Z80Error, Z80State, Z80Signals, Z80Address, Status, Flags};
 use crate::timing::Z80InstructionCycles;
 use crate::debugger::Z80Debugger;
 
@@ -41,12 +41,17 @@ impl<Instant> Z80<Instant>
 where
     Instant: EmuInstant,
 {
-    pub(crate) fn begin<'a, Bus>(&'a mut self, clock: Instant, bus: &'a mut Bus) -> Result<ExecuteNext<'a, &mut Bus, Instant>, Z80Error>
+    pub(crate) fn begin<'a, Bus>(
+        &'a mut self,
+        clock: Instant,
+        bus: &'a mut Bus,
+    ) -> Result<ExecuteNext<'a, &'a mut Bus, Instant>, Z80Error>
     where
         Bus: BusAccess<Z80Address, Instant = Instant>,
     {
         let executor = ExecuteNext {
             state: &mut self.state,
+            signals: &mut self.signals,
             debugger: &mut self.debugger,
             cycle: Z80Cycle::at_time(clock),
             bus,
@@ -61,6 +66,7 @@ where
     Bus: BusAccess<Z80Address, Instant = Instant>,
 {
     state: &'a mut Z80State,
+    signals: &'a mut Z80Signals,
     debugger: &'a mut Z80Debugger,
     cycle: Z80Cycle<Instant>,
     bus: Bus,
@@ -71,28 +77,22 @@ where
     Bus: BusAccess<Z80Address, Instant = Instant>,
     Instant: EmuInstant,
 {
-    pub(crate) fn end(mut self) -> Z80Cycle<Instant> {
+    pub(crate) fn end(self) -> Z80Cycle<Instant> {
         self.cycle
     }
 
     pub(crate) fn step_one(&mut self) -> Result<u16, Z80Error> {
-        // TODO restore the reset and bus request signals
-        //let clocks = if self.reset.get() {
-        //    self.reset()?
-        //} else if self.bus_request.get() {
-        //    4
-        //} else {
-        //    self.step_internal(self.cycle.current_clock)?
-        //};
-
-        //Ok(self.frequency.period_duration() * clocks as u64)
-
-        // TODO remove this when done
-        let clocks = self.step_internal(self.cycle.current_clock)?;
+        let clocks = if self.signals.reset {
+            self.reset()?
+        } else if self.signals.bus_request {
+            4
+        } else {
+            self.step_internal()?
+        };
         Ok(clocks)
     }
 
-    fn step_internal(&mut self, clock: Instant) -> Result<u16, Z80Error> {
+    fn step_internal(&mut self) -> Result<u16, Z80Error> {
         match self.state.status {
             Status::Init => self.init(),
             Status::Halted => Err(Z80Error::Halted),
@@ -630,7 +630,9 @@ where
         let parity = if count != 0 { Flags::Parity as u8 } else { 0 };
         self.set_flags(mask, parity);
 
-        if (self.cycle.decoder.instruction == Instruction::LDIR || self.cycle.decoder.instruction == Instruction::LDDR) && count != 0 {
+        if (self.cycle.decoder.instruction == Instruction::LDIR || self.cycle.decoder.instruction == Instruction::LDDR)
+            && count != 0
+        {
             self.cycle.took_branch = true;
             self.state.pc -= 2;
         }
@@ -1126,13 +1128,17 @@ where
 
     fn read_port_u8(&mut self, addr: u16) -> Result<u8, Z80Error> {
         self.increment_refresh(1);
-        Ok(self.bus.read_u8(self.cycle.current_clock, addr as Z80Address)
+        Ok(self
+            .bus
+            .read_u8(self.cycle.current_clock, addr as Z80Address)
             .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?)
     }
 
     fn write_port_u8(&mut self, addr: u16, value: u8) -> Result<(), Z80Error> {
         self.increment_refresh(1);
-        Ok(self.bus.write_u8(self.cycle.current_clock, addr as Z80Address, value)
+        Ok(self
+            .bus
+            .write_u8(self.cycle.current_clock, addr as Z80Address, value)
             .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?)
     }
 
@@ -1144,7 +1150,9 @@ where
         let mut bytes = [0; 2];
         for byte in bytes.iter_mut() {
             self.increment_refresh(1);
-            *byte = self.bus.read_u8(self.cycle.current_clock, addr & 0xFFFF)
+            *byte = self
+                .bus
+                .read_u8(self.cycle.current_clock, addr & 0xFFFF)
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             addr = addr.wrapping_add(1);
         }
@@ -1159,7 +1167,8 @@ where
         let mut bytes = value.to_le_bytes();
         for byte in bytes.iter_mut() {
             self.increment_refresh(1);
-            self.bus.write_u8(self.cycle.current_clock, addr & 0xFFFF, *byte)
+            self.bus
+                .write_u8(self.cycle.current_clock, addr & 0xFFFF, *byte)
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             addr = addr.wrapping_add(1);
         }
@@ -1172,7 +1181,7 @@ where
         //if let Some(io) = self.ioport.as_mut() {
         //    Ok(io.read_u8(self.cycle.current_clock, addr)?)
         //} else {
-            Ok(0)
+        Ok(0)
         //}
     }
 

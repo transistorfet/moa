@@ -1247,9 +1247,10 @@ name = "rad-tests"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
+ "emulator-hal",
+ "emulator-hal-memory",
  "femtos",
  "flate2",
- "moa-core",
  "moa-z80",
  "serde",
  "serde_derive",

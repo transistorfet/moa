@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::fmt::Write;
 use femtos::Instant;
+use emulator_hal::{self, BusAccess, Error as EmuError};
 
 use crate::error::Error;
 use crate::devices::{Address, Addressable, Transmutable, Device, read_beu16};
@@ -236,7 +237,7 @@ impl Bus {
 
             let to = if count < 16 { count / 2 } else { 8 };
             for _ in 0..to {
-                let word = self.read_beu16(clock, addr);
+                let word = Addressable::read_beu16(self, clock, addr);
                 if word.is_err() {
                     println!("{}", line);
                     return;
@@ -353,7 +354,7 @@ impl Addressable for BusPort {
         for i in (0..data.len()).step_by(self.data_width as usize) {
             let addr_index = (addr + i as Address) & self.address_mask;
             let end = cmp::min(i + self.data_width as usize, data.len());
-            subdevice.read(clock, addr_index, &mut data[i..end])?;
+            Addressable::read(&mut *subdevice, clock, addr_index, &mut data[i..end])?;
         }
         Ok(())
     }
@@ -364,7 +365,7 @@ impl Addressable for BusPort {
         for i in (0..data.len()).step_by(self.data_width as usize) {
             let addr_index = (addr + i as Address) & self.address_mask;
             let end = cmp::min(i + self.data_width as usize, data.len());
-            subdevice.write(clock, addr_index, &data[i..end])?;
+            Addressable::write(&mut *subdevice, clock, addr_index, &data[i..end])?;
         }
         Ok(())
     }
@@ -412,9 +413,7 @@ where
     }
 }
 
-use emulator_hal::bus::{self, BusAccess};
-
-impl bus::Error for Error {}
+impl EmuError for Error {}
 
 impl BusAccess<u64> for &mut dyn Addressable {
     type Instant = Instant;
@@ -427,6 +426,21 @@ impl BusAccess<u64> for &mut dyn Addressable {
 
     fn write(&mut self, now: Instant, addr: Address, data: &[u8]) -> Result<usize, Self::Error> {
         (*self).write(now, addr, data)?;
+        Ok(data.len())
+    }
+}
+
+impl BusAccess<u64> for Bus {
+    type Instant = Instant;
+    type Error = Error;
+
+    fn read(&mut self, now: Instant, addr: Address, data: &mut [u8]) -> Result<usize, Self::Error> {
+        Addressable::read(self, now, addr, data)?;
+        Ok(data.len())
+    }
+
+    fn write(&mut self, now: Instant, addr: Address, data: &[u8]) -> Result<usize, Self::Error> {
+        Addressable::write(self, now, addr, data)?;
         Ok(data.len())
     }
 }

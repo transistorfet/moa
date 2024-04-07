@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use emulator_hal::{BusAccess, Instant as EmuInstant};
 
-use crate::state::{Z80Error, Z80Address} ;
+use crate::state::{Z80Error, Z80Address};
 use crate::instructions::{
     Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target,
     LoadTarget, UndocumentedCopy, Instruction,
@@ -55,27 +55,16 @@ impl Z80Decoder {
         Ok(decoder.decoder)
     }
 
-    /*
-    pub fn format_instruction_bytes(&mut self) -> String {
-        let mut ins_data = String::new();
-        for offset in 0..self.decoder.end.saturating_sub(self.decoder.start) {
-            write!(ins_data, "{:02x} ", self.bus.read_u8(self.clock, self.decoder.start + offset).unwrap()).unwrap()
-        }
-        ins_data
-    }
-
-    pub fn dump_decoded(&mut self) {
-        let ins_data = self.format_instruction_bytes();
-        println!("{:#06x}: {}\n\t{:?}\n", self.decoder.start, ins_data, self.decoder.instruction);
-    }
-
-    pub fn dump_disassembly(&mut self, start: Z80Address, length: Z80Address) {
+    pub fn dump_disassembly<Bus>(bus: &mut Bus, start: Z80Address, length: Z80Address)
+    where
+        Bus: BusAccess<Z80Address>,
+    {
         let mut next = start;
         while next < (start + length) {
-            match self.decode_at(self.clock, next) {
-                Ok(()) => {
-                    self.dump_decoded();
-                    next = self.decoder.end;
+            match Z80Decoder::decode_at(bus, Bus::Instant::START, next) {
+                Ok(mut decoder) => {
+                    decoder.dump_decoded(bus);
+                    next = decoder.end;
                 },
                 Err(err) => {
                     println!("{:?}", err);
@@ -84,7 +73,25 @@ impl Z80Decoder {
             }
         }
     }
-    */
+
+    pub fn dump_decoded<Bus>(&mut self, bus: &mut Bus)
+    where
+        Bus: BusAccess<Z80Address>,
+    {
+        let ins_data = self.format_instruction_bytes(bus);
+        println!("{:#06x}: {}\n\t{:?}\n", self.start, ins_data, self.instruction);
+    }
+
+    pub fn format_instruction_bytes<Bus>(&mut self, bus: &mut Bus) -> String
+    where
+        Bus: BusAccess<Z80Address>,
+    {
+        let mut ins_data = String::new();
+        for offset in 0..self.end.saturating_sub(self.start) {
+            write!(ins_data, "{:02x} ", bus.read_u8(Bus::Instant::START, self.start + offset).unwrap()).unwrap()
+        }
+        ins_data
+    }
 }
 
 pub struct DecodeNext<'a, Bus, Instant>
@@ -107,11 +114,7 @@ where
         Ok(())
     }
 
-    pub fn decode_bare(
-        &mut self,
-        ins: u8,
-        extra_instruction_bytes: u16,
-    ) -> Result<Instruction, Z80Error> {
+    pub fn decode_bare(&mut self, ins: u8, extra_instruction_bytes: u16) -> Result<Instruction, Z80Error> {
         self.decoder.extra_instruction_bytes = extra_instruction_bytes;
         match get_ins_x(ins) {
             0 => match get_ins_z(ins) {
@@ -559,11 +562,7 @@ where
         }
     }
 
-    fn decode_index_target(
-        &mut self,
-        index_reg: IndexRegister,
-        z: u8,
-    ) -> Result<Option<Target>, Z80Error> {
+    fn decode_index_target(&mut self, index_reg: IndexRegister, z: u8) -> Result<Option<Target>, Z80Error> {
         let result = match z {
             4 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 0))),
             5 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 1))),
@@ -578,7 +577,9 @@ where
 
 
     fn read_instruction_byte(&mut self) -> Result<u8, Z80Error> {
-        let byte = self.bus.read_u8(self.clock, self.decoder.end)
+        let byte = self
+            .bus
+            .read_u8(self.clock, self.decoder.end)
             .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
         self.decoder.end = self.decoder.end.wrapping_add(1);
         Ok(byte)
@@ -587,7 +588,9 @@ where
     fn read_instruction_word(&mut self) -> Result<u16, Z80Error> {
         let mut bytes = [0; 2];
         for byte in bytes.iter_mut() {
-            *byte = self.bus.read_u8(self.clock, self.decoder.end & 0xFFFF)
+            *byte = self
+                .bus
+                .read_u8(self.clock, self.decoder.end & 0xFFFF)
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             self.decoder.end = self.decoder.end.wrapping_add(1);
         }

@@ -1,8 +1,8 @@
-
+use std::any::Any;
 use femtos::{Instant, Duration};
 use emulator_hal::{BusAdapter, Instant as EmuInstant};
 
-use moa_core::{System, Error, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable};
+use moa_core::{System, Error, Address, Steppable, Addressable, Interruptable, Signalable, Signal, Debuggable, Transmutable};
 
 use crate::{Z80, Z80Error, Z80Decoder};
 use crate::instructions::Register;
@@ -22,12 +22,31 @@ where
     }
 
     fn on_error(&mut self, system: &System) {
-        self.dump_state(system.clock);
+        let bus = &mut *system.bus.borrow_mut();
+        let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
+        self.dump_state(system.clock, &mut adapter);
     }
 }
 
 impl Interruptable for Z80<Instant> {}
 
+
+impl Signalable for Z80<Instant> {
+    fn set_signal(&mut self, signal: Signal, flag: bool) -> Result<(), Error> {
+        match signal {
+            Signal::Reset => self.signals.reset = flag,
+            Signal::BusRequest => self.signals.bus_request = flag,
+        }
+        Ok(())
+    }
+
+    fn signal(&mut self, signal: Signal) -> Option<bool> {
+        match signal {
+            Signal::Reset => Some(self.signals.reset),
+            Signal::BusRequest => Some(self.signals.bus_request),
+        }
+    }
+}
 
 impl Transmutable for Z80<Instant> {
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
@@ -39,6 +58,11 @@ impl Transmutable for Z80<Instant> {
     }
 
     fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
+        Some(self)
+    }
+
+    #[inline]
+    fn as_signalable(&mut self) -> Option<&mut dyn Signalable> {
         Some(self)
     }
 }
@@ -80,16 +104,16 @@ impl Debuggable for Z80<Instant> {
         let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
 
         let decoder = Z80Decoder::decode_at(&mut adapter, system.clock, self.state.pc)?;
-        // TODO disabled until decoder is fixed
-        //self.decoder.dump_decoded(&mut self.port);
-        self.dump_state(system.clock);
+        self.previous_cycle.decoder.dump_decoded(&mut adapter);
+        self.dump_state(system.clock, &mut adapter);
         Ok(())
     }
 
-    fn print_disassembly(&mut self, _system: &System, addr: Address, count: usize) {
-        // TODO disabled until decoder is fixed
-        //let mut decoder = Z80Decoder::default();
-        //decoder.dump_disassembly(&mut self.port, addr as u16, count as u16);
+    fn print_disassembly(&mut self, system: &System, addr: Address, count: usize) {
+        let bus = &mut *system.bus.borrow_mut();
+        let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
+
+        Z80Decoder::dump_disassembly(&mut adapter, addr as u16, count as u16);
     }
 
     fn run_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {
@@ -102,5 +126,3 @@ impl Debuggable for Z80<Instant> {
         Ok(false)
     }
 }
-
-

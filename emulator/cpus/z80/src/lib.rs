@@ -1,11 +1,11 @@
 mod debugger;
 mod decode;
+mod emuhal;
 mod execute;
 mod instructions;
+mod moa;
 mod state;
 mod timing;
-mod moa;
-mod emuhal;
 
 pub use crate::state::{Z80, Z80Type, Z80Error, Z80State, Status, Flags};
 pub use crate::decode::Z80Decoder;

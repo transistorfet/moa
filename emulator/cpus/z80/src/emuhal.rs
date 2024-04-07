@@ -1,4 +1,3 @@
-
 use emulator_hal::{BusAccess, Instant as EmuInstant, Error as EmuError, Step, Inspect, Debug, IntoAddress};
 use crate::state::{Z80, Z80Error, Z80Address, Status};
 
@@ -23,10 +22,9 @@ where
 
     fn step(&mut self, now: Self::Instant, bus: &mut Bus) -> Result<Self::Instant, Self::Error> {
         let mut executor = self.begin(now, bus)?;
-        executor.step_one()?;
+        let clocks = executor.step_one()?;
         self.previous_cycle = executor.end();
-        // TODO fix this
-        Ok(now)
+        Ok(now + Instant::hertz_to_duration(self.frequency.as_hz() as u64) * clocks as u32)
     }
 }
 
@@ -51,11 +49,9 @@ where
 
     fn step(&mut self, now: Self::Instant, bus: (&mut MemBus, &mut IoBus)) -> Result<Self::Instant, Self::Error> {
         let executor = self.begin(now, bus)?;
-        executor.step_one()?;
+        let clocks = executor.step_one()?;
         self.previous_cycle = executor.end();
-        // TODO fix this
-        Ok(now)
+        Ok(now + Instant::hertz_to_duration(self.frequency.as_hz() as u64) * clocks as u32)
     }
 }
 */
-

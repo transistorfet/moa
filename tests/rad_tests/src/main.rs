@@ -148,7 +148,11 @@ impl TestCase {
 }
 
 
-fn init_execute_test(cputype: Z80Type, state: &TestState, ports: &[TestPort]) -> Result<(Z80<Instant>, MemoryBlock<Instant>, MemoryBlock<Instant>), Error> {
+fn init_execute_test(
+    cputype: Z80Type,
+    state: &TestState,
+    ports: &[TestPort],
+) -> Result<(Z80<Instant>, MemoryBlock<Instant>, MemoryBlock<Instant>), Error> {
     // Insert basic initialization
     let len = 0x1_0000;
     let mut data = Vec::with_capacity(len);
@@ -220,7 +224,8 @@ fn load_state(
 
     // Load data bytes into memory
     for (addr, byte) in initial.ram.iter() {
-        memory.write_u8(Instant::START, *addr, *byte)
+        memory
+            .write_u8(Instant::START, *addr, *byte)
             .map_err(|err| Error::Bus(format!("{:?}", err)))?;
     }
 
@@ -281,7 +286,8 @@ fn assert_state(
 
     // Load data bytes into memory
     for (addr, byte) in expected.ram.iter() {
-        let actual = memory.read_u8(Instant::START, *addr)
+        let actual = memory
+            .read_u8(Instant::START, *addr)
             .map_err(|err| Error::Bus(format!("{:?}", err)))?;
         assert_value(actual, *byte, &format!("ram at {:x}", addr))?;
     }
@@ -289,7 +295,8 @@ fn assert_state(
     // Load data bytes into io space
     for port in ports.iter() {
         if port.atype == "w" {
-            let actual = io.read_u8(Instant::START, port.addr)
+            let actual = io
+                .read_u8(Instant::START, port.addr)
                 .map_err(|err| Error::Bus(format!("{:?}", err)))?;
             assert_value(actual, port.value, &format!("port value at {:x}", port.addr))?;
         }
@@ -306,7 +313,8 @@ fn step_cpu_and_assert(
     args: &Args,
 ) -> Result<(), Error> {
     //let clock_elapsed = cpu.step((memory, io))?;
-    let clock_elapsed = cpu.step(Instant::START, memory)
+    let clock_elapsed = cpu
+        .step(Instant::START, memory)
         .map_err(|err| Error::Step(format!("{:?}", err)))?;
 
     assert_state(cpu, memory, io, &case.final_state, args.check_extra_flags, &case.ports)?;
@@ -338,8 +346,8 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                 if args.debug {
                     case.dump();
                     println!();
-                    initial_cpu.dump_state(Instant::START);
-                    cpu.dump_state(Instant::START);
+                    initial_cpu.dump_state(Instant::START, &mut memory);
+                    cpu.dump_state(Instant::START, &mut memory);
                 }
                 println!("FAILED: {:?}", err);
             }

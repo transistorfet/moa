@@ -2,7 +2,7 @@ use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use femtos::Frequency;
+use femtos::{Instant, Frequency};
 
 use moa_core::{System, Error, MemoryBlock, Bus, Address, Addressable, Device};
 use moa_host::Host;
@@ -68,11 +68,13 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     coproc_bus.borrow_mut().insert(0x6000, coproc_register.clone());
     coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
     coproc_bus.borrow_mut().insert(0x8000, coproc_area);
-    let coproc = Z80::from_type(Z80Type::Z80, Frequency::from_hz(3_579_545), coproc_bus, 0, None);
-    let mut reset = coproc.reset.clone();
-    let mut bus_request = coproc.bus_request.clone();
-    reset.set(true);
-    bus_request.set(true);
+    let coproc = Z80::from_type(Z80Type::Z80, Frequency::from_hz(3_579_545));
+    //let mut reset = coproc.reset.clone();
+    //let mut bus_request = coproc.bus_request.clone();
+    //reset.set(true);
+    //bus_request.set(true);
+    let coproc = Device::new(coproc);
+
 
     // Add coprocessor devices to the system bus so the 68000 can access them too
     system.add_addressable_device(0x00a00000, coproc_ram)?;
@@ -80,14 +82,14 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     system.add_addressable_device(0x00a06000, coproc_register)?;
     //system.add_addressable_device(0x00c00010, coproc_sn_sound)?;
     system.add_device("sn_sound", coproc_sn_sound.clone())?;
-    system.add_device("coproc", Device::new(coproc))?;
+    system.add_device("coproc", coproc.clone())?;
 
 
     let controllers = GenesisControllers::new(host)?;
     let interrupt = controllers.get_interrupt_signal();
     system.add_addressable_device(0x00a10000, Device::new(controllers))?;
 
-    let coproc = CoprocessorCoordinator::new(reset, bus_request);
+    let coproc = CoprocessorCoordinator::new(coproc);
     system.add_addressable_device(0x00a11000, Device::new(coproc))?;
 
     let vdp = Ym7101::new(host, interrupt, coproc_sn_sound)?;
