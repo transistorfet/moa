@@ -46,6 +46,9 @@ struct Args {
     /// Check instruction timings
     #[clap(short = 't', long)]
     check_timings: bool,
+    /// Don't check I/O instructions
+    #[clap(short = 'i', long)]
+    no_check_io: bool,
     /// Directory to the test suite to run
     #[clap(long, default_value = DEFAULT_RAD_TESTS)]
     testsuite: String,
@@ -284,7 +287,7 @@ fn assert_state(
     assert_value(cpu.state.iff1 as u8, expected.iff1, "iff1")?;
     assert_value(cpu.state.iff2 as u8, expected.iff2, "iff2")?;
 
-    // Load data bytes into memory
+    // Compare data bytes in memory
     for (addr, byte) in expected.ram.iter() {
         let actual = memory
             .read_u8(Instant::START, *addr)
@@ -292,7 +295,7 @@ fn assert_state(
         assert_value(actual, *byte, &format!("ram at {:x}", addr))?;
     }
 
-    // Load data bytes into io space
+    // Compare data bytes in io space
     for port in ports.iter() {
         if port.atype == "w" {
             let actual = io
@@ -319,15 +322,14 @@ fn step_cpu_and_assert(
 
     assert_state(cpu, memory, io, &case.final_state, args.check_extra_flags, &case.ports)?;
     if args.check_timings {
-        // TODO re-enable. not sure why it can't divide here
-        //let cycles = clock_elapsed / cpu.frequency.period_duration();
-        //if cycles != case.cycles.len() {
-        //    return Err(Error::Assertion(format!(
-        //        "expected instruction to take {} cycles, but took {}",
-        //        case.cycles.len(),
-        //        cycles
-        //    )));
-        //}
+        let cycles = clock_elapsed.as_duration() / cpu.frequency.period_duration();
+        if cycles != case.cycles.len() as u64 {
+            return Err(Error::Assertion(format!(
+                "expected instruction to take {} cycles, but took {}",
+                case.cycles.len(),
+                cycles
+            )));
+        }
     }
 
     Ok(())
@@ -377,6 +379,10 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
             if !case.name.ends_with(only) {
                 continue;
             }
+        }
+
+        if args.no_check_io && !case.ports.is_empty() {
+            continue;
         }
 
         // Sort the ram memory for debugging help
