@@ -86,11 +86,18 @@ impl Debuggable for M68k<Instant> {
         }
     }
 
-    fn print_current_step(&mut self, _system: &System) -> Result<(), Error> {
+    fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
+        let mut bus = system.bus.borrow_mut();
+        let mut adapter: BusAdapter<u32, u64, &mut dyn Addressable, Error> =
+            BusAdapter::new(&mut *bus, |addr| addr as u64, |err| err);
+
         // TODO this is called by the debugger, but should be called some other way
-        //let _ = self.decoder.decode_at(&mut self.bus, true, self.state.pc);
-        //self.decoder.dump_decoded(&mut self.bus);
-        //self.dump_state();
+        let mut decoder = M68kDecoder::new(self.info.chip, true, self.state.pc);
+        decoder.decode_at(&mut adapter, &mut M68kBusPort::default(), true, self.state.pc)?;
+        decoder.dump_decoded(system.clock, &mut adapter);
+        let mut writer = String::new();
+        self.dump_state(&mut writer)?;
+        println!("{}", writer);
         Ok(())
     }
 

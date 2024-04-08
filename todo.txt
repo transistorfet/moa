@@ -1,7 +1,7 @@
 
-* fix the Z80 dumping functions
 * fix the Z80 reset and bus_request signals
 * the emulator_hal_memory should throw an error when an access will straddle the end of memory?  Or should it autowrap?
+* fix the m68k dumping functions
 
 * convert computie system to use the new moa-system library crate to replace the old core crate
 * change package names to drop the 's', so moa-systems-computie becomes moa-system-computie

@@ -71,3 +71,9 @@ impl<E> From<HostError<E>> for Error {
         Self::Other("other".to_string())
     }
 }
+
+impl From<fmt::Error> for Error {
+    fn from(err: fmt::Error) -> Self {
+        Self::Other(format!("{:?}", err))
+    }
+}
