@@ -82,9 +82,9 @@ where
     }
 
     pub(crate) fn step_one(&mut self) -> Result<u16, Z80Error> {
-        let clocks = if self.signals.reset {
+        let clocks = if self.signals.reset.get() {
             self.reset()?
-        } else if self.signals.bus_request {
+        } else if self.signals.bus_request.get() {
             4
         } else {
             self.step_internal()?

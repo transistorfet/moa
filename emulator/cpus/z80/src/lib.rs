@@ -3,9 +3,12 @@ mod decode;
 mod emuhal;
 mod execute;
 mod instructions;
-mod moa;
 mod state;
 mod timing;
+
+//#[cfg(feature = "moa")]
+pub mod moa;
+pub use crate::moa::MoaZ80;
 
 pub use crate::state::{Z80, Z80Type, Z80Error, Z80State, Status, Flags};
 pub use crate::decode::Z80Decoder;

@@ -8,4 +8,4 @@ log = "0.4"
 femtos = "0.1"
 thiserror = "1.0"
 moa-host = { path = "../libraries/host" }
-emulator-hal = { path = "../libraries/emulator-hal/emulator-hal" }
+emulator-hal = { path = "../libraries/emulator-hal/emulator-hal", features = ["femtos"] }

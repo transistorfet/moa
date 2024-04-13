@@ -94,8 +94,10 @@ impl Z80State {
 
 #[derive(Clone, Debug, Default)]
 pub struct Z80Signals {
-    pub reset: bool,
-    pub bus_request: bool,
+    //pub reset: bool,
+    //pub bus_request: bool,
+    pub reset: Signal<bool>,
+    pub bus_request: Signal<bool>,
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
