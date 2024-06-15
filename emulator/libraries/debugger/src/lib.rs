@@ -27,7 +27,7 @@ impl Debugger {
     pub fn print_step(&mut self, system: &mut System) -> Result<(), Error> {
         println!("@ {} ns", system.clock.as_duration().as_nanos());
         if let Some(device) = system.get_next_debuggable_device() {
-            device.borrow_mut().as_debuggable().unwrap().print_current_step(system)?;
+            system.get_dyn_device(device).unwrap().borrow_mut().as_debuggable().unwrap().print_current_step(system)?;
         }
         Ok(())
     }
@@ -65,13 +65,13 @@ impl Debugger {
                     let (name, addr) = parse_address(args[1])?;
                     match name {
                         Some(name) => {
-                            let target = system.get_device(name)?;
+                            let target = system.get_dyn_device_by_name(name)?;
                             target.borrow_mut().as_debuggable().unwrap().add_breakpoint(addr);
                             println!("Breakpoint set for devices {:?} at {:08x}", name, addr);
                         },
                         None => {
                             if let Some(device) = system.get_next_debuggable_device() {
-                                device.borrow_mut().as_debuggable().unwrap().add_breakpoint(addr);
+                                system.get_dyn_device(device).unwrap().borrow_mut().as_debuggable().unwrap().add_breakpoint(addr);
                                 println!("Breakpoint set for {:08x}", addr);
                             }
                         },
@@ -85,13 +85,13 @@ impl Debugger {
                     let (name, addr) = parse_address(args[1])?;
                     match name {
                         Some(name) => {
-                            let target = system.get_device(name)?;
+                            let target = system.get_dyn_device_by_name(name)?;
                             target.borrow_mut().as_debuggable().unwrap().remove_breakpoint(addr);
                             println!("Breakpoint removed for devices {:?} at {:08x}", name, addr);
                         },
                         None => {
                             if let Some(device) = system.get_next_debuggable_device() {
-                                device.borrow_mut().as_debuggable().unwrap().remove_breakpoint(addr);
+                                system.get_dyn_device(device).unwrap().borrow_mut().as_debuggable().unwrap().remove_breakpoint(addr);
                                 println!("Breakpoint removed for {:08x}", addr);
                             }
                         },
@@ -132,13 +132,13 @@ impl Debugger {
                 if args.len() < 2 {
                     println!("Usage: inspect <device_name> [<device specific arguments>]");
                 } else {
-                    let device = system.get_device(args[1])?;
-                    let subargs = if args.len() > 2 { &args[2..] } else { &[""] };
-                    device
-                        .borrow_mut()
-                        .as_inspectable()
-                        .ok_or_else(|| Error::new("That device is not inspectable"))?
-                        .inspect(system, subargs)?;
+                    // let device = system.get_dyn_device(args[1])?;
+                    // let subargs = if args.len() > 2 { &args[2..] } else { &[""] };
+                    // device
+                    //     .borrow_mut()
+                    //     .as_inspectable()
+                    //     .ok_or_else(|| Error::new("That device is not inspectable"))?
+                    //     .inspect(system, subargs)?;
                 }
             },
             "dis" | "disassemble" => {
@@ -155,7 +155,7 @@ impl Debugger {
                 };
 
                 if let Some(device) = system.get_next_debuggable_device() {
-                    device
+                    system.get_dyn_device(device).unwrap()
                         .borrow_mut()
                         .as_debuggable()
                         .unwrap()
@@ -202,7 +202,7 @@ impl Debugger {
             //},
             _ => {
                 if let Some(device) = system.get_next_debuggable_device() {
-                    if device.borrow_mut().as_debuggable().unwrap().run_command(system, &args)? {
+                    if system.get_dyn_device(device).unwrap().borrow_mut().as_debuggable().unwrap().run_command(system, &args)? {
                         println!("Error: unknown command {}", args[0]);
                     }
                 }
