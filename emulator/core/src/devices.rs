@@ -179,6 +179,10 @@ pub trait DynDevice: Any + 'static + Transmutable {}
 
 pub type Device = Rc<RefCell<dyn DynDevice>>;
 
+pub fn wrap_device<T: DynDevice>(value: T) -> Device {
+    Rc::new(RefCell::new(value))
+}
+
 impl<T> DynDevice for T where T: Transmutable + 'static {}
 
 pub trait Transmutable {

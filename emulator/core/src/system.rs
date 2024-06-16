@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use femtos::{Instant, Duration};
 
 use crate::devices::{downcast_rc_refc, get_next_device_id, Device, DeviceId, DynDevice};
-use crate::{Address, Bus, Error, InterruptController};
+use crate::{wrap_device, Address, Bus, Error, InterruptController};
 
 
 pub struct System {
@@ -127,12 +127,7 @@ impl System {
     }
 
     pub fn add_device<T: DynDevice>(&mut self, device: T, settings: DeviceSettings) -> Result<DeviceId, Error> {
-        self.add_device_rc_ref(Rc::new(RefCell::new(device)), settings)
-    }
-
-    pub fn add_device_rc_ref<T: DynDevice>(&mut self, device: Rc<RefCell<T>>, settings: DeviceSettings) -> Result<DeviceId, Error> {
-        let device = device as Device;
-        self.add_device_rc_dyn(device, settings)
+        self.add_device_rc_dyn(wrap_device(device), settings)
     }
 
     pub fn add_device_rc_dyn(&mut self, device: Device, settings: DeviceSettings) -> Result<DeviceId, Error> {
@@ -154,7 +149,11 @@ impl System {
     }
 
     pub fn add_named_device<T: DynDevice>(&mut self, name: &str, device: T) -> Result<DeviceId, Error> {
-        self.add_device(device, DeviceSettings {
+        self.add_named_device_rc_dyn(name, wrap_device(device))
+    }
+
+    pub fn add_named_device_rc_dyn(&mut self, name: &str, device: Device) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(device, DeviceSettings {
             name: Some(name.to_owned()),
             queue: true,
             ..Default::default()
@@ -162,16 +161,25 @@ impl System {
     }
 
     pub fn add_addressable_device<T: DynDevice>(&mut self, addr: Address, device: T) -> Result<DeviceId, Error> {
-        self.add_device(device, DeviceSettings {
+        self.add_addressable_device_rc_dyn(addr, wrap_device(device))
+    }
+
+    pub fn add_addressable_device_rc_dyn(&mut self, addr: Address, device: Device) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(device, DeviceSettings {
             name: Some(format!("mem{:x}", addr)),
             address: Some(addr),
             queue: true,
             ..Default::default()
         })
     }
+    
 
     pub fn add_peripheral<T: DynDevice>(&mut self, name: &str, addr: Address, device: T) -> Result<DeviceId, Error> {
-        self.add_device(device, DeviceSettings {
+        self.add_peripheral_rc_dyn(name, addr, wrap_device(device))
+    }
+
+    pub fn add_peripheral_rc_dyn(&mut self, name: &str, addr: Address, device: Device) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(device, DeviceSettings {
             name: Some(name.to_owned()),
             address: Some(addr),
             queue: true,
@@ -180,7 +188,11 @@ impl System {
     }
 
     pub fn add_interruptable_device<T: DynDevice>(&mut self, name: &str, device: T) -> Result<DeviceId, Error> {
-        self.add_device(device, DeviceSettings {
+        self.add_interruptable_device_rc_dyn(name, wrap_device(device))
+    }
+
+    pub fn add_interruptable_device_rc_dyn(&mut self, name: &str, device: Device) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(device, DeviceSettings {
             name: Some(name.to_owned()),
             queue: true,
             ..Default::default()
