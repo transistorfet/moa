@@ -1,4 +1,4 @@
-use std::any::{type_name, type_name_of_val, Any, TypeId};
+use std::any::{type_name, Any, TypeId};
 use std::ops::Deref;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -232,12 +232,6 @@ pub fn downcast_rc_refc<'a, T: DynDevice>(field: &'a Device) -> Result<&'a Rc<Re
     } else {
         Err(Error::Other(format!("Type {} is not {}", field.borrow().deref().type_name(), type_name::<T>())))
     }
-}
-
-pub type TransmutableBox = Rc<RefCell<Box<dyn Transmutable>>>;
-
-pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox {
-    Rc::new(RefCell::new(Box::new(value)))
 }
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
