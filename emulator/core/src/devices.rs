@@ -1,6 +1,8 @@
+use std::any::{type_name, Any, TypeId};
+use std::ops::Deref;
 use std::rc::Rc;
-use std::cell::{RefCell, RefMut, BorrowMutError};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicU32, Ordering};
 use femtos::{Duration, Instant};
 
 use crate::{Error, System};
@@ -172,6 +174,23 @@ pub trait Inspectable {
 }
 
 
+pub type DeviceId = u32;
+pub trait DynDevice: Any + 'static + Transmutable {
+    fn type_name(&self) -> &'static str;
+}
+
+pub type Device = Rc<RefCell<dyn DynDevice>>;
+
+pub fn wrap_device<T: DynDevice>(value: T) -> Device {
+    Rc::new(RefCell::new(value))
+}
+
+impl<T> DynDevice for T where T: Transmutable + 'static {
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<T>()
+    }
+}
+
 pub trait Transmutable {
     #[inline]
     fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
@@ -199,55 +218,29 @@ pub trait Transmutable {
     }
 }
 
-pub type TransmutableBox = Rc<RefCell<Box<dyn Transmutable>>>;
-
-pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox {
-    Rc::new(RefCell::new(Box::new(value)))
+// Taken from deno_core
+fn is<T: DynDevice>(field: &dyn DynDevice) -> bool {
+    field.type_id() == TypeId::of::<T>()
 }
 
-static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DeviceId(usize);
-
-impl DeviceId {
-    pub fn new() -> Self {
-        let next = NEXT_ID.load(Ordering::Acquire);
-        NEXT_ID.store(next + 1, Ordering::Release);
-        Self(next)
+// Taken from deno_core
+pub fn downcast_rc_refc<'a, T: DynDevice>(field: &'a Device) -> Result<&'a Rc<RefCell<T>>, Error> {
+    if is::<T>(field.borrow().deref()) {
+        let ptr = field as *const Rc<RefCell<_>> as *const Rc<RefCell<T>>;
+        #[allow(clippy::undocumented_unsafe_blocks)]
+        Ok(unsafe { &*ptr })
+    } else {
+        Err(Error::Other(format!("Type {} is not {}", field.borrow().deref().type_name(), type_name::<T>())))
     }
 }
 
-impl Default for DeviceId {
-    fn default() -> Self {
-        Self::new()
-    }
+static NEXT_ID: AtomicU32 = AtomicU32::new(1);
+
+pub fn get_next_device_id() -> u32 {
+    let next = NEXT_ID.load(Ordering::Acquire);
+    NEXT_ID.store(next + 1, Ordering::Release);
+    next
 }
-
-#[derive(Clone)]
-pub struct Device(DeviceId, TransmutableBox);
-
-impl Device {
-    pub fn new<T>(value: T) -> Self
-    where
-        T: Transmutable + 'static,
-    {
-        Self(DeviceId::new(), wrap_transmutable(value))
-    }
-
-    pub fn id(&self) -> DeviceId {
-        self.0
-    }
-
-    pub fn borrow_mut(&self) -> RefMut<'_, Box<dyn Transmutable>> {
-        self.1.borrow_mut()
-    }
-
-    pub fn try_borrow_mut(&self) -> Result<RefMut<'_, Box<dyn Transmutable>>, BorrowMutError> {
-        self.1.try_borrow_mut()
-    }
-}
-
 
 /*
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

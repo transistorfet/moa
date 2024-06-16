@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Duration};
 
-use moa_core::{System, Bus, Error, Address, Addressable, AddressRepeater, Steppable, Transmutable, Device};
+use moa_core::{wrap_device, Address, AddressRepeater, Addressable, Bus, Device, Error, Steppable, System, Transmutable};
 use moa_signals::Observable;
 
 use moa_peripherals_mos::Mos6522;
@@ -48,28 +48,28 @@ impl Mainboard {
                 lower_bus.borrow_mut().clear_all_bus_devices();
                 lower_bus
                     .borrow_mut()
-                    .insert(0x000000, Device::new(AddressRepeater::new(ram.clone(), 0x400000)));
+                    .insert(0x000000, wrap_device(AddressRepeater::new(ram.clone(), 0x400000)));
                 lower_bus
                     .borrow_mut()
-                    .insert(0x400000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                    .insert(0x400000, wrap_device(AddressRepeater::new(rom.clone(), 0x100000)));
                 lower_bus
                     .borrow_mut()
-                    .insert(0x600000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                    .insert(0x600000, wrap_device(AddressRepeater::new(rom.clone(), 0x100000)));
             } else {
                 println!("{}: overlay is 1 (startup)", DEV_NAME);
                 lower_bus.borrow_mut().clear_all_bus_devices();
                 lower_bus
                     .borrow_mut()
-                    .insert(0x000000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                    .insert(0x000000, wrap_device(AddressRepeater::new(rom.clone(), 0x100000)));
                 lower_bus
                     .borrow_mut()
-                    .insert(0x200000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                    .insert(0x200000, wrap_device(AddressRepeater::new(rom.clone(), 0x100000)));
                 lower_bus
                     .borrow_mut()
-                    .insert(0x400000, Device::new(AddressRepeater::new(rom.clone(), 0x100000)));
+                    .insert(0x400000, wrap_device(AddressRepeater::new(rom.clone(), 0x100000)));
                 lower_bus
                     .borrow_mut()
-                    .insert(0x600000, Device::new(AddressRepeater::new(ram.clone(), 0x200000)));
+                    .insert(0x600000, wrap_device(AddressRepeater::new(ram.clone(), 0x200000)));
             }
         });
 

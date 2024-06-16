@@ -1,6 +1,6 @@
 use femtos::Frequency;
 
-use moa_core::{System, Error, MemoryBlock, Device};
+use moa_core::{System, Error, MemoryBlock};
 use moa_host::Host;
 
 use moa_z80::{Z80, Z80Type};
@@ -33,20 +33,20 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
     //rom.load_at(0x0000, "binaries/trs80/level2.rom")?;
     rom.load_at(0x0000, &options.rom)?;
     rom.read_only();
-    system.add_addressable_device(0x0000, Device::new(rom))?;
+    system.add_addressable_device(0x0000, rom)?;
 
     let ram = MemoryBlock::new(vec![0; options.memory as usize]);
-    system.add_addressable_device(0x4000, Device::new(ram))?;
+    system.add_addressable_device(0x4000, ram)?;
 
     let keyboard = Model1Keyboard::new(host)?;
-    system.add_addressable_device(0x37E0, Device::new(keyboard)).unwrap();
+    system.add_addressable_device(0x37E0, keyboard).unwrap();
     let video = Model1Video::new(host)?;
-    system.add_addressable_device(0x37E0 + 0x420, Device::new(video)).unwrap();
+    system.add_addressable_device(0x37E0 + 0x420, video).unwrap();
 
     // TODO the ioport needs to be hooked up
     let cpu = Z80::from_type(Z80Type::Z80, options.frequency, system.bus.clone(), 0, None);
 
-    system.add_interruptable_device("cpu", Device::new(cpu))?;
+    system.add_interruptable_device("cpu", cpu)?;
 
     Ok(system)
 }

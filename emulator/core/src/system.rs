@@ -1,29 +1,33 @@
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use femtos::{Instant, Duration};
 
-use crate::{Bus, Error, InterruptController, Address, Device};
+use crate::devices::{downcast_rc_refc, get_next_device_id, Device, DeviceId, DynDevice};
+use crate::{wrap_device, Address, Bus, Error, InterruptController};
 
 
 pub struct System {
     pub clock: Instant,
-    pub devices: HashMap<String, Device>,
+    pub devices: BTreeMap<DeviceId, Device>,
     pub event_queue: Vec<NextStep>,
+    pub id_to_name: HashMap<DeviceId, String>,
 
-    pub debuggables: Vec<Device>,
+    pub debuggables: Vec<DeviceId>,
 
     pub bus: Rc<RefCell<Bus>>,
     pub buses: HashMap<String, Rc<RefCell<Bus>>>,
     pub interrupt_controller: RefCell<InterruptController>,
 }
 
+
 impl Default for System {
     fn default() -> Self {
         Self {
             clock: Instant::START,
-            devices: HashMap::new(),
+            devices: BTreeMap::new(),
             event_queue: vec![],
+            id_to_name: HashMap::new(),
 
             debuggables: Vec::new(),
 
@@ -31,6 +35,50 @@ impl Default for System {
             buses: HashMap::new(),
             interrupt_controller: RefCell::new(InterruptController::default()),
         }
+    }
+}
+
+pub struct DeviceSettings {
+    pub name: Option<String>,
+    pub address: Option<Address>,
+    pub debuggable: bool,
+    pub queue: bool,
+}
+
+impl Default for DeviceSettings {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DeviceSettings {
+    fn new() -> Self {
+        Self {
+            name: None,
+            address: None,
+            debuggable: false,
+            queue: false,
+        }
+    }
+
+    fn with_address(&mut self, addr: Address) -> &mut Self {
+        self.address = Some(addr);
+        self
+    }
+
+    fn with_name(&mut self, name: String) -> &mut Self {
+        self.name = Some(name);
+        self
+    }
+
+    fn debuggable(&mut self, debuggable: bool) -> &mut Self {
+        self.debuggable = debuggable;
+        self
+    }
+
+    fn queue(&mut self, queue: bool) -> &mut Self {
+        self.queue = queue;
+        self
     }
 }
 
@@ -43,43 +91,118 @@ impl System {
         self.interrupt_controller.borrow_mut()
     }
 
-    pub fn get_device(&self, name: &str) -> Result<Device, Error> {
+    pub fn get_id_from_name(&self, name: &str) -> Option<DeviceId> {
+        self.id_to_name.iter().find_map(|(key, &ref val)| if val == name { Some(*key)} else { None })
+    }
+
+    pub fn get_device<T: DynDevice>(&self, device: DeviceId) -> Result<Rc<RefCell<T>>, Error> {
         self.devices
-            .get(name)
+            .get(&device)
+            .and_then(|rc| downcast_rc_refc::<T>(rc).inspect_err(|e| panic!("{:?}", e)).ok())
             .cloned()
-            .ok_or_else(|| Error::new(format!("system: no device named {}", name)))
+            .ok_or_else(|| Error::new(format!("system: bad device id {}", device)))
     }
 
-    pub fn add_device(&mut self, name: &str, device: Device) -> Result<(), Error> {
-        self.try_add_debuggable(device.clone());
-        self.try_queue_device(device.clone());
-        self.devices.insert(name.to_string(), device);
-        Ok(())
+    pub fn get_device_by_name<T: DynDevice>(&self, name: &str) -> Result<Rc<RefCell<T>>, Error> {
+        if let Some(id) = self.get_id_from_name(name) {
+            self.get_device(id)
+        } else {
+            Err(Error::new(format!("system: could not find device  {}", name)))
+        }
     }
 
-    pub fn add_addressable_device(&mut self, addr: Address, device: Device) -> Result<(), Error> {
-        self.add_peripheral(&format!("mem{:x}", addr), addr, device)
+    pub fn get_dyn_device(&self, device: DeviceId) -> Result<Device, Error> {
+        self.devices
+            .get(&device)
+            .cloned()
+            .ok_or_else(|| Error::new(format!("system: bad device id {}", device)))
     }
 
-    pub fn add_peripheral(&mut self, name: &str, addr: Address, device: Device) -> Result<(), Error> {
-        self.bus.borrow_mut().insert(addr, device.clone());
-        self.try_add_debuggable(device.clone());
-        self.try_queue_device(device.clone());
-        self.devices.insert(name.to_string(), device);
-        Ok(())
+    pub fn get_dyn_device_by_name(&self, name: &str) -> Result<Device, Error> {
+        if let Some(id) = self.get_id_from_name(name) {
+            self.get_dyn_device(id)
+        } else {
+            Err(Error::new(format!("system: could not find device  {}", name)))
+        }
     }
 
-    pub fn add_interruptable_device(&mut self, name: &str, device: Device) -> Result<(), Error> {
-        self.try_add_debuggable(device.clone());
-        self.try_queue_device(device.clone());
-        self.devices.insert(name.to_string(), device);
-        Ok(())
+    pub fn add_device<T: DynDevice>(&mut self, device: T, settings: DeviceSettings) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(wrap_device(device), settings)
+    }
+
+    pub fn add_device_rc_dyn(&mut self, device: Device, settings: DeviceSettings) -> Result<DeviceId, Error> {
+        let id = get_next_device_id();
+        self.id_to_name.insert(id, settings.name.unwrap_or_default());
+
+        self.devices.insert(id, device.clone());
+
+        if settings.debuggable && device.borrow_mut().as_debuggable().is_some() {
+            self.debuggables.push(id);
+        }
+        if settings.queue && device.borrow_mut().as_steppable().is_some() {
+            self.queue_device(NextStep::new(id));
+        }
+        if let Some(addr) = settings.address {
+            self.bus.borrow_mut().insert(addr, device.clone());
+        }
+        Ok(id)
+    }
+
+    pub fn add_named_device<T: DynDevice>(&mut self, name: &str, device: T) -> Result<DeviceId, Error> {
+        self.add_named_device_rc_dyn(name, wrap_device(device))
+    }
+
+    pub fn add_named_device_rc_dyn(&mut self, name: &str, device: Device) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(device, DeviceSettings {
+            name: Some(name.to_owned()),
+            queue: true,
+            ..Default::default()
+        })
+    }
+
+    pub fn add_addressable_device<T: DynDevice>(&mut self, addr: Address, device: T) -> Result<DeviceId, Error> {
+        self.add_addressable_device_rc_dyn(addr, wrap_device(device))
+    }
+
+    pub fn add_addressable_device_rc_dyn(&mut self, addr: Address, device: Device) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(device, DeviceSettings {
+            name: Some(format!("mem{:x}", addr)),
+            address: Some(addr),
+            queue: true,
+            ..Default::default()
+        })
+    }
+    
+
+    pub fn add_peripheral<T: DynDevice>(&mut self, name: &str, addr: Address, device: T) -> Result<DeviceId, Error> {
+        self.add_peripheral_rc_dyn(name, addr, wrap_device(device))
+    }
+
+    pub fn add_peripheral_rc_dyn(&mut self, name: &str, addr: Address, device: Device) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(device, DeviceSettings {
+            name: Some(name.to_owned()),
+            address: Some(addr),
+            queue: true,
+            ..Default::default()
+        })
+    }
+
+    pub fn add_interruptable_device<T: DynDevice>(&mut self, name: &str, device: T) -> Result<DeviceId, Error> {
+        self.add_interruptable_device_rc_dyn(name, wrap_device(device))
+    }
+
+    pub fn add_interruptable_device_rc_dyn(&mut self, name: &str, device: Device) -> Result<DeviceId, Error> {
+        self.add_device_rc_dyn(device, DeviceSettings {
+            name: Some(name.to_owned()),
+            queue: true,
+            ..Default::default()
+        })
     }
 
     fn process_one_event(&mut self) -> Result<(), Error> {
         let mut event_device = self.event_queue.pop().unwrap();
         self.clock = event_device.next_clock;
-        let result = match event_device.device.borrow_mut().as_steppable().unwrap().step(self) {
+        let result = match self.get_dyn_device(event_device.device).unwrap().borrow_mut().as_steppable().unwrap().step(self) {
             Ok(diff) => {
                 event_device.next_clock = self.clock.checked_add(diff).unwrap();
                 Ok(())
@@ -107,11 +230,11 @@ impl System {
     }
 
     /// Step through the simulation until the next event is for the given device
-    pub fn step_until_device(&mut self, device: Device) -> Result<(), Error> {
+    pub fn step_until_device(&mut self, device: DeviceId) -> Result<(), Error> {
         loop {
             self.step()?;
 
-            if self.get_next_event_device().id() == device.id() {
+            if self.get_next_event_device_id() == device {
                 break;
             }
         }
@@ -123,7 +246,7 @@ impl System {
         loop {
             self.step()?;
 
-            if self.get_next_event_device().borrow_mut().as_debuggable().is_some() {
+            if self.get_dyn_device(self.get_next_event_device_id()).unwrap().borrow_mut().as_debuggable().is_some() {
                 break;
             }
         }
@@ -161,29 +284,17 @@ impl System {
         }
     }
 
-    pub fn get_next_event_device(&self) -> Device {
-        self.event_queue[self.event_queue.len() - 1].device.clone()
+    pub fn get_next_event_device_id(&self) -> DeviceId {
+        self.event_queue[self.event_queue.len() - 1].device
     }
 
-    pub fn get_next_debuggable_device(&self) -> Option<Device> {
+    pub fn get_next_debuggable_device(&self) -> Option<DeviceId> {
         for event in self.event_queue.iter().rev() {
-            if event.device.borrow_mut().as_debuggable().is_some() {
-                return Some(event.device.clone());
+            if self.get_dyn_device(event.device).unwrap().borrow_mut().as_debuggable().is_some() {
+                return Some(event.device);
             }
         }
         None
-    }
-
-    fn try_add_debuggable(&mut self, device: Device) {
-        if device.borrow_mut().as_debuggable().is_some() {
-            self.debuggables.push(device);
-        }
-    }
-
-    fn try_queue_device(&mut self, device: Device) {
-        if device.borrow_mut().as_steppable().is_some() {
-            self.queue_device(NextStep::new(device));
-        }
     }
 
     fn queue_device(&mut self, device_step: NextStep) {
@@ -200,11 +311,11 @@ impl System {
 
 pub struct NextStep {
     pub next_clock: Instant,
-    pub device: Device,
+    pub device: DeviceId,
 }
 
 impl NextStep {
-    pub fn new(device: Device) -> Self {
+    pub fn new(device: DeviceId) -> Self {
         Self {
             next_clock: Instant::START,
             device,
