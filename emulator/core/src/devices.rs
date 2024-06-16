@@ -1,4 +1,4 @@
-use std::any::{Any, TypeId};
+use std::any::{type_name, type_name_of_val, Any, TypeId};
 use std::ops::Deref;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -175,7 +175,9 @@ pub trait Inspectable {
 
 
 pub type DeviceId = u32;
-pub trait DynDevice: Any + 'static + Transmutable {}
+pub trait DynDevice: Any + 'static + Transmutable {
+    fn type_name(&self) -> &'static str;
+}
 
 pub type Device = Rc<RefCell<dyn DynDevice>>;
 
@@ -183,7 +185,11 @@ pub fn wrap_device<T: DynDevice>(value: T) -> Device {
     Rc::new(RefCell::new(value))
 }
 
-impl<T> DynDevice for T where T: Transmutable + 'static {}
+impl<T> DynDevice for T where T: Transmutable + 'static {
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<T>()
+    }
+}
 
 pub trait Transmutable {
     #[inline]
@@ -218,13 +224,13 @@ fn is<T: DynDevice>(field: &dyn DynDevice) -> bool {
 }
 
 // Taken from deno_core
-pub fn downcast_rc_refc<'a, T: DynDevice>(field: &'a Device) -> Option<&'a Rc<RefCell<T>>> {
+pub fn downcast_rc_refc<'a, T: DynDevice>(field: &'a Device) -> Result<&'a Rc<RefCell<T>>, Error> {
     if is::<T>(field.borrow().deref()) {
         let ptr = field as *const Rc<RefCell<_>> as *const Rc<RefCell<T>>;
         #[allow(clippy::undocumented_unsafe_blocks)]
-        Some(unsafe { &*ptr })
+        Ok(unsafe { &*ptr })
     } else {
-        None
+        Err(Error::Other(format!("Type {} is not {}", field.borrow().deref().type_name(), type_name::<T>())))
     }
 }
 

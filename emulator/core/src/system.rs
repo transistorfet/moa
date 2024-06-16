@@ -98,7 +98,7 @@ impl System {
     pub fn get_device<T: DynDevice>(&self, device: DeviceId) -> Result<Rc<RefCell<T>>, Error> {
         self.devices
             .get(&device)
-            .and_then(|rc| downcast_rc_refc::<T>(rc))
+            .and_then(|rc| downcast_rc_refc::<T>(rc).inspect_err(|e| panic!("{:?}", e)).ok())
             .cloned()
             .ok_or_else(|| Error::new(format!("system: bad device id {}", device)))
     }
