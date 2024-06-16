@@ -132,13 +132,13 @@ impl Debugger {
                 if args.len() < 2 {
                     println!("Usage: inspect <device_name> [<device specific arguments>]");
                 } else {
-                    // let device = system.get_dyn_device(args[1])?;
-                    // let subargs = if args.len() > 2 { &args[2..] } else { &[""] };
-                    // device
-                    //     .borrow_mut()
-                    //     .as_inspectable()
-                    //     .ok_or_else(|| Error::new("That device is not inspectable"))?
-                    //     .inspect(system, subargs)?;
+                    let device = system.get_dyn_device_by_name(args[1])?;
+                    let subargs = if args.len() > 2 { &args[2..] } else { &[""] };
+                    device
+                        .borrow_mut()
+                        .as_inspectable()
+                        .ok_or_else(|| Error::new("That device is not inspectable"))?
+                        .inspect(system, subargs)?;
                 }
             },
             "dis" | "disassemble" => {
