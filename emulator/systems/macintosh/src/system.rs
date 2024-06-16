@@ -1,6 +1,6 @@
 use femtos::Frequency;
 
-use moa_core::{System, Error, MemoryBlock, Debuggable, Device};
+use moa_core::{wrap_device, Debuggable, Error, MemoryBlock, System};
 use moa_host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -64,10 +64,10 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     rom.read_only();
 
     let video = MacVideo::new(host)?;
-    system.add_device("video", Device::new(video)).unwrap();
+    system.add_named_device("video", video).unwrap();
 
-    let mainboard = Mainboard::new(Device::new(ram), Device::new(rom))?;
-    system.add_addressable_device(0x00000000, Device::new(mainboard))?;
+    let mainboard = Mainboard::new(wrap_device(ram), wrap_device(rom))?;
+    system.add_addressable_device(0x00000000, mainboard)?;
 
 
     let mut cpu = M68k::from_type(M68kType::MC68000, Frequency::from_hz(7_833_600));
@@ -122,7 +122,7 @@ pub fn build_macintosh_512k<H: Host>(host: &mut H) -> Result<System, Error> {
     panic!("");
     */
 
-    system.add_interruptable_device("cpu", Device::new(cpu))?;
+    system.add_interruptable_device("cpu", cpu)?;
 
     Ok(system)
 }

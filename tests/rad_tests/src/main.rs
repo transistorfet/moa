@@ -13,7 +13,7 @@ use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 use femtos::Frequency;
 
-use moa_core::{System, Error, MemoryBlock, Bus, BusPort, Address, Addressable, Steppable, Device};
+use moa_core::{System, Error, MemoryBlock, Bus, BusPort, Address, Addressable, Steppable};
 
 use moa_z80::{Z80, Z80Type};
 use moa_z80::instructions::InterruptMode;
@@ -150,10 +150,10 @@ fn init_execute_test(cputype: Z80Type, state: &TestState, ports: &[TestPort]) ->
 
     // Insert basic initialization
     let mem = MemoryBlock::new(vec![0; 0x1_0000]);
-    system.add_addressable_device(0x00000000, Device::new(mem)).unwrap();
+    system.add_addressable_device(0x00000000, mem).unwrap();
 
     // Set up IOREQ as memory space
-    let io_ram = Device::new(MemoryBlock::new(vec![0; 0x10000]));
+    let io_ram = Rc::new(RefCell::new(MemoryBlock::new(vec![0; 0x10000])));
     let io_bus = Rc::new(RefCell::new(Bus::default()));
     io_bus.borrow_mut().set_ignore_unmapped(true);
     io_bus.borrow_mut().insert(0x0000, io_ram);

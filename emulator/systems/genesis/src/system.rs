@@ -4,7 +4,8 @@ use std::cell::RefCell;
 
 use femtos::Frequency;
 
-use moa_core::{System, Error, MemoryBlock, Bus, Address, Addressable, Device};
+use moa_core::wrap_device;
+use moa_core::{System, Error, MemoryBlock, Bus, Address, Addressable};
 use moa_host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -44,22 +45,22 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     let rom = MemoryBlock::new(rom_data);
     //rom.read_only();
     let rom_end = rom.size();
-    system.add_addressable_device(0x00000000, Device::new(rom))?;
+    system.add_addressable_device(0x00000000, rom)?;
 
     let cartridge_nvram = MemoryBlock::new(vec![0; 0x400000 - rom_end]);
-    system.add_addressable_device(rom_end as Address, Device::new(cartridge_nvram))?;
+    system.add_addressable_device(rom_end as Address, cartridge_nvram)?;
 
     let ram = MemoryBlock::new(vec![0; 0x00010000]);
-    system.add_addressable_device(0x00ff0000, Device::new(ram))?;
+    system.add_addressable_device(0x00ff0000, ram)?;
 
 
     // Build the Coprocessor's Bus
-    let coproc_ram = Device::new(MemoryBlock::new(vec![0; 0x00002000]));
-    let coproc_ym_sound = Device::new(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
-    let coproc_sn_sound = Device::new(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
+    let coproc_ram = wrap_device(MemoryBlock::new(vec![0; 0x00002000]));
+    let coproc_ym_sound = wrap_device(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
+    let coproc_sn_sound = wrap_device(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
     let (coproc_area, coproc_register) = CoprocessorBankArea::new(system.bus.clone());
-    let coproc_area = Device::new(coproc_area);
-    let coproc_register = Device::new(coproc_register);
+    let coproc_area = wrap_device(coproc_area);
+    let coproc_register = wrap_device(coproc_register);
 
     let coproc_bus = Rc::new(RefCell::new(Bus::default()));
     coproc_bus.borrow_mut().set_ignore_unmapped(true);
@@ -75,26 +76,26 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     bus_request.set(true);
 
     // Add coprocessor devices to the system bus so the 68000 can access them too
-    system.add_addressable_device(0x00a00000, coproc_ram)?;
-    system.add_addressable_device(0x00a04000, coproc_ym_sound)?;
-    system.add_addressable_device(0x00a06000, coproc_register)?;
+    system.add_addressable_device_rc_dyn(0x00a00000, coproc_ram)?;
+    system.add_addressable_device_rc_dyn(0x00a04000, coproc_ym_sound)?;
+    system.add_addressable_device_rc_dyn(0x00a06000, coproc_register)?;
     //system.add_addressable_device(0x00c00010, coproc_sn_sound)?;
-    system.add_device("sn_sound", coproc_sn_sound.clone())?;
-    system.add_device("coproc", Device::new(coproc))?;
+    system.add_named_device_rc_dyn("sn_sound", coproc_sn_sound.clone())?;
+    system.add_named_device("coproc", coproc)?;
 
 
     let controllers = GenesisControllers::new(host)?;
     let interrupt = controllers.get_interrupt_signal();
-    system.add_addressable_device(0x00a10000, Device::new(controllers))?;
+    system.add_addressable_device(0x00a10000, controllers)?;
 
     let coproc = CoprocessorCoordinator::new(reset, bus_request);
-    system.add_addressable_device(0x00a11000, Device::new(coproc))?;
+    system.add_addressable_device(0x00a11000, coproc)?;
 
     let vdp = Ym7101::new(host, interrupt, coproc_sn_sound)?;
-    system.add_peripheral("vdp", 0x00c00000, Device::new(vdp))?;
+    system.add_peripheral("vdp", 0x00c00000, vdp)?;
 
     let cpu = M68k::from_type(M68kType::MC68000, Frequency::from_hz(7_670_454));
-    system.add_interruptable_device("cpu", Device::new(cpu))?;
+    system.add_interruptable_device("cpu", cpu)?;
 
     Ok(system)
 }

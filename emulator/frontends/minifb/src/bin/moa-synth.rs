@@ -3,7 +3,7 @@ use femtos::{Instant, Duration, Frequency};
 use moa_peripherals_yamaha::{Ym2612, Sn76489};
 
 use moa_host::{self, Host, Frame, FrameSender, PixelEncoding, Key, KeyEvent, EventReceiver};
-use moa_core::{System, Error, Address, Addressable, Steppable, Transmutable, Device};
+use moa_core::{wrap_device, Address, Addressable, Device, Error, Steppable, System, Transmutable};
 
 const SCREEN_WIDTH: u32 = 384;
 const SCREEN_HEIGHT: u32 = 128;
@@ -88,14 +88,14 @@ fn main() {
 
         let (frame_sender, frame_receiver) = moa_host::frame_queue(SCREEN_WIDTH, SCREEN_HEIGHT);
         let (key_sender, key_receiver) = moa_host::event_queue();
-        let control = Device::new(SynthControl::new(key_receiver, frame_sender));
-        system.add_device("control", control)?;
+        let control = SynthControl::new(key_receiver, frame_sender);
+        system.add_named_device("control", control)?;
 
-        let ym_sound = Device::new(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
+        let ym_sound = wrap_device(Ym2612::new(host, Frequency::from_hz(7_670_454))?);
         initialize_ym(ym_sound.clone())?;
-        system.add_addressable_device(0x00, ym_sound)?;
+        system.add_addressable_device_rc_dyn(0x00, ym_sound)?;
 
-        let sn_sound = Device::new(Sn76489::new(host, Frequency::from_hz(3_579_545))?);
+        let sn_sound = Sn76489::new(host, Frequency::from_hz(3_579_545))?;
         system.add_addressable_device(0x10, sn_sound)?;
 
         host.add_video_source(frame_receiver)?;

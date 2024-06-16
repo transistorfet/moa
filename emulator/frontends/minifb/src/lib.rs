@@ -7,7 +7,7 @@ use minifb::{self, Key, MouseMode, MouseButton};
 use clap::{Command, Arg, ArgAction, ArgMatches};
 use femtos::{Duration as FemtosDuration};
 
-use moa_core::{System, Error, Device};
+use moa_core::{System, Error};
 use moa_debugger::{Debugger, DebugControl};
 use moa_host::{
     Host, HostError, Audio, KeyEvent, MouseEvent, MouseState, ControllerDevice, ControllerEvent, EventSender, PixelEncoding, Frame,
@@ -244,7 +244,7 @@ impl MiniFrontend {
 
         if self.mixer.borrow_mut().num_sources() != 0 && !matches.get_flag("disable-audio") {
             if let Some(system) = system.as_mut() {
-                system.add_device("mixer", Device::new(self.mixer.clone())).unwrap();
+                system.add_named_device("mixer", self.mixer.clone()).unwrap();
             }
             self.audio = Some(CpalAudioOutput::create_audio_output(self.mixer.borrow_mut().get_sink()));
         }
