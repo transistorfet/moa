@@ -175,11 +175,11 @@ pub trait Inspectable {
 
 
 pub type DeviceId = u32;
-pub trait Resource: Any + 'static + Transmutable {}
+pub trait DynDevice: Any + 'static + Transmutable {}
 
-pub type Device = Rc<RefCell<dyn Resource>>;
+pub type Device = Rc<RefCell<dyn DynDevice>>;
 
-impl<T> Resource for T where T: Transmutable + 'static {}
+impl<T> DynDevice for T where T: Transmutable + 'static {}
 
 pub trait Transmutable {
     #[inline]
@@ -209,12 +209,12 @@ pub trait Transmutable {
 }
 
 // Taken from deno_core
-fn is<T: Resource>(field: &dyn Resource) -> bool {
+fn is<T: DynDevice>(field: &dyn DynDevice) -> bool {
     field.type_id() == TypeId::of::<T>()
 }
 
 // Taken from deno_core
-pub fn downcast_rc_refc<'a, T: Resource>(field: &'a Device) -> Option<&'a Rc<RefCell<T>>> {
+pub fn downcast_rc_refc<'a, T: DynDevice>(field: &'a Device) -> Option<&'a Rc<RefCell<T>>> {
     if is::<T>(field.borrow().deref()) {
         let ptr = field as *const Rc<RefCell<_>> as *const Rc<RefCell<T>>;
         #[allow(clippy::undocumented_unsafe_blocks)]
@@ -232,53 +232,11 @@ pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
-pub fn get_next_id() -> u32 {
+pub fn get_next_device_id() -> u32 {
     let next = NEXT_ID.load(Ordering::Acquire);
     NEXT_ID.store(next + 1, Ordering::Release);
     next
 }
-
-// #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-// pub struct DeviceId(usize);
-
-// impl DeviceId {
-//     pub fn new() -> Self {
-//         let next = NEXT_ID.load(Ordering::Acquire);
-//         NEXT_ID.store(next + 1, Ordering::Release);
-//         Self(next)
-//     }
-// }
-
-// impl Default for DeviceId {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
-
-// #[derive(Clone)]
-// pub struct Device(DeviceId, TransmutableBox);
-
-// impl Device {
-//     pub fn new<T>(value: T) -> Self
-//     where
-//         T: Transmutable + 'static,
-//     {
-//         Self(DeviceId::new(), wrap_transmutable(value))
-//     }
-
-//     pub fn id(&self) -> DeviceId {
-//         self.0
-//     }
-
-//     pub fn borrow_mut(&self) -> RefMut<'_, Box<dyn Transmutable>> {
-//         self.1.borrow_mut()
-//     }
-
-//     pub fn try_borrow_mut(&self) -> Result<RefMut<'_, Box<dyn Transmutable>>, BorrowMutError> {
-//         self.1.try_borrow_mut()
-//     }
-// }
-
 
 /*
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

@@ -3,7 +3,7 @@ use std::cell::{RefCell, RefMut};
 use std::collections::{BTreeMap, HashMap};
 use femtos::{Instant, Duration};
 
-use crate::devices::{downcast_rc_refc, get_next_id, Device, DeviceId, Resource};
+use crate::devices::{downcast_rc_refc, get_next_device_id, Device, DeviceId, DynDevice};
 use crate::{Address, Bus, Error, InterruptController};
 
 
@@ -47,12 +47,38 @@ pub struct DeviceSettings {
 
 impl Default for DeviceSettings {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DeviceSettings {
+    fn new() -> Self {
         Self {
             name: None,
             address: None,
             debuggable: false,
             queue: false,
         }
+    }
+
+    fn with_address(&mut self, addr: Address) -> &mut Self {
+        self.address = Some(addr);
+        self
+    }
+
+    fn with_name(&mut self, name: String) -> &mut Self {
+        self.name = Some(name);
+        self
+    }
+
+    fn debuggable(&mut self, debuggable: bool) -> &mut Self {
+        self.debuggable = debuggable;
+        self
+    }
+
+    fn queue(&mut self, queue: bool) -> &mut Self {
+        self.queue = queue;
+        self
     }
 }
 
@@ -65,7 +91,11 @@ impl System {
         self.interrupt_controller.borrow_mut()
     }
 
-    pub fn get_device<T: Resource>(&self, device: DeviceId) -> Result<Rc<RefCell<T>>, Error> {
+    pub fn get_id_from_name(&self, name: &str) -> Option<DeviceId> {
+        self.id_to_name.iter().find_map(|(key, &ref val)| if val == name { Some(*key)} else { None })
+    }
+
+    pub fn get_device<T: DynDevice>(&self, device: DeviceId) -> Result<Rc<RefCell<T>>, Error> {
         self.devices
             .get(&device)
             .and_then(|rc| downcast_rc_refc::<T>(rc))
@@ -73,10 +103,9 @@ impl System {
             .ok_or_else(|| Error::new(format!("system: bad device id {}", device)))
     }
 
-    pub fn get_device_by_name<T: Resource>(&self, name: &str) -> Result<Rc<RefCell<T>>, Error> {
-        let id = self.id_to_name.iter().find_map(|(key, &ref val)| if val == name { Some(key)} else { None });
-        if let Some(id) = id {
-            self.get_device(*id)
+    pub fn get_device_by_name<T: DynDevice>(&self, name: &str) -> Result<Rc<RefCell<T>>, Error> {
+        if let Some(id) = self.get_id_from_name(name) {
+            self.get_device(id)
         } else {
             Err(Error::new(format!("system: could not find device  {}", name)))
         }
@@ -90,25 +119,24 @@ impl System {
     }
 
     pub fn get_dyn_device_by_name(&self, name: &str) -> Result<Device, Error> {
-        let id = self.id_to_name.iter().find_map(|(key, &ref val)| if val == name { Some(key)} else { None });
-        if let Some(id) = id {
-            self.get_dyn_device(*id)
+        if let Some(id) = self.get_id_from_name(name) {
+            self.get_dyn_device(id)
         } else {
             Err(Error::new(format!("system: could not find device  {}", name)))
         }
     }
 
-    pub fn add_device<T: Resource>(&mut self, device: T, settings: DeviceSettings) -> Result<DeviceId, Error> {
+    pub fn add_device<T: DynDevice>(&mut self, device: T, settings: DeviceSettings) -> Result<DeviceId, Error> {
         self.add_device_rc_ref(Rc::new(RefCell::new(device)), settings)
     }
 
-    pub fn add_device_rc_ref<T: Resource>(&mut self, device: Rc<RefCell<T>>, settings: DeviceSettings) -> Result<DeviceId, Error> {
+    pub fn add_device_rc_ref<T: DynDevice>(&mut self, device: Rc<RefCell<T>>, settings: DeviceSettings) -> Result<DeviceId, Error> {
         let device = device as Device;
         self.add_device_rc_dyn(device, settings)
     }
 
     pub fn add_device_rc_dyn(&mut self, device: Device, settings: DeviceSettings) -> Result<DeviceId, Error> {
-        let id = get_next_id();
+        let id = get_next_device_id();
         self.id_to_name.insert(id, settings.name.unwrap_or_default());
 
         self.devices.insert(id, device.clone());
@@ -125,7 +153,7 @@ impl System {
         Ok(id)
     }
 
-    pub fn add_named_device<T: Resource>(&mut self, name: &str, device: T) -> Result<DeviceId, Error> {
+    pub fn add_named_device<T: DynDevice>(&mut self, name: &str, device: T) -> Result<DeviceId, Error> {
         self.add_device(device, DeviceSettings {
             name: Some(name.to_owned()),
             queue: true,
@@ -133,7 +161,7 @@ impl System {
         })
     }
 
-    pub fn add_addressable_device<T: Resource>(&mut self, addr: Address, device: T) -> Result<DeviceId, Error> {
+    pub fn add_addressable_device<T: DynDevice>(&mut self, addr: Address, device: T) -> Result<DeviceId, Error> {
         self.add_device(device, DeviceSettings {
             name: Some(format!("mem{:x}", addr)),
             address: Some(addr),
@@ -142,7 +170,7 @@ impl System {
         })
     }
 
-    pub fn add_peripheral<T: Resource>(&mut self, name: &str, addr: Address, device: T) -> Result<DeviceId, Error> {
+    pub fn add_peripheral<T: DynDevice>(&mut self, name: &str, addr: Address, device: T) -> Result<DeviceId, Error> {
         self.add_device(device, DeviceSettings {
             name: Some(name.to_owned()),
             address: Some(addr),
@@ -151,7 +179,7 @@ impl System {
         })
     }
 
-    pub fn add_interruptable_device<T: Resource>(&mut self, name: &str, device: T) -> Result<DeviceId, Error> {
+    pub fn add_interruptable_device<T: DynDevice>(&mut self, name: &str, device: T) -> Result<DeviceId, Error> {
         self.add_device(device, DeviceSettings {
             name: Some(name.to_owned()),
             queue: true,
@@ -194,7 +222,7 @@ impl System {
         loop {
             self.step()?;
 
-            if self.get_next_event_device() == device {
+            if self.get_next_event_device_id() == device {
                 break;
             }
         }
@@ -206,7 +234,7 @@ impl System {
         loop {
             self.step()?;
 
-            if self.get_dyn_device(self.get_next_event_device()).unwrap().borrow_mut().as_debuggable().is_some() {
+            if self.get_dyn_device(self.get_next_event_device_id()).unwrap().borrow_mut().as_debuggable().is_some() {
                 break;
             }
         }
@@ -244,7 +272,7 @@ impl System {
         }
     }
 
-    pub fn get_next_event_device(&self) -> DeviceId {
+    pub fn get_next_event_device_id(&self) -> DeviceId {
         self.event_queue[self.event_queue.len() - 1].device
     }
 
