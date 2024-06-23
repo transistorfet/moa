@@ -1,6 +1,4 @@
-use moa_core::Error;
-
-use crate::instructions::{Instruction, Target, LoadTarget, RegisterPair};
+use crate::{Z80Error, Instruction, Target, LoadTarget, RegisterPair};
 
 pub enum Z80InstructionCycles {
     Single(u16),
@@ -37,7 +35,7 @@ impl Z80InstructionCycles {
         }
     }
 
-    pub fn from_instruction(instruction: &Instruction, extra: u16) -> Result<Z80InstructionCycles, Error> {
+    pub fn from_instruction(instruction: &Instruction, extra: u16) -> Result<Z80InstructionCycles, Z80Error> {
         let cycles = match instruction {
             Instruction::ADCa(target)
             | Instruction::ADDa(target)
@@ -67,7 +65,7 @@ impl Z80InstructionCycles {
                 Target::DirectReg(_) => 8,
                 Target::IndirectReg(_) => 12,
                 Target::IndirectOffset(_, _) => 20,
-                _ => return Err(Error::new(format!("unexpected instruction: {:?}", instruction))),
+                _ => return Err(Z80Error::UnexpectedInstruction(instruction.clone())),
             },
 
             Instruction::CALL(_) => 17,
@@ -111,7 +109,7 @@ impl Z80InstructionCycles {
                 Target::DirectReg(_) | Target::DirectRegHalf(_) => 4,
                 Target::IndirectReg(_) => 11,
                 Target::IndirectOffset(_, _) => 23,
-                _ => return Err(Error::new(format!("unexpected instruction: {:?}", instruction))),
+                _ => return Err(Z80Error::UnexpectedInstruction(instruction.clone())),
             },
 
             Instruction::DEC16(regpair) | Instruction::INC16(regpair) => {
@@ -210,7 +208,7 @@ impl Z80InstructionCycles {
 
                     (LoadTarget::IndirectWord(_), _) | (_, LoadTarget::IndirectWord(_)) => 20,
 
-                    _ => return Err(Error::new(format!("unexpected instruction: {:?}", instruction))),
+                    _ => return Err(Z80Error::UnexpectedInstruction(instruction.clone())),
                 }
             },
 
@@ -238,7 +236,7 @@ impl Z80InstructionCycles {
                 Target::DirectReg(_) => 8,
                 Target::IndirectReg(_) => 15,
                 Target::IndirectOffset(_, _) => 23,
-                _ => return Err(Error::new(format!("unexpected instruction: {:?}", instruction))),
+                _ => return Err(Z80Error::UnexpectedInstruction(instruction.clone())),
             },
 
             Instruction::RET => 10,
@@ -263,7 +261,7 @@ impl Z80InstructionCycles {
                 Target::DirectReg(_) => 8,
                 Target::IndirectReg(_) => 15,
                 Target::IndirectOffset(_, _) => 23,
-                _ => return Err(Error::new(format!("unexpected instruction: {:?}", instruction))),
+                _ => return Err(Z80Error::UnexpectedInstruction(instruction.clone())),
             },
 
             Instruction::RLA | Instruction::RLCA | Instruction::RRA | Instruction::RRCA => 4,

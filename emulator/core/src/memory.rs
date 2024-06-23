@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::fmt::Write;
 use femtos::Instant;
-use emulator_hal::{self, BusAccess, Error as EmuError};
+use emulator_hal::{self, BusAccess, ErrorType};
 
 use crate::error::Error;
 use crate::devices::{Address, Addressable, Transmutable, Device, read_beu16};
@@ -413,7 +413,7 @@ where
     }
 }
 
-impl EmuError for Error {}
+impl ErrorType for Error {}
 
 impl BusAccess<u64> for &mut dyn Addressable {
     type Instant = Instant;

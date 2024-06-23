@@ -1,6 +1,6 @@
 // Instruction Execution
 
-use emulator_hal::{Instant as BusInstant, Error, BusAccess, Step};
+use emulator_hal::{Instant as BusInstant, ErrorType, BusAccess, Step, FromAddress};
 
 use crate::{M68k, M68kType, M68kError, M68kState};
 use crate::state::{Status, Flags, Exceptions, InterruptPriority};
@@ -72,13 +72,12 @@ where
     }
 }
 
-impl<Bus, BusError, Instant> Step<Bus> for M68k<Instant>
+impl<Bus, BusError, Instant> Step<M68kAddress, Bus> for M68k<Instant>
 where
     Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
-    BusError: Error,
+    BusError: ErrorType,
     Instant: BusInstant,
 {
-    type Instant = Instant;
     type Error = M68kError<BusError>;
 
     fn is_running(&mut self) -> bool {

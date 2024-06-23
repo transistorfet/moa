@@ -1,12 +1,13 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use femtos::{Instant, Duration};
-use emulator_hal::{BusAdapter, Instant as EmuInstant};
+use emulator_hal::{BusAdapter, NoBus, Instant as EmuInstant};
 
 use moa_core::{System, Error, Bus, Address, Steppable, Addressable, Interruptable, Signalable, Signal, Debuggable, Transmutable};
 
 use crate::{Z80, Z80Error, Z80Decoder};
 use crate::instructions::Register;
+use crate::emuhal::Z80Port;
 
 pub struct MoaZ80<Instant>
 where
@@ -22,9 +23,11 @@ where
 {
     fn step(&mut self, system: &System) -> Result<Duration, Error> {
         let mut bus = &mut *self.bus.borrow_mut();
-        let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
+        let mut adapter = BusAdapter::<_, _, _, Z80Error>::new(bus, |addr| addr as u64);
+        let mut io_bus = NoBus::new();
+        let mut bus = Z80Port::new(&mut adapter, &mut io_bus);
 
-        let mut executor = self.cpu.begin(system.clock, &mut adapter)?;
+        let mut executor = self.cpu.begin(system.clock, &mut bus)?;
         let clocks = executor.step_one()?;
         self.cpu.previous_cycle = executor.end();
         Ok(Instant::hertz_to_duration(self.cpu.frequency.as_hz() as u64) * clocks as u32)
@@ -32,8 +35,10 @@ where
 
     fn on_error(&mut self, system: &System) {
         let bus = &mut *system.bus.borrow_mut();
-        let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
-        self.cpu.dump_state(system.clock, &mut adapter);
+        let mut adapter = BusAdapter::<_, _, _, Z80Error>::new(bus, |addr| addr as u64);
+        let mut io_bus = NoBus::new();
+        let mut bus = Z80Port::new(&mut adapter, &mut io_bus);
+        self.cpu.dump_state(system.clock, &mut bus);
     }
 }
 
@@ -83,6 +88,7 @@ impl From<Z80Error> for Error {
             Z80Error::Halted => Self::Other("cpu halted".to_string()),
             Z80Error::Breakpoint => Self::Breakpoint("breakpoint".to_string()),
             Z80Error::Unimplemented(instruction) => Self::new(format!("unimplemented instruction {:?}", instruction)),
+            Z80Error::UnexpectedInstruction(instruction) => Self::new(format!("unexpected instruction {:?}", instruction)),
             Z80Error::BusError(msg) => Self::Other(msg),
         }
     }
@@ -111,19 +117,23 @@ impl Debuggable for MoaZ80<Instant> {
 
     fn print_current_step(&mut self, system: &System) -> Result<(), Error> {
         let bus = &mut *system.bus.borrow_mut();
-        let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
+        let mut adapter = BusAdapter::<_, _, _, Z80Error>::new(bus, |addr| addr as u64);
+        let mut io_bus = NoBus::new();
+        let mut bus = Z80Port::new(&mut adapter, &mut io_bus);
 
-        let decoder = Z80Decoder::decode_at(&mut adapter, system.clock, self.cpu.state.pc)?;
-        self.cpu.previous_cycle.decoder.dump_decoded(&mut adapter);
-        self.cpu.dump_state(system.clock, &mut adapter);
+        let decoder = Z80Decoder::decode_at(&mut bus, system.clock, self.cpu.state.pc)?;
+        self.cpu.previous_cycle.decoder.dump_decoded(&mut bus);
+        self.cpu.dump_state(system.clock, &mut bus);
         Ok(())
     }
 
     fn print_disassembly(&mut self, system: &System, addr: Address, count: usize) {
         let bus = &mut *system.bus.borrow_mut();
-        let mut adapter = BusAdapter::new(bus, |addr| addr as u64, |err| Z80Error::BusError(format!("{:?}", err)));
+        let mut adapter = BusAdapter::<_, _, _, Z80Error>::new(bus, |addr| addr as u64);
+        let mut io_bus = NoBus::new();
+        let mut bus = Z80Port::new(&mut adapter, &mut io_bus);
 
-        Z80Decoder::dump_disassembly(&mut adapter, addr as u16, count as u16);
+        Z80Decoder::dump_disassembly(&mut bus, addr as u16, count as u16);
     }
 
     fn run_command(&mut self, _system: &System, args: &[&str]) -> Result<bool, Error> {

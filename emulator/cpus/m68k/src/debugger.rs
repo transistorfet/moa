@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use emulator_hal::{Instant as BusInstant, Error as ErrorType, BusAccess, Inspect, Debug};
+use emulator_hal::{Instant as BusInstant, ErrorType, BusAccess, FromAddress, Inspect, Debug};
 
 use crate::{M68k, M68kError, M68kAddress, M68kCycleExecutor};
 
@@ -26,7 +26,7 @@ pub enum M68kInfo {
     State,
 }
 
-impl<Bus, BusError, Instant, Writer> Inspect<Bus, Writer> for M68k<Instant>
+impl<Bus, BusError, Instant, Writer> Inspect<M68kAddress, Bus, Writer> for M68k<Instant>
 where
     Bus: BusAccess<M68kAddress, Instant = Instant, Error = BusError>,
     BusError: ErrorType,

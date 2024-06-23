@@ -10,5 +10,11 @@ femtos = "0.1"
 emulator-hal = { path = "../../libraries/emulator-hal/emulator-hal", features = ["femtos"] }
 
 # TODO the goal is to make these optional, or remove them entirely
-moa-core = { path = "../../core" }
+moa-core = { path = "../../core", optional = true }
 moa-signals = { path = "../../libraries/signals" }
+
+[dev-dependencies]
+emulator-hal-memory = { path = "../../libraries/emulator-hal/emulator-hal-memory" }
+
+[features]
+moa = ["moa-core"]

@@ -994,6 +994,7 @@ name = "moa-z80"
 version = "0.1.0"
 dependencies = [
  "emulator-hal",
+ "emulator-hal-memory",
  "femtos",
  "log",
  "moa-core",

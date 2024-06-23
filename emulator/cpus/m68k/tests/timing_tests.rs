@@ -26,7 +26,7 @@ const TIMING_TESTS: &'static [TimingCase] = &[TimingCase {
 }];
 
 
-fn init_decode_test(cputype: M68kType) -> (M68k<Instant>, M68kCycle<Instant>, MemoryBlock<u32, Instant>) {
+fn init_decode_test(cputype: M68kType) -> (M68k<Instant>, M68kCycle<Instant>, MemoryBlock<Instant>) {
     // Insert basic initialization
     let len = 0x10_0000;
     let mut data = Vec::with_capacity(len);

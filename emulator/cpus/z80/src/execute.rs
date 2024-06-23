@@ -5,7 +5,7 @@ use crate::instructions::{
     Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister,
     IndexRegisterHalf, Size, Direction, UndocumentedCopy,
 };
-use crate::state::{Z80, Z80Error, Z80State, Z80Signals, Z80Address, Status, Flags};
+use crate::state::{Z80, Z80Error, Z80State, Z80Signals, Z80Address, Z80IOAddress, Z80AddressSpace, Status, Flags};
 use crate::timing::Z80InstructionCycles;
 use crate::debugger::Z80Debugger;
 
@@ -47,7 +47,7 @@ where
         bus: &'a mut Bus,
     ) -> Result<ExecuteNext<'a, &'a mut Bus, Instant>, Z80Error>
     where
-        Bus: BusAccess<Z80Address, Instant = Instant>,
+        Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
     {
         let executor = ExecuteNext {
             state: &mut self.state,
@@ -63,7 +63,7 @@ where
 
 pub(crate) struct ExecuteNext<'a, Bus, Instant>
 where
-    Bus: BusAccess<Z80Address, Instant = Instant>,
+    Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
 {
     state: &'a mut Z80State,
     signals: &'a mut Z80Signals,
@@ -74,7 +74,7 @@ where
 
 impl<'a, Bus, Instant> ExecuteNext<'a, Bus, Instant>
 where
-    Bus: BusAccess<Z80Address, Instant = Instant>,
+    Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
     Instant: EmuInstant,
 {
     pub(crate) fn end(self) -> Z80Cycle<Instant> {
@@ -1130,7 +1130,7 @@ where
         self.increment_refresh(1);
         Ok(self
             .bus
-            .read_u8(self.cycle.current_clock, addr as Z80Address)
+            .read_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr as Z80Address))
             .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?)
     }
 
@@ -1138,7 +1138,7 @@ where
         self.increment_refresh(1);
         Ok(self
             .bus
-            .write_u8(self.cycle.current_clock, addr as Z80Address, value)
+            .write_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr as Z80Address), value)
             .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?)
     }
 
@@ -1152,7 +1152,7 @@ where
             self.increment_refresh(1);
             *byte = self
                 .bus
-                .read_u8(self.cycle.current_clock, addr & 0xFFFF)
+                .read_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr & 0xFFFF))
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             addr = addr.wrapping_add(1);
         }
@@ -1168,7 +1168,7 @@ where
         for byte in bytes.iter_mut() {
             self.increment_refresh(1);
             self.bus
-                .write_u8(self.cycle.current_clock, addr & 0xFFFF, *byte)
+                .write_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr & 0xFFFF), *byte)
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             addr = addr.wrapping_add(1);
         }

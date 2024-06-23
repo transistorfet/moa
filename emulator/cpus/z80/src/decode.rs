@@ -1,7 +1,7 @@
 use core::fmt::Write;
 use emulator_hal::{BusAccess, Instant as EmuInstant};
 
-use crate::state::{Z80Error, Z80Address};
+use crate::state::{Z80Error, Z80Address, Z80AddressSpace};
 use crate::instructions::{
     Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target,
     LoadTarget, UndocumentedCopy, Instruction,
@@ -44,7 +44,7 @@ impl Z80Decoder {
 impl Z80Decoder {
     pub fn decode_at<Bus>(bus: &mut Bus, clock: Bus::Instant, start: Z80Address) -> Result<Self, Z80Error>
     where
-        Bus: BusAccess<Z80Address>,
+        Bus: BusAccess<Z80AddressSpace>,
     {
         let mut decoder: DecodeNext<'_, Bus, Bus::Instant> = DecodeNext {
             clock,
@@ -57,7 +57,7 @@ impl Z80Decoder {
 
     pub fn dump_disassembly<Bus>(bus: &mut Bus, start: Z80Address, length: Z80Address)
     where
-        Bus: BusAccess<Z80Address>,
+        Bus: BusAccess<Z80AddressSpace>,
     {
         let mut next = start;
         while next < (start + length) {
@@ -76,7 +76,7 @@ impl Z80Decoder {
 
     pub fn dump_decoded<Bus>(&mut self, bus: &mut Bus)
     where
-        Bus: BusAccess<Z80Address>,
+        Bus: BusAccess<Z80AddressSpace>,
     {
         let ins_data = self.format_instruction_bytes(bus);
         println!("{:#06x}: {}\n\t{:?}\n", self.start, ins_data, self.instruction);
@@ -84,11 +84,11 @@ impl Z80Decoder {
 
     pub fn format_instruction_bytes<Bus>(&mut self, bus: &mut Bus) -> String
     where
-        Bus: BusAccess<Z80Address>,
+        Bus: BusAccess<Z80AddressSpace>,
     {
         let mut ins_data = String::new();
         for offset in 0..self.end.saturating_sub(self.start) {
-            write!(ins_data, "{:02x} ", bus.read_u8(Bus::Instant::START, self.start + offset).unwrap()).unwrap()
+            write!(ins_data, "{:02x} ", bus.read_u8(Bus::Instant::START, Z80AddressSpace::Memory(self.start + offset)).unwrap()).unwrap()
         }
         ins_data
     }
@@ -96,7 +96,7 @@ impl Z80Decoder {
 
 pub struct DecodeNext<'a, Bus, Instant>
 where
-    Bus: BusAccess<Z80Address, Instant = Instant>,
+    Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
 {
     clock: Instant,
     bus: &'a mut Bus,
@@ -105,7 +105,7 @@ where
 
 impl<'a, Bus, Instant> DecodeNext<'a, Bus, Instant>
 where
-    Bus: BusAccess<Z80Address, Instant = Instant>,
+    Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
     Instant: EmuInstant,
 {
     pub fn decode_one(&mut self) -> Result<(), Z80Error> {
@@ -579,7 +579,7 @@ where
     fn read_instruction_byte(&mut self) -> Result<u8, Z80Error> {
         let byte = self
             .bus
-            .read_u8(self.clock, self.decoder.end)
+            .read_u8(self.clock, Z80AddressSpace::Memory(self.decoder.end))
             .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
         self.decoder.end = self.decoder.end.wrapping_add(1);
         Ok(byte)
@@ -590,7 +590,7 @@ where
         for byte in bytes.iter_mut() {
             *byte = self
                 .bus
-                .read_u8(self.clock, self.decoder.end & 0xFFFF)
+                .read_u8(self.clock, Z80AddressSpace::Memory(self.decoder.end & 0xFFFF))
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             self.decoder.end = self.decoder.end.wrapping_add(1);
         }

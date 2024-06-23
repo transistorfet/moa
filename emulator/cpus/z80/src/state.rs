@@ -1,9 +1,6 @@
-use std::rc::Rc;
-use std::cell::RefCell;
-use femtos::{Instant, Frequency};
+use femtos::Frequency;
 use emulator_hal::{Instant as EmuInstant, BusAccess};
 
-use moa_core::{Address, Bus, BusPort};
 use moa_signals::Signal;
 
 use crate::debugger::Z80Debugger;
@@ -108,6 +105,8 @@ pub enum Z80Error /* <B: fmt::Display> */ {
     Breakpoint,
     #[error("unimplemented instruction {0:?}")]
     Unimplemented(Instruction),
+    #[error("unexpected instruction {0:?}")]
+    UnexpectedInstruction(Instruction),
     #[error("bus error: {0}")]
     BusError(String /* B */),
 }
@@ -116,6 +115,7 @@ pub enum Z80Error /* <B: fmt::Display> */ {
 pub type Z80Address = u16;
 pub type Z80IOAddress = u16;
 
+#[derive(Copy, Clone, Debug)]
 pub enum Z80AddressSpace {
     Memory(Z80Address),
     IO(Z80IOAddress),
@@ -165,7 +165,7 @@ where
 
     pub fn dump_state<Bus>(&mut self, clock: Instant, bus: &mut Bus)
     where
-        Bus: BusAccess<Z80Address, Instant = Instant>,
+        Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
     {
         println!("Status: {:?}", self.state.status);
         println!("PC: {:#06x}", self.state.pc);

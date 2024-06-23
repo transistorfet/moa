@@ -1,10 +1,9 @@
-use femtos::Frequency;
+use femtos::{Instant, Frequency};
 
-use moa_core::{System, MemoryBlock, BusPort, Address, Addressable, Device};
+use emulator_hal::{BusAccess, Step};
+use emulator_hal_memory::MemoryBlock;
 
-use moa_z80::{Z80, Z80Type};
-use moa_z80::state::Z80State;
-use moa_z80::instructions::{Instruction, LoadTarget, Target, Register, RegisterPair, Condition};
+use moa_z80::{Z80, Z80Type, Z80Address, Z80State, Status, Instruction, LoadTarget, Target, Register, RegisterPair, Condition};
 
 struct TestState {
     pc: u16,
@@ -482,23 +481,26 @@ const TEST_CASES: &'static [TestCase] = &[
 
 ];
 
-fn init_execute_test() -> (Z80, System) {
-    let mut system = System::default();
-
+fn init_execute_test() -> (Z80<Instant>, MemoryBlock<Instant>) {
     // Insert basic initialization
-    let data = vec![0; 0x10000];
-    let mem = MemoryBlock::new(data);
-    system.add_addressable_device(0x0000, Device::new(mem)).unwrap();
+    let len = 0x10_0000;
+    let mut data = Vec::with_capacity(len);
+    unsafe {
+        data.set_len(len);
+    }
+    let mut memory = MemoryBlock::from(data);
 
     // Initialize the CPU and make sure it's in the expected state
-    let mut cpu = Z80::new(Z80Type::Z80, Frequency::from_mhz(4), BusPort::new(0, 16, 8, system.bus.clone()), None);
-    cpu.init().unwrap();
+    let mut cpu = Z80::new(Z80Type::Z80, Frequency::from_mhz(4));
+    cpu.reset(Instant::START, &mut memory).unwrap();
+    cpu.step(Instant::START, &mut memory).unwrap();
 
-    (cpu, system)
+    (cpu, memory)
 }
 
 fn build_state(state: &TestState) -> Z80State {
     let mut new_state = Z80State::default();
+    new_state.status = Status::Running;
     new_state.pc = state.pc;
     new_state.sp = state.sp;
     new_state.ix = state.ix;
@@ -514,25 +516,24 @@ fn build_state(state: &TestState) -> Z80State {
     new_state
 }
 
-fn load_memory(system: &System, data: &[u8]) {
+fn load_memory(memory: &mut MemoryBlock<Instant>, data: &[u8]) {
     for i in 0..data.len() {
-        system.get_bus().write_u8(system.clock, i as Address, data[i]).unwrap();
+        memory.write_u8(Instant::START, i, data[i]).unwrap();
     }
 }
 
 fn run_test(case: &TestCase) {
-    let (mut cpu, system) = init_execute_test();
+    let (mut cpu, mut memory) = init_execute_test();
 
     let init_state = build_state(&case.init);
     let mut expected_state = build_state(&case.fini);
 
-    load_memory(&system, case.data);
+    load_memory(&mut memory, case.data);
     cpu.state = init_state;
 
-    cpu.decode_next().unwrap();
-    assert_eq!(cpu.decoder.instruction, case.ins);
+    cpu.step(Instant::START, &mut memory).unwrap();
+    assert_eq!(cpu.previous_cycle.decoder.instruction, case.ins);
 
-    cpu.execute_current().unwrap();
 
     // TODO this is a hack to ignore the functioning of the F5, F3 flags for now
     cpu.state.reg[Register::F as usize] &= 0xD7;

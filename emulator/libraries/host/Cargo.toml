@@ -2,7 +2,7 @@
 name = "moa-host"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.70"
 categories = ["emulators"]
 keywords = ["emulators"]
 description = "traits for abstracting the I/O of an emulated system to the host"
