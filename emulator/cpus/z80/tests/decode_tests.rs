@@ -1,9 +1,9 @@
 use femtos::{Instant, Frequency};
 
-use emulator_hal::{BusAccess, Step};
+use emulator_hal::{BusAccess, Step, NoBus};
 use emulator_hal_memory::MemoryBlock;
 
-use moa_z80::{Z80, Z80Type, Z80Decoder, Instruction, LoadTarget, Target, Register, RegisterPair, IndexRegister, IndexRegisterHalf};
+use moa_z80::{Z80, Z80Type, Z80Port, Instruction, LoadTarget, Target, Register, RegisterPair, IndexRegister, IndexRegisterHalf};
 
 fn init_decode_test() -> (Z80<Instant>, MemoryBlock<Instant>) {
     // Insert basic initialization
@@ -13,11 +13,13 @@ fn init_decode_test() -> (Z80<Instant>, MemoryBlock<Instant>) {
         data.set_len(len);
     }
     let mut memory = MemoryBlock::from(data);
+    let mut io = NoBus::new();
 
     // Initialize the CPU and make sure it's in the expected state
     let mut cpu = Z80::new(Z80Type::Z80, Frequency::from_mhz(4));
-    cpu.reset(Instant::START, &mut memory).unwrap();
-    cpu.step(Instant::START, &mut memory).unwrap();
+    let mut bus = Z80Port::new(&mut memory, &mut io);
+    cpu.reset(Instant::START, &mut bus).unwrap();
+    cpu.step(Instant::START, &mut bus).unwrap();
 
     (cpu, memory)
 }
@@ -31,7 +33,9 @@ fn load_memory(memory: &mut MemoryBlock<Instant>, data: &[u8]) {
 fn run_decode_test(data: &[u8]) -> Instruction {
     let (mut cpu, mut memory) = init_decode_test();
     load_memory(&mut memory, data);
-    cpu.step(Instant::START, &mut memory).unwrap();
+    let mut io = NoBus::new();
+    let mut bus = Z80Port::new(&mut memory, &mut io);
+    cpu.step(Instant::START, &mut bus).unwrap();
     cpu.previous_cycle.decoder.instruction
 }
 

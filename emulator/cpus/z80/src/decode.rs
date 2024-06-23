@@ -88,7 +88,13 @@ impl Z80Decoder {
     {
         let mut ins_data = String::new();
         for offset in 0..self.end.saturating_sub(self.start) {
-            write!(ins_data, "{:02x} ", bus.read_u8(Bus::Instant::START, Z80AddressSpace::Memory(self.start + offset)).unwrap()).unwrap()
+            write!(
+                ins_data,
+                "{:02x} ",
+                bus.read_u8(Bus::Instant::START, Z80AddressSpace::Memory(self.start + offset))
+                    .unwrap()
+            )
+            .unwrap()
         }
         ins_data
     }
@@ -590,7 +596,7 @@ where
         for byte in bytes.iter_mut() {
             *byte = self
                 .bus
-                .read_u8(self.clock, Z80AddressSpace::Memory(self.decoder.end & 0xFFFF))
+                .read_u8(self.clock, Z80AddressSpace::Memory(self.decoder.end))
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             self.decoder.end = self.decoder.end.wrapping_add(1);
         }

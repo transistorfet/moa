@@ -2,7 +2,7 @@ use std::mem;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use femtos::{Instant, Frequency};
+use femtos::Frequency;
 
 use moa_core::{System, Error, MemoryBlock, Bus, Address, Addressable, Device};
 use moa_host::Host;

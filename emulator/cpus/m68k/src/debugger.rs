@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use emulator_hal::{Instant as BusInstant, ErrorType, BusAccess, FromAddress, Inspect, Debug};
+use emulator_hal::{Instant as BusInstant, ErrorType, BusAccess, Inspect, Debug};
 
 use crate::{M68k, M68kError, M68kAddress, M68kCycleExecutor};
 

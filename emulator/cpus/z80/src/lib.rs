@@ -8,6 +8,7 @@ mod timing;
 
 #[cfg(feature = "moa")]
 pub mod moa;
+#[cfg(feature = "moa")]
 pub use crate::moa::MoaZ80;
 
 pub use crate::state::{Z80, Z80Type, Z80Address, Z80IOAddress, Z80Error, Z80State, Status, Flags};
@@ -17,3 +18,4 @@ pub use crate::instructions::{
     Size, Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target,
     LoadTarget, UndocumentedCopy, Instruction,
 };
+pub use crate::emuhal::Z80Port;

@@ -1,6 +1,6 @@
 // Instruction Execution
 
-use emulator_hal::{Instant as BusInstant, ErrorType, BusAccess, Step, FromAddress};
+use emulator_hal::{Instant as BusInstant, ErrorType, BusAccess, Step};
 
 use crate::{M68k, M68kType, M68kError, M68kState};
 use crate::state::{Status, Flags, Exceptions, InterruptPriority};

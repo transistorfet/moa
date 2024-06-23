@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use femtos::{Instant, Duration};
 use emulator_hal::{BusAdapter, NoBus, Instant as EmuInstant};
 
-use moa_core::{System, Error, Bus, Address, Steppable, Addressable, Interruptable, Signalable, Signal, Debuggable, Transmutable};
+use moa_core::{System, Error, Bus, Address, Steppable, Interruptable, /* Signalable, Signal,*/ Debuggable, Transmutable};
 
 use crate::{Z80, Z80Error, Z80Decoder};
 use crate::instructions::Register;
@@ -22,7 +22,7 @@ where
     Instant: EmuInstant,
 {
     fn step(&mut self, system: &System) -> Result<Duration, Error> {
-        let mut bus = &mut *self.bus.borrow_mut();
+        let bus = &mut *self.bus.borrow_mut();
         let mut adapter = BusAdapter::<_, _, _, Z80Error>::new(bus, |addr| addr as u64);
         let mut io_bus = NoBus::new();
         let mut bus = Z80Port::new(&mut adapter, &mut io_bus);
@@ -38,7 +38,9 @@ where
         let mut adapter = BusAdapter::<_, _, _, Z80Error>::new(bus, |addr| addr as u64);
         let mut io_bus = NoBus::new();
         let mut bus = Z80Port::new(&mut adapter, &mut io_bus);
-        self.cpu.dump_state(system.clock, &mut bus);
+        let mut output = String::with_capacity(256);
+        let _ = self.cpu.dump_state(&mut output, system.clock, &mut bus);
+        println!("{}", output);
     }
 }
 
@@ -89,6 +91,7 @@ impl From<Z80Error> for Error {
             Z80Error::Breakpoint => Self::Breakpoint("breakpoint".to_string()),
             Z80Error::Unimplemented(instruction) => Self::new(format!("unimplemented instruction {:?}", instruction)),
             Z80Error::UnexpectedInstruction(instruction) => Self::new(format!("unexpected instruction {:?}", instruction)),
+            Z80Error::Other(msg) => Self::Other(msg),
             Z80Error::BusError(msg) => Self::Other(msg),
         }
     }
@@ -121,9 +124,10 @@ impl Debuggable for MoaZ80<Instant> {
         let mut io_bus = NoBus::new();
         let mut bus = Z80Port::new(&mut adapter, &mut io_bus);
 
-        let decoder = Z80Decoder::decode_at(&mut bus, system.clock, self.cpu.state.pc)?;
         self.cpu.previous_cycle.decoder.dump_decoded(&mut bus);
-        self.cpu.dump_state(system.clock, &mut bus);
+        let mut output = String::with_capacity(256);
+        let _ = self.cpu.dump_state(&mut output, system.clock, &mut bus);
+        println!("{}", output);
         Ok(())
     }
 

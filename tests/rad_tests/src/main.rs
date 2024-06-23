@@ -14,8 +14,7 @@ use femtos::{Instant, Frequency};
 use emulator_hal::{Step, BusAccess};
 use emulator_hal_memory::MemoryBlock;
 
-use moa_z80::{Z80, Z80Type, InterruptMode, Flags, Status};
-
+use moa_z80::{Z80, Z80Type, Z80Port, InterruptMode, Flags, Status};
 
 #[derive(Clone, Debug)]
 enum Error {
@@ -58,7 +57,6 @@ fn main() {
     let args = Args::parse();
     run_all_tests(&args);
 }
-
 
 #[derive(Debug, Deserialize)]
 struct TestState {
@@ -113,6 +111,8 @@ struct TestCase {
     ports: Vec<TestPort>,
 }
 
+type Machine = (Z80<Instant>, MemoryBlock<Instant>, MemoryBlock<Instant>);
+
 impl TestState {
     pub fn dump(&self) {
         println!(" a: {:02x}   a': {:02x}", self.a, self.af_ >> 8);
@@ -150,12 +150,8 @@ impl TestCase {
     }
 }
 
-
-fn init_execute_test(
-    cputype: Z80Type,
-    state: &TestState,
-    ports: &[TestPort],
-) -> Result<(Z80<Instant>, MemoryBlock<Instant>, MemoryBlock<Instant>), Error> {
+#[allow(clippy::uninit_vec)]
+fn init_execute_test(cputype: Z80Type, state: &TestState, ports: &[TestPort]) -> Result<Machine, Error> {
     // Insert basic initialization
     let len = 0x1_0000;
     let mut data = Vec::with_capacity(len);
@@ -315,9 +311,9 @@ fn step_cpu_and_assert(
     case: &TestCase,
     args: &Args,
 ) -> Result<(), Error> {
-    //let clock_elapsed = cpu.step((memory, io))?;
+    let mut bus = Z80Port::new(&mut *memory, &mut *io);
     let clock_elapsed = cpu
-        .step(Instant::START, memory)
+        .step(Instant::START, &mut bus)
         .map_err(|err| Error::Step(format!("{:?}", err)))?;
 
     assert_state(cpu, memory, io, &case.final_state, args.check_extra_flags, &case.ports)?;
@@ -348,8 +344,11 @@ fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
                 if args.debug {
                     case.dump();
                     println!();
-                    initial_cpu.dump_state(Instant::START, &mut memory);
-                    cpu.dump_state(Instant::START, &mut memory);
+                    let mut bus = Z80Port::new(&mut memory, &mut io);
+                    let mut writer = String::new();
+                    initial_cpu.dump_state(&mut writer, Instant::START, &mut bus).unwrap();
+                    cpu.dump_state(&mut writer, Instant::START, &mut bus).unwrap();
+                    println!("{}", writer);
                 }
                 println!("FAILED: {:?}", err);
             }
@@ -416,12 +415,10 @@ fn test_json_file(path: PathBuf, args: &Args) -> (usize, usize, String) {
     (passed, failed, message)
 }
 
-
 fn run_all_tests(args: &Args) {
     let mut passed = 0;
     let mut failed = 0;
     let mut messages = vec![];
-
 
     let mut tests: Vec<PathBuf> = fs::read_dir(&args.testsuite)
         .unwrap()

@@ -1,9 +1,9 @@
 use femtos::{Instant, Frequency};
 
-use emulator_hal::{BusAccess, Step};
+use emulator_hal::{BusAccess, Step, NoBus};
 use emulator_hal_memory::MemoryBlock;
 
-use moa_z80::{Z80, Z80Type, Z80Address, Z80State, Status, Instruction, LoadTarget, Target, Register, RegisterPair, Condition};
+use moa_z80::{Z80, Z80Type, Z80Port, Z80State, Status, Instruction, LoadTarget, Target, Register, RegisterPair, Condition};
 
 struct TestState {
     pc: u16,
@@ -489,11 +489,13 @@ fn init_execute_test() -> (Z80<Instant>, MemoryBlock<Instant>) {
         data.set_len(len);
     }
     let mut memory = MemoryBlock::from(data);
+    let mut io = NoBus::new();
 
     // Initialize the CPU and make sure it's in the expected state
     let mut cpu = Z80::new(Z80Type::Z80, Frequency::from_mhz(4));
-    cpu.reset(Instant::START, &mut memory).unwrap();
-    cpu.step(Instant::START, &mut memory).unwrap();
+    let mut bus = Z80Port::new(&mut memory, &mut io);
+    cpu.reset(Instant::START, &mut bus).unwrap();
+    cpu.step(Instant::START, &mut bus).unwrap();
 
     (cpu, memory)
 }
@@ -531,7 +533,9 @@ fn run_test(case: &TestCase) {
     load_memory(&mut memory, case.data);
     cpu.state = init_state;
 
-    cpu.step(Instant::START, &mut memory).unwrap();
+    let mut io = NoBus::new();
+    let mut bus = Z80Port::new(&mut memory, &mut io);
+    cpu.step(Instant::START, &mut bus).unwrap();
     assert_eq!(cpu.previous_cycle.decoder.instruction, case.ins);
 
 

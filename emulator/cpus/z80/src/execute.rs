@@ -5,7 +5,7 @@ use crate::instructions::{
     Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister,
     IndexRegisterHalf, Size, Direction, UndocumentedCopy,
 };
-use crate::state::{Z80, Z80Error, Z80State, Z80Signals, Z80Address, Z80IOAddress, Z80AddressSpace, Status, Flags};
+use crate::state::{Z80, Z80Error, Z80State, Z80Signals, Z80Address, Z80AddressSpace, Status, Flags};
 use crate::timing::Z80InstructionCycles;
 use crate::debugger::Z80Debugger;
 
@@ -1016,8 +1016,6 @@ where
         result
     }
 
-
-
     fn push_word(&mut self, value: u16) -> Result<(), Z80Error> {
         self.state.sp = self.state.sp.wrapping_sub(1);
         self.write_port_u8(self.state.sp, (value >> 8) as u8)?;
@@ -1128,18 +1126,16 @@ where
 
     fn read_port_u8(&mut self, addr: u16) -> Result<u8, Z80Error> {
         self.increment_refresh(1);
-        Ok(self
-            .bus
+        self.bus
             .read_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr as Z80Address))
-            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?)
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))
     }
 
     fn write_port_u8(&mut self, addr: u16, value: u8) -> Result<(), Z80Error> {
         self.increment_refresh(1);
-        Ok(self
-            .bus
+        self.bus
             .write_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr as Z80Address), value)
-            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?)
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))
     }
 
     /// Read a u16 value through this CPU's memory port
@@ -1152,7 +1148,7 @@ where
             self.increment_refresh(1);
             *byte = self
                 .bus
-                .read_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr & 0xFFFF))
+                .read_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr))
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             addr = addr.wrapping_add(1);
         }
@@ -1168,7 +1164,7 @@ where
         for byte in bytes.iter_mut() {
             self.increment_refresh(1);
             self.bus
-                .write_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr & 0xFFFF), *byte)
+                .write_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr), *byte)
                 .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
             addr = addr.wrapping_add(1);
         }
@@ -1177,23 +1173,20 @@ where
 
     fn read_ioport_value(&mut self, upper: u8, lower: u8) -> Result<u8, Z80Error> {
         let addr = ((upper as Z80Address) << 8) | (lower as Z80Address);
-        // TODO restore this eventually
-        //if let Some(io) = self.ioport.as_mut() {
-        //    Ok(io.read_u8(self.cycle.current_clock, addr)?)
-        //} else {
-        Ok(0)
-        //}
+        let bytes_read = self
+            .bus
+            .read_u8(self.cycle.current_clock, Z80AddressSpace::IO(addr))
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
+        Ok(bytes_read)
     }
 
     fn write_ioport_value(&mut self, upper: u8, lower: u8, value: u8) -> Result<(), Z80Error> {
         let addr = ((upper as Z80Address) << 8) | (lower as Z80Address);
-        // TODO restore this eventually
-        //if let Some(io) = self.ioport.as_mut() {
-        //    io.write_u8(self.cycle.current_clock, addr, value)?
-        //}
+        self.bus
+            .write_u8(self.cycle.current_clock, Z80AddressSpace::IO(addr), value)
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
         Ok(())
     }
-
 
     fn get_register_value(&mut self, reg: Register) -> u8 {
         self.state.reg[reg as usize]
@@ -1244,16 +1237,16 @@ where
     fn set_register_pair_value(&mut self, regpair: RegisterPair, value: u16) {
         match regpair {
             RegisterPair::BC => {
-                (&mut self.state.reg[0..2]).copy_from_slice(&value.to_be_bytes()[..]);
+                self.state.reg[0..2].copy_from_slice(&value.to_be_bytes()[..]);
             },
             RegisterPair::DE => {
-                (&mut self.state.reg[2..4]).copy_from_slice(&value.to_be_bytes()[..]);
+                self.state.reg[2..4].copy_from_slice(&value.to_be_bytes()[..]);
             },
             RegisterPair::HL => {
-                (&mut self.state.reg[4..6]).copy_from_slice(&value.to_be_bytes()[..]);
+                self.state.reg[4..6].copy_from_slice(&value.to_be_bytes()[..]);
             },
             RegisterPair::AF => {
-                (&mut self.state.reg[6..8]).copy_from_slice(&value.to_be_bytes()[..]);
+                self.state.reg[6..8].copy_from_slice(&value.to_be_bytes()[..]);
             },
             RegisterPair::SP => {
                 self.state.sp = value;

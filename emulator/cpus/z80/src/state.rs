@@ -1,3 +1,4 @@
+use core::fmt::{self, Write};
 use femtos::Frequency;
 use emulator_hal::{Instant as EmuInstant, BusAccess};
 
@@ -109,6 +110,8 @@ pub enum Z80Error /* <B: fmt::Display> */ {
     UnexpectedInstruction(Instruction),
     #[error("bus error: {0}")]
     BusError(String /* B */),
+    #[error("{0}")]
+    Other(String),
 }
 
 
@@ -129,9 +132,6 @@ pub struct Z80<Instant> {
     pub debugger: Z80Debugger,
     pub previous_cycle: Z80Cycle<Instant>,
     pub signals: Z80Signals,
-    // TODO activate later
-    //pub reset: Signal<bool>,
-    //pub bus_request: Signal<bool>,
 }
 
 impl<Instant> Z80<Instant>
@@ -146,8 +146,6 @@ where
             debugger: Z80Debugger::default(),
             previous_cycle: Z80Cycle::at_time(Instant::START),
             signals: Z80Signals::default(),
-            //reset: Signal::new(false),
-            //bus_request: Signal::new(false),
         }
     }
 
@@ -163,57 +161,64 @@ where
         self.debugger = Z80Debugger::default();
     }
 
-    pub fn dump_state<Bus>(&mut self, clock: Instant, bus: &mut Bus)
+    pub fn dump_state<W, Bus>(&mut self, writer: &mut W, _clock: Instant, bus: &mut Bus) -> Result<(), fmt::Error>
     where
+        W: Write,
         Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
     {
-        println!("Status: {:?}", self.state.status);
-        println!("PC: {:#06x}", self.state.pc);
-        println!("SP: {:#06x}", self.state.sp);
-        println!("IX: {:#06x}", self.state.ix);
-        println!("IY: {:#06x}", self.state.iy);
+        writeln!(writer, "Status: {:?}", self.state.status)?;
+        writeln!(writer, "PC: {:#06x}", self.state.pc)?;
+        writeln!(writer, "SP: {:#06x}", self.state.sp)?;
+        writeln!(writer, "IX: {:#06x}", self.state.ix)?;
+        writeln!(writer, "IY: {:#06x}", self.state.iy)?;
 
-        println!(
+        writeln!(
+            writer,
             "A: {:#04x}    F:  {:#04x}           A': {:#04x}    F':  {:#04x}",
             self.state.reg[Register::A as usize],
             self.state.reg[Register::F as usize],
             self.state.shadow_reg[Register::A as usize],
             self.state.shadow_reg[Register::F as usize]
-        );
-        println!(
+        )?;
+        writeln!(
+            writer,
             "B: {:#04x}    C:  {:#04x}           B': {:#04x}    C':  {:#04x}",
             self.state.reg[Register::B as usize],
             self.state.reg[Register::C as usize],
             self.state.shadow_reg[Register::B as usize],
             self.state.shadow_reg[Register::C as usize]
-        );
-        println!(
+        )?;
+        writeln!(
+            writer,
             "D: {:#04x}    E:  {:#04x}           D': {:#04x}    E':  {:#04x}",
             self.state.reg[Register::D as usize],
             self.state.reg[Register::E as usize],
             self.state.shadow_reg[Register::D as usize],
             self.state.shadow_reg[Register::E as usize]
-        );
-        println!(
+        )?;
+        writeln!(
+            writer,
             "H: {:#04x}    L:  {:#04x}           H': {:#04x}    L':  {:#04x}",
             self.state.reg[Register::H as usize],
             self.state.reg[Register::L as usize],
             self.state.shadow_reg[Register::H as usize],
             self.state.shadow_reg[Register::L as usize]
-        );
+        )?;
 
-        println!("I: {:#04x}    R:  {:#04x}", self.state.i, self.state.r);
-        println!("IM: {:?}  IFF1: {:?}  IFF2: {:?}", self.state.im, self.state.iff1, self.state.iff2);
+        writeln!(writer, "I: {:#04x}    R:  {:#04x}", self.state.i, self.state.r)?;
+        writeln!(writer, "IM: {:?}  IFF1: {:?}  IFF2: {:?}", self.state.im, self.state.iff1, self.state.iff2)?;
 
-        println!(
+        writeln!(
+            writer,
             "Current Instruction: {} {:?}",
             self.previous_cycle.decoder.format_instruction_bytes(bus),
             self.previous_cycle.decoder.instruction
-        );
-        println!("Previous Instruction: {:?}", self.previous_cycle.decoder.instruction);
-        println!();
+        )?;
+        writeln!(writer, "Previous Instruction: {:?}", self.previous_cycle.decoder.instruction)?;
+        writeln!(writer)?;
         // TODO disabled until function is reimplemented
         //self.port.dump_memory(clock, self.state.sp as Address, 0x40);
-        println!();
+        writeln!(writer)?;
+        Ok(())
     }
 }
