@@ -1,3 +1,4 @@
+use std::fmt;
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut, BorrowMutError};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -9,7 +10,7 @@ use crate::{Error, System};
 /// A universal memory address used by the Addressable trait
 pub type Address = u64;
 
-
+/*
 /// A device that can change state over time.  The `step()` method will be called
 /// by the containing `System` when the system clock advances.  If an error occurs
 /// with any device, the `on_error()` method will be called to display any state
@@ -196,16 +197,6 @@ pub trait Inspectable {
     fn inspect(&mut self, system: &System, args: &[&str]) -> Result<(), Error>;
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Signal {
-    Reset,
-    BusRequest,
-}
-
-pub trait Signalable {
-    fn set_signal(&mut self, signal: Signal, flag: bool) -> Result<(), Error>;
-    fn signal(&mut self, signal: Signal) -> Option<bool>;
-}
 
 pub trait Transmutable {
     #[inline]
@@ -232,11 +223,6 @@ pub trait Transmutable {
     fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
         None
     }
-
-    #[inline]
-    fn as_signalable(&mut self) -> Option<&mut dyn Signalable> {
-        None
-    }
 }
 
 pub type TransmutableBox = Rc<RefCell<Box<dyn Transmutable>>>;
@@ -244,6 +230,44 @@ pub type TransmutableBox = Rc<RefCell<Box<dyn Transmutable>>>;
 pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox {
     Rc::new(RefCell::new(Box::new(value)))
 }
+
+*/
+
+
+use emulator_hal::{BusAccess, Step, Inspect, Debug};
+
+pub type MoaBus = dyn BusAccess<u64, Instant = Instant, Error = Error>;
+pub type MoaStep = dyn Step<MoaBus, Instant = Instant, Error = Error>;
+//pub type MoaInspect<'a> = dyn Inspect<u64, &'a mut MoaBus, String>;
+//pub type MoaDebug<'a> = dyn Debug<u64, &'a mut MoaBus, String>;
+
+pub trait DeviceInterface {
+    #[inline]
+    fn as_bus_access(&mut self) -> Option<&mut MoaBus> {
+        None
+    }
+
+    #[inline]
+    fn as_step(&mut self) -> Option<&mut MoaStep> {
+        None
+    }
+
+    /*
+    #[inline]
+    fn as_inspect(&mut self) -> Option<&mut MoaInspect> {
+        None
+    }
+
+    #[inline]
+    fn as_debug(&mut self) -> Option<&mut MoaDebug> {
+        None
+    }
+    */
+}
+
+
+
+
 
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
@@ -265,27 +289,35 @@ impl Default for DeviceId {
     }
 }
 
+pub type BoxedInterface = Rc<RefCell<Box<dyn DeviceInterface>>>;
+
 #[derive(Clone)]
-pub struct Device(DeviceId, TransmutableBox);
+pub struct Device(DeviceId, BoxedInterface);
 
 impl Device {
     pub fn new<T>(value: T) -> Self
     where
-        T: Transmutable + 'static,
+        T: DeviceInterface + 'static,
     {
-        Self(DeviceId::new(), wrap_transmutable(value))
+        Self(DeviceId::new(), Rc::new(RefCell::new(Box::new(value))))
     }
 
     pub fn id(&self) -> DeviceId {
         self.0
     }
 
-    pub fn borrow_mut(&self) -> RefMut<'_, Box<dyn Transmutable>> {
+    pub fn borrow_mut(&self) -> RefMut<'_, Box<dyn DeviceInterface>> {
         self.1.borrow_mut()
     }
 
-    pub fn try_borrow_mut(&self) -> Result<RefMut<'_, Box<dyn Transmutable>>, BorrowMutError> {
+    pub fn try_borrow_mut(&self) -> Result<RefMut<'_, Box<dyn DeviceInterface>>, BorrowMutError> {
         self.1.try_borrow_mut()
+    }
+}
+
+impl fmt::Debug for Device {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "{:?}", self.0)
     }
 }
 

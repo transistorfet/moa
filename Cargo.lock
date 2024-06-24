@@ -804,13 +804,12 @@ dependencies = [
  "log",
  "moa-common",
  "moa-core",
- "moa-debugger",
  "moa-host",
  "moa-m68k",
  "moa-peripherals-generic",
  "moa-peripherals-motorola",
+ "moa-system",
  "moa-systems-computie",
- "moa-systems-genesis",
  "simple_logger",
 ]
 
@@ -884,9 +883,11 @@ dependencies = [
 name = "moa-peripherals-generic"
 version = "0.1.0"
 dependencies = [
+ "emulator-hal",
  "femtos",
  "log",
  "moa-core",
+ "moa-system",
 ]
 
 [[package]]
@@ -903,10 +904,12 @@ dependencies = [
 name = "moa-peripherals-motorola"
 version = "0.1.0"
 dependencies = [
+ "emulator-hal",
  "femtos",
  "log",
  "moa-core",
  "moa-host",
+ "moa-system",
 ]
 
 [[package]]
@@ -938,6 +941,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "moa-system"
+version = "0.1.0"
+dependencies = [
+ "emulator-hal",
+ "femtos",
+ "log",
+ "moa-host",
+ "thiserror",
+]
+
+[[package]]
 name = "moa-systems-computie"
 version = "0.1.0"
 dependencies = [
@@ -948,6 +962,7 @@ dependencies = [
  "moa-m68k",
  "moa-peripherals-generic",
  "moa-peripherals-motorola",
+ "moa-system",
 ]
 
 [[package]]
