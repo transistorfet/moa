@@ -19,7 +19,7 @@ type Input<T> = Signal<T>;
 #[allow(dead_code)]
 type TriState<T> = Signal<T>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Signal<T: Copy>(Rc<Cell<T>>);
 
 impl<T: Copy> Signal<T> {

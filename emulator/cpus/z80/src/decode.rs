@@ -1,9 +1,7 @@
 use core::fmt::Write;
-use femtos::Instant;
+use emulator_hal::{BusAccess, Instant as EmuInstant};
 
-use moa_core::{Address, Addressable};
-
-use crate::state::Z80Error;
+use crate::state::{Z80Error, Z80Address, Z80AddressSpace};
 use crate::instructions::{
     Direction, Condition, Register, RegisterPair, IndexRegister, IndexRegisterHalf, SpecialRegister, InterruptMode, Target,
     LoadTarget, UndocumentedCopy, Instruction,
@@ -15,9 +13,8 @@ use crate::instructions::{
 
 #[derive(Clone)]
 pub struct Z80Decoder {
-    pub clock: Instant,
-    pub start: u16,
-    pub end: u16,
+    pub start: Z80Address,
+    pub end: Z80Address,
     pub extra_instruction_bytes: u16,
     pub instruction: Instruction,
 }
@@ -25,7 +22,6 @@ pub struct Z80Decoder {
 impl Default for Z80Decoder {
     fn default() -> Self {
         Self {
-            clock: Instant::START,
             start: 0,
             end: 0,
             extra_instruction_bytes: 0,
@@ -34,59 +30,119 @@ impl Default for Z80Decoder {
     }
 }
 
-/*
-    fn read_test<B>(&mut self, device: &mut B) -> Result<u8, Z80Error>
-    where
-        B: BusAccess<Z80Address, Instant = Instant>,
-    {
-        device.read_u8(self.clock, (false, self.end as u16))
-            .map_err(|err| Z80Error::BusError(format!("butts")))
+impl Z80Decoder {
+    fn new(start: Z80Address) -> Self {
+        Self {
+            start,
+            end: start,
+            extra_instruction_bytes: 0,
+            instruction: Instruction::NOP,
+        }
     }
-*/
+}
 
 impl Z80Decoder {
-    pub fn decode_at(&mut self, memory: &mut dyn Addressable, clock: Instant, start: u16) -> Result<(), Z80Error> {
-        self.clock = clock;
-        self.start = start;
-        self.end = start;
-        self.extra_instruction_bytes = 0;
-        self.instruction = self.decode_one(memory)?;
+    pub fn decode_at<Bus>(bus: &mut Bus, clock: Bus::Instant, start: Z80Address) -> Result<Self, Z80Error>
+    where
+        Bus: BusAccess<Z80AddressSpace>,
+    {
+        let mut decoder: DecodeNext<'_, Bus, Bus::Instant> = DecodeNext {
+            clock,
+            bus,
+            decoder: Z80Decoder::new(start),
+        };
+        decoder.decode_one()?;
+        Ok(decoder.decoder)
+    }
+
+    pub fn dump_disassembly<Bus>(bus: &mut Bus, start: Z80Address, length: Z80Address)
+    where
+        Bus: BusAccess<Z80AddressSpace>,
+    {
+        let mut next = start;
+        while next < (start + length) {
+            match Z80Decoder::decode_at(bus, Bus::Instant::START, next) {
+                Ok(mut decoder) => {
+                    decoder.dump_decoded(bus);
+                    next = decoder.end;
+                },
+                Err(err) => {
+                    println!("{:?}", err);
+                    return;
+                },
+            }
+        }
+    }
+
+    pub fn dump_decoded<Bus>(&mut self, bus: &mut Bus)
+    where
+        Bus: BusAccess<Z80AddressSpace>,
+    {
+        let ins_data = self.format_instruction_bytes(bus);
+        println!("{:#06x}: {}\n\t{:?}\n", self.start, ins_data, self.instruction);
+    }
+
+    pub fn format_instruction_bytes<Bus>(&mut self, bus: &mut Bus) -> String
+    where
+        Bus: BusAccess<Z80AddressSpace>,
+    {
+        let mut ins_data = String::new();
+        for offset in 0..self.end.saturating_sub(self.start) {
+            write!(
+                ins_data,
+                "{:02x} ",
+                bus.read_u8(Bus::Instant::START, Z80AddressSpace::Memory(self.start + offset))
+                    .unwrap()
+            )
+            .unwrap()
+        }
+        ins_data
+    }
+}
+
+pub struct DecodeNext<'a, Bus, Instant>
+where
+    Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
+{
+    clock: Instant,
+    bus: &'a mut Bus,
+    decoder: Z80Decoder,
+}
+
+impl<'a, Bus, Instant> DecodeNext<'a, Bus, Instant>
+where
+    Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
+    Instant: EmuInstant,
+{
+    pub fn decode_one(&mut self) -> Result<(), Z80Error> {
+        let ins = self.read_instruction_byte()?;
+        self.decoder.instruction = self.decode_bare(ins, 0)?;
         Ok(())
     }
 
-    pub fn decode_one(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Z80Error> {
-        let ins = self.read_instruction_byte(memory)?;
-        self.decode_bare(memory, ins, 0)
-    }
-
-    pub fn decode_bare(
-        &mut self,
-        memory: &mut dyn Addressable,
-        ins: u8,
-        extra_instruction_bytes: u16,
-    ) -> Result<Instruction, Z80Error> {
-        self.extra_instruction_bytes = extra_instruction_bytes;
+    pub fn decode_bare(&mut self, ins: u8, extra_instruction_bytes: u16) -> Result<Instruction, Z80Error> {
+        self.decoder.extra_instruction_bytes = extra_instruction_bytes;
         match get_ins_x(ins) {
             0 => match get_ins_z(ins) {
                 0 => match get_ins_y(ins) {
                     0 => Ok(Instruction::NOP),
                     1 => Ok(Instruction::EXafaf),
                     2 => {
-                        let offset = self.read_instruction_byte(memory)? as i8;
+                        let offset = self.read_instruction_byte()? as i8;
                         Ok(Instruction::DJNZ(offset))
                     },
                     3 => {
-                        let offset = self.read_instruction_byte(memory)? as i8;
+                        let offset = self.read_instruction_byte()? as i8;
                         Ok(Instruction::JR(offset))
                     },
                     y => {
-                        let offset = self.read_instruction_byte(memory)? as i8;
+                        let offset = self.read_instruction_byte()? as i8;
                         Ok(Instruction::JRcc(get_condition(y - 4), offset))
                     },
                 },
                 1 => {
                     if get_ins_q(ins) == 0 {
-                        let data = self.read_instruction_word(memory)?;
+                        let data = self.read_instruction_word()?;
                         Ok(Instruction::LD(
                             LoadTarget::DirectRegWord(get_register_pair(get_ins_p(ins))),
                             LoadTarget::ImmediateWord(data),
@@ -107,7 +163,7 @@ impl Z80Decoder {
                             true => Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), target)),
                         }
                     } else {
-                        let addr = self.read_instruction_word(memory)?;
+                        let addr = self.read_instruction_word()?;
                         match (ins >> 3) & 0x03 {
                             0 => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(RegisterPair::HL))),
                             1 => Ok(Instruction::LD(LoadTarget::DirectRegWord(RegisterPair::HL), LoadTarget::IndirectWord(addr))),
@@ -127,7 +183,7 @@ impl Z80Decoder {
                 4 => Ok(Instruction::INC8(get_register(get_ins_y(ins)))),
                 5 => Ok(Instruction::DEC8(get_register(get_ins_y(ins)))),
                 6 => {
-                    let data = self.read_instruction_byte(memory)?;
+                    let data = self.read_instruction_byte()?;
                     Ok(Instruction::LD(to_load_target(get_register(get_ins_y(ins))), LoadTarget::ImmediateByte(data)))
                 },
                 7 => match get_ins_y(ins) {
@@ -173,21 +229,21 @@ impl Z80Decoder {
                     }
                 },
                 2 => {
-                    let addr = self.read_instruction_word(memory)?;
+                    let addr = self.read_instruction_word()?;
                     Ok(Instruction::JPcc(get_condition(get_ins_y(ins)), addr))
                 },
                 3 => match get_ins_y(ins) {
                     0 => {
-                        let addr = self.read_instruction_word(memory)?;
+                        let addr = self.read_instruction_word()?;
                         Ok(Instruction::JP(addr))
                     },
-                    1 => self.decode_prefix_cb(memory),
+                    1 => self.decode_prefix_cb(),
                     2 => {
-                        let port = self.read_instruction_byte(memory)?;
+                        let port = self.read_instruction_byte()?;
                         Ok(Instruction::OUTx(port))
                     },
                     3 => {
-                        let port = self.read_instruction_byte(memory)?;
+                        let port = self.read_instruction_byte()?;
                         Ok(Instruction::INx(port))
                     },
                     4 => Ok(Instruction::EXsp(RegisterPair::HL)),
@@ -197,7 +253,7 @@ impl Z80Decoder {
                     _ => panic!("InternalError: impossible value"),
                 },
                 4 => {
-                    let addr = self.read_instruction_word(memory)?;
+                    let addr = self.read_instruction_word()?;
                     Ok(Instruction::CALLcc(get_condition(get_ins_y(ins)), addr))
                 },
                 5 => {
@@ -206,18 +262,18 @@ impl Z80Decoder {
                     } else {
                         match get_ins_p(ins) {
                             0 => {
-                                let addr = self.read_instruction_word(memory)?;
+                                let addr = self.read_instruction_word()?;
                                 Ok(Instruction::CALL(addr))
                             },
-                            1 => self.decode_prefix_dd_fd(memory, IndexRegister::IX),
-                            2 => self.decode_prefix_ed(memory),
-                            3 => self.decode_prefix_dd_fd(memory, IndexRegister::IY),
+                            1 => self.decode_prefix_dd_fd(IndexRegister::IX),
+                            2 => self.decode_prefix_ed(),
+                            3 => self.decode_prefix_dd_fd(IndexRegister::IY),
                             _ => panic!("InternalError: impossible value"),
                         }
                     }
                 },
                 6 => {
-                    let data = self.read_instruction_byte(memory)?;
+                    let data = self.read_instruction_byte()?;
                     Ok(get_alu_instruction(get_ins_y(ins), Target::Immediate(data)))
                 },
                 7 => Ok(Instruction::RST(get_ins_y(ins) * 8)),
@@ -227,8 +283,8 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_prefix_cb(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Z80Error> {
-        let ins = self.read_instruction_byte(memory)?;
+    pub fn decode_prefix_cb(&mut self) -> Result<Instruction, Z80Error> {
+        let ins = self.read_instruction_byte()?;
         match get_ins_x(ins) {
             0 => Ok(get_rot_instruction(get_ins_y(ins), get_register(get_ins_z(ins)), None)),
             1 => Ok(Instruction::BIT(get_ins_y(ins), get_register(get_ins_z(ins)))),
@@ -238,9 +294,9 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_sub_prefix_cb(&mut self, memory: &mut dyn Addressable, reg: IndexRegister) -> Result<Instruction, Z80Error> {
-        let offset = self.read_instruction_byte(memory)? as i8;
-        let ins = self.read_instruction_byte(memory)?;
+    pub fn decode_sub_prefix_cb(&mut self, reg: IndexRegister) -> Result<Instruction, Z80Error> {
+        let offset = self.read_instruction_byte()? as i8;
+        let ins = self.read_instruction_byte()?;
         let opt_copy = match get_ins_z(ins) {
             6 => None, //Some(Target::DirectReg(Register::F)),
             z => Some(get_register(z)),
@@ -255,8 +311,8 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_prefix_ed(&mut self, memory: &mut dyn Addressable) -> Result<Instruction, Z80Error> {
-        let ins = self.read_instruction_byte(memory)?;
+    pub fn decode_prefix_ed(&mut self) -> Result<Instruction, Z80Error> {
+        let ins = self.read_instruction_byte()?;
 
         match get_ins_x(ins) {
             0 => Ok(Instruction::NOP),
@@ -285,7 +341,7 @@ impl Z80Decoder {
                     }
                 },
                 3 => {
-                    let addr = self.read_instruction_word(memory)?;
+                    let addr = self.read_instruction_word()?;
                     if get_ins_q(ins) == 0 {
                         Ok(Instruction::LD(
                             LoadTarget::IndirectWord(addr),
@@ -348,11 +404,11 @@ impl Z80Decoder {
         }
     }
 
-    pub fn decode_prefix_dd_fd(&mut self, memory: &mut dyn Addressable, index_reg: IndexRegister) -> Result<Instruction, Z80Error> {
-        let ins = self.read_instruction_byte(memory)?;
+    pub fn decode_prefix_dd_fd(&mut self, index_reg: IndexRegister) -> Result<Instruction, Z80Error> {
+        let ins = self.read_instruction_byte()?;
 
         if ins == 0xCB {
-            return self.decode_sub_prefix_cb(memory, index_reg);
+            return self.decode_sub_prefix_cb(index_reg);
         }
 
         match get_ins_x(ins) {
@@ -364,11 +420,11 @@ impl Z80Decoder {
                 match get_ins_p(ins) {
                     2 => match get_ins_z(ins) {
                         1 => {
-                            let data = self.read_instruction_word(memory)?;
+                            let data = self.read_instruction_word()?;
                             Ok(Instruction::LD(LoadTarget::DirectRegWord(index_reg.into()), LoadTarget::ImmediateWord(data)))
                         },
                         2 => {
-                            let addr = self.read_instruction_word(memory)?;
+                            let addr = self.read_instruction_word()?;
                             let regpair = index_reg.into();
                             match get_ins_q(ins) != 0 {
                                 false => Ok(Instruction::LD(LoadTarget::IndirectWord(addr), LoadTarget::DirectRegWord(regpair))),
@@ -380,50 +436,50 @@ impl Z80Decoder {
                             true => Ok(Instruction::DEC16(index_reg.into())),
                         },
                         4 => {
-                            self.extra_instruction_bytes = 4;
+                            self.decoder.extra_instruction_bytes = 4;
                             let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
                             Ok(Instruction::INC8(half_target))
                         },
                         5 => {
-                            self.extra_instruction_bytes = 4;
+                            self.decoder.extra_instruction_bytes = 4;
                             let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
                             Ok(Instruction::DEC8(half_target))
                         },
                         6 => {
-                            self.extra_instruction_bytes = 4;
+                            self.decoder.extra_instruction_bytes = 4;
                             let half_target = Target::DirectRegHalf(get_index_register_half(index_reg, get_ins_q(ins)));
-                            let data = self.read_instruction_byte(memory)?;
+                            let data = self.read_instruction_byte()?;
                             Ok(Instruction::LD(to_load_target(half_target), LoadTarget::ImmediateByte(data)))
                         },
-                        _ => self.decode_bare(memory, ins, 4),
+                        _ => self.decode_bare(ins, 4),
                     },
                     3 => match ins {
                         0x34 => {
-                            let offset = self.read_instruction_byte(memory)? as i8;
+                            let offset = self.read_instruction_byte()? as i8;
                             Ok(Instruction::INC8(Target::IndirectOffset(index_reg, offset)))
                         },
                         0x35 => {
-                            let offset = self.read_instruction_byte(memory)? as i8;
+                            let offset = self.read_instruction_byte()? as i8;
                             Ok(Instruction::DEC8(Target::IndirectOffset(index_reg, offset)))
                         },
                         0x36 => {
-                            let offset = self.read_instruction_byte(memory)? as i8;
-                            let immediate = self.read_instruction_byte(memory)?;
+                            let offset = self.read_instruction_byte()? as i8;
+                            let immediate = self.read_instruction_byte()?;
                             Ok(Instruction::LD(
                                 LoadTarget::IndirectOffsetByte(index_reg, offset),
                                 LoadTarget::ImmediateByte(immediate),
                             ))
                         },
-                        _ => self.decode_bare(memory, ins, 4),
+                        _ => self.decode_bare(ins, 4),
                     },
-                    _ => self.decode_bare(memory, ins, 4),
+                    _ => self.decode_bare(ins, 4),
                 }
             },
             1 => match get_ins_p(ins) {
                 0 | 1 => {
-                    let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
+                    let target = match self.decode_index_target(index_reg, get_ins_z(ins))? {
                         Some(target) => target,
-                        None => return self.decode_bare(memory, ins, 4),
+                        None => return self.decode_bare(ins, 4),
                     };
 
                     match (ins & 0x18) >> 3 {
@@ -443,7 +499,7 @@ impl Z80Decoder {
                         4 => Target::DirectRegHalf(get_index_register_half(index_reg, 0)),
                         5 => Target::DirectRegHalf(get_index_register_half(index_reg, 1)),
                         6 => {
-                            let offset = self.read_instruction_byte(memory)? as i8;
+                            let offset = self.read_instruction_byte()? as i8;
                             let src = to_load_target(Target::IndirectOffset(index_reg, offset));
                             if get_ins_q(ins) == 0 {
                                 return Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::H), src));
@@ -461,15 +517,15 @@ impl Z80Decoder {
                 3 => {
                     if get_ins_q(ins) == 0 {
                         if get_ins_z(ins) == 6 {
-                            return self.decode_bare(memory, ins, 4);
+                            return self.decode_bare(ins, 4);
                         }
                         let src = get_register(get_ins_z(ins));
-                        let offset = self.read_instruction_byte(memory)? as i8;
+                        let offset = self.read_instruction_byte()? as i8;
                         Ok(Instruction::LD(LoadTarget::IndirectOffsetByte(index_reg, offset), to_load_target(src)))
                     } else {
-                        let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
+                        let target = match self.decode_index_target(index_reg, get_ins_z(ins))? {
                             Some(target) => target,
-                            None => return self.decode_bare(memory, ins, 4),
+                            None => return self.decode_bare(ins, 4),
                         };
 
                         Ok(Instruction::LD(LoadTarget::DirectRegByte(Register::A), to_load_target(target)))
@@ -478,11 +534,11 @@ impl Z80Decoder {
                 _ => panic!("InternalError: impossible value"),
             },
             2 => {
-                self.extra_instruction_bytes = 4;
+                self.decoder.extra_instruction_bytes = 4;
 
-                let target = match self.decode_index_target(memory, index_reg, get_ins_z(ins))? {
+                let target = match self.decode_index_target(index_reg, get_ins_z(ins))? {
                     Some(target) => target,
-                    None => return self.decode_bare(memory, ins, 4),
+                    None => return self.decode_bare(ins, 4),
                 };
 
                 match get_ins_y(ins) {
@@ -506,23 +562,18 @@ impl Z80Decoder {
                     LoadTarget::DirectRegWord(RegisterPair::SP),
                     LoadTarget::DirectRegWord(index_reg.into()),
                 )),
-                _ => self.decode_bare(memory, ins, 4),
+                _ => self.decode_bare(ins, 4),
             },
             _ => panic!("InternalError: impossible value"),
         }
     }
 
-    fn decode_index_target(
-        &mut self,
-        memory: &mut dyn Addressable,
-        index_reg: IndexRegister,
-        z: u8,
-    ) -> Result<Option<Target>, Z80Error> {
+    fn decode_index_target(&mut self, index_reg: IndexRegister, z: u8) -> Result<Option<Target>, Z80Error> {
         let result = match z {
             4 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 0))),
             5 => Some(Target::DirectRegHalf(get_index_register_half(index_reg, 1))),
             6 => {
-                let offset = self.read_instruction_byte(memory)? as i8;
+                let offset = self.read_instruction_byte()? as i8;
                 Some(Target::IndirectOffset(index_reg, offset))
             },
             _ => None,
@@ -531,45 +582,25 @@ impl Z80Decoder {
     }
 
 
-    fn read_instruction_byte(&mut self, device: &mut dyn Addressable) -> Result<u8, Z80Error> {
-        let byte = device.read_u8(self.clock, self.end as Address)?;
-        self.end = self.end.wrapping_add(1);
+    fn read_instruction_byte(&mut self) -> Result<u8, Z80Error> {
+        let byte = self
+            .bus
+            .read_u8(self.clock, Z80AddressSpace::Memory(self.decoder.end))
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
+        self.decoder.end = self.decoder.end.wrapping_add(1);
         Ok(byte)
     }
 
-    fn read_instruction_word(&mut self, device: &mut dyn Addressable) -> Result<u16, Z80Error> {
-        let word = device.read_leu16(self.clock, self.end as Address)?;
-        self.end = self.end.wrapping_add(2);
-        Ok(word)
-    }
-
-    pub fn format_instruction_bytes(&mut self, memory: &mut dyn Addressable) -> String {
-        let mut ins_data = String::new();
-        for offset in 0..self.end.saturating_sub(self.start) {
-            write!(ins_data, "{:02x} ", memory.read_u8(self.clock, (self.start + offset) as Address).unwrap()).unwrap()
+    fn read_instruction_word(&mut self) -> Result<u16, Z80Error> {
+        let mut bytes = [0; 2];
+        for byte in bytes.iter_mut() {
+            *byte = self
+                .bus
+                .read_u8(self.clock, Z80AddressSpace::Memory(self.decoder.end))
+                .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
+            self.decoder.end = self.decoder.end.wrapping_add(1);
         }
-        ins_data
-    }
-
-    pub fn dump_decoded(&mut self, memory: &mut dyn Addressable) {
-        let ins_data = self.format_instruction_bytes(memory);
-        println!("{:#06x}: {}\n\t{:?}\n", self.start, ins_data, self.instruction);
-    }
-
-    pub fn dump_disassembly(&mut self, memory: &mut dyn Addressable, start: u16, length: u16) {
-        let mut next = start;
-        while next < (start + length) {
-            match self.decode_at(memory, self.clock, next) {
-                Ok(()) => {
-                    self.dump_decoded(memory);
-                    next = self.end;
-                },
-                Err(err) => {
-                    println!("{:?}", err);
-                    return;
-                },
-            }
-        }
+        Ok(u16::from_le_bytes(bytes))
     }
 }
 

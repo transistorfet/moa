@@ -1,6 +1,5 @@
 use femtos::{Instant, Frequency};
-use emulator_hal::bus::BusAccess;
-use emulator_hal::step::Step;
+use emulator_hal::{BusAccess, Step};
 use emulator_hal_memory::MemoryBlock;
 
 use moa_m68k::{M68k, M68kType, M68kAddress};
@@ -38,7 +37,7 @@ struct TestCase {
 #[allow(clippy::uninit_vec)]
 fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
 where
-    F: FnMut(M68kCycleExecutor<&mut MemoryBlock<u32, Instant>, Instant>),
+    F: FnMut(M68kCycleExecutor<&mut MemoryBlock<Instant>, Instant>),
 {
     // Insert basic initialization
     let len = 0x10_0000;

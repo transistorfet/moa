@@ -3,7 +3,7 @@ use femtos::Frequency;
 use moa_core::{System, Error, MemoryBlock, Device};
 use moa_host::Host;
 
-use moa_z80::{Z80, Z80Type};
+use moa_z80::{MoaZ80, Z80, Z80Type};
 
 use crate::peripherals::model1::{Model1Keyboard, Model1Video};
 
@@ -44,7 +44,11 @@ pub fn build_trs80<H: Host>(host: &mut H, options: Trs80Options) -> Result<Syste
     system.add_addressable_device(0x37E0 + 0x420, Device::new(video)).unwrap();
 
     // TODO the ioport needs to be hooked up
-    let cpu = Z80::from_type(Z80Type::Z80, options.frequency, system.bus.clone(), 0, None);
+    let cpu = Z80::from_type(Z80Type::Z80, options.frequency);
+    let cpu = MoaZ80 {
+        bus: system.bus.clone(),
+        cpu,
+    };
 
     system.add_interruptable_device("cpu", Device::new(cpu))?;
 

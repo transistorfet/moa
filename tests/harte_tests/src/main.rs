@@ -11,8 +11,7 @@ use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 use femtos::{Instant, Frequency};
 
-use emulator_hal::bus::BusAccess;
-use emulator_hal::step::Step;
+use emulator_hal::{BusAccess, Step};
 use emulator_hal_memory::MemoryBlock;
 
 use moa_m68k::{M68k, M68kType};
@@ -146,14 +145,14 @@ impl TestCase {
 
 
 #[allow(clippy::uninit_vec)]
-fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k<Instant>, MemoryBlock<u32, Instant>), Error> {
+fn init_execute_test(cputype: M68kType, state: &TestState) -> Result<(M68k<Instant>, MemoryBlock<Instant>), Error> {
     // Insert basic initialization
     let len = 0x100_0000;
     let mut data = Vec::with_capacity(len);
     unsafe {
         data.set_len(len);
     }
-    let mut memory = MemoryBlock::<u32, Instant>::from(data);
+    let mut memory = MemoryBlock::from(data);
 
     let mut cpu = M68k::from_type(cputype, Frequency::from_mhz(10));
     cpu.state.status = Status::Running;
@@ -174,7 +173,7 @@ where
     }
 }
 
-fn load_state(cpu: &mut M68k<Instant>, memory: &mut MemoryBlock<u32, Instant>, initial: &TestState) -> Result<(), Error> {
+fn load_state(cpu: &mut M68k<Instant>, memory: &mut MemoryBlock<Instant>, initial: &TestState) -> Result<(), Error> {
     cpu.state.d_reg[0] = initial.d0;
     cpu.state.d_reg[1] = initial.d1;
     cpu.state.d_reg[2] = initial.d2;
@@ -213,7 +212,7 @@ fn load_state(cpu: &mut M68k<Instant>, memory: &mut MemoryBlock<u32, Instant>, i
     Ok(())
 }
 
-fn assert_state(cpu: &M68k<Instant>, memory: &mut MemoryBlock<u32, Instant>, expected: &TestState) -> Result<(), Error> {
+fn assert_state(cpu: &M68k<Instant>, memory: &mut MemoryBlock<Instant>, expected: &TestState) -> Result<(), Error> {
     assert_value(cpu.state.d_reg[0], expected.d0, "d0")?;
     assert_value(cpu.state.d_reg[1], expected.d1, "d1")?;
     assert_value(cpu.state.d_reg[2], expected.d2, "d2")?;
@@ -259,7 +258,7 @@ fn assert_state(cpu: &M68k<Instant>, memory: &mut MemoryBlock<u32, Instant>, exp
 
 fn step_cpu_and_assert(
     cpu: &mut M68k<Instant>,
-    memory: &mut MemoryBlock<u32, Instant>,
+    memory: &mut MemoryBlock<Instant>,
     case: &TestCase,
     test_timing: bool,
 ) -> Result<(), Error> {

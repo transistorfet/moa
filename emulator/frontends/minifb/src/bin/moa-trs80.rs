@@ -8,7 +8,7 @@ fn main() {
             Arg::new("ROM")
                 .short('r')
                 .long("rom")
-                .action(ArgAction::SetTrue)
+                .action(ArgAction::Set)
                 .value_name("FILE")
                 .help("ROM file to load at the start of memory"),
         )

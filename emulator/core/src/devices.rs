@@ -171,6 +171,16 @@ pub trait Inspectable {
     fn inspect(&mut self, system: &System, args: &[&str]) -> Result<(), Error>;
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Signal {
+    Reset,
+    BusRequest,
+}
+
+pub trait Signalable {
+    fn set_signal(&mut self, signal: Signal, flag: bool) -> Result<(), Error>;
+    fn signal(&mut self, signal: Signal) -> Option<bool>;
+}
 
 pub trait Transmutable {
     #[inline]
@@ -195,6 +205,11 @@ pub trait Transmutable {
 
     #[inline]
     fn as_inspectable(&mut self) -> Option<&mut dyn Inspectable> {
+        None
+    }
+
+    #[inline]
+    fn as_signalable(&mut self) -> Option<&mut dyn Signalable> {
         None
     }
 }

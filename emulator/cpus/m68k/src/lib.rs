@@ -18,4 +18,4 @@ pub use crate::memory::{M68kAddress, M68kAddressSpace, M68kBusPort};
 pub use crate::decode::{M68kDecoder, InstructionDecoding};
 pub use crate::execute::{M68kCycle, M68kCycleExecutor};
 pub use crate::timing::M68kInstructionTiming;
-//pub use crate::instructions::{Instruction, Target, Size, Sign, XRegister, BaseRegister, IndexRegister, Direction};
+pub use crate::instructions::*;

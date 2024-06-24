@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod decode_unit_tests {
     use femtos::Instant;
-    use emulator_hal::bus::BusAccess;
+    use emulator_hal::BusAccess;
     use emulator_hal_memory::MemoryBlock;
 
     use crate::M68kType;
@@ -13,7 +13,7 @@ mod decode_unit_tests {
 
     fn run_decode_test<F>(cputype: M68kType, mut test_func: F)
     where
-        F: FnMut(&mut InstructionDecoding<'_, MemoryBlock<u32, Instant>, Instant>),
+        F: FnMut(&mut InstructionDecoding<'_, MemoryBlock<Instant>, Instant>),
     {
         let mut memory = MemoryBlock::from(vec![0; 0x0000100]);
         let mut decoder = M68kDecoder::new(cputype, true, 0);
@@ -316,8 +316,7 @@ mod decode_unit_tests {
 #[cfg(test)]
 mod execute_unit_tests {
     use femtos::{Instant, Frequency};
-    use emulator_hal::bus::BusAccess;
-    use emulator_hal::step::Step;
+    use emulator_hal::{Step, BusAccess};
     use emulator_hal_memory::MemoryBlock;
 
     use crate::{M68k, M68kType};
@@ -330,7 +329,7 @@ mod execute_unit_tests {
     #[allow(clippy::uninit_vec)]
     fn run_execute_test<F>(cputype: M68kType, mut test_func: F)
     where
-        F: FnMut(M68kCycleExecutor<&mut MemoryBlock<u32, Instant>, Instant>),
+        F: FnMut(M68kCycleExecutor<&mut MemoryBlock<Instant>, Instant>),
     {
         // Insert basic initialization
         let len = 0x10_0000;

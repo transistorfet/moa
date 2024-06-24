@@ -1,7 +1,6 @@
 use core::cmp;
 use core::fmt::Write;
-use emulator_hal::time;
-use emulator_hal::bus::BusAccess;
+use emulator_hal::{Instant as BusInstant, BusAccess};
 
 use crate::{M68kError, CpuInfo};
 use crate::state::Exceptions;
@@ -65,7 +64,7 @@ impl FunctionCode {
 
 impl<Instant> Default for MemoryRequest<Instant>
 where
-    Instant: time::Instant,
+    Instant: BusInstant,
 {
     fn default() -> Self {
         Self {
@@ -138,7 +137,7 @@ pub struct M68kBusPort<Instant> {
 
 impl<Instant> Default for M68kBusPort<Instant>
 where
-    Instant: time::Instant,
+    Instant: BusInstant,
 {
     fn default() -> Self {
         Self {

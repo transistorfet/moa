@@ -8,7 +8,7 @@ use moa_core::{System, Error, MemoryBlock, Bus, Address, Addressable, Device};
 use moa_host::Host;
 
 use moa_m68k::{M68k, M68kType};
-use moa_z80::{Z80, Z80Type};
+use moa_z80::{MoaZ80, Z80, Z80Type};
 use moa_peripherals_yamaha::Ym2612;
 use moa_peripherals_yamaha::Sn76489;
 
@@ -68,11 +68,16 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     coproc_bus.borrow_mut().insert(0x6000, coproc_register.clone());
     coproc_bus.borrow_mut().insert(0x7f11, coproc_sn_sound.clone());
     coproc_bus.borrow_mut().insert(0x8000, coproc_area);
-    let coproc = Z80::from_type(Z80Type::Z80, Frequency::from_hz(3_579_545), coproc_bus, 0, None);
-    let mut reset = coproc.reset.clone();
-    let mut bus_request = coproc.bus_request.clone();
+    let coproc = Z80::from_type(Z80Type::Z80, Frequency::from_hz(3_579_545));
+    let coproc = MoaZ80 {
+        bus: coproc_bus,
+        cpu: coproc,
+    };
+    let mut reset = coproc.cpu.signals.reset.clone();
+    let mut bus_request = coproc.cpu.signals.bus_request.clone();
     reset.set(true);
     bus_request.set(true);
+    let coproc = Device::new(coproc);
 
     // Add coprocessor devices to the system bus so the 68000 can access them too
     system.add_addressable_device(0x00a00000, coproc_ram)?;
@@ -80,7 +85,7 @@ pub fn build_genesis<H: Host>(host: &mut H, mut options: SegaGenesisOptions) -> 
     system.add_addressable_device(0x00a06000, coproc_register)?;
     //system.add_addressable_device(0x00c00010, coproc_sn_sound)?;
     system.add_device("sn_sound", coproc_sn_sound.clone())?;
-    system.add_device("coproc", Device::new(coproc))?;
+    system.add_device("coproc", coproc.clone())?;
 
 
     let controllers = GenesisControllers::new(host)?;

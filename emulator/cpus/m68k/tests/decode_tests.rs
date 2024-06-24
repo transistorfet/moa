@@ -1,5 +1,5 @@
 use femtos::{Instant, Frequency};
-use emulator_hal::bus::BusAccess;
+use emulator_hal::BusAccess;
 use emulator_hal_memory::MemoryBlock;
 
 use moa_m68k::{M68k, M68kType, M68kAddress};
@@ -64,7 +64,7 @@ const DECODE_TESTS: &'static [TestCase] = &[
 ];
 
 
-fn init_decode_test(cputype: M68kType) -> (M68k<Instant>, M68kCycle<Instant>, MemoryBlock<u32, Instant>) {
+fn init_decode_test(cputype: M68kType) -> (M68k<Instant>, M68kCycle<Instant>, MemoryBlock<Instant>) {
     // Insert basic initialization
     let len = 0x2000;
     let mut data = Vec::with_capacity(len);

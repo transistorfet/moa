@@ -1,13 +1,13 @@
-use femtos::{Instant, Duration};
+use emulator_hal::{BusAccess, Instant as EmuInstant};
 
-use moa_core::{System, Error, Address, Steppable, Addressable, Interruptable, Debuggable, Transmutable, read_beu16, write_beu16};
-
+use crate::decode::Z80Decoder;
 use crate::instructions::{
     Condition, Instruction, LoadTarget, Target, Register, InterruptMode, RegisterPair, IndexRegister, SpecialRegister,
     IndexRegisterHalf, Size, Direction, UndocumentedCopy,
 };
-use crate::state::{Z80, Z80Error, Status, Flags};
+use crate::state::{Z80, Z80Error, Z80State, Z80Signals, Z80Address, Z80AddressSpace, Status, Flags};
 use crate::timing::Z80InstructionCycles;
+use crate::debugger::Z80Debugger;
 
 
 const FLAGS_NUMERIC: u8 = 0xC0;
@@ -20,79 +20,79 @@ enum RotateType {
     Bit9,
 }
 
-impl Steppable for Z80 {
-    fn step(&mut self, system: &System) -> Result<Duration, Error> {
-        let clocks = if self.reset.get() {
-            self.reset()?
-        } else if self.bus_request.get() {
-            4
-        } else {
-            self.step_internal(system)?
-        };
-
-        Ok(self.frequency.period_duration() * clocks as u64)
-    }
-
-    fn on_error(&mut self, system: &System) {
-        self.dump_state(system.clock);
-    }
-}
-
-impl Interruptable for Z80 {}
-
-
-impl Transmutable for Z80 {
-    fn as_steppable(&mut self) -> Option<&mut dyn Steppable> {
-        Some(self)
-    }
-
-    fn as_interruptable(&mut self) -> Option<&mut dyn Interruptable> {
-        Some(self)
-    }
-
-    fn as_debuggable(&mut self) -> Option<&mut dyn Debuggable> {
-        Some(self)
-    }
-}
-
-impl From<Z80Error> for Error {
-    fn from(err: Z80Error) -> Self {
-        match err {
-            Z80Error::Halted => Self::Other("cpu halted".to_string()),
-            Z80Error::Breakpoint => Self::Breakpoint("breakpoint".to_string()),
-            Z80Error::Unimplemented(instruction) => Self::new(format!("unimplemented instruction {:?}", instruction)),
-            Z80Error::BusError(msg) => Self::Other(msg),
-        }
-    }
-}
-
-impl From<Error> for Z80Error {
-    fn from(err: Error) -> Self {
-        match err {
-            Error::Processor(ex) => Z80Error::BusError(format!("processor error {}", ex)),
-            Error::Breakpoint(_) => Z80Error::Breakpoint,
-            Error::Other(msg) | Error::Assertion(msg) | Error::Emulator(_, msg) => Z80Error::BusError(msg),
-        }
-    }
-}
 #[derive(Clone)]
-pub struct Z80Executor {
+pub struct Z80Cycle<Instant> {
     pub current_clock: Instant,
+    pub decoder: Z80Decoder,
     pub took_branch: bool,
 }
 
-impl Z80Executor {
+impl<Instant> Z80Cycle<Instant> {
     pub fn at_time(current_clock: Instant) -> Self {
         Self {
             current_clock,
+            decoder: Default::default(),
             took_branch: false,
         }
     }
 }
 
-impl Z80 {
-    pub fn step_internal(&mut self, system: &System) -> Result<u16, Z80Error> {
-        self.executor = Z80Executor::at_time(system.clock);
+impl<Instant> Z80<Instant>
+where
+    Instant: EmuInstant,
+{
+    pub(crate) fn begin<'a, Bus>(
+        &'a mut self,
+        clock: Instant,
+        bus: &'a mut Bus,
+    ) -> Result<ExecuteNext<'a, &'a mut Bus, Instant>, Z80Error>
+    where
+        Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
+    {
+        let executor = ExecuteNext {
+            state: &mut self.state,
+            signals: &mut self.signals,
+            debugger: &mut self.debugger,
+            cycle: Z80Cycle::at_time(clock),
+            bus,
+        };
+
+        Ok(executor)
+    }
+}
+
+pub(crate) struct ExecuteNext<'a, Bus, Instant>
+where
+    Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
+{
+    state: &'a mut Z80State,
+    signals: &'a mut Z80Signals,
+    debugger: &'a mut Z80Debugger,
+    cycle: Z80Cycle<Instant>,
+    bus: Bus,
+}
+
+impl<'a, Bus, Instant> ExecuteNext<'a, Bus, Instant>
+where
+    Bus: BusAccess<Z80AddressSpace, Instant = Instant>,
+    Instant: EmuInstant,
+{
+    pub(crate) fn end(self) -> Z80Cycle<Instant> {
+        self.cycle
+    }
+
+    pub(crate) fn step_one(&mut self) -> Result<u16, Z80Error> {
+        let clocks = if self.signals.reset.get() {
+            self.reset()?
+        } else if self.signals.bus_request.get() {
+            4
+        } else {
+            self.step_internal()?
+        };
+        Ok(clocks)
+    }
+
+    fn step_internal(&mut self) -> Result<u16, Z80Error> {
         match self.state.status {
             Status::Init => self.init(),
             Status::Halted => Err(Z80Error::Halted),
@@ -103,38 +103,37 @@ impl Z80 {
         }
     }
 
-    pub fn init(&mut self) -> Result<u16, Z80Error> {
+    fn init(&mut self) -> Result<u16, Z80Error> {
         self.state.pc = 0;
         self.state.status = Status::Running;
         Ok(16)
     }
 
-    pub fn reset(&mut self) -> Result<u16, Z80Error> {
-        self.clear_state();
+    fn reset(&mut self) -> Result<u16, Z80Error> {
+        *self.state = Default::default();
         Ok(16)
     }
 
-    pub fn cycle_one(&mut self) -> Result<u16, Z80Error> {
-        self.check_breakpoints()?;
+    fn cycle_one(&mut self) -> Result<u16, Z80Error> {
+        self.debugger.check_breakpoints(self.state.pc)?;
 
         self.decode_next()?;
         self.execute_current()?;
         Ok(
-            Z80InstructionCycles::from_instruction(&self.decoder.instruction, self.decoder.extra_instruction_bytes)?
-                .calculate_cycles(self.executor.took_branch),
+            Z80InstructionCycles::from_instruction(&self.cycle.decoder.instruction, self.cycle.decoder.extra_instruction_bytes)?
+                .calculate_cycles(self.cycle.took_branch),
         )
     }
 
-    pub fn decode_next(&mut self) -> Result<(), Z80Error> {
-        self.decoder
-            .decode_at(&mut self.port, self.executor.current_clock, self.state.pc)?;
-        self.increment_refresh(self.decoder.end.saturating_sub(self.decoder.start) as u8);
-        self.state.pc = self.decoder.end;
+    fn decode_next(&mut self) -> Result<(), Z80Error> {
+        self.cycle.decoder = Z80Decoder::decode_at(&mut self.bus, self.cycle.current_clock, self.state.pc)?;
+        self.increment_refresh(self.cycle.decoder.end.saturating_sub(self.cycle.decoder.start) as u8);
+        self.state.pc = self.cycle.decoder.end;
         Ok(())
     }
 
-    pub fn execute_current(&mut self) -> Result<(), Z80Error> {
-        match self.decoder.instruction {
+    fn execute_current(&mut self) -> Result<(), Z80Error> {
+        match self.cycle.decoder.instruction {
             Instruction::ADCa(target) => self.execute_adca(target),
             Instruction::ADC16(dest_pair, src_pair) => self.execute_adc16(dest_pair, src_pair),
             Instruction::ADDa(target) => self.execute_adda(target),
@@ -230,7 +229,7 @@ impl Z80 {
             Instruction::SRL(target, opt_copy) => self.execute_srl(target, opt_copy),
             Instruction::SUB(target) => self.execute_sub(target),
             Instruction::XOR(target) => self.execute_xor(target),
-            _ => Err(Z80Error::Unimplemented(self.decoder.instruction.clone())),
+            _ => Err(Z80Error::Unimplemented(self.cycle.decoder.instruction.clone())),
         }
     }
 
@@ -310,15 +309,15 @@ impl Z80 {
     }
 
     fn execute_call(&mut self, addr: u16) -> Result<(), Z80Error> {
-        self.push_word(self.decoder.end)?;
+        self.push_word(self.cycle.decoder.end)?;
         self.state.pc = addr;
         Ok(())
     }
 
     fn execute_callcc(&mut self, cond: Condition, addr: u16) -> Result<(), Z80Error> {
         if self.get_current_condition(cond) {
-            self.executor.took_branch = true;
-            self.push_word(self.decoder.end)?;
+            self.cycle.took_branch = true;
+            self.push_word(self.cycle.decoder.end)?;
             self.state.pc = addr;
         }
         Ok(())
@@ -434,7 +433,7 @@ impl Z80 {
         self.set_register_value(Register::B, result);
 
         if result != 0 {
-            self.executor.took_branch = true;
+            self.cycle.took_branch = true;
             self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
         }
         Ok(())
@@ -567,7 +566,7 @@ impl Z80 {
 
     fn execute_jpcc(&mut self, cond: Condition, addr: u16) -> Result<(), Z80Error> {
         if self.get_current_condition(cond) {
-            self.executor.took_branch = true;
+            self.cycle.took_branch = true;
             self.state.pc = addr;
         }
         Ok(())
@@ -580,7 +579,7 @@ impl Z80 {
 
     fn execute_jrcc(&mut self, cond: Condition, offset: i8) -> Result<(), Z80Error> {
         if self.get_current_condition(cond) {
-            self.executor.took_branch = true;
+            self.cycle.took_branch = true;
             self.state.pc = self.state.pc.wrapping_add_signed(offset as i16);
         }
         Ok(())
@@ -616,7 +615,7 @@ impl Z80 {
     }
 
     fn execute_ldx(&mut self) -> Result<(), Z80Error> {
-        let diff = if self.decoder.instruction == Instruction::LDI || self.decoder.instruction == Instruction::LDIR {
+        let diff = if self.cycle.decoder.instruction == Instruction::LDI || self.cycle.decoder.instruction == Instruction::LDIR {
             1
         } else {
             -1
@@ -631,8 +630,10 @@ impl Z80 {
         let parity = if count != 0 { Flags::Parity as u8 } else { 0 };
         self.set_flags(mask, parity);
 
-        if (self.decoder.instruction == Instruction::LDIR || self.decoder.instruction == Instruction::LDDR) && count != 0 {
-            self.executor.took_branch = true;
+        if (self.cycle.decoder.instruction == Instruction::LDIR || self.cycle.decoder.instruction == Instruction::LDDR)
+            && count != 0
+        {
+            self.cycle.took_branch = true;
             self.state.pc -= 2;
         }
         Ok(())
@@ -725,7 +726,7 @@ impl Z80 {
 
     fn execute_retcc(&mut self, cond: Condition) -> Result<(), Z80Error> {
         if self.get_current_condition(cond) {
-            self.executor.took_branch = true;
+            self.cycle.took_branch = true;
             self.state.pc = self.pop_word()?;
         }
         Ok(())
@@ -852,7 +853,7 @@ impl Z80 {
     }
 
     fn execute_rst(&mut self, addr: u8) -> Result<(), Z80Error> {
-        self.push_word(self.decoder.end)?;
+        self.push_word(self.cycle.decoder.end)?;
         self.state.pc = addr as u16;
         Ok(())
     }
@@ -1010,12 +1011,10 @@ impl Z80 {
             _ => panic!("RegPair is not supported by inc/dec"),
         };
 
-        let result = (read_beu16(addr) as i16).wrapping_add(value) as u16;
-        write_beu16(addr, result);
+        let result = (u16::from_be_bytes(addr.try_into().unwrap()) as i16).wrapping_add(value) as u16;
+        addr.copy_from_slice(&result.to_be_bytes()[..]);
         result
     }
-
-
 
     fn push_word(&mut self, value: u16) -> Result<(), Z80Error> {
         self.state.sp = self.state.sp.wrapping_sub(1);
@@ -1127,41 +1126,67 @@ impl Z80 {
 
     fn read_port_u8(&mut self, addr: u16) -> Result<u8, Z80Error> {
         self.increment_refresh(1);
-        Ok(self.port.read_u8(self.executor.current_clock, addr as Address)?)
+        self.bus
+            .read_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr as Z80Address))
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))
     }
 
     fn write_port_u8(&mut self, addr: u16, value: u8) -> Result<(), Z80Error> {
         self.increment_refresh(1);
-        Ok(self.port.write_u8(self.executor.current_clock, addr as Address, value)?)
+        self.bus
+            .write_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr as Z80Address), value)
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))
     }
 
-    fn read_port_u16(&mut self, addr: u16) -> Result<u16, Z80Error> {
-        self.increment_refresh(2);
-        Ok(self.port.read_leu16(self.executor.current_clock, addr as Address)?)
-    }
-
-    fn write_port_u16(&mut self, addr: u16, value: u16) -> Result<(), Z80Error> {
-        self.increment_refresh(2);
-        Ok(self.port.write_leu16(self.executor.current_clock, addr as Address, value)?)
-    }
-
-    fn read_ioport_value(&mut self, upper: u8, lower: u8) -> Result<u8, Z80Error> {
-        let addr = ((upper as Address) << 8) | (lower as Address);
-        if let Some(io) = self.ioport.as_mut() {
-            Ok(io.read_u8(self.executor.current_clock, addr)?)
-        } else {
-            Ok(0)
+    /// Read a u16 value through this CPU's memory port
+    ///
+    /// Since the memory port is only able to read 8 bits at a time, this does two reads
+    /// in little endian byte order
+    fn read_port_u16(&mut self, mut addr: u16) -> Result<u16, Z80Error> {
+        let mut bytes = [0; 2];
+        for byte in bytes.iter_mut() {
+            self.increment_refresh(1);
+            *byte = self
+                .bus
+                .read_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr))
+                .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
+            addr = addr.wrapping_add(1);
         }
+        Ok(u16::from_le_bytes(bytes))
     }
 
-    fn write_ioport_value(&mut self, upper: u8, lower: u8, value: u8) -> Result<(), Z80Error> {
-        let addr = ((upper as Address) << 8) | (lower as Address);
-        if let Some(io) = self.ioport.as_mut() {
-            io.write_u8(self.executor.current_clock, addr, value)?
+    /// Write a u16 value through this CPU's memory port
+    ///
+    /// Since the memory port is only able to read 8 bits at a time, this does two writes
+    /// in little endian byte order
+    fn write_port_u16(&mut self, mut addr: u16, value: u16) -> Result<(), Z80Error> {
+        let mut bytes = value.to_le_bytes();
+        for byte in bytes.iter_mut() {
+            self.increment_refresh(1);
+            self.bus
+                .write_u8(self.cycle.current_clock, Z80AddressSpace::Memory(addr), *byte)
+                .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
+            addr = addr.wrapping_add(1);
         }
         Ok(())
     }
 
+    fn read_ioport_value(&mut self, upper: u8, lower: u8) -> Result<u8, Z80Error> {
+        let addr = ((upper as Z80Address) << 8) | (lower as Z80Address);
+        let bytes_read = self
+            .bus
+            .read_u8(self.cycle.current_clock, Z80AddressSpace::IO(addr))
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
+        Ok(bytes_read)
+    }
+
+    fn write_ioport_value(&mut self, upper: u8, lower: u8, value: u8) -> Result<(), Z80Error> {
+        let addr = ((upper as Z80Address) << 8) | (lower as Z80Address);
+        self.bus
+            .write_u8(self.cycle.current_clock, Z80AddressSpace::IO(addr), value)
+            .map_err(|err| Z80Error::BusError(format!("{:?}", err)))?;
+        Ok(())
+    }
 
     fn get_register_value(&mut self, reg: Register) -> u8 {
         self.state.reg[reg as usize]
@@ -1199,10 +1224,10 @@ impl Z80 {
 
     fn get_register_pair_value(&mut self, regpair: RegisterPair) -> u16 {
         match regpair {
-            RegisterPair::BC => read_beu16(&self.state.reg[0..2]),
-            RegisterPair::DE => read_beu16(&self.state.reg[2..4]),
-            RegisterPair::HL => read_beu16(&self.state.reg[4..6]),
-            RegisterPair::AF => read_beu16(&self.state.reg[6..8]),
+            RegisterPair::BC => u16::from_be_bytes(self.state.reg[0..2].try_into().unwrap()),
+            RegisterPair::DE => u16::from_be_bytes(self.state.reg[2..4].try_into().unwrap()),
+            RegisterPair::HL => u16::from_be_bytes(self.state.reg[4..6].try_into().unwrap()),
+            RegisterPair::AF => u16::from_be_bytes(self.state.reg[6..8].try_into().unwrap()),
             RegisterPair::SP => self.state.sp,
             RegisterPair::IX => self.state.ix,
             RegisterPair::IY => self.state.iy,
@@ -1212,16 +1237,16 @@ impl Z80 {
     fn set_register_pair_value(&mut self, regpair: RegisterPair, value: u16) {
         match regpair {
             RegisterPair::BC => {
-                write_beu16(&mut self.state.reg[0..2], value);
+                self.state.reg[0..2].copy_from_slice(&value.to_be_bytes()[..]);
             },
             RegisterPair::DE => {
-                write_beu16(&mut self.state.reg[2..4], value);
+                self.state.reg[2..4].copy_from_slice(&value.to_be_bytes()[..]);
             },
             RegisterPair::HL => {
-                write_beu16(&mut self.state.reg[4..6], value);
+                self.state.reg[4..6].copy_from_slice(&value.to_be_bytes()[..]);
             },
             RegisterPair::AF => {
-                write_beu16(&mut self.state.reg[6..8], value);
+                self.state.reg[6..8].copy_from_slice(&value.to_be_bytes()[..]);
             },
             RegisterPair::SP => {
                 self.state.sp = value;

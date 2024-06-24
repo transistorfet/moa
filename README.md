@@ -21,8 +21,10 @@ For more about the Sega Genesis support, check out this series I wrote about imp
 I've also generated rustdocs of the workspace. All the various crates within moa
 are listed in the crates section in the sidebar on the left. There's not a lot
 of doc comments in the code yet but I plan to eventually write more:
-[rustdocs for moa_core](http://jabberwocky.ca/moa/doc/moa_core/)
-[rustdocs for ym2612](http://jabberwocky.ca/moa/doc/moa_peripherals_yamaha/ym2612/index.html)
+[moa_core](http://jabberwocky.ca/moa/doc/moa_core/)
+[moa_m68k](http://jabberwocky.ca/moa/doc/moa_m68k/)
+[moa_z80](http://jabberwocky.ca/moa/doc/moa_z80/)
+[ym2612](http://jabberwocky.ca/moa/doc/moa_peripherals_yamaha/ym2612/index.html)
 
 This repository uses submodules, so make sure to clone with
 ```sh
