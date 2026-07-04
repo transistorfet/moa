@@ -13,7 +13,7 @@ const CMDLINE_LEN: u32 = 32;
 #[derive(Parser, Debug)]
 #[command(about = "A configurable test bench for gloworm on different Motorola 68000 processors", long_about = None)]
 struct BenchConfig {
-    // general config
+    // startup config
     #[arg(help = "Binary file to be loaded into the emulator")]
     bin: String,
 
@@ -40,7 +40,7 @@ struct BenchConfig {
     #[arg(long, default_value_t = 8.0, help = "Clock speed of the emulated CPU, in MHz")]
     clock_speed: f64,
 
-    #[arg(long, help = "Initial stack pointer of the CPU, by default at end of RAM")]
+    #[arg(long, help = "Initial stack pointer of the CPU, defaults to end of RAM")]
     isp: Option<u32>,
 
     #[arg(long, help = "Initial program counter of the CPU, defaults to binary load address")]
@@ -49,6 +49,7 @@ struct BenchConfig {
     #[arg(value_enum, long, default_value_t = CpuType::MC68010, help = "The architecture of the emulated CPU")]
     cpu_type: CpuType,
 
+    // Emu config
     #[arg(long, default_value_t = 10.0f64, help = "Runtime of the emulation, in seconds")]
     runtime: f64,
 }
