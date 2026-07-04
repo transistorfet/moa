@@ -139,7 +139,7 @@ fn main() {
     system.add_addressable_device(args.ram_address as u64, Device::new(ram)).unwrap();
 
     // Add the DUART when necessary
-    if true {
+    if args.mc68681_addr != 0 {
         let mut serial = MC68681::default();
         let current_tty = CurrentTty::default();
         serial.port_a.connect(Box::new(current_tty)).unwrap();
@@ -151,7 +151,8 @@ fn main() {
 
     system.run_for_duration(Duration::from_millis((args.runtime * 1000.0) as u64)).unwrap();
 
-    if true {
+    if args.mc68681_addr != 0 {
+        println!("\nDUART registers:");
         system.get_bus().dump_memory(Instant::START, args.mc68681_addr as u64, 48);
     }
 }
