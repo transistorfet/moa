@@ -151,9 +151,4 @@ fn main() {
     system.add_interruptable_device("cpu", Device::new(cpu)).unwrap();
 
     system.run_for_duration(Duration::from_millis((args.runtime * 1000.0) as u64)).unwrap();
-
-    if args.mc68681_addr != 0 {
-        println!("\nDUART registers:");
-        system.get_bus().dump_memory(Instant::START, args.mc68681_addr as u64, 48);
-    }
 }
