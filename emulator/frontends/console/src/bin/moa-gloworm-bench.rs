@@ -142,6 +142,7 @@ fn main() {
     // Add the DUART when necessary
     if args.mc68681_addr != 0 {
         let mut serial = MC68681::default();
+        serial.timer_prescaler = 32; // 3686400/32/1152 = 100
         let current_tty = CurrentTty::default();
         serial.port_a.connect(Box::new(current_tty)).unwrap();
         system.add_addressable_device(args.mc68681_addr as u64, Device::new(serial)).unwrap();
