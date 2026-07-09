@@ -1,4 +1,7 @@
 
+* fix the EXTB.L decode to not conflict with LEA/CHK (by cleaning up how I'm decoding to have fewer
+  exceptional cases)
+
 * fix the Z80 reset and bus_request signals
 * the emulator_hal_memory should throw an error when an access will straddle the end of memory?  Or should it autowrap?
 * fix the m68k dumping functions

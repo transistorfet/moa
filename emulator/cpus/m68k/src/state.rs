@@ -174,6 +174,8 @@ pub struct M68kState {
     pub usp: u32,
 
     pub vbr: u32,
+    pub sfc: u32,
+    pub dfc: u32,
 }
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -223,6 +225,8 @@ impl Default for M68kState {
             usp: 0,
 
             vbr: 0,
+            sfc: 0,
+            dfc: 0,
         }
     }
 }
@@ -264,6 +268,8 @@ where
 
         if let Some(cycle) = self.cycle.as_ref() {
             writeln!(writer, "Current Instruction: {:#010x} {:?}", cycle.decoder.start, cycle.decoder.instruction)?;
+            //writeln!(writer, "Current Instruction: {:#010x} ({:#06x}) {:?}", cycle.decoder.start, cycle.port.read_beu16(cycle.decoder.start.into()).unwrap(), cycle.decoder.instruction);
+
             writeln!(writer)?;
         }
         //memory::dump_memory(&mut self.bus, self.cycle.current_clock, self.state.ssp, 0x40);

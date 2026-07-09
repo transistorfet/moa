@@ -1778,6 +1778,9 @@ where
 
     fn get_control_reg_mut(&mut self, control_reg: ControlRegister) -> &mut u32 {
         match control_reg {
+            ControlRegister::SFC => &mut self.state.sfc,
+            ControlRegister::DFC => &mut self.state.dfc,
+            ControlRegister::USP => &mut self.state.usp,
             ControlRegister::VBR => &mut self.state.vbr,
         }
     }

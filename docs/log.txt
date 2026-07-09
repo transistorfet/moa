@@ -491,3 +491,32 @@ General Work
   should use MaybeUninit, but I instead used Vec::with_capacity/.set_len().  It went from 15-24 minutes
   down to 6 seconds.
 
+2025-03-01
+- I've been working on gloworm lately, and wanted to quickly test some code in an emulator to trace
+  the context switch which is otherwise harder to debug on real hardware, and came across a bug in
+  the instruction decode.  It's decoding an EXTB instruction as a LEA instruction, and then throwing
+  an invalid addressing mode error because it's decoded the LEA as using %d0, which is invalid.
+- I feel like this is a bug I've come across before but just haven't written about
+- sure enough, I have a commit message from Oct 15th 2021 when I was first writing it that fixes a
+  problem with the if expressions for EXT and LEA where I changed the LEA conditional to include
+  `(ins & 0x180) == 0x180 && (ins & 0x038) != 0` and the EXT to `ins_0f00 == 0x800 || ins_0f00 ==
+  0x900` with the second part of each being added, but looking at the code I have now, the EXT still
+  has that but the LEA removed the 0x038 part, which I can only assume was due to another recent bug
+  fix when trying to fix tests
+- I should note that the M68kOpcodes-v2.3.pdf file that I use extensively to compare all the opcodes
+  in one place is incorrect for EXT, where it shows that all EXT instructions must be 0x48xx but
+  the motorola user manual shows it can be 0x48xx or 0x49xx, which is the case I've come across,
+  0x49c0.
+- found the commit where I removed the conditional that's causing that instruction to be decoded as
+  LEA.  It's 1b6cbfa83112f13f81b178ea3ef9fbe2155a92a7 from Dec. 14th, 2021 so very early on.  It's
+  titled "Fixed some decoder bugs" and there's a comment I added about decoding the long word option
+  of the CHK instruction.  That problematic conditional only covers LEA and CHK, so it was probably
+  a CHK instruction that wasn't decoding properly that prompted me to remove it in the first place
+- the decoding is really messy.  The instruction format itself is pretty ambiguous in places, and I
+  think it might be required to exclude certain addressing modes for some instructions in order to
+  decode it correctly, otherwise there's overlap
+- the EXTB.L instruction specifically is the one that doesn't decode correctly, and it's only
+  supported by the MC68020+.  It has opmode field 111, which is conflicting with LEA, which always
+  has those bits set
+- I might just hackishy patch this for now, but I'll need to fix this properly
+
