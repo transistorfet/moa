@@ -4,13 +4,12 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::fmt::Write;
 use femtos::Instant;
-use emulator_hal::{BusAccess, Error as BusError};
+use emulator_hal::{BusAccess, ErrorType};
 
 use crate::error::Error;
 use crate::devices::{Address, Device, DeviceInterface, MoaBus};
 
-impl BusError for Error {}
-
+/*
 /// A contiguous block of `Addressable` memory, backed by a `Vec`
 pub struct MemoryBlock {
     read_only: bool,
@@ -85,6 +84,7 @@ impl DeviceInterface for MemoryBlock {
         Some(self)
     }
 }
+*/
 
 /*
 /// An address adapter that repeats the address space of the subdevice over the given range

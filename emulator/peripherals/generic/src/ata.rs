@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use core::convert::Infallible;
 use femtos::Instant;
-use emulator_hal::{BusAccess, BusAdapter, Step, FromAddress, IntoAddress, Error as EmuError};
+use emulator_hal::{BusAccess, BusAdapter, Step, FromAddress, IntoAddress, ErrorType};
 
 //use moa_core::{Error, Bus, MoaBus, Address, Addressable, Transmutable, DeviceInterface};
 use moa_system::{Error as MoaError, MoaBus, DeviceInterface};
@@ -75,7 +75,7 @@ where
 
 impl<Address, Error> BusAccess<Address> for AtaDevice<Error>
 where
-    Error: EmuError + Default,
+    Error: ErrorType + Default,
     Address: IntoAddress<DeviceAddress> + Copy,
 {
     type Instant = Instant;

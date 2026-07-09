@@ -28,22 +28,21 @@ struct MoaM68k(M68k<Instant>);
 
 use moa_system::emulator_hal::{Step, BusAccess};
 
-impl<Bus> Step<Bus> for MoaM68k
+impl<Bus> Step<u64, Bus> for MoaM68k
 where
-    Bus: BusAccess<u64, Instant = Instant> + ?Sized,
+    Bus: BusAccess<u64, Instant = Instant>,
 {
-    type Instant = Instant;
     type Error = Error;
 
     fn is_running(&mut self) -> bool {
         true
     }
 
-    fn reset(&mut self, _now: Self::Instant, _bus: &mut Bus) -> Result<(), Self::Error> {
+    fn reset(&mut self, _now: Bus::Instant, _bus: &mut Bus) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn step(&mut self, now: Self::Instant, bus: &mut Bus) -> Result<Self::Instant, Self::Error> {
+    fn step(&mut self, now: Bus::Instant, bus: &mut Bus) -> Result<Bus::Instant, Self::Error> {
         self.0.step(now, &mut BusAdapter::new(bus, |addr| addr as u64, |err| Error::new(format!("{:?}", err))))
             .map_err(|err| Error::new(format!("{:?}", err)))
     }

@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use femtos::Frequency;
 
-use moa_core::{System, Error, MemoryBlock, Bus, Address, Addressable, Device};
+use moa_system::{System, Error, MemoryBlock, Bus, Address, Addressable, Device};
 use moa_host::Host;
 
 use moa_m68k::{M68k, M68kType};

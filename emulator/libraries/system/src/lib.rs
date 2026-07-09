@@ -1,9 +1,9 @@
 #[macro_use]
 mod error;
 
+mod bus;
 mod devices;
 mod interrupts;
-mod memory;
 mod system;
 
 pub use crate::devices::{
@@ -12,7 +12,7 @@ pub use crate::devices::{
 };
 pub use crate::error::Error;
 pub use crate::interrupts::InterruptController;
-pub use crate::memory::{MemoryBlock, Bus, dump_slice, dump_memory};
+pub use crate::bus::{Bus, dump_slice, dump_memory};
 pub use crate::system::System;
 
 pub use emulator_hal;

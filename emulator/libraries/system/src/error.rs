@@ -1,7 +1,9 @@
 use core::fmt;
 use core::convert::Infallible;
 use moa_host::HostError;
-use emulator_hal::Error as EmuError;
+use emulator_hal::ErrorType;
+
+impl ErrorType for Error {}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EmulatorErrorKind {

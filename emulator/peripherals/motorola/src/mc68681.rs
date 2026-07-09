@@ -2,11 +2,9 @@ use core::marker::PhantomData;
 use core::convert::Infallible;
 use core::ops::{Deref, DerefMut};
 use femtos::{Instant, Duration, Frequency};
-use emulator_hal::{BusAccess, BusAdapter, Step, Instant as EmuInstant, Error as EmuError};
+use emulator_hal::{BusAccess, BusAdapter, Step, Instant as EmuInstant, ErrorType};
 
-use moa_core::{System, Bus, Address, Steppable, Addressable, Transmutable};
 use moa_host::Tty;
-
 use moa_system::{DeviceInterface, Error, MoaBus, MoaStep};
 
 type DeviceAddress = u64;
@@ -232,24 +230,23 @@ impl<Address, Instant, Error> MC68681<Address, Instant, Error> {
     }
 }
 
-impl<Address, Instant, Error, Bus> Step<Bus> for MC68681<Address, Instant, Error>
+impl<Address, Instant, Error, Bus> Step<Address, Bus> for MC68681<Address, Instant, Error>
 where
     Address: Into<DeviceAddress> + Copy,
     Instant: EmuInstant,
-    Bus: BusAccess<Address, Instant = Instant> + ?Sized,
+    Bus: BusAccess<Address, Instant = Instant>,
 {
-    type Instant = Instant;
     type Error = Error;
 
     fn is_running(&mut self) -> bool {
         true
     }
 
-    fn reset(&mut self, _now: Self::Instant, _bus: &mut Bus) -> Result<(), Self::Error> {
+    fn reset(&mut self, _now: Bus::Instant, _bus: &mut Bus) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn step(&mut self, now: Self::Instant, bus: &mut Bus) -> Result<Self::Instant, Self::Error> {
+    fn step(&mut self, now: Bus::Instant, bus: &mut Bus) -> Result<Bus::Instant, Self::Error> {
         if self.port_a.check_rx() {
             self.set_interrupt_flag(ISR_CH_A_RX_READY_FULL, true);
         }
@@ -294,7 +291,7 @@ impl<Address, Instant, Error> BusAccess<Address> for MC68681<Address, Instant, E
 where
     Address: Into<DeviceAddress> + Copy,
     Instant: EmuInstant,
-    Error: EmuError,
+    Error: ErrorType,
 {
     type Instant = Instant;
     type Error = Error;

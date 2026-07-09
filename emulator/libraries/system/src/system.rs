@@ -2,9 +2,9 @@ use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use femtos::{Instant, Duration};
+use emulator_hal::Step;
 
 use crate::{Bus, Error, InterruptController, Address, Device};
-
 
 pub struct System {
     pub clock: Instant,
