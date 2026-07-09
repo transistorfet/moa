@@ -6,5 +6,8 @@ edition = "2021"
 [dependencies]
 log = "0.4"
 femtos = "0.1"
+emulator-hal = { path = "../../libraries/emulator-hal/emulator-hal", features = ["femtos"] }
+
+moa-system = { path = "../../libraries/system" }
 moa-core = { path = "../../core" }
 moa-host = { path = "../../libraries/host" }

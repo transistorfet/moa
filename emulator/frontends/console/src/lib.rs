@@ -2,8 +2,8 @@ use clap::{Command, Arg, ArgAction, ArgMatches};
 use std::io::{self, Write};
 use femtos::Duration;
 
-use moa_core::{Error, System};
-use moa_debugger::{Debugger, DebugControl};
+use moa_system::{Error, System};
+//use moa_debugger::{Debugger, DebugControl};
 use moa_host::{Host, HostError, Tty, ControllerEvent, Audio, DummyAudio, FrameReceiver, EventSender};
 
 pub struct ConsoleFrontend;
@@ -75,9 +75,10 @@ impl ConsoleFrontend {
             .unwrap();
 
         // Run the main loop
-        let mut debugger = Debugger::default();
+        //let mut debugger = Debugger::default();
         let mut run_debugger = matches.get_flag("debugger");
         loop {
+            /*
             if run_debugger {
                 run_debugger = false;
 
@@ -99,6 +100,7 @@ impl ConsoleFrontend {
                     }
                 }
             }
+            */
 
             match system.run_for_duration(Duration::MAX - system.clock.as_duration()) {
                 Ok(()) => {},

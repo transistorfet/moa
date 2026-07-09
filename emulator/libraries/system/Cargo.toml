@@ -1,0 +1,15 @@
+[package]
+name = "moa-system"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4"
+femtos = "0.1"
+thiserror = "1.0"
+moa-host = { path = "../host" }
+emulator-hal = { path = "../emulator-hal/emulator-hal", features = ["femtos"] }
+
+[features]
+default = ["std"]
+std = []

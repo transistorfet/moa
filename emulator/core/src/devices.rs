@@ -101,6 +101,31 @@ pub trait Addressable {
     }
 }
 
+impl<T> Addressable for &mut T
+where
+    T: Addressable + ?Sized,
+{
+    #[inline]
+    fn size(&self) -> usize {
+        T::size(self)
+    }
+
+    #[inline]
+    fn read(
+        &mut self,
+        now: Instant,
+        addr: Address,
+        data: &mut [u8],
+    ) -> Result<(), Error> {
+        T::read(self, now, addr, data)
+    }
+
+    #[inline]
+    fn write(&mut self, now: Instant, addr: Address, data: &[u8]) -> Result<(), Error> {
+        T::write(self, now, addr, data)
+    }
+}
+
 #[inline]
 pub fn read_beu16(data: &[u8]) -> u16 {
     (data[0] as u16) << 8 | (data[1] as u16)
@@ -219,6 +244,7 @@ pub type TransmutableBox = Rc<RefCell<Box<dyn Transmutable>>>;
 pub fn wrap_transmutable<T: Transmutable + 'static>(value: T) -> TransmutableBox {
     Rc::new(RefCell::new(Box::new(value)))
 }
+
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 
