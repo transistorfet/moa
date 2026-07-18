@@ -316,10 +316,19 @@ where
         } else if (ins & 0xF80) == 0xC00 && self.decoder.cputype >= M68kType::MC68020 {
             let extension = self.read_instruction_word()?;
             //let reg_r = if (extension & 0x0400) != 0 { Some(get_low_reg(ins)) } else { None };
-            let reg_r = if (extension & 0x0400) != 0 { panic!("size is 1"); Some(get_low_reg(ins)) } else { None };
+            let reg_r = if (extension & 0x0400) != 0 {
+                panic!("size is 1");
+                Some(get_low_reg(ins))
+            } else {
+                None
+            };
             let reg_q = ((extension & 0x7000) >> 12) as u8;
             let target = self.decode_lower_effective_address(ins, Some(Size::Long))?;
-            let sign = if (extension & 0x0800) == 0 { Sign::Unsigned } else { Sign::Signed };
+            let sign = if (extension & 0x0800) == 0 {
+                Sign::Unsigned
+            } else {
+                Sign::Signed
+            };
             match (ins & 0x040) == 0 {
                 true => Ok(Instruction::MULL(target, reg_r, reg_q, sign)),
                 false => Ok(Instruction::DIVL(target, reg_r, reg_q, sign)),
