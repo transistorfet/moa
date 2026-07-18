@@ -315,9 +315,7 @@ where
             Ok(Instruction::MOVEM(target, size, dir, data))
         } else if (ins & 0xF80) == 0xC00 && self.decoder.cputype >= M68kType::MC68020 {
             let extension = self.read_instruction_word()?;
-            //let reg_r = if (extension & 0x0400) != 0 { Some(get_low_reg(ins)) } else { None };
             let reg_r = if (extension & 0x0400) != 0 {
-                panic!("size is 1");
                 Some(get_low_reg(ins))
             } else {
                 None

@@ -5,6 +5,7 @@ use moa_parsing::{self as parser, AssemblyLine, AssemblyOperand, AssemblyParser,
 use super::state::M68kType;
 use super::instructions::Size;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Error(String);
 
