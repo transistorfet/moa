@@ -11,7 +11,7 @@ permissions:
 
 env:
   RUSTFLAGS: '--deny warnings'
-  RUSTVERSION: 1.90
+  RUSTVERSION: "1.90"
 
 jobs:
   test-ubuntu:

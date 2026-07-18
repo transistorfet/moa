@@ -7,7 +7,7 @@ on:
     types: [opened, synchronize, reopened]
 
 env:
-  RUSTVERSION: 1.90
+  RUSTVERSION: "1.90"
 
 permissions:
   contents: read
