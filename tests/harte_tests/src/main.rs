@@ -17,6 +17,7 @@ use emulator_hal_memory::MemoryBlock;
 use moa_m68k::{M68k, M68kType};
 use moa_m68k::state::Status;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 enum Error {
     Assertion(String),

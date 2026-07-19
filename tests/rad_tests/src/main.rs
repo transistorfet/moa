@@ -16,6 +16,7 @@ use emulator_hal_memory::MemoryBlock;
 
 use moa_z80::{Z80, Z80Type, Z80Port, InterruptMode, Flags, Status};
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 enum Error {
     Assertion(String),
@@ -88,6 +89,7 @@ struct TestState {
     ram: Vec<(u16, u8)>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TestCycle(u16, Option<u8>, String);
 
