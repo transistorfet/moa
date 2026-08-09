@@ -7,6 +7,7 @@ use femtos::{Frequency, Instant};
 use moa_core::{Addressable, Device, MemoryBlock, System};
 use moa_host::Tty;
 use moa_m68k::{M68k, M68kType};
+use moa_peripherals_generic::AtaDevice;
 use moa_peripherals_motorola::MC68681;
 
 const CMDLINE_LEN: u32 = 32;
@@ -37,6 +38,12 @@ struct BenchConfig {
 
     #[arg(long, help = "Address of the mc68681 DUART, 0 means disabled", default_value_t = 0x00700000)]
     mc68681_addr: u32,
+
+    #[arg(long, help = "Address of the memory mapped ATA device", default_value_t = 0x600000)]
+    ata_addr: u32,
+
+    #[arg(long, help = "Image file for the ATA device")]
+    ata_img: Option<String>,
 
     // CPU config
     #[arg(long, default_value_t = 8.0, help = "Clock speed of the emulated CPU, in MHz")]
@@ -183,6 +190,13 @@ fn main() {
         }
         serial.port_a.connect(Box::new(current_tty)).unwrap();
         system.add_addressable_device(args.mc68681_addr as u64, Device::new(serial)).unwrap();
+    }
+
+    // Add the ATA device if necessary
+    if let Some(ata_img) = args.ata_img {
+        let mut ata = AtaDevice::default();
+        ata.load(&ata_img).unwrap();
+        system.add_addressable_device(args.ata_addr as u64, Device::new(ata)).unwrap();
     }
 
     let cpu = M68k::from_type(args.cpu_type.to_m68k_type(), Frequency::from_hz((args.clock_speed * 1e6) as u32));
