@@ -20,3 +20,4 @@ moa-systems-computie = { path = "../../systems/computie" }
 moa-m68k = { path = "../../cpus/m68k", features = ["moa"] }
 moa-peripherals-generic = { path = "../../peripherals/generic" }
 moa-peripherals-motorola = { path = "../../peripherals/motorola" }
+console = "0.16.4"

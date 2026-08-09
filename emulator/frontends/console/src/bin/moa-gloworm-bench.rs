@@ -1,14 +1,16 @@
 
-use std::io::{self, Write};
+use std::{io::{Write}, sync::mpsc::{self, Receiver}, thread::{self, sleep}, time::{Duration, SystemTime}};
 
 use clap::{Parser, ValueEnum};
-use femtos::{Duration, Frequency, Instant};
+use console::Term;
+use femtos::{Frequency, Instant};
 use moa_core::{Addressable, Device, MemoryBlock, System};
 use moa_host::Tty;
 use moa_m68k::{M68k, M68kType};
 use moa_peripherals_motorola::MC68681;
 
 const CMDLINE_LEN: u32 = 32;
+const EMU_INTERVAL: Duration = Duration::from_millis(10); // ms
 
 #[derive(Parser, Debug)]
 #[command(about = "A configurable test bench for gloworm on different Motorola 68000 processors", long_about = None)]
@@ -50,8 +52,11 @@ struct BenchConfig {
     cpu_type: CpuType,
 
     // Emu config
-    #[arg(long, default_value_t = 10.0f64, help = "Runtime of the emulation, in seconds")]
+    #[arg(long, default_value_t = 10.0f64, help = "Runtime of the emulation, in seconds (0 means run forever)")]
     runtime: f64,
+
+    #[arg(long, short, default_value_t = false, help = "Run the emulator in interactive mode (read from stdin), this also makes the emulator run forever")]
+    interactive: bool
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -76,12 +81,30 @@ impl CpuType {
 }
 
 struct CurrentTty {
+    uart_receiver: Option<Receiver<u8>>,
+    term: Term
+}
 
+impl CurrentTty {
+    // Spawn thread for reading UART input from stdin
+    pub fn start_interaction(&mut self) {
+        
+        // Channel for UART input
+        let (uart_sender, uart_receiver) = mpsc::channel::<u8>();
+        self.uart_receiver = Some(uart_receiver);
+
+        let term_copy = self.term.clone();
+        thread::spawn(move || {
+            loop {
+                uart_sender.send(term_copy.read_char().unwrap() as u8).unwrap();
+            }
+        });
+    }
 }
 
 impl Default for CurrentTty {
     fn default() -> Self {
-        Self {  }
+        Self { uart_receiver: None, term: Term::stdout() }
     }
 }
 
@@ -91,12 +114,20 @@ impl Tty for CurrentTty {
     }
 
     fn read(&mut self) -> Option<u8> {
-        None
+        if let Some(rx) = &self.uart_receiver {
+            if let Ok(byte) = rx.try_recv() {
+                Some(byte)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     fn write(&mut self, output: u8) -> bool {
-        io::stdout().write_all(&[output]).unwrap();
-        io::stdout().flush().unwrap();
+        self.term.write_all(&[output]).unwrap();
+        self.term.flush().unwrap();
         true
     }
 }
@@ -146,7 +177,10 @@ fn main() {
     if args.mc68681_addr != 0 {
         let mut serial = MC68681::default();
         serial.timer_prescaler = 32; // 3686400/32/1152 = 100
-        let current_tty = CurrentTty::default();
+        let mut current_tty = CurrentTty::default();
+        if args.interactive {
+            current_tty.start_interaction();
+        }
         serial.port_a.connect(Box::new(current_tty)).unwrap();
         system.add_addressable_device(args.mc68681_addr as u64, Device::new(serial)).unwrap();
     }
@@ -154,5 +188,18 @@ fn main() {
     let cpu = M68k::from_type(args.cpu_type.to_m68k_type(), Frequency::from_hz((args.clock_speed * 1e6) as u32));
     system.add_interruptable_device("cpu", Device::new(cpu)).unwrap();
 
-    system.run_for_duration(Duration::from_millis((args.runtime * 1000.0) as u64)).unwrap();
+    if args.runtime == 0.0f64 || args.interactive {
+        loop {
+            let current_cycle_start = SystemTime::now();
+            system.run_for_duration(femtos::Duration::from(EMU_INTERVAL)).unwrap();
+            let time_elapsed = current_cycle_start.elapsed().unwrap();
+            let sleep_time = EMU_INTERVAL.saturating_sub(time_elapsed);
+
+            if !sleep_time.is_zero() {
+                sleep(sleep_time);
+            }
+        }
+    } else {
+        system.run_for_duration(femtos::Duration::from_millis((args.runtime * 1000.0) as u64)).unwrap();
+    }
 }
