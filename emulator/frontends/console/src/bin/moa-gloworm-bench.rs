@@ -39,6 +39,9 @@ struct BenchConfig {
     #[arg(long, help = "Address of the mc68681 DUART, 0 means disabled", default_value_t = 0x00700000)]
     mc68681_addr: u32,
 
+    #[arg(long, help = "(External) Prescaler of the mc68681 timer", default_value_t = 32)] // 3686400/32/1152 = 100
+    mc68681_prescaler: u16,
+
     #[arg(long, help = "Address of the memory mapped ATA device", default_value_t = 0x600000)]
     ata_addr: u32,
 
@@ -183,7 +186,7 @@ fn main() {
     // Add the DUART when necessary
     if args.mc68681_addr != 0 {
         let mut serial = MC68681::default();
-        serial.timer_prescaler = 32; // 3686400/32/1152 = 100
+        serial.timer_prescaler = args.mc68681_prescaler; 
         let mut current_tty = CurrentTty::default();
         if args.interactive {
             current_tty.start_interaction();
