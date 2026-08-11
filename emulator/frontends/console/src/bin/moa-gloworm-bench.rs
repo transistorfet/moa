@@ -266,6 +266,11 @@ fn main() {
 
     // Add the ATA device if necessary
     if let Some(ata_img) = args.ata_img {
+        if args.ata_addr == 0 {
+            println!("Error: ATA base address not set!");
+            return;
+        }
+
         let mut ata = AtaDevice::default();
         ata.load(&ata_img).unwrap();
         system.add_addressable_device(args.ata_addr as u64, Device::new(ata)).unwrap();
