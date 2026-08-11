@@ -1,5 +1,5 @@
 
-use std::{fs, io::Write, sync::mpsc::{self, Receiver}, thread::{self, sleep}, time::{Duration, SystemTime}};
+use std::{fs, io::Write, sync::mpsc::{self, Receiver, Sender}, thread::{self, sleep}, time::{Duration, SystemTime}};
 
 use clap::{Parser, ValueEnum};
 use console::Term;
@@ -66,7 +66,10 @@ struct BenchConfig {
     runtime: f64,
 
     #[arg(long, short, default_value_t = false, help = "Run the emulator in interactive mode (read from stdin), this also makes the emulator run forever")]
-    interactive: bool
+    interactive: bool,
+
+    #[arg(long, help = "Feed the DUART with data from this file, can be used together with -i")]
+    input_file: Option<String>
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -91,22 +94,27 @@ impl CpuType {
 }
 
 struct CurrentTty {
-    uart_receiver: Option<Receiver<u8>>,
+    uart_sender: Sender<u8>,
+    uart_receiver: Receiver<u8>,
     term: Term
 }
 
 impl CurrentTty {
+    // Prefeed channel (misused as buffer) 
+    pub fn prefeed(&mut self, data: &Vec<u8>) {
+        for byte in data {
+            self.uart_sender.send(*byte).unwrap();
+        }
+    }
+
     // Spawn thread for reading UART input from stdin
     pub fn start_interaction(&mut self) {
-        
-        // Channel for UART input
-        let (uart_sender, uart_receiver) = mpsc::channel::<u8>();
-        self.uart_receiver = Some(uart_receiver);
 
-        let term_copy = self.term.clone();
+        let term_local = self.term.clone();
+        let sender_local = self.uart_sender.clone();
         thread::spawn(move || {
             loop {
-                uart_sender.send(term_copy.read_char().unwrap() as u8).unwrap();
+                sender_local.send(term_local.read_char().unwrap() as u8).unwrap();
             }
         });
     }
@@ -114,7 +122,8 @@ impl CurrentTty {
 
 impl Default for CurrentTty {
     fn default() -> Self {
-        Self { uart_receiver: None, term: Term::stdout() }
+        let (uart_sender, uart_receiver) = mpsc::channel::<u8>();
+        Self { uart_sender, uart_receiver, term: Term::stdout() }
     }
 }
 
@@ -124,12 +133,8 @@ impl Tty for CurrentTty {
     }
 
     fn read(&mut self) -> Option<u8> {
-        if let Some(rx) = &self.uart_receiver {
-            if let Ok(byte) = rx.try_recv() {
-                Some(byte)
-            } else {
-                None
-            }
+        if let Ok(byte) = self.uart_receiver.try_recv() {
+            Some(byte)
         } else {
             None
         }
@@ -257,9 +262,16 @@ fn main() {
         let mut serial = MC68681::default();
         serial.timer_prescaler = args.mc68681_prescaler; 
         let mut current_tty = CurrentTty::default();
+
+        if let Some(file) = args.input_file {
+            let data: Vec<u8> = fs::read_to_string(file).unwrap().bytes().collect();
+            current_tty.prefeed(&data);
+        }
+
         if args.interactive {
             current_tty.start_interaction();
         }
+
         serial.port_a.connect(Box::new(current_tty)).unwrap();
         system.add_addressable_device(args.mc68681_addr as u64, Device::new(serial)).unwrap();
     }
