@@ -33,7 +33,7 @@ struct BenchConfig {
     #[arg(long, help = "Physical start address of RAM", default_value_t = 0)]
     ram_address: u32,
 
-    #[arg(long, help = "Length of RAM in bytes", default_value_t = 0)]
+    #[arg(long, help = "Length of RAM in bytes", default_value_t = 4 * 1024 * 1024)]
     ram_length: u32,
 
     #[arg(long, help = "Address of the mc68681 DUART, 0 means disabled", default_value_t = 0)]
