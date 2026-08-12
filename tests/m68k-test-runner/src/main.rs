@@ -277,7 +277,6 @@ fn step_cpu_and_assert(
 }
 
 fn run_test(case: &TestCase, args: &Args) -> Result<(), Error> {
-println!("{:?}", case);
     let (mut cpu, mut memory) = init_execute_test(M68kType::MC68000, &case.initial_state).unwrap();
     let initial_cpu = cpu.clone();
 

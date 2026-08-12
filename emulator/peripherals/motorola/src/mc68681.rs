@@ -228,7 +228,7 @@ impl Steppable for MC68681 {
         if self.is_timing {
             self.timer_divider = self.timer_divider.wrapping_sub(1);
             if self.timer_divider == 0 {
-                self.timer_divider = 31;
+                self.timer_divider = 1;
                 self.timer_count = self.timer_count.wrapping_sub(1);
 
                 if self.timer_count == 0 {
