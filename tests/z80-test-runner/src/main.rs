@@ -1,4 +1,4 @@
-const DEFAULT_RAD_TESTS: &str = "tests/jsmoo/misc/tests/GeneratedTests/z80/v1/";
+const DEFAULT_Z80_TESTS: &str = "tests/z80/v1/";
 
 use std::io::prelude::*;
 use std::fmt::{Debug, UpperHex};
@@ -50,7 +50,7 @@ struct Args {
     #[clap(short = 'i', long)]
     no_check_io: bool,
     /// Directory to the test suite to run
-    #[clap(long, default_value = DEFAULT_RAD_TESTS)]
+    #[clap(long, default_value = DEFAULT_Z80_TESTS)]
     testsuite: String,
 }
 

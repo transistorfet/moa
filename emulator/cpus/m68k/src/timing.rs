@@ -102,7 +102,9 @@ impl M68kInstructionTiming {
     #[inline(always)]
     pub fn add_indirect_set(&mut self, target: &Target, areg: u8, aoff: u8, indoff: u8, indw: u8, indl: u8) -> &mut Self {
         match target {
-            Target::IndirectAReg(_) => self.add_internal(areg),
+            Target::IndirectAReg(_)
+            | Target::IndirectARegInc(_)
+            | Target::IndirectARegDec(_) => self.add_internal(areg),
             Target::IndirectRegOffset(_, None, _) => self.add_internal(aoff),
             Target::IndirectRegOffset(_, Some(_), _) => self.add_internal(indoff),
             Target::IndirectMemory(_, Size::Long) => self.add_internal(indl),
