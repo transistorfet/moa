@@ -11,6 +11,7 @@ permissions:
 
 env:
   RUSTFLAGS: '--deny warnings'
+  RUSTVERSION: "1.90"
 
 jobs:
   test-ubuntu:
@@ -22,12 +23,13 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update
           sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
 
       - name: Select rust version
         run: |
-          rustup toolchain install 1.70 --profile minimal --no-self-update
-          rustup default 1.70
+          rustup toolchain install $RUSTVERSION --profile minimal --no-self-update
+          rustup default $RUSTVERSION
 
       - name: Run tests with default features
         run: |

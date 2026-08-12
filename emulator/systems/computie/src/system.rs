@@ -1,6 +1,6 @@
 use femtos::Frequency;
 
-use moa_core::{System, Error, Debuggable, MemoryBlock, Device};
+use moa_core::{System, Error, MemoryBlock, Device};
 use moa_host::Host;
 
 use moa_m68k::{M68k, M68kType};
@@ -44,16 +44,15 @@ pub fn build_computie<H: Host>(host: &H, options: ComputieOptions) -> Result<Sys
     system.add_addressable_device(0x00700000, Device::new(serial))?;
 
 
-    let mut cpu = M68k::from_type(M68kType::MC68010, options.frequency);
-
-    cpu.add_breakpoint(0);
+    let cpu = M68k::from_type(M68kType::MC68010, options.frequency);
+    //cpu.add_breakpoint(0);
 
     system.add_interruptable_device("cpu", Device::new(cpu))?;
 
     Ok(system)
 }
 
-pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
+pub fn build_computie_k30<H: Host>(host: &H, options: ComputieOptions) -> Result<System, Error> {
     let mut system = System::default();
 
     let monitor = MemoryBlock::load("binaries/computie/monitor-68030.bin")?;
@@ -73,7 +72,7 @@ pub fn build_computie_k30<H: Host>(host: &H) -> Result<System, Error> {
     system.add_addressable_device(0x00700000, Device::new(serial))?;
 
 
-    let cpu = M68k::from_type(M68kType::MC68030, Frequency::from_hz(10_000_000));
+    let cpu = M68k::from_type(M68kType::MC68030, options.frequency);
 
     system.add_interruptable_device("cpu", Device::new(cpu))?;
 

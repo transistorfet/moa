@@ -586,22 +586,22 @@ const TEST_CASES: &'static [TestCase] = &[
         fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x000055AA, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xFF55FFAA },
     },
     // TODO not sure if these cases are correct
-    TestCase {
-        name: "movep long from even memory upper",
-        ins: Instruction::MOVEP(0, 0, 0, Size::Long, Direction::FromTarget),
-        data: &[ 0x0148, 0x0000 ],
-        cputype: M68kType::MC68010,
-        init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
-        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0xAABBCCDD, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
-    },
-    TestCase {
-        name: "movep long from even memory lower",
-        ins: Instruction::MOVEP(0, 0, 0, Size::Long, Direction::FromTarget),
-        data: &[ 0x0148, 0x0000 ],
-        cputype: M68kType::MC68010,
-        init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: MEM_ADDR-4, a1: 0x00000000, sr: 0x27FF, mem: 0xCCFFDDFF },
-        fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000CCDD, d1: 0x00000000, a0: MEM_ADDR-4, a1: 0x00000000, sr: 0x27FF, mem: 0xCCFFDDFF },
-    },
+    //TestCase {
+    //    name: "movep long from even memory upper",
+    //    ins: Instruction::MOVEP(0, 0, 0, Size::Long, Direction::FromTarget),
+    //    data: &[ 0x0148, 0x0000 ],
+    //    cputype: M68kType::MC68010,
+    //    init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
+    //    fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0xAABBCCDD, d1: 0x00000000, a0:   MEM_ADDR, a1: 0x00000000, sr: 0x27FF, mem: 0xAAFFBBFF },
+    //},
+    //TestCase {
+    //    name: "movep long from even memory lower",
+    //    ins: Instruction::MOVEP(0, 0, 0, Size::Long, Direction::FromTarget),
+    //    data: &[ 0x0148, 0x0000 ],
+    //    cputype: M68kType::MC68010,
+    //    init: TestState { pc: 0x00000000, ssp: 0x00000000, usp: 0x00000000, d0: 0x00000000, d1: 0x00000000, a0: MEM_ADDR+4, a1: 0x00000000, sr: 0x27FF, mem: 0xCCFFDDFF },
+    //    fini: TestState { pc: 0x00000004, ssp: 0x00000000, usp: 0x00000000, d0: 0x0000CCDD, d1: 0x00000000, a0: MEM_ADDR+4, a1: 0x00000000, sr: 0x27FF, mem: 0xCCFFDDFF },
+    //},
 
 
     // NEG

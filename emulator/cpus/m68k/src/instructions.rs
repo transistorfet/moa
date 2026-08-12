@@ -50,6 +50,9 @@ pub enum RegOrImmediate {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ControlRegister {
+    SFC,
+    DFC,
+    USP,
     VBR,
 }
 
@@ -268,6 +271,9 @@ impl fmt::Display for Condition {
 impl fmt::Display for ControlRegister {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ControlRegister::SFC => write!(f, "%sfc"),
+            ControlRegister::DFC => write!(f, "%dfc"),
+            ControlRegister::USP => write!(f, "%usp"),
             ControlRegister::VBR => write!(f, "%vbr"),
         }
     }
@@ -423,9 +429,9 @@ impl fmt::Display for Instruction {
 
             Instruction::DBcc(cond, reg, offset) => write!(f, "db{}\t%d{}, {}", cond, reg, offset),
             Instruction::DIVW(src, dest, sign) => write!(f, "div{}w\t{}, %d{}", sign, src, dest),
-            Instruction::DIVL(src, desth, destl, sign) => {
-                let opt_reg = desth.map(|reg| format!("%d{}:", reg)).unwrap_or_default();
-                write!(f, "div{}l\t{}, {}%d{}", sign, src, opt_reg, destl)
+            Instruction::DIVL(src, destr, destq, sign) => {
+                let opt_reg = destr.map(|reg| format!("%d{}:", reg)).unwrap_or_default();
+                write!(f, "div{}l\t{}, {}%d{}", sign, src, opt_reg, destq)
             },
 
             Instruction::EOR(src @ Target::Immediate(_), dest, size) => write!(f, "eori{}\t{}, {}", size, src, dest),

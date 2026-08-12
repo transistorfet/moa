@@ -270,6 +270,21 @@ where
         let ins_0f00 = ins & 0xF00;
         let ins_00f0 = ins & 0x0F0;
 
+        if (ins & 0xFE38) == 0x4800 {
+            match (ins & 0x01C0) >> 6 {
+                0b010 => {
+                    return Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Word));
+                },
+                0b011 => {
+                    return Ok(Instruction::EXT(get_low_reg(ins), Size::Word, Size::Long));
+                },
+                0b111 => {
+                    return Ok(Instruction::EXT(get_low_reg(ins), Size::Byte, Size::Long));
+                },
+                _ => {},
+            };
+        }
+
         if (ins & 0x180) == 0x180 {
             if (ins & 0x040) == 0 {
                 let size = match get_size(ins) {
@@ -300,17 +315,21 @@ where
             Ok(Instruction::MOVEM(target, size, dir, data))
         } else if (ins & 0xF80) == 0xC00 && self.decoder.cputype >= M68kType::MC68020 {
             let extension = self.read_instruction_word()?;
-            let reg_h = if (extension & 0x0400) != 0 {
+            let reg_r = if (extension & 0x0400) != 0 {
                 Some(get_low_reg(ins))
             } else {
                 None
             };
-            let reg_l = ((extension & 0x7000) >> 12) as u8;
+            let reg_q = ((extension & 0x7000) >> 12) as u8;
             let target = self.decode_lower_effective_address(ins, Some(Size::Long))?;
-            let sign = if (ins & 0x0800) == 0 { Sign::Unsigned } else { Sign::Signed };
+            let sign = if (extension & 0x0800) == 0 {
+                Sign::Unsigned
+            } else {
+                Sign::Signed
+            };
             match (ins & 0x040) == 0 {
-                true => Ok(Instruction::MULL(target, reg_h, reg_l, sign)),
-                false => Ok(Instruction::DIVL(target, reg_h, reg_l, sign)),
+                true => Ok(Instruction::MULL(target, reg_r, reg_q, sign)),
+                false => Ok(Instruction::DIVL(target, reg_r, reg_q, sign)),
             }
         } else if (ins & 0x800) == 0 {
             let target = self.decode_lower_effective_address(ins, Some(Size::Word))?;
@@ -421,6 +440,9 @@ where
                             _ => Target::DirectAReg(((ins2 & 0x7000) >> 12) as u8),
                         };
                         let creg = match ins2 & 0xFFF {
+                            0x000 => ControlRegister::SFC,
+                            0x001 => ControlRegister::DFC,
+                            0x800 => ControlRegister::USP,
                             0x801 => ControlRegister::VBR,
                             _ => return Err(M68kError::Exception(Exceptions::IllegalInstruction)),
                         };

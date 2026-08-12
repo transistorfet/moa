@@ -6,6 +6,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+env:
+  RUSTVERSION: "1.90"
+
 permissions:
   contents: read
 
@@ -19,12 +22,13 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update
           sudo apt-get install -y alsa-base libasound2-dev libxkbcommon-dev
 
       - name: Select rust version
         run: |
-          rustup toolchain install 1.70 --profile minimal --no-self-update
-          rustup default 1.70
+          rustup toolchain install $RUSTVERSION --profile minimal --no-self-update
+          rustup default $RUSTVERSION
           rustup component add clippy
 
       - name: Check clippy
