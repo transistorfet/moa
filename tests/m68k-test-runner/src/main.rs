@@ -1,4 +1,4 @@
-const DEFAULT_M68K_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
+const DEFAULT_M68K_TESTS: &str = "tests/m68000/v1/";
 
 use std::io::prelude::*;
 use std::fmt::{Write, Debug, UpperHex};
