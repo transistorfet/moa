@@ -1,5 +1,10 @@
-
-use std::{fs, io::Write, sync::mpsc::{self, Receiver, Sender}, thread::{self, sleep}, time::{Duration, SystemTime}};
+use std::{
+    fs,
+    io::Write,
+    sync::mpsc::{self, Receiver, Sender},
+    thread::{self, sleep},
+    time::{Duration, SystemTime},
+};
 
 use clap::{Parser, ValueEnum};
 use console::Term;
@@ -11,7 +16,7 @@ use moa_peripherals_generic::AtaDevice;
 use moa_peripherals_motorola::MC68681;
 
 const CMDLINE_LEN: u32 = 32;
-const EMU_INTERVAL: Duration = Duration::from_millis(10); // ms
+const EMU_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Parser, Debug)]
 #[command(about = "A configurable test bench for gloworm on different Motorola 68000 processors", long_about = None)]
@@ -25,7 +30,6 @@ struct BenchConfig {
 
     //#[arg(long, help = "Commandline to be given to kernel", default_value_t = String::from(""))]
     //command_line: String,
-
     #[arg(long, help = "Physical address where the binary will be loaded", default_value_t = 0)]
     bin_load_address: u32,
 
@@ -62,14 +66,23 @@ struct BenchConfig {
     cpu_type: CpuType,
 
     // Emu config
-    #[arg(long, default_value_t = 10.0f64, help = "Runtime of the emulation, in seconds (0 means run forever)")]
+    #[arg(
+        long,
+        default_value_t = 10.0f64,
+        help = "Runtime of the emulation, in seconds (0 means run forever)"
+    )]
     runtime: f64,
 
-    #[arg(long, short, default_value_t = false, help = "Run the emulator in interactive mode (read from stdin), this also makes the emulator run forever")]
+    #[arg(
+        long,
+        short,
+        default_value_t = false,
+        help = "Run the emulator in interactive mode (read from stdin), this also makes the emulator run forever"
+    )]
     interactive: bool,
 
     #[arg(long, help = "Feed the DUART with data from this file, can be used together with -i")]
-    input_file: Option<String>
+    input_file: Option<String>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -96,11 +109,11 @@ impl CpuType {
 struct CurrentTty {
     uart_sender: Sender<u8>,
     uart_receiver: Receiver<u8>,
-    term: Term
+    term: Term,
 }
 
 impl CurrentTty {
-    // Prefeed channel (misused as buffer) 
+    // Prefeed channel (misused as buffer)
     pub fn prefeed(&mut self, data: &Vec<u8>) {
         for byte in data {
             self.uart_sender.send(*byte).unwrap();
@@ -109,7 +122,6 @@ impl CurrentTty {
 
     // Spawn thread for reading UART input from stdin
     pub fn start_interaction(&mut self) {
-
         let term_local = self.term.clone();
         let sender_local = self.uart_sender.clone();
         thread::spawn(move || {
@@ -123,7 +135,11 @@ impl CurrentTty {
 impl Default for CurrentTty {
     fn default() -> Self {
         let (uart_sender, uart_receiver) = mpsc::channel::<u8>();
-        Self { uart_sender, uart_receiver, term: Term::stdout() }
+        Self {
+            uart_sender,
+            uart_receiver,
+            term: Term::stdout(),
+        }
     }
 }
 
@@ -155,7 +171,7 @@ fn parse_hex(val: &str) -> u32 {
             Err(e) => {
                 println!("Warning: invalid hex '{}': {}", val, e);
                 0
-            }
+            },
         }
     } else {
         println!("Warning: invalid hex '{}': must start with 0x", val);
@@ -181,21 +197,27 @@ fn set_args_from_file(args: &mut BenchConfig) {
 
         match kv.as_slice() {
             // binary load address & ram start
-            ["CONFIG_KERNEL_BASE", val] => { 
+            ["CONFIG_KERNEL_BASE", val] => {
                 args.bin_load_address = parse_hex(val);
                 args.ram_address = parse_hex(val);
-            }
+            },
 
-            ["CONFIG_KERNEL_RAM_SIZE", val] => { args.ram_length = parse_hex(val) }
-            ["CONFIG_TTY_68681_BASE", val] => { args.mc68681_addr = parse_hex(val) - 1 } // Value in config is physical base + 1
-            ["CONFIG_ATA_BASE", val] => { args.ata_addr = parse_hex(val) - 0x21 } // Value in config is physical base + 0x21
+            ["CONFIG_KERNEL_RAM_SIZE", val] => args.ram_length = parse_hex(val),
+            ["CONFIG_TTY_68681_BASE", val] => args.mc68681_addr = parse_hex(val) - 1, // Value in config is physical base + 1
+            ["CONFIG_ATA_BASE", val] => args.ata_addr = parse_hex(val) - 0x21,        // Value in config is physical base + 0x21
 
             // CPU types
-            ["CONFIG_MC68010", "y"] => { args.cpu_type = CpuType::MC68010; }
-            ["CONFIG_MC68020", "y"] => { args.cpu_type = CpuType::MC68020; }
-            ["CONFIG_MC68030", "y"] => { args.cpu_type = CpuType::MC68030; }
+            ["CONFIG_MC68010", "y"] => {
+                args.cpu_type = CpuType::MC68010;
+            },
+            ["CONFIG_MC68020", "y"] => {
+                args.cpu_type = CpuType::MC68020;
+            },
+            ["CONFIG_MC68030", "y"] => {
+                args.cpu_type = CpuType::MC68030;
+            },
 
-            _ => {}
+            _ => {},
         }
     }
 }
@@ -213,7 +235,6 @@ fn main() {
         return;
     }
 
-    // Test if required parameters are set
     if args.bin_load_address == 0 {
         println!("Error: Loading the binary at address 0 overwrites vector table!");
         return;
@@ -224,9 +245,10 @@ fn main() {
 
     let mut system = System::default();
     let mut ram = MemoryBlock::new(vec![0; args.ram_length as usize]);
-    ram.load_at((args.bin_load_address - args.ram_address) as u64, &args.bin).unwrap();
+    ram.load_at((args.bin_load_address - args.ram_address) as u64, &args.bin)
+        .unwrap();
 
-    
+
     // Paste kernel command line to top of stack, not actually working, thus commented out
     isp_address -= CMDLINE_LEN;
     /*
@@ -245,22 +267,28 @@ fn main() {
     isp_address -= 4;
 
     // Add initial stack pointer & initial program counter to vector table (VT isn't included in gloworm)
-    if args.ram_address == 0x00 { // Add vectors to ram if ram is mapped to initial vector table
+    if args.ram_address == 0x00 {
+        // Add vectors to ram if ram is mapped to initial vector table
         ram.write_beu32(Instant::START, 0x00, isp_address).unwrap();
-        ram.write_beu32(Instant::START, 0x04, args.ipc.unwrap_or(args.bin_load_address)).unwrap();
-    } else { // Generate a seperate vector area
+        ram.write_beu32(Instant::START, 0x04, args.ipc.unwrap_or(args.bin_load_address))
+            .unwrap();
+    } else {
+        // Generate a seperate vector area
         let mut vt = MemoryBlock::new(vec![0; 8]);
         vt.write_beu32(Instant::START, 0x00, isp_address).unwrap();
-        vt.write_beu32(Instant::START, 0x04, args.ipc.unwrap_or(args.bin_load_address)).unwrap();
+        vt.write_beu32(Instant::START, 0x04, args.ipc.unwrap_or(args.bin_load_address))
+            .unwrap();
         system.add_addressable_device(0x00u64, Device::new(vt)).unwrap();
     }
 
-    system.add_addressable_device(args.ram_address as u64, Device::new(ram)).unwrap();
+    system
+        .add_addressable_device(args.ram_address as u64, Device::new(ram))
+        .unwrap();
 
     // Add the DUART when necessary
     if args.mc68681_addr != 0 {
         let mut serial = MC68681::default();
-        serial.timer_prescaler = args.mc68681_prescaler; 
+        serial.timer_prescaler = args.mc68681_prescaler;
         let mut current_tty = CurrentTty::default();
 
         if let Some(file) = args.input_file {
@@ -273,7 +301,9 @@ fn main() {
         }
 
         serial.port_a.connect(Box::new(current_tty)).unwrap();
-        system.add_addressable_device(args.mc68681_addr as u64, Device::new(serial)).unwrap();
+        system
+            .add_addressable_device(args.mc68681_addr as u64, Device::new(serial))
+            .unwrap();
     }
 
     // Add the ATA device if necessary
@@ -303,6 +333,8 @@ fn main() {
             }
         }
     } else {
-        system.run_for_duration(femtos::Duration::from_millis((args.runtime * 1000.0) as u64)).unwrap();
+        system
+            .run_for_duration(femtos::Duration::from_millis((args.runtime * 1000.0) as u64))
+            .unwrap();
     }
 }
