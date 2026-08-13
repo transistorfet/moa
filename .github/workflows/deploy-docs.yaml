@@ -53,7 +53,7 @@ jobs:
           cp -R target/doc build
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v7
+        uses: actions/upload-pages-artifact@v3
         with:
           path: build
 
