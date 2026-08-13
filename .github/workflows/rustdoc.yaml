@@ -30,4 +30,4 @@ jobs:
 
       - name: Build rustdoc
         run: |
-          RUSTDOCFLAGS="--deny=warnings --cfg=docsrs" cargo doc --all-features
+          RUSTDOCFLAGS="--deny=warnings --cfg=docsrs" cargo +nightly doc --all-features
