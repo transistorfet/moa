@@ -1,5 +1,5 @@
 [package]
-name = "harte-tests"
+name = "z80-test-runner"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,8 +7,7 @@ edition = "2021"
 femtos = "0.1"
 emulator-hal = { path = "../../emulator/libraries/emulator-hal/emulator-hal" }
 emulator-hal-memory = { path = "../../emulator/libraries/emulator-hal/emulator-hal-memory" }
-moa-m68k = { path = "../../emulator/cpus/m68k" }
-
+moa-z80 = { path = "../../emulator/cpus/z80" }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"

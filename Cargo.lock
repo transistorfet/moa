@@ -551,21 +551,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
-name = "harte-tests"
-version = "0.1.0"
-dependencies = [
- "clap 3.2.25",
- "emulator-hal",
- "emulator-hal-memory",
- "femtos",
- "flate2",
- "moa-m68k",
- "serde",
- "serde_derive",
- "serde_json",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -755,6 +740,21 @@ name = "log"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+
+[[package]]
+name = "m68k-test-runner"
+version = "0.1.0"
+dependencies = [
+ "clap 3.2.25",
+ "emulator-hal",
+ "emulator-hal-memory",
+ "femtos",
+ "flate2",
+ "moa-m68k",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
 
 [[package]]
 name = "mach2"
@@ -1297,21 +1297,6 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
-
-[[package]]
-name = "rad-tests"
-version = "0.1.0"
-dependencies = [
- "clap 3.2.25",
- "emulator-hal",
- "emulator-hal-memory",
- "femtos",
- "flate2",
- "moa-z80",
- "serde",
- "serde_derive",
- "serde_json",
-]
 
 [[package]]
 name = "raw-window-handle"
@@ -2146,6 +2131,21 @@ name = "xml-rs"
 version = "0.8.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
+
+[[package]]
+name = "z80-test-runner"
+version = "0.1.0"
+dependencies = [
+ "clap 3.2.25",
+ "emulator-hal",
+ "emulator-hal-memory",
+ "femtos",
+ "flate2",
+ "moa-z80",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
 
 [[package]]
 name = "zmij"

@@ -1,4 +1,4 @@
-const DEFAULT_HARTE_TESTS: &str = "tests/ProcessorTests/680x0/68000/v1/";
+const DEFAULT_M68K_TESTS: &str = "tests/m68000/v1/";
 
 use std::io::prelude::*;
 use std::fmt::{Write, Debug, UpperHex};
@@ -50,7 +50,7 @@ struct Args {
     #[clap(short, long)]
     timing: bool,
     /// Directory to the test suite to run
-    #[clap(long, default_value = DEFAULT_HARTE_TESTS)]
+    #[clap(long, default_value = DEFAULT_M68K_TESTS)]
     testsuite: String,
     #[clap(long, short, arg_enum, default_value_t = Selection::Include)]
     exceptions: Selection,

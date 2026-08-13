@@ -3,8 +3,7 @@ Tests
 =====
 
 This directory contains CPU tests for the 68k and Z80.  The test cases themselves are provided by
-Tom Harte and raddad772, and must be cloned from their respective repositories before running the
-tests.
+Tom Harte and raddad772, and are shared through the github organization https://github.com/SingleStepTests
 
 
 Downloading
@@ -12,14 +11,12 @@ Downloading
 
 To download the 68k tests, from the `tests/` directory, run:
 ```sh
-git clone git@github.com:TomHarte/ProcessorTests.git
+git clone git@github.com:SingleStepTests/m68000.git
 ```
 
 To download the Z80 tests, from the `tests/` directory, run:
 ```sh
-git clone --no-checkout git@github.com:raddad772/jsmoo.git
-cd jsmoo
-git checkout origin/HEAD -- misc/tests/GeneratedTests
+git clone git@github.com:SingleStepTests/z80.git
 ```
 
 
@@ -28,7 +25,7 @@ Running
 
 The 68k tests can be run from the moa root with:
 ```sh
-tests/harte_tests/run_all.sh
+tests/m68k-test/runner/run_all.sh
 ```
 By default, the script will use the compressed versions of the tests which are slower to run because
 they must be unzipped every time the tests are run. To speed it up for repeat runs, the tests can be
@@ -37,7 +34,7 @@ the script to point to the uncompressed versions
 
 The Z80 tests can be run with:
 ```sh
-tests/rad_tests/run_all.sh
+tests/z80-test-runner/run_all.sh
 ```
 
 
