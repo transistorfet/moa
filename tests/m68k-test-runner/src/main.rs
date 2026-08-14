@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 use std::fs::{self, File};
 
-use clap::{Parser, ArgEnum};
+use clap::{Parser, ValueEnum};
 use flate2::read::GzDecoder;
 use serde_derive::Deserialize;
 use femtos::{Instant, Frequency};
@@ -25,7 +25,7 @@ enum Error {
     Step(String),
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, ArgEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
 enum Selection {
     Include,
     Exclude,
@@ -52,7 +52,7 @@ struct Args {
     /// Directory to the test suite to run
     #[clap(long, default_value = DEFAULT_M68K_TESTS)]
     testsuite: String,
-    #[clap(long, short, arg_enum, default_value_t = Selection::Include)]
+    #[clap(long, short, value_enum, default_value_t = Selection::Include)]
     exceptions: Selection,
 }
 

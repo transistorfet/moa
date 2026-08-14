@@ -6,7 +6,7 @@ default-run = "moa-computie"
 
 [dependencies]
 log = "0.4"
-clap = { version = "=4.4", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive"] }
 simple_logger = "4"
 femtos = "0.1"
 
