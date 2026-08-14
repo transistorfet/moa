@@ -169,6 +169,7 @@ pub struct MC68681 {
     timer_preload: u16,
     timer_count: u16,
     is_timing: bool,
+    pub timer_prescaler: u16,
     timer_divider: u16,
 
     input_pin_change: u8,
@@ -193,6 +194,7 @@ impl Default for MC68681 {
             timer_preload: 0,
             timer_count: 0,
             is_timing: true,
+            timer_prescaler: 2,
             timer_divider: 0,
 
             input_pin_change: 0,
@@ -228,7 +230,7 @@ impl Steppable for MC68681 {
         if self.is_timing {
             self.timer_divider = self.timer_divider.wrapping_sub(1);
             if self.timer_divider == 0 {
-                self.timer_divider = 1;
+                self.timer_divider = self.timer_prescaler - 1;
                 self.timer_count = self.timer_count.wrapping_sub(1);
 
                 if self.timer_count == 0 {

@@ -6,7 +6,7 @@ default-run = "moa-computie"
 
 [dependencies]
 log = "0.4"
-clap = "4"
+clap = { version = "4.4.6", features = ["derive"] }
 simple_logger = "4"
 femtos = "0.1"
 
@@ -20,3 +20,4 @@ moa-systems-computie = { path = "../../systems/computie" }
 moa-m68k = { path = "../../cpus/m68k", features = ["moa"] }
 moa-peripherals-generic = { path = "../../peripherals/generic" }
 moa-peripherals-motorola = { path = "../../peripherals/motorola" }
+console = "0.16.4"
